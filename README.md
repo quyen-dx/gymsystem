@@ -23,8 +23,8 @@ git checkout -b feature/ten-chuc-nang
 - Làm **dashboard** → `git checkout -b feature/dashboard`
 
 <aside>
-⚠️
 
+⚠️
 #### Ngày đầu clone về rồi thì **bỏ qua Bước 3**, làm **Bước 4** luôn.
 
 </aside>
