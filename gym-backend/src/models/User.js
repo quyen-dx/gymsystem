@@ -1,6 +1,11 @@
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 const userSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: [true, 'Họ tên là bắt buộc'],
+        trim: true,
+    },
     email: {
         type: String,
         required: [true, "Email la bat buoc"],
