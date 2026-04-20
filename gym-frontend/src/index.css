@@ -1,1 +1,42 @@
 @import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --gs-bg: #171717;
+  --gs-bg-elevated: #202020;
+  --gs-bg-soft: #262626;
+  --gs-panel: rgba(28, 28, 28, 0.92);
+  --gs-panel-strong: rgba(23, 23, 23, 0.96);
+  --gs-border: rgba(255, 255, 255, 0.08);
+  --gs-border-strong: rgba(255, 255, 255, 0.14);
+  --gs-text: #f3efe8;
+  --gs-text-muted: #b8afa3;
+  --gs-text-soft: #8f877d;
+  --gs-accent: #b6462f;
+  --gs-accent-strong: #8f3423;
+  --gs-accent-soft: rgba(182, 70, 47, 0.14);
+  --gs-success: #748c54;
+  --gs-danger: #c45b4d;
+  --gs-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(182, 70, 47, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(116, 140, 84, 0.1), transparent 24%),
+    linear-gradient(180deg, #111111 0%, #171717 40%, #1d1d1d 100%);
+  color: var(--gs-text);
+  font-family: "Segoe UI", "Inter", sans-serif;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}

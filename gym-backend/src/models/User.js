@@ -1,75 +1,107 @@
-import bcrypt from "bcryptjs";
-import mongoose from "mongoose";
-const userSchema = new mongoose.Schema({
+import bcrypt from 'bcrypt'
+import mongoose from 'mongoose'
+
+const emailRegex = /^\S+@\S+\.\S+$/
+const phoneRegex = /^(0|\+84)\d{9}$/
+
+const userSchema = new mongoose.Schema(
+  {
     name: {
-        type: String,
-        required: [true, 'Họ tên là bắt buộc'],
-        trim: true,
+      type: String,
+      required: [true, 'Họ tên là bắt buộc'],
+      trim: true,
     },
     email: {
-        type: String,
-        required: [true, "Email la bat buoc"],
-        unique: true,
-        lowercase: true,
-        trim: true,
-        match: [/^\S+@\S+\.\S+$/, "email khong hop le"]
+      type: String,
+      unique: true,
+      sparse: true,
+      lowercase: true,
+      trim: true,
+      validate: {
+        validator: (value) => value == null || value === '' || emailRegex.test(value),
+        message: 'Email không hợp lệ',
+      },
     },
-    password: {
-        type: String,
-        required: [true, "Mật khẩu không để trống"],
-        minlength: [6, "Mat khau phai it nhat co 6 ki tu"],
-        select: false
-    },
-    role: {
-        type: String,
-        enum: ["admin", "pt", "staff", "member"],
-        default: "member"
+    facebookId: {
+      type: String,
+      default: null,
+      unique: true,
+      sparse: true,
     },
     phone: {
-        type: String,
-        trim: true,
-        unique: true,
-        sparse: true,
-        match: [/^(0|\+84)[0-9]{9}$/, "so diẹn thoai phai hop le"]
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      validate: {
+        validator: (value) => value == null || value === '' || phoneRegex.test(value),
+        message: 'Số điện thoại không hợp lệ',
+      },
+    },
+    password: {
+      type: String,
+      default: null,
+      minlength: [6, 'Mật khẩu phải có ít nhất 6 ký tự'],
+      select: false,
+    },
+    provider: {
+      type: String,
+      enum: ['google', 'facebook', 'phone'],
+      required: true,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    role: {
+      type: String,
+      enum: ['admin', 'pt', 'staff', 'member'],
+      default: 'member',
     },
     avatar: {
-        type: String,
-        default: ''
+      type: String,
+      default: '',
     },
     isActive: {
-        type: Boolean,
-        default: true
-    },
-    resetPasswordOTP: {
-        type: String,
-        select: false
-    },
-    resetPasswordOTPExpires: {
-        type: Date,
-        select: false
+      type: Boolean,
+      default: true,
     },
     refreshToken: {
-        type: String,
-        select: false
-    }
-}, { timestamps: true })
+      type: String,
+      select: false,
+    },
+  },
+  { timestamps: true },
+)
+
+userSchema.pre('validate', function () {
+  if (!this.email && !this.phone && !this.facebookId) {
+    this.invalidate('email', 'Email hoặc số điện thoại là bắt buộc')
+  }
+
+  if (this.provider === 'phone' && !this.phone) {
+    this.invalidate('phone', 'Tài khoản số điện thoại cần có số điện thoại')
+  }
+})
 
 userSchema.pre('save', async function () {
-    if (!this.isModified('password')) return;
-    this.password = await bcrypt.hash(this.password, 12)
-
+  if (!this.isModified('password') || !this.password) return
+  if (this.$locals?.skipPasswordHashing) return
+  this.password = await bcrypt.hash(this.password, 12)
 })
+
 userSchema.methods.comparePassword = async function (candidatePassword) {
-    return bcrypt.compare(candidatePassword, this.password)
+  if (!this.password || !candidatePassword) return false
+  return bcrypt.compare(candidatePassword, this.password)
 }
 
 userSchema.methods.toJSON = function () {
-    const obj = this.toObject();
-    delete obj.password;
-    delete obj.resetPasswordOTP;
-    delete obj.resetPasswordOTPExpires;
-    delete obj.refreshToken;
-    return obj
+  const obj = this.toObject()
+  delete obj.password
+  delete obj.refreshToken
+  return obj
 }
-const User = mongoose.model("User", userSchema)
+
+const User = mongoose.model('User', userSchema)
+
 export default User

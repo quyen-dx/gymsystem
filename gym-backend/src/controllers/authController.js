@@ -1,293 +1,587 @@
-import User from '../models/User.js';
+import User from '../models/User.js'
+import {
+  consumeOtp,
+  hashPendingPassword,
+  sendOtp,
+  verifyOtp,
+} from '../services/otpService.js'
+import AppError from '../utils/appError.js'
 import {
   generateAccessToken,
   generateRefreshToken,
+  generateResetToken,
   verifyRefreshToken,
-} from '../utils/generateToken.js';
-import { generateOTP, sendOTPEmail } from '../utils/emailService.js';
+  verifyResetToken,
+} from '../utils/generateToken.js'
+import {
+  detectIdentifierType,
+  isValidEmail,
+  isValidPhone,
+  normalizeIdentifier,
+  normalizePhone,
+} from '../utils/identifier.js'
 
-// ==================== ĐĂNG KÝ ====================
-export const register = async (req, res) => {
+const sendError = (res, error) => {
+  console.error(error)
+
+  if (error?.code === 11000) {
+    if (error.keyPattern?.email) {
+      return res.status(400).json({ message: 'Email đã được sử dụng' })
+    }
+    if (error.keyPattern?.phone) {
+      return res.status(400).json({ message: 'Số điện thoại đã được sử dụng' })
+    }
+  }
+
+  return res.status(error.statusCode || 500).json({
+    message: error.message || 'Lỗi máy chủ',
+  })
+}
+
+const validateMockOAuthToken = (provider, token) => {
+  if (!token || typeof token !== 'string') return false
+  return token.startsWith(`${provider}-demo-`) || token === `${provider}-demo-token`
+}
+
+const buildAuthResponse = async (user) => {
+  const accessToken = generateAccessToken(user._id, user.role)
+  const refreshToken = generateRefreshToken(user._id)
+
+  user.refreshToken = refreshToken
+  await user.save({ validateBeforeSave: false })
+
+  return {
+    message: 'Đăng nhập thành công',
+    accessToken,
+    refreshToken,
+    user,
+  }
+}
+
+const createVerifiedUser = async (payload) => {
+  const user = new User({
+    name: payload.name,
+    email: payload.email || null,
+    phone: payload.phone || null,
+    provider: payload.provider,
+    isVerified: true,
+    password: payload.passwordHash || null,
+    role: 'member',
+  })
+
+  if (payload.passwordHash) {
+    user.$locals.skipPasswordHashing = true
+  }
+
+  await user.save()
+  return user
+}
+
+export const buildGoogleOauthRedirect = async (user) => {
+  const accessToken = generateAccessToken(user._id, user.role)
+  const refreshToken = generateRefreshToken(user._id)
+
+  user.refreshToken = refreshToken
+  await user.save({ validateBeforeSave: false })
+
+  const frontendUrl = process.env.CLIENT_URL || 'http://localhost:5173'
+  const redirectUrl = new URL('/oauth-success', frontendUrl)
+  redirectUrl.searchParams.set('token', accessToken)
+
+  return redirectUrl.toString()
+}
+export const buildFacebookOauthRedirect = async (user) => {
+  const accessToken = generateAccessToken(user._id, user.role)
+  const refreshToken = generateRefreshToken(user._id)
+
+  user.refreshToken = refreshToken
+  await user.save({ validateBeforeSave: false })
+
+  const frontendUrl = process.env.CLIENT_URL || 'http://localhost:5173'
+  const redirectUrl = new URL('/oauth-success', frontendUrl)
+  redirectUrl.searchParams.set('token', accessToken)
+
+  return redirectUrl.toString()
+}
+export const sendRegisterOtp = async (req, res) => {
   try {
-    const { email, password, name, phone } = req.body;
-console.log('req.body:', req.body);
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Email đã được sử dụng' });
+    const { provider, name, phone, password } = req.body
+
+    if (provider !== 'phone') {
+      throw new AppError('Chỉ đăng ký bằng số điện thoại mới cần OTP', 400)
     }
 
-    const user = await User.create({ email, password, name, phone, role: 'member' });
+    if (!name?.trim()) {
+      throw new AppError('Họ tên là bắt buộc', 400)
+    }
 
-    const accessToken = generateAccessToken(user._id, user.role);
-    const newRefreshToken = generateRefreshToken(user._id);
+    const normalizedPhone = normalizePhone(phone)
 
-    user.refreshToken = newRefreshToken;
-    await user.save({ validateBeforeSave: false });
+    if (!isValidPhone(normalizedPhone)) {
+      throw new AppError('Số điện thoại không hợp lệ', 400)
+    }
 
-    res.status(201).json({
-      message: 'Đăng ký thành công',
-      accessToken,
-      refreshToken: newRefreshToken,
-      user,
-    });
+    if (!password || password.length < 6) {
+      throw new AppError('Mật khẩu phải có ít nhất 6 ký tự', 400)
+    }
+
+    const existingUser = await User.findOne({ phone: normalizedPhone })
+    if (existingUser) {
+      throw new AppError('Số điện thoại đã được sử dụng', 400)
+    }
+
+    const passwordHash = await hashPendingPassword(password)
+    const otpResult = await sendOtp({
+      identifier: normalizedPhone,
+      purpose: 'register',
+      channel: 'sms',
+      provider: 'phone',
+      payload: {
+        name: name.trim(),
+        phone: normalizedPhone,
+        passwordHash,
+        provider: 'phone',
+      },
+    })
+
+    return res.json({
+      message: 'Mã OTP đã được gửi qua SMS',
+      expiresIn: otpResult.expiresIn,
+      resendAfter: otpResult.resendAfter,
+      otpPreview: otpResult.otpPreview,
+    })
   } catch (error) {
-    console.error('register error:', error)
-    res.status(500).json({ message: error.message });
+    return sendError(res, error)
   }
-};
+}
 
-// ==================== ĐĂNG NHẬP ====================
+export const verifyRegisterOtp = async (req, res) => {
+  try {
+    const { identifier, otp } = req.body
+    const normalizedIdentifier = normalizeIdentifier(identifier)
+
+    const otpRecord = await verifyOtp({
+      identifier: normalizedIdentifier,
+      purpose: 'register',
+      otp,
+    })
+
+    const identityChecks = []
+    if (otpRecord.payload.email) identityChecks.push({ email: otpRecord.payload.email })
+    if (otpRecord.payload.phone) identityChecks.push({ phone: otpRecord.payload.phone })
+
+    const existingUser = identityChecks.length
+      ? await User.findOne({ $or: identityChecks })
+      : null
+
+    if (existingUser) {
+      await consumeOtp(otpRecord._id)
+      throw new AppError('Tài khoản đã tồn tại', 400)
+    }
+
+    const user = await createVerifiedUser(otpRecord.payload)
+    await consumeOtp(otpRecord._id)
+
+    const authPayload = await buildAuthResponse(user)
+
+    return res.status(201).json({
+      ...authPayload,
+      message: 'Đăng ký tài khoản thành công',
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const registerFacebook = async (req, res) => {
+  try {
+    const { name, email, password, oauthToken } = req.body
+    const normalizedEmail = email?.trim().toLowerCase()
+
+    if (!name?.trim()) {
+      throw new AppError('Họ tên là bắt buộc', 400)
+    }
+
+    if (!isValidEmail(normalizedEmail)) {
+      throw new AppError('Email Facebook không hợp lệ', 400)
+    }
+
+    if (!validateMockOAuthToken('facebook', oauthToken)) {
+      throw new AppError('Facebook token không hợp lệ', 401)
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail })
+    if (existingUser) {
+      throw new AppError('Email đã được sử dụng', 400)
+    }
+
+    const user = new User({
+      name: name.trim(),
+      email: normalizedEmail,
+      password: password || null,
+      provider: 'facebook',
+      isVerified: true,
+      role: 'member',
+    })
+
+    await user.save()
+
+    const authPayload = await buildAuthResponse(user)
+
+    return res.status(201).json({
+      ...authPayload,
+      message: 'Đăng ký Facebook thành công',
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { identifier, password, oauthToken, provider } = req.body
 
-    const user = await User.findOne({ email }).select('+password');
+    if (!identifier) {
+      throw new AppError('Thiếu thông tin đăng nhập', 400)
+    }
+
+    const trimmed = identifier.trim()
+
+    // Tự detect loại identifier
+    let query
+    if (trimmed.includes('@')) {
+      // Email đầy đủ hoặc username dạng xxx@gmail.com
+      query = { email: trimmed.toLowerCase() }
+    } else if (/^(0|\+84)\d{9}$/.test(trimmed.replace(/\s/g, ''))) {
+      // Số điện thoại
+      query = { phone: normalizePhone(trimmed) }
+    } else {
+      // Username — tìm theo phần trước @ của email
+      // VD: "daoxuanquyen333" → tìm email bắt đầu bằng "daoxuanquyen333@"
+      query = { email: new RegExp(`^${trimmed}@`, 'i') }
+    }
+
+    const user = await User.findOne(query).select('+password +refreshToken')
+
     if (!user) {
-      return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
+      throw new AppError('Tài khoản không tồn tại', 401)
     }
 
     if (!user.isActive) {
-      return res.status(403).json({ message: 'Tài khoản đã bị khóa. Liên hệ admin để được hỗ trợ.' });
+      throw new AppError('Tài khoản đã bị khóa', 403)
     }
 
-    const isMatch = await user.comparePassword(password);
+    if (oauthToken) {
+      if (!validateMockOAuthToken(provider, oauthToken)) {
+        throw new AppError('OAuth token không hợp lệ', 401)
+      }
+      return res.json(await buildAuthResponse(user))
+    }
+
+    if (!password) {
+      throw new AppError('Thiếu mật khẩu', 400)
+    }
+
+    if (!user.password) {
+      throw new AppError('Tài khoản chưa có mật khẩu. Vui lòng đăng nhập Google rồi vào Profile để đặt mật khẩu', 400)
+    }
+
+    const isMatch = await user.comparePassword(password)
     if (!isMatch) {
-      return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
+      throw new AppError('Mật khẩu không đúng', 401)
     }
 
-    const accessToken = generateAccessToken(user._id, user.role);
-    const newRefreshToken = generateRefreshToken(user._id);
-
-    user.refreshToken = newRefreshToken;
-    await user.save({ validateBeforeSave: false });
-
-    res.json({
-      message: 'Đăng nhập thành công',
-      accessToken,
-      refreshToken: newRefreshToken,
-      user,
-    });
+    return res.json(await buildAuthResponse(user))
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return sendError(res, error)
   }
-};
-
-// ==================== REFRESH TOKEN ====================
+}
 export const refreshToken = async (req, res) => {
   try {
-    const { refreshToken: token } = req.body;
+    const { refreshToken: token } = req.body
 
     if (!token) {
-      return res.status(400).json({ message: 'Refresh token là bắt buộc' });
+      throw new AppError('Refresh token là bắt buộc', 400)
     }
 
-    const decoded = verifyRefreshToken(token);
+    const decoded = verifyRefreshToken(token)
     if (!decoded) {
-      return res.status(401).json({ message: 'Refresh token không hợp lệ hoặc đã hết hạn' });
+      throw new AppError('Refresh token không hợp lệ hoặc đã hết hạn', 401)
     }
 
-    const user = await User.findById(decoded.id).select('+refreshToken');
+    const user = await User.findById(decoded.id).select('+refreshToken')
     if (!user || user.refreshToken !== token) {
-      return res.status(401).json({ message: 'Refresh token không hợp lệ hoặc đã hết hạn' });
+      throw new AppError('Refresh token không hợp lệ hoặc đã hết hạn', 401)
     }
 
-    const newAccessToken = generateAccessToken(user._id, user.role);
-    const newRefreshToken = generateRefreshToken(user._id);
+    const accessToken = generateAccessToken(user._id, user.role)
+    const refreshTokenValue = generateRefreshToken(user._id)
 
-    user.refreshToken = newRefreshToken;
-    await user.save({ validateBeforeSave: false });
+    user.refreshToken = refreshTokenValue
+    await user.save({ validateBeforeSave: false })
 
-    res.json({
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
-    });
+    return res.json({
+      accessToken,
+      refreshToken: refreshTokenValue,
+    })
   } catch (error) {
-    res.status(401).json({ message: 'Refresh token không hợp lệ hoặc đã hết hạn' });
+    return sendError(res, error)
   }
-};
+}
 
-// ==================== ĐĂNG XUẤT ====================
 export const logout = async (req, res) => {
   try {
-    await User.findByIdAndUpdate(req.user._id, { refreshToken: null });
-    res.json({ message: 'Đăng xuất thành công' });
+    await User.findByIdAndUpdate(req.user._id, { refreshToken: null })
+    return res.json({ message: 'Đăng xuất thành công' })
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return sendError(res, error)
   }
-};
+}
 
-// ==================== LẤY THÔNG TIN BẢN THÂN ====================
 export const getMe = async (req, res) => {
-  res.json({ user: req.user });
-};
+  return res.json({ user: req.user })
+}
 
-// ==================== CẬP NHẬT THÔNG TIN CÁ NHÂN ====================
 export const updateProfile = async (req, res) => {
   try {
-    const { name, phone } = req.body;
-    const updateData = {};
+    const { name, phone } = req.body
+    const updateData = {}
 
-    if (name) updateData.name = name;
-    if (phone) updateData.phone = phone;
+    if (name) updateData.name = name.trim()
+
+    if (phone) {
+      const normalizedPhone = normalizePhone(phone)
+      if (!isValidPhone(normalizedPhone)) {
+        throw new AppError('Số điện thoại không hợp lệ', 400)
+      }
+      updateData.phone = normalizedPhone
+    }
 
     if (req.file) {
-      updateData.avatar = req.file.path;
+      updateData.avatar = req.file.path
     }
 
     const user = await User.findByIdAndUpdate(req.user._id, updateData, {
       new: true,
       runValidators: true,
-    });
+    })
 
-    res.json({ message: 'Cập nhật thông tin thành công', user });
+    return res.json({ message: 'Cập nhật thông tin thành công', user })
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return sendError(res, error)
   }
-};
+}
 
-// ==================== ĐỔI MẬT KHẨU ====================
+// Đặt mật khẩu lần đầu (dành cho tài khoản Google chưa có password)
+export const setPassword = async (req, res) => {
+  try {
+    const { newPassword } = req.body
+
+    if (!newPassword || newPassword.length < 6) {
+      throw new AppError('Mật khẩu phải có ít nhất 6 ký tự', 400)
+    }
+
+    const user = await User.findById(req.user._id).select('+password')
+
+    if (user.password) {
+      throw new AppError('Tài khoản đã có mật khẩu, hãy dùng chức năng đổi mật khẩu', 400)
+    }
+
+    user.password = newPassword
+    await user.save()
+
+    return res.json({ message: 'Đặt mật khẩu thành công' })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
 export const changePassword = async (req, res) => {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body
 
-    const user = await User.findById(req.user._id).select('+password');
-    const isMatch = await user.comparePassword(currentPassword);
+    if (!newPassword || newPassword.length < 6) {
+      throw new AppError('Mật khẩu mới phải có ít nhất 6 ký tự', 400)
+    }
 
+    const user = await User.findById(req.user._id).select('+password')
+
+    if (!user.password) {
+      throw new AppError('Tài khoản chưa có mật khẩu, hãy dùng chức năng đặt mật khẩu', 400)
+    }
+
+    const isMatch = await user.comparePassword(currentPassword)
     if (!isMatch) {
-      return res.status(400).json({ message: 'Mật khẩu hiện tại không đúng' });
+      throw new AppError('Mật khẩu hiện tại không đúng', 400)
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
-    }
+    user.password = newPassword
+    await user.save()
 
-    user.password = newPassword;
-    await user.save();
-
-    res.json({ message: 'Đổi mật khẩu thành công' });
+    return res.json({ message: 'Đổi mật khẩu thành công' })
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return sendError(res, error)
   }
-};
+}
 
-// ==================== QUÊN MẬT KHẨU — GỬI OTP ====================
-export const forgotPassword = async (req, res) => {
+export const sendForgotPasswordOtp = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { identifier } = req.body
+    const type = detectIdentifierType(identifier)
+    const normalizedIdentifier = normalizeIdentifier(identifier)
 
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.json({ message: 'Nếu email tồn tại, mã OTP đã được gửi' });
+    if (type === 'email' && !isValidEmail(normalizedIdentifier)) {
+      throw new AppError('Email không hợp lệ', 400)
     }
 
-    const otp = generateOTP();
-    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    if (type === 'phone' && !isValidPhone(normalizedIdentifier)) {
+      throw new AppError('Số điện thoại không hợp lệ', 400)
+    }
 
-    user.resetPasswordOTP = otp;
-    user.resetPasswordOTPExpires = otpExpires;
-    await user.save({ validateBeforeSave: false });
+    const user = await User.findOne(
+      type === 'email' ? { email: normalizedIdentifier } : { phone: normalizedIdentifier },
+    )
 
-    await sendOTPEmail(email, otp, user.name);
+    if (!user) {
+      throw new AppError('Không tìm thấy tài khoản', 404)
+    }
 
-    res.json({ message: 'Mã OTP đã được gửi đến email của bạn' });
+    if (user.provider === 'facebook') {
+      throw new AppError('Tài khoản Facebook không hỗ trợ quên mật khẩu bằng OTP', 400)
+    }
+
+    const otpResult = await sendOtp({
+      identifier: normalizedIdentifier,
+      purpose: 'forgot_password',
+      channel: type === 'email' ? 'email' : 'sms',
+      provider: user.provider,
+      payload: {
+        userId: user._id.toString(),
+      },
+    })
+
+    return res.json({
+      message: type === 'email' ? 'Mã OTP đã được gửi về email' : 'Mã OTP đã được gửi qua SMS',
+      expiresIn: otpResult.expiresIn,
+      resendAfter: otpResult.resendAfter,
+      otpPreview: otpResult.otpPreview,
+    })
   } catch (error) {
-    res.status(500).json({ message: 'Lỗi khi gửi email. Vui lòng thử lại.' });
+    return sendError(res, error)
   }
-};
+}
 
-// ==================== ĐẶT LẠI MẬT KHẨU BẰNG OTP ====================
+export const verifyForgotPasswordOtp = async (req, res) => {
+  try {
+    const { identifier, otp } = req.body
+    const normalizedIdentifier = normalizeIdentifier(identifier)
+    const otpRecord = await verifyOtp({
+      identifier: normalizedIdentifier,
+      purpose: 'forgot_password',
+      otp,
+    })
+
+    const resetToken = generateResetToken({
+      userId: otpRecord.payload.userId,
+      identifier: normalizedIdentifier,
+    })
+
+    await consumeOtp(otpRecord._id)
+
+    return res.json({
+      message: 'Xác thực OTP thành công',
+      resetToken,
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
 export const resetPassword = async (req, res) => {
   try {
-    const { email, otp, newPassword } = req.body;
+    const { resetToken, newPassword } = req.body
 
-    const user = await User.findOne({ email }).select(
-      '+resetPasswordOTP +resetPasswordOTPExpires'
-    );
-
-    if (!user || !user.resetPasswordOTP) {
-      return res.status(400).json({ message: 'OTP không hợp lệ' });
+    if (!newPassword || newPassword.length < 6) {
+      throw new AppError('Mật khẩu mới phải có ít nhất 6 ký tự', 400)
     }
 
-    if (user.resetPasswordOTPExpires < Date.now()) {
-      return res.status(400).json({ message: 'OTP đã hết hạn. Vui lòng yêu cầu mã mới.' });
+    const decoded = verifyResetToken(resetToken)
+    if (!decoded) {
+      throw new AppError('Phiên đặt lại mật khẩu không hợp lệ hoặc đã hết hạn', 401)
     }
 
-    if (user.resetPasswordOTP !== otp) {
-      return res.status(400).json({ message: 'OTP không đúng' });
+    const user = await User.findById(decoded.userId).select('+password')
+    if (!user) {
+      throw new AppError('Không tìm thấy tài khoản', 404)
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
-    }
+    user.password = newPassword
+    user.isVerified = true
+    await user.save()
 
-    user.password = newPassword;
-    user.resetPasswordOTP = undefined;
-    user.resetPasswordOTPExpires = undefined;
-    await user.save();
-
-    res.json({ message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.' });
+    return res.json({ message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.' })
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return sendError(res, error)
   }
+}
 
-};
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find();
-    res.json({ users });
+    const users = await User.find()
+    return res.json({ users })
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return sendError(res, error)
   }
-};
-// Cập nhật role user
+}
+
 export const updateUserRole = async (req, res) => {
   try {
-    const { role } = req.body;
+    const { role } = req.body
 
     if (!['admin', 'pt', 'staff', 'member'].includes(role)) {
-      return res.status(400).json({ message: 'Role không hợp lệ' });
+      throw new AppError('Role không hợp lệ', 400)
     }
 
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { role },
-      { new: true }
-    );
+    const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true })
 
-    if (!user) return res.status(404).json({ message: 'Không tìm thấy user' });
+    if (!user) {
+      throw new AppError('Không tìm thấy người dùng', 404)
+    }
 
-    res.json({ message: 'Cập nhật role thành công', user });
+    return res.json({ message: 'Cập nhật role thành công', user })
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return sendError(res, error)
   }
-};
+}
 
-// Khóa / mở khóa user
 export const toggleUserStatus = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: 'Không tìm thấy user' });
+    const user = await User.findById(req.params.id)
+    if (!user) {
+      throw new AppError('Không tìm thấy người dùng', 404)
+    }
 
-    user.isActive = !user.isActive;
-    await user.save();
+    user.isActive = !user.isActive
+    await user.save()
 
-    res.json({
+    return res.json({
       message: `Tài khoản đã được ${user.isActive ? 'mở khóa' : 'khóa'}`,
       user,
-    });
+    })
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return sendError(res, error)
   }
-};
+}
 
-// Xóa user
 export const deleteUser = async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
-    if (!user) return res.status(404).json({ message: 'Không tìm thấy user' });
+    const user = await User.findByIdAndDelete(req.params.id)
+    if (!user) {
+      throw new AppError('Không tìm thấy người dùng', 404)
+    }
 
-    res.json({ message: 'Xóa user thành công' });
+    return res.json({ message: 'Xóa người dùng thành công' })
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return sendError(res, error)
   }
-};
+}
