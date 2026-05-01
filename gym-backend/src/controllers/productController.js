@@ -28,21 +28,15 @@ const normalizeWeightVariants = (variants, fallbackWeights) => {
 }
 
 const ensureSellerShop = async (user) => {
-  if (user.shop_id || user.shopId) return user.shop_id || user.shopId
-
-  let shop = await Shop.findOne({ user_id: user._id })
-  if (!shop) {
-    shop = await Shop.create({
-      user_id: user._id,
-      name: `${user.name || 'Seller'} Shop`,
-    })
+  const shopId = user.shop_id || user.shopId
+  if (!shopId) {
+    throw new AppError('Bạn cần có shop để tạo sản phẩm', 403)
   }
 
-  user.isSeller = true
-  user.role = 'seller'
-  user.shopId = shop._id
-  user.shop_id = shop._id
-  await user.save()
+  const shop = await Shop.findById(shopId)
+  if (!shop || shop.user_id.toString() !== user._id.toString()) {
+    throw new AppError('Shop không hợp lệ hoặc không tồn tại', 403)
+  }
 
   return shop._id
 }

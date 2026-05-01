@@ -1,6 +1,6 @@
 import passport from 'passport'
-import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { Strategy as FacebookStrategy } from 'passport-facebook'
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import User from '../models/User.js'
 import { normalizeEmail } from '../utils/identifier.js'
 
@@ -50,7 +50,7 @@ if (isGoogleOAuthConfigured) {
               email,
               provider: 'google',
               isVerified: true,
-              role: 'user',
+              role: 'member',
             })
           } else if (user.provider !== 'google') {
             user.provider = 'google'
@@ -69,49 +69,49 @@ if (isGoogleOAuthConfigured) {
 
 if (isFacebookOAuthConfigured) {
   passport.use(
-  new FacebookStrategy(
-    {
-      clientID: process.env.FACEBOOK_APP_ID,
-      clientSecret: process.env.FACEBOOK_APP_SECRET,
-      callbackURL: `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/facebook/callback`,
-      profileFields: ['id', 'displayName', 'name', 'profileUrl'],
-    },
-    async (_accessToken, _refreshToken, profile, done) => {
-      try {
-        const name = profile.displayName?.trim() || 
-          `${profile.name?.givenName || ''} ${profile.name?.familyName || ''}`.trim() || 
-          'Người dùng Facebook'
+    new FacebookStrategy(
+      {
+        clientID: process.env.FACEBOOK_APP_ID,
+        clientSecret: process.env.FACEBOOK_APP_SECRET,
+        callbackURL: `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/facebook/callback`,
+        profileFields: ['id', 'displayName', 'name', 'profileUrl'],
+      },
+      async (_accessToken, _refreshToken, profile, done) => {
+        try {
+          const name = profile.displayName?.trim() ||
+            `${profile.name?.givenName || ''} ${profile.name?.familyName || ''}`.trim() ||
+            'Người dùng Facebook'
 
-        const facebookId = profile.id
-        const facebookProfileUrl = profile.profileUrl
+          const facebookId = profile.id
+          const facebookProfileUrl = profile.profileUrl
 
-        // Tìm theo facebookId thay vì email
-        let user = await User.findOne({ facebookId })
+          // Tìm theo facebookId thay vì email
+          let user = await User.findOne({ facebookId })
 
-        if (!user) {
-          user = await User.create({
-            name,
-            facebookId,
-            facebookProfileUrl,
-            provider: 'facebook',
-            isVerified: true,
-            role: 'user',
-          })
-        } else {
-          // Cập nhật link profile nếu nó thay đổi hoặc chưa có
-          if (user.facebookProfileUrl !== facebookProfileUrl) {
-            user.facebookProfileUrl = facebookProfileUrl
-            await user.save({ validateBeforeSave: false })
+          if (!user) {
+            user = await User.create({
+              name,
+              facebookId,
+              facebookProfileUrl,
+              provider: 'facebook',
+              isVerified: true,
+              role: 'member',
+            })
+          } else {
+            // Cập nhật link profile nếu nó thay đổi hoặc chưa có
+            if (user.facebookProfileUrl !== facebookProfileUrl) {
+              user.facebookProfileUrl = facebookProfileUrl
+              await user.save({ validateBeforeSave: false })
+            }
           }
-        }
 
-        return done(null, user)
-      } catch (error) {
-        return done(error, null)
-      }
-    },
-  ),
-)
+          return done(null, user)
+        } catch (error) {
+          return done(error, null)
+        }
+      },
+    ),
+  )
 }
 
 export default passport

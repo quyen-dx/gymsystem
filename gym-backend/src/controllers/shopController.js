@@ -1,5 +1,5 @@
-import Shop from '../models/Shop.js'
 import Product from '../models/Product.js'
+import Shop from '../models/Shop.js'
 import User from '../models/User.js'
 import { recordAuditLog } from '../services/auditLogService.js'
 import { sendShopDeletionEmail } from '../services/emailService.js'
@@ -23,31 +23,39 @@ export const deleteShop = async (req, res, next) => {
       return next(new AppError('Vui lòng cung cấp lý do xóa shop', 400))
     }
 
-    const shop = await Shop.findById(id).populate('user_id')
+    const shop = await Shop.findById(id)
     if (!shop) {
       return next(new AppError('Không tìm thấy shop', 404))
     }
 
-    const user = shop.user_id
+    const ownerId = shop.user_id
     const shopName = shop.name
-    const userEmail = user?.email
 
-    // 1. Delete all products of this shop
+    // 1. Fetch owner details for email and audit log BEFORE deleting shop
+    const owner = await User.findById(ownerId)
+    const userEmail = owner?.email
+
+    // 2. Delete all products of this shop
     await Product.deleteMany({ shop_id: id })
 
-    // 2. Delete the shop
+    // 3. Delete the shop
     await shop.deleteOne()
 
-    // 3. Update user role (revert to 'user' or something?)
-    if (user) {
-      user.role = 'user'
-      user.isSeller = false
-      user.shopId = null
-      user.shop_id = null
-      await user.save()
+    // 4. Update user role and shop references
+    // We use findByIdAndUpdate to bypass potential validation issues with other fields
+    // and ensure the update is performed directly in the database.
+    if (ownerId) {
+      await User.findByIdAndUpdate(ownerId, {
+        $set: {
+          role: 'member',
+          isSeller: false,
+          shopId: null,
+          shop_id: null
+        }
+      })
     }
 
-    // 4. Send email if email exists
+    // 5. Send email if email exists
     if (userEmail) {
       try {
         await sendShopDeletionEmail({ toEmail: userEmail, shopName, reason })
@@ -56,12 +64,12 @@ export const deleteShop = async (req, res, next) => {
       }
     }
 
-    // 5. Audit log
+    // 6. Audit log
     await recordAuditLog({
       req,
       module: 'shops',
       action: 'delete',
-      entity: { _id: id, name: shopName, owner: user?.name },
+      entity: { _id: id, name: shopName, owner: owner?.name },
       details: `Xóa shop với lý do: ${reason}`,
     })
 

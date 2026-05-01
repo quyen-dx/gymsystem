@@ -1,12 +1,12 @@
-import User from '../models/User.js'
 import Shop from '../models/Shop.js'
+import User from '../models/User.js'
+import { recordAuditLog } from '../services/auditLogService.js'
 import {
   consumeOtp,
   hashPendingPassword,
   sendOtp,
   verifyOtp,
 } from '../services/otpService.js'
-import { recordAuditLog } from '../services/auditLogService.js'
 import AppError from '../utils/appError.js'
 import {
   generateAccessToken,
@@ -68,7 +68,7 @@ const createVerifiedUser = async (payload) => {
     provider: payload.provider,
     isVerified: true,
     password: payload.passwordHash || null,
-    role: 'user',
+    role: 'member',
   })
 
   if (payload.passwordHash) {
@@ -223,7 +223,7 @@ export const registerFacebook = async (req, res) => {
       password: password || null,
       provider: 'facebook',
       isVerified: true,
-      role: 'user',
+      role: 'member',
     })
 
     await user.save()
@@ -612,20 +612,40 @@ export const updateUserRole = async (req, res) => {
 
     const { role } = req.body
 
-    if (!['admin', 'pt', 'staff', 'member', 'user', 'seller'].includes(role)) {
+    const normalizedRole = role === 'user' ? 'member' : role
+    if (!['admin', 'pt', 'staff', 'member', 'seller'].includes(normalizedRole)) {
       throw new AppError('Role không hợp lệ', 400)
     }
 
     const user = await findEditableUserById(req.params.id)
     const previousRole = user.role
-    user.role = role
+
+    if (normalizedRole === 'seller') {
+      let shop = await Shop.findOne({ user_id: user._id })
+      if (!shop) {
+        shop = await Shop.create({
+          user_id: user._id,
+          name: `${user.name || 'Seller'} Shop`,
+          description: '',
+        })
+      }
+      user.isSeller = true
+      user.shopId = shop._id
+      user.shop_id = shop._id
+    } else if (previousRole === 'seller' && normalizedRole !== 'seller') {
+      user.isSeller = false
+      user.shopId = null
+      user.shop_id = null
+    }
+
+    user.role = normalizedRole
     await user.save()
     await recordAuditLog({
       req,
       module: 'users',
       action: 'update',
       entity: user,
-      details: `Đổi role từ ${previousRole} sang ${role}`,
+      details: `Đổi role từ ${previousRole} sang ${normalizedRole}`,
     })
 
     return res.json({ message: 'Cập nhật role thành công', user })
