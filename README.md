@@ -52,7 +52,7 @@ git commit -m "đặt theo chức năng "
 git push origin ten-chuc-nang
 ```
 
-### Bước 5 — mỗi lần code xong  báo tên chức năng cho main 🚀  Trên Zalo
+### Bước 5 —- mỗi lần code xong  báo tên chức năng cho main 🚀  Trên Zalo
 
 # Chú ý:
 
