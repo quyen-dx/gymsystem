@@ -4,7 +4,12 @@ import session from 'express-session'
 import connectDB from './src/config/db.js'
 import passport from './src/config/passport.js'
 import authRoutes from './src/routes/authRoutes.js'
+import auditLogRoutes from './src/routes/auditLogRoutes.js'
 import planRoutes from './src/routes/planRoutes.js'
+import productRoutes from './src/routes/productRoutes.js'
+import shopRoutes from './src/routes/shopRoutes.js'
+import { getMyProducts } from './src/controllers/productController.js'
+import { protect, sellerOnly } from './src/middlewares/authMiddleware.js'
 
 const app = express()
 
@@ -33,7 +38,11 @@ app.use(passport.initialize())
 app.use(passport.session())
 
 app.use('/api/auth', authRoutes)
+app.use('/api/audit-logs', auditLogRoutes)
+app.get('/api/my-products', protect, sellerOnly, getMyProducts)
 app.use('/api/plans', planRoutes)
+app.use('/api/products', productRoutes)
+app.use('/api/shops', shopRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', message: 'GymSystem API is running' })

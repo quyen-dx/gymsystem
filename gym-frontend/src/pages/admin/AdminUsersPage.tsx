@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import DashboardLayout from '../../components/layout/DashboardLayout'
+import AdminHistoryButton from '../../components/admin/AdminHistoryButton'
 import api from '../../services/api'
 import {
   Table, Button, Tag, Space, Popconfirm, message,
@@ -9,34 +10,26 @@ import {
   DeleteOutlined, LockOutlined, UnlockOutlined, EditOutlined,
   MailOutlined, PhoneOutlined, FacebookOutlined
 } from '@ant-design/icons'
-
-interface User {
-  _id: string
-  name: string
-  email: string | null
-  phone: string | null
-  facebookId?: string | null
-  role: 'admin' | 'pt' | 'staff' | 'member'
-  provider: string
-  isActive: boolean
-  isVerified: boolean
-  avatar: string
-  createdAt: string
-}
+import type { AdminUser } from '../../types/admin/user'
+import { useAuth } from '../../hook/useAuth'
 
 const roleColors: Record<string, string> = {
   admin: 'red',
   pt: 'blue',
   staff: 'orange',
   member: 'green',
+  user: 'green',
+  seller: 'purple',
 }
+const PROTECTED_ADMIN_EMAIL = 'daoxuanquyen333@gmail.com'
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<User[]>([])
+  const { user: currentUser } = useAuth()
+  const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('')
-  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null)
   const [form] = Form.useForm()
   const [submitLoading, setSubmitLoading] = useState(false)
 
@@ -76,7 +69,17 @@ export default function AdminUsersPage() {
     }
   }
 
-  const openEdit = (user: User) => {
+  const openEdit = (user: AdminUser) => {
+    if (user._id === currentUser?._id) {
+      message.warning('Không thể chỉnh sửa chính tài khoản của mình')
+      return
+    }
+
+    if (user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL) {
+      message.warning('Tài khoản admin này được bảo vệ và không thể chỉnh sửa')
+      return
+    }
+
     setEditingUser(user)
     form.setFieldsValue({ role: user.role })
   }
@@ -105,11 +108,14 @@ export default function AdminUsersPage() {
     return matchSearch && matchRole
   })
 
+  const isSelf = (userId: string) => userId === currentUser?._id
+  const isProtectedAdmin = (user: AdminUser) => user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL
+
   const columns = [
     {
       title: 'Người dùng',
       width: 220,
-      render: (_: any, u: User) => (
+      render: (_: any, u: AdminUser) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Avatar
             size={40}
@@ -130,7 +136,7 @@ export default function AdminUsersPage() {
     {
       title: 'Liên hệ',
       width: 260,
-      render: (_: any, u: User) => (
+      render: (_: any, u: AdminUser) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {u.email ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
@@ -154,16 +160,16 @@ export default function AdminUsersPage() {
             </div>
           )}
 
-          {u.facebookId ? (
+          {(u.facebookProfileUrl || u.facebookId) ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
               <FacebookOutlined style={{ color: '#1877F2' }} />
               <a
-                href={`https://facebook.com/${u.facebookId}`}
+                href={u.facebookProfileUrl || `https://facebook.com/${u.facebookId}`}
                 target="_blank"
                 rel="noreferrer"
-                style={{ color: '#1877F2' }}
+                style={{ color: '#1877F2', textDecoration: 'underline' }}
               >
-                facebook.com/{u.facebookId}
+                Trang cá nhân Facebook
               </a>
             </div>
           ) : (
@@ -190,7 +196,7 @@ export default function AdminUsersPage() {
     {
       title: 'Trạng thái',
       width: 130,
-      render: (_: any, u: User) => (
+      render: (_: any, u: AdminUser) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <Tag color={u.isActive ? 'success' : 'error'}>
             {u.isActive ? 'Hoạt động' : 'Đã khóa'}
@@ -210,35 +216,53 @@ export default function AdminUsersPage() {
     {
       title: 'Thao tác',
       width: 120,
-      render: (_: any, u: User) => (
-        <Space>
-          <Tooltip title="Đổi role">
-            <Button
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => openEdit(u)}
-            />
-          </Tooltip>
-          <Tooltip title={u.isActive ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}>
-            <Button
-              size="small"
-              icon={u.isActive ? <LockOutlined /> : <UnlockOutlined />}
-              onClick={() => handleToggleStatus(u._id)}
-            />
-          </Tooltip>
-          <Popconfirm
-            title="Xóa người dùng này?"
-            description="Hành động này không thể hoàn tác."
-            onConfirm={() => handleDelete(u._id)}
-            okText="Xóa"
-            cancelText="Hủy"
-          >
-            <Tooltip title="Xóa">
-              <Button size="small" danger icon={<DeleteOutlined />} />
+      render: (_: any, u: AdminUser) => {
+        const selfAccount = isSelf(u._id)
+        const protectedAccount = isProtectedAdmin(u)
+        const disabledActions = selfAccount || protectedAccount
+        const disabledTooltip = selfAccount
+          ? 'Không thể thao tác với chính tài khoản của mình'
+          : 'Tài khoản admin này được bảo vệ và không thể chỉnh sửa'
+
+        return (
+          <Space>
+            <Tooltip title={disabledActions ? disabledTooltip : 'Đổi role'}>
+              <span>
+                <Button
+                  size="small"
+                  icon={<EditOutlined />}
+                  disabled={disabledActions}
+                  onClick={() => openEdit(u)}
+                />
+              </span>
             </Tooltip>
-          </Popconfirm>
-        </Space>
-      ),
+            <Tooltip title={disabledActions ? disabledTooltip : (u.isActive ? 'Khóa tài khoản' : 'Mở khóa tài khoản')}>
+              <span>
+                <Button
+                  size="small"
+                  icon={u.isActive ? <LockOutlined /> : <UnlockOutlined />}
+                  disabled={disabledActions}
+                  onClick={() => handleToggleStatus(u._id)}
+                />
+              </span>
+            </Tooltip>
+            <Popconfirm
+              title="Xóa người dùng này?"
+              description="Hành động này không thể hoàn tác."
+              onConfirm={() => handleDelete(u._id)}
+              okText="Xóa"
+              cancelText="Hủy"
+              disabled={disabledActions}
+            >
+              <Tooltip title={disabledActions ? disabledTooltip : 'Xóa'}>
+                <span>
+                  <Button size="small" danger icon={<DeleteOutlined />} disabled={disabledActions} />
+                </span>
+              </Tooltip>
+            </Popconfirm>
+          </Space>
+        )
+      },
     },
   ]
 
@@ -253,7 +277,8 @@ export default function AdminUsersPage() {
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <Input.Search
             placeholder="Tìm theo tên, email, số điện thoại..."
             allowClear
@@ -270,8 +295,11 @@ export default function AdminUsersPage() {
               { label: 'PT', value: 'pt' },
               { label: 'Staff', value: 'staff' },
               { label: 'Member', value: 'member' },
+              { label: 'Seller', value: 'seller' },
             ]}
           />
+          </div>
+          <AdminHistoryButton module="users" title="người dùng" />
         </div>
 
         <Table
@@ -300,6 +328,7 @@ export default function AdminUsersPage() {
                 { label: 'PT', value: 'pt' },
                 { label: 'Staff', value: 'staff' },
                 { label: 'Member', value: 'member' },
+                { label: 'Seller', value: 'seller' },
               ]}
             />
           </Form.Item>

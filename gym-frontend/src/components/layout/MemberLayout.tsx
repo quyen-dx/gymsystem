@@ -5,6 +5,7 @@ import {
   HeartOutlined,
   HomeOutlined,
   LogoutOutlined,
+  ShoppingCartOutlined,
 } from '@ant-design/icons'
 import {
   Avatar,
@@ -12,23 +13,29 @@ import {
   Layout,
   Menu,
   Typography,
+  Badge
 } from 'antd'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hook/useAuth'
+import { useCart } from '../../context/useCart'
+import AccountProfileModal from '../account/AccountProfileModal'
 
 const { Header, Content } = Layout
 const { Text } = Typography
 
 export default function MemberLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
+  const [accountOpen, setAccountOpen] = useState(false)
+  const { cartCount } = useCart()
   const navigate = useNavigate()
 
-  // 🔥 theme mới (Antd Provider của mày)
   const { dark, toggleTheme } = useTheme()
 
   const navItems = [
     { key: '/dashboard/member', label: 'Trang chủ', icon: <HomeOutlined /> },
+    { key: '/dashboard/member/store', label: 'Cửa hàng', icon: <FundOutlined /> },
     { key: '/dashboard/member/booking', label: 'Đặt lịch PT', icon: <CalendarOutlined /> },
     { key: '/dashboard/member/health', label: 'Sức khoẻ', icon: <HeartOutlined /> },
     { key: '/dashboard/member/workout', label: 'Lộ trình', icon: <FundOutlined /> },
@@ -37,7 +44,6 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
   return (
     <Layout style={{ minHeight: '100vh' }}>
 
-      {/* HEADER */}
       <Header
         style={{
           display: 'flex',
@@ -54,19 +60,17 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
           onClick={() => navigate('/dashboard/member')}
           style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}
         >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 12,
-              background: '#b6462f',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 700,
-            }}
-          >
+          <div style={{
+            width: 36,
+            height: 36,
+            borderRadius: 12,
+            background: '#b6462f',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 700,
+          }}>
             GS
           </div>
 
@@ -93,20 +97,25 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
           }}
         />
 
-        {/* RIGHT ACTIONS */}
+        {/* RIGHT */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
 
-          {/* 🔥 TOGGLE THEME */}
-          <Button
-            icon={<BulbOutlined />}
-            onClick={toggleTheme}
-          >
+          {/* CART */}
+          <Badge count={cartCount}>
+            <Button
+              icon={<ShoppingCartOutlined />}
+              onClick={() => navigate('/dashboard/member/cart')}
+            />
+          </Badge>
+
+          {/* THEME */}
+          <Button icon={<BulbOutlined />} onClick={toggleTheme}>
             {dark ? 'Light' : 'Dark'}
           </Button>
 
-  
+          {/* USER */}
           <div
-            onClick={() => navigate('/profile')}
+            onClick={() => setAccountOpen(true)}
             style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
           >
             <Avatar
@@ -119,15 +128,14 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
               {user?.name}
             </Text>
           </div>
+
           <Button danger icon={<LogoutOutlined />} onClick={logout}>
             Đăng xuất
           </Button>
 
         </div>
-
       </Header>
 
-      {/* CONTENT */}
       <Content
         style={{
           padding: 24,
@@ -137,6 +145,8 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
       >
         {children}
       </Content>
+
+      <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
 
     </Layout>
   )

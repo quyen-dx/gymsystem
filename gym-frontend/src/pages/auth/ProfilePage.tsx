@@ -39,6 +39,7 @@ export default function ProfilePage() {
 
   const getDashboardPath = (role: string) => {
     if (role === 'admin') return '/dashboard/admin'
+    if (role === 'seller') return '/dashboard/seller/products'
     if (role === 'staff') return '/dashboard/staff'
     if (role === 'pt') return '/dashboard/pt'
     return '/dashboard/member'
@@ -109,6 +110,20 @@ export default function ProfilePage() {
       setPasswords({ currentPassword: '', newPassword: '', confirm: '' })
     } catch (err: any) {
       message.error(err.response?.data?.message || 'Đổi mật khẩu thất bại')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleEnableSeller = async () => {
+    setLoading(true)
+    try {
+      const { data } = await authService.enableSellerMode()
+      updateUser(data.user)
+      message.success('Đã bật chế độ bán hàng')
+      navigate('/dashboard/seller/products')
+    } catch (err: any) {
+      message.error(err.response?.data?.message || 'Bật bán hàng thất bại')
     } finally {
       setLoading(false)
     }
@@ -211,9 +226,28 @@ export default function ProfilePage() {
               </Form.Item>
             )}
 
+            {user.facebookProfileUrl && (
+              <Form.Item label="Facebook Profile">
+                <a 
+                  href={user.facebookProfileUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:underline"
+                >
+                  Xem trang cá nhân
+                </a>
+              </Form.Item>
+            )}
+
             <Button type="primary" htmlType="submit" loading={loading} block>
               Lưu thay đổi
             </Button>
+
+            {user.role !== 'seller' && (
+              <Button style={{ marginTop: 12 }} block loading={loading} onClick={handleEnableSeller}>
+                Bật chế độ bán hàng
+              </Button>
+            )}
           </Form>
         )}
 

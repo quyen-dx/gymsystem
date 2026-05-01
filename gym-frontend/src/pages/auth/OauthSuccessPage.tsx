@@ -5,6 +5,7 @@ import { authService } from '../../services/authService'
 
 const getDashboardPath = (role?: string) => {
   if (role === 'admin') return '/dashboard/admin'
+  if (role === 'seller') return '/dashboard/seller/products'
   if (role === 'staff') return '/dashboard/staff'
   if (role === 'pt') return '/dashboard/pt'
   return '/dashboard/member'

@@ -50,7 +50,7 @@ if (isGoogleOAuthConfigured) {
               email,
               provider: 'google',
               isVerified: true,
-              role: 'member',
+              role: 'user',
             })
           } else if (user.provider !== 'google') {
             user.provider = 'google'
@@ -74,7 +74,7 @@ if (isFacebookOAuthConfigured) {
       clientID: process.env.FACEBOOK_APP_ID,
       clientSecret: process.env.FACEBOOK_APP_SECRET,
       callbackURL: `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/facebook/callback`,
-      profileFields: ['id', 'displayName', 'name'],
+      profileFields: ['id', 'displayName', 'name', 'profileUrl'],
     },
     async (_accessToken, _refreshToken, profile, done) => {
       try {
@@ -83,6 +83,7 @@ if (isFacebookOAuthConfigured) {
           'Người dùng Facebook'
 
         const facebookId = profile.id
+        const facebookProfileUrl = profile.profileUrl
 
         // Tìm theo facebookId thay vì email
         let user = await User.findOne({ facebookId })
@@ -91,10 +92,17 @@ if (isFacebookOAuthConfigured) {
           user = await User.create({
             name,
             facebookId,
+            facebookProfileUrl,
             provider: 'facebook',
             isVerified: true,
-            role: 'member',
+            role: 'user',
           })
+        } else {
+          // Cập nhật link profile nếu nó thay đổi hoặc chưa có
+          if (user.facebookProfileUrl !== facebookProfileUrl) {
+            user.facebookProfileUrl = facebookProfileUrl
+            await user.save({ validateBeforeSave: false })
+          }
         }
 
         return done(null, user)

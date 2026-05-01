@@ -1,5 +1,6 @@
 import Plan from '../models/Plan.js';
 import Membership from '../models/Membership.js';
+import { recordAuditLog } from '../services/auditLogService.js';
 
 // ==================== TẠO GÓI TẬP ====================
 export const createPlan = async (req, res) => {
@@ -7,6 +8,13 @@ export const createPlan = async (req, res) => {
     const { name, price, durationDays, description, color } = req.body;
 
     const plan = await Plan.create({ name, price, durationDays, description, color });
+    await recordAuditLog({
+      req,
+      module: 'plans',
+      action: 'create',
+      entity: plan,
+      details: 'Tạo gói tập',
+    });
 
     res.status(201).json({ message: 'Tạo gói tập thành công', plan });
   } catch (error) {
@@ -96,15 +104,24 @@ export const updatePlan = async (req, res) => {
   try {
     const { name, price, durationDays, description, color } = req.body;
 
-    const plan = await Plan.findByIdAndUpdate(
-      req.params.id,
-      { name, price, durationDays, description, color },
-      { new: true, runValidators: true }
-    );
-
+    const plan = await Plan.findById(req.params.id);
     if (!plan) {
       return res.status(404).json({ message: 'Không tìm thấy gói tập' });
     }
+
+    plan.name = name;
+    plan.price = price;
+    plan.durationDays = durationDays;
+    plan.description = description;
+    plan.color = color;
+    await plan.save();
+    await recordAuditLog({
+      req,
+      module: 'plans',
+      action: 'update',
+      entity: plan,
+      details: 'Cập nhật thông tin gói tập',
+    });
 
     res.json({ message: 'Cập nhật gói tập thành công', plan });
   } catch (error) {
@@ -135,6 +152,13 @@ export const deletePlan = async (req, res) => {
     if (!plan) {
       return res.status(404).json({ message: 'Không tìm thấy gói tập' });
     }
+    await recordAuditLog({
+      req,
+      module: 'plans',
+      action: 'delete',
+      entity: plan,
+      details: 'Xóa gói tập',
+    });
 
     res.json({ message: 'Xóa gói tập thành công' });
   } catch (error) {
@@ -152,6 +176,13 @@ export const togglePlanStatus = async (req, res) => {
 
     plan.isActive = !plan.isActive;
     await plan.save();
+    await recordAuditLog({
+      req,
+      module: 'plans',
+      action: 'update',
+      entity: plan,
+      details: plan.isActive ? 'Kích hoạt gói tập' : 'Vô hiệu hóa gói tập',
+    });
 
     res.json({
       message: `Gói tập đã được ${plan.isActive ? 'kích hoạt' : 'vô hiệu hóa'}`,

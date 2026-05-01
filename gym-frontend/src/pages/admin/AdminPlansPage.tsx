@@ -1,34 +1,24 @@
 import { useEffect, useState } from 'react'
 import DashboardLayout from '../../components/layout/DashboardLayout'
+import AdminHistoryButton from '../../components/admin/AdminHistoryButton'
 import api from '../../services/api'
 import {
   Table, Button, Modal, Form, Input, InputNumber,
-  Switch, Tag, Space, Popconfirm, message, ColorPicker
+  Tag, Space, Popconfirm, message, ColorPicker
 } from 'antd'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, PoweroffOutlined
 } from '@ant-design/icons'
-
-interface Plan {
-  _id: string
-  name: string
-  price: number
-  durationDays: number
-  description: string
-  color: string
-  isActive: boolean
-  memberCount: number
-  createdAt: string
-}
+import type { AdminPlan } from '../../types/admin/plan'
 
 export default function AdminPlansPage() {
-  const [plans, setPlans] = useState<Plan[]>([])
+  const [plans, setPlans] = useState<AdminPlan[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
+  const [editingPlan, setEditingPlan] = useState<AdminPlan | null>(null)
   const [form] = Form.useForm()
   const [submitLoading, setSubmitLoading] = useState(false)
 
@@ -58,7 +48,7 @@ export default function AdminPlansPage() {
     setModalOpen(true)
   }
 
-  const openEdit = (plan: Plan) => {
+  const openEdit = (plan: AdminPlan) => {
     setEditingPlan(plan)
     form.setFieldsValue({
       name: plan.name,
@@ -121,7 +111,7 @@ export default function AdminPlansPage() {
     {
       title: 'Gói tập',
       dataIndex: 'name',
-      render: (name: string, record: Plan) => (
+      render: (name: string, record: AdminPlan) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div
             style={{
@@ -163,7 +153,7 @@ export default function AdminPlansPage() {
     },
     {
       title: 'Thao tác',
-      render: (_: any, record: Plan) => (
+      render: (_: any, record: AdminPlan) => (
         <Space>
           <Button
             size="small"
@@ -209,9 +199,12 @@ export default function AdminPlansPage() {
               fetchPlans(1, val)
             }}
           />
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            Tạo gói tập
-          </Button>
+          <Space>
+            <AdminHistoryButton module="plans" title="gói tập" />
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              Tạo gói tập
+            </Button>
+          </Space>
         </div>
 
         <Table

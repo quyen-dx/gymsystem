@@ -8,8 +8,13 @@ export interface User {
   name: string
   password?: string | null
   phone?: string | null
+  facebookProfileUrl?: string | null
+  dateOfBirth?: string | null
   provider: AuthProviderType
-  role: 'admin' | 'pt' | 'staff' | 'member'
+  role: 'admin' | 'pt' | 'staff' | 'member' | 'user' | 'seller'
+  isSeller?: boolean
+  shopId?: string | null
+  shop_id?: string | null
   avatar?: string
   isActive: boolean
   isVerified: boolean

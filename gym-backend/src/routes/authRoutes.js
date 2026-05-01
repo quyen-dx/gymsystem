@@ -7,6 +7,7 @@ import {
   buildFacebookOauthRedirect,
   changePassword,
   deleteUser,
+  enableSellerMode,
   getAllUsers,
   getMe,
   login,
@@ -94,6 +95,7 @@ router.put('/update-profile', protect, upload.single('avatar'), updateProfile)
 router.put('/change-password', protect, changePassword)
 router.put('/set-password', protect, setPassword)
 router.post('/logout', protect, logout)
+router.post('/seller/enable', protect, enableSellerMode)
 
 router.get('/users', protect, adminOnly, getAllUsers)
 router.patch('/users/:id/role', protect, adminOnly, updateUserRole)

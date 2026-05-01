@@ -38,6 +38,9 @@ export const authService = {
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put('/auth/change-password', data),
 
+  enableSellerMode: (data?: { shopName?: string; description?: string }) =>
+    api.post('/auth/seller/enable', data || {}),
+
   sendForgotPasswordOtp: (identifier: string) =>
     api.post('/auth/forgot-password/send-otp', { identifier }),
 

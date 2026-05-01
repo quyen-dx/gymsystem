@@ -28,6 +28,10 @@ const userSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    facebookProfileUrl: {
+      type: String,
+      default: null,
+    },
     phone: {
       type: String,
       unique: true,
@@ -37,6 +41,10 @@ const userSchema = new mongoose.Schema(
         validator: (value) => value == null || value === '' || phoneRegex.test(value),
         message: 'Số điện thoại không hợp lệ',
       },
+    },
+    dateOfBirth: {
+      type: Date,
+      default: null,
     },
     password: {
       type: String,
@@ -55,8 +63,22 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'pt', 'staff', 'member'],
+      enum: ['admin', 'pt', 'staff', 'member', 'seller'],
       default: 'member',
+    },
+    isSeller: {
+      type: Boolean,
+      default: false,
+    },
+    shopId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Shop',
+      default: null,
+    },
+    shop_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Shop',
+      default: null,
     },
     avatar: {
       type: String,

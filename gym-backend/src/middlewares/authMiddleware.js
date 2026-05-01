@@ -50,6 +50,8 @@ export const authorize = (...roles) => {
 };
 
 export const adminOnly = authorize('admin');
+export const sellerOnly = authorize('seller');
+export const sellerOrAdmin = authorize('seller', 'admin');
 export const adminOrStaff = authorize('admin', 'staff');
 export const adminOrPT = authorize('admin', 'pt');
-export const allRoles = authorize('admin', 'pt', 'staff', 'member');
+export const allRoles = authorize('admin', 'pt', 'staff', 'member', 'user', 'seller');

@@ -1,10 +1,12 @@
 import User from '../models/User.js'
+import Shop from '../models/Shop.js'
 import {
   consumeOtp,
   hashPendingPassword,
   sendOtp,
   verifyOtp,
 } from '../services/otpService.js'
+import { recordAuditLog } from '../services/auditLogService.js'
 import AppError from '../utils/appError.js'
 import {
   generateAccessToken,
@@ -66,7 +68,7 @@ const createVerifiedUser = async (payload) => {
     provider: payload.provider,
     isVerified: true,
     password: payload.passwordHash || null,
-    role: 'member',
+    role: 'user',
   })
 
   if (payload.passwordHash) {
@@ -221,7 +223,7 @@ export const registerFacebook = async (req, res) => {
       password: password || null,
       provider: 'facebook',
       isVerified: true,
-      role: 'member',
+      role: 'user',
     })
 
     await user.save()
@@ -344,7 +346,7 @@ export const getMe = async (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const { name, phone } = req.body
+    const { name, phone, dateOfBirth } = req.body
     const updateData = {}
 
     if (name) updateData.name = name.trim()
@@ -355,6 +357,14 @@ export const updateProfile = async (req, res) => {
         throw new AppError('Số điện thoại không hợp lệ', 400)
       }
       updateData.phone = normalizedPhone
+    }
+
+    if (dateOfBirth) {
+      const parsedDate = new Date(dateOfBirth)
+      if (Number.isNaN(parsedDate.getTime())) {
+        throw new AppError('Ngày sinh không hợp lệ', 400)
+      }
+      updateData.dateOfBirth = parsedDate
     }
 
     if (req.file) {
@@ -534,19 +544,89 @@ export const getAllUsers = async (req, res) => {
   }
 }
 
+export const enableSellerMode = async (req, res) => {
+  try {
+    if (!req.user.dateOfBirth) {
+      throw new AppError('Vui lòng cập nhật ngày sinh trước khi bật chế độ bán hàng', 400)
+    }
+
+    const today = new Date()
+    const birthDate = new Date(req.user.dateOfBirth)
+    let age = today.getFullYear() - birthDate.getFullYear()
+    const monthDiff = today.getMonth() - birthDate.getMonth()
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age -= 1
+    }
+
+    if (age <= 20) {
+      throw new AppError('Bạn phải trên 20 tuổi mới có thể bật chế độ bán hàng', 403)
+    }
+
+    let shop = await Shop.findOne({ user_id: req.user._id })
+
+    if (!shop) {
+      shop = await Shop.create({
+        user_id: req.user._id,
+        name: req.body?.shopName?.trim() || `${req.user.name || 'Seller'} Shop`,
+        description: req.body?.description || '',
+      })
+    }
+
+    req.user.isSeller = true
+    req.user.role = 'seller'
+    req.user.shopId = shop._id
+    req.user.shop_id = shop._id
+    await req.user.save()
+
+    return res.json({
+      message: 'Đã bật chế độ bán hàng',
+      user: req.user,
+      shop,
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+const isCurrentUser = (req) => req.user?._id?.toString() === req.params.id
+const PROTECTED_ADMIN_EMAIL = 'daoxuanquyen333@gmail.com'
+
+const findEditableUserById = async (id) => {
+  const user = await User.findById(id)
+  if (!user) {
+    throw new AppError('Không tìm thấy người dùng', 404)
+  }
+
+  if (user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL) {
+    throw new AppError('Tài khoản admin này được bảo vệ và không thể chỉnh sửa', 403)
+  }
+
+  return user
+}
+
 export const updateUserRole = async (req, res) => {
   try {
+    if (isCurrentUser(req)) {
+      throw new AppError('Bạn không thể chỉnh sửa chính tài khoản của mình', 403)
+    }
+
     const { role } = req.body
 
-    if (!['admin', 'pt', 'staff', 'member'].includes(role)) {
+    if (!['admin', 'pt', 'staff', 'member', 'user', 'seller'].includes(role)) {
       throw new AppError('Role không hợp lệ', 400)
     }
 
-    const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true })
-
-    if (!user) {
-      throw new AppError('Không tìm thấy người dùng', 404)
-    }
+    const user = await findEditableUserById(req.params.id)
+    const previousRole = user.role
+    user.role = role
+    await user.save()
+    await recordAuditLog({
+      req,
+      module: 'users',
+      action: 'update',
+      entity: user,
+      details: `Đổi role từ ${previousRole} sang ${role}`,
+    })
 
     return res.json({ message: 'Cập nhật role thành công', user })
   } catch (error) {
@@ -556,13 +636,20 @@ export const updateUserRole = async (req, res) => {
 
 export const toggleUserStatus = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-    if (!user) {
-      throw new AppError('Không tìm thấy người dùng', 404)
+    if (isCurrentUser(req)) {
+      throw new AppError('Bạn không thể khóa hoặc mở khóa chính tài khoản của mình', 403)
     }
 
+    const user = await findEditableUserById(req.params.id)
     user.isActive = !user.isActive
     await user.save()
+    await recordAuditLog({
+      req,
+      module: 'users',
+      action: 'update',
+      entity: user,
+      details: user.isActive ? 'Mở khóa tài khoản' : 'Khóa tài khoản',
+    })
 
     return res.json({
       message: `Tài khoản đã được ${user.isActive ? 'mở khóa' : 'khóa'}`,
@@ -575,10 +662,19 @@ export const toggleUserStatus = async (req, res) => {
 
 export const deleteUser = async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id)
-    if (!user) {
-      throw new AppError('Không tìm thấy người dùng', 404)
+    if (isCurrentUser(req)) {
+      throw new AppError('Bạn không thể xóa chính tài khoản của mình', 403)
     }
+
+    const user = await findEditableUserById(req.params.id)
+    await user.deleteOne()
+    await recordAuditLog({
+      req,
+      module: 'users',
+      action: 'delete',
+      entity: user,
+      details: 'Xóa tài khoản người dùng',
+    })
 
     return res.json({ message: 'Xóa người dùng thành công' })
   } catch (error) {

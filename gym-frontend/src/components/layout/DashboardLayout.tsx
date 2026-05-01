@@ -6,6 +6,7 @@ import {
   LogoutOutlined,
   TeamOutlined,
   UserOutlined,
+  ShopOutlined,
 } from '@ant-design/icons'
 import {
   Avatar,
@@ -15,9 +16,11 @@ import {
   Menu,
   Typography,
 } from 'antd'
+import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hook/useAuth'
+import AccountProfileModal from '../account/AccountProfileModal'
 
 const { Sider, Content } = Layout
 const { Text } = Typography
@@ -27,10 +30,10 @@ const roleMenus: Record<string, any[]> = {
     { key: '/dashboard/admin', label: 'Overview', icon: <DashboardOutlined /> },
     { key: '/dashboard/admin/users', label: 'Users', icon: <UserOutlined /> },
     { key: '/dashboard/admin/plans', label: 'Plans', icon: <CalendarOutlined /> },
+    { key: '/dashboard/admin/shop', label: 'Shop', icon: <BulbOutlined /> },
     { key: '/dashboard/admin/members', label: 'Members', icon: <TeamOutlined /> },
     { key: '/dashboard/admin/pts', label: 'Trainers (PT)', icon: <UserOutlined /> },
     { key: '/dashboard/admin/reports', label: 'Reports', icon: <BarChartOutlined /> },
-
   ],
   staff: [
     { key: '/dashboard/staff', label: 'Check-in', icon: <DashboardOutlined /> },
@@ -40,10 +43,14 @@ const roleMenus: Record<string, any[]> = {
     { key: '/dashboard/pt', label: 'Schedule', icon: <CalendarOutlined /> },
     { key: '/dashboard/pt/members', label: 'Students', icon: <TeamOutlined /> },
   ],
+  seller: [
+    { key: '/dashboard/seller/products', label: 'My Products', icon: <ShopOutlined /> },
+  ],
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
+  const [accountOpen, setAccountOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -109,7 +116,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               marginBottom: 12,
               cursor: 'pointer',
             }}
-            onClick={() => navigate('/profile')}
+            onClick={() => setAccountOpen(true)}
           >
             <Avatar
               size={44}
@@ -153,6 +160,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </Content>
       </Layout>
+
+      <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
 
     </Layout>
   )
