@@ -7,6 +7,7 @@ export interface AdminProductPartner {
 export interface AdminWeightVariant {
   label: string
   priceDelta: number
+  stock?: number
 }
 
 export interface AdminProduct {

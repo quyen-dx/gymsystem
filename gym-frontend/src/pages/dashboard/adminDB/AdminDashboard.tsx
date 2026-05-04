@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import DashboardLayout from '../../components/layout/DashboardLayout'
-import api from '../../services/api'
+import DashboardLayout from '../../../components/layout/DashboardLayout'
+import api from '../../../services/api'
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({

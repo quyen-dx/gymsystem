@@ -1,6 +1,7 @@
 import api from './api'
 
 export const getProducts = (params?: any) => api.get('/products', { params })
+export const getProductCategories = (params?: any) => api.get('/products/categories', { params })
 export const getShopProducts = (shopId: string, params?: any) =>
   api.get('/products', { params: { ...params, shopId } })
 export const getAdminProducts = (params?: any) => api.get('/products/admin/all', { params })

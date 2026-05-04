@@ -1,21 +1,23 @@
+import { DeleteOutlined } from '@ant-design/icons'
 import {
   Button,
   Card,
   Col,
   Empty,
-  Row,
   InputNumber,
   Popconfirm,
+  Row,
   message
 } from 'antd'
-import { DeleteOutlined } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../components/layout/MemberLayout'
-import { useCart } from '../../context/useCart'
 import { useTheme } from '../../context/ThemeProvider'
+import { useCart } from '../../context/useCart'
 import type { CartItem } from '../../types/member/cart'
 
 export default function CartPage() {
   const { cart, setCart } = useCart()
+  const navigate = useNavigate()
   const { dark } = useTheme()
   const panelBg = dark ? 'rgba(23,23,23,0.92)' : '#ffffff'
   const borderColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)'
@@ -46,11 +48,12 @@ export default function CartPage() {
   )
 
   const handleCheckout = () => {
-    message.info('Tính năng thanh toán đang phát triển!')
+    navigate('/dashboard/member/checkout')
   }
 
   return (
     <MemberLayout>
+      <div className="member-page">
       <h2 style={{ marginBottom: 24 }}>
         Giỏ hàng của bạn ({cart.length} sản phẩm)
       </h2>
@@ -99,7 +102,8 @@ export default function CartPage() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: 8,
-                      marginBottom: 12
+                      marginBottom: 12,
+                      flexWrap: 'wrap',
                     }}
                   >
                     <span>Số lượng:</span>
@@ -157,12 +161,14 @@ export default function CartPage() {
               type="primary"
               size="large"
               onClick={handleCheckout}
+              style={{ width: 'min(100%, 280px)' }}
             >
               Tiến hành thanh toán
             </Button>
           </div>
         </>
       )}
+      </div>
     </MemberLayout>
   )
 }

@@ -30,11 +30,16 @@ const normalizeWeightVariants = (product: MemberProduct) => {
       .map((item) => ({
         label: String(item?.label || '').trim(),
         priceDelta: Number(item?.priceDelta || 0) || 0,
+        stock: Number(item?.stock || 0) || 0,
       }))
       .filter((item) => item.label)
-      .map((item) => ({ ...item, priceDelta: item.priceDelta > 0 ? item.priceDelta : 0 }))
+      .map((item) => ({
+        ...item,
+        priceDelta: item.priceDelta > 0 ? item.priceDelta : 0,
+        stock: item.stock > 0 ? item.stock : 0,
+      }))
   }
-  return normalizeImageList(product.weights).map((label) => ({ label, priceDelta: 0 }))
+  return normalizeImageList(product.weights).map((label) => ({ label, priceDelta: 0, stock: 0 }))
 }
 
 export default function ProductDetailPage() {
@@ -70,13 +75,48 @@ export default function ProductDetailPage() {
       .finally(() => setLoading(false))
   }, [id])
 
+  useEffect(() => {
+    if (!user) return
+    setProduct((current) => {
+      if (!current?.reviews?.length) return current
+      return {
+        ...current,
+        reviews: current.reviews.map((review) =>
+          String(review.userId) === String(user._id)
+            ? { ...review, name: user.name, avatar: user.avatar || '' }
+            : review,
+        ),
+      }
+    })
+  }, [user?._id, user?.name, user?.avatar])
+
+  useEffect(() => {
+    if (!product) return
+    const variants = normalizeWeightVariants(product)
+    const selected = variants.find((item) => item.label === activeWeight)
+    const selectedStock = variants.length > 0 ? Number(selected?.stock || 0) : Number(product.stock || 0)
+    if (selectedStock > 0 && qty > selectedStock) setQty(selectedStock)
+    if (selectedStock <= 0 && qty !== 1) setQty(1)
+  }, [activeWeight, product?._id])
+
   const handleAddToCart = () => {
     if (!product) return
     const selectedVariant = weightVariants.find((item) => item.label === activeWeight)
-    const dynamicPrice = basePrice + (selectedVariant?.priceDelta || 0)
+    const dynamicPrice = selectedVariant?.priceDelta ?? basePrice
+    const selectedStock = weightVariants.length > 0 ? Number(selectedVariant?.stock || 0) : Number(product.stock || 0)
+    if (selectedStock <= 0) {
+      message.error('Biến thể này đã hết hàng')
+      return
+    }
+    if (qty > selectedStock) {
+      message.error(`Chỉ còn ${selectedStock} sản phẩm cho biến thể này`)
+      return
+    }
+    const sellerId = typeof product.shop_id === 'object' ? product.shop_id?.user_id?._id || '' : ''
+
     for (let i = 0; i < qty; i++) {
       addToCart(
-        { ...product, basePrice, price: dynamicPrice },
+        { ...product, basePrice, price: dynamicPrice, sellerId },
         { weight: selectedVariant?.label || undefined },
       )
     }
@@ -91,7 +131,8 @@ export default function ProductDetailPage() {
       setProduct(res.data.product)
       message.success('Đánh giá thành công!')
       setReviewForm({ rating: 5, comment: '' })
-    } catch (err: any) {
+    } catch (error) {
+      const err = error as any;
       message.error(err.response?.data?.message || 'Đánh giá thất bại')
     } finally {
       setSubmittingReview(false)
@@ -123,8 +164,8 @@ export default function ProductDetailPage() {
   const basePrice = product.price ?? 0
   const weightVariants = normalizeWeightVariants(product)
   const selectedVariant = weightVariants.find((item) => item.label === activeWeight)
-  const dynamicPrice = basePrice + (selectedVariant?.priceDelta || 0)
-  const stock = product.stock ?? 0
+  const dynamicPrice = selectedVariant?.priceDelta ?? basePrice
+  const stock = weightVariants.length > 0 ? Number(selectedVariant?.stock || 0) : Number(product.stock || 0)
   const rating = product.rating ?? 0
   const reviewCount = product.reviewCount ?? reviews.length
   const inStock = stock > 0
@@ -136,8 +177,10 @@ export default function ProductDetailPage() {
   const thumbBorder = dark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,0,0,0.12)'
   const shop = typeof product.shop_id === 'object' ? product.shop_id : null
   const shopOwner = shop?.user_id
-  const shopName = shopOwner?.name || shop?.name || product.partner?.name || 'Shop'
-  const shopAvatar = shopOwner?.avatar || shop?.avatar || product.partner?.avatar
+  const shopName = shop?.name || shopOwner?.name || product.partner?.name || 'Shop'
+  const shopAvatar = shop?.avatar || shopOwner?.avatar || product.partner?.avatar
+  const shopRating = shop?.rating ?? 0
+  const shopReviewCount = shop?.reviewCount ?? 0
   const shopId = shop?._id
   const descriptionImages = normalizeImageList(product.descriptionImages)
 
@@ -155,19 +198,20 @@ export default function ProductDetailPage() {
     maxWidth: 1280,
     margin: '0 auto',
     padding: '0 16px',
+    width: '100%',
   }
 
   const sectionStyle: React.CSSProperties = {
     background: panelBg,
     borderRadius: 16,
     border: `1px solid ${borderColor}`,
-    padding: 32,
+    padding: 'clamp(16px, 3vw, 32px)',
     marginBottom: 16,
   }
 
   return (
     <MemberLayout>
-      <div style={containerStyle}>
+      <div className="member-page" style={containerStyle}>
 
         {/* BACK BUTTON */}
         <Button
@@ -231,13 +275,10 @@ export default function ProductDetailPage() {
                 {product.name}
               </h1>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
                 <Rate disabled defaultValue={rating} allowHalf style={{ fontSize: 16 }} />
                 <span style={{ color: '#b6462f', fontWeight: 600 }}>{rating.toFixed(1)}</span>
                 <span style={{ color: mutedText }}>({reviewCount} đánh giá)</span>
-                <Tag color={inStock ? 'green' : 'red'}>
-                  {inStock ? `Còn ${stock}` : 'Hết hàng'}
-                </Tag>
               </div>
 
               <div style={{
@@ -245,11 +286,6 @@ export default function ProductDetailPage() {
                 padding: '16px 0', borderTop: `1px solid ${borderColor}`, borderBottom: `1px solid ${borderColor}`,
               }}>
                 {dynamicPrice.toLocaleString('vi-VN')}đ
-                {selectedVariant && selectedVariant.priceDelta > 0 && (
-                  <span style={{ marginLeft: 10, fontSize: 14, color: mutedText, fontWeight: 500 }}>
-                    (+{selectedVariant.priceDelta.toLocaleString('vi-VN')}đ)
-                  </span>
-                )}
               </div>
 
               {/* TRỌNG LƯỢNG */}
@@ -259,6 +295,7 @@ export default function ProductDetailPage() {
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     {weightVariants.map((variant) => {
                       const active = activeWeight === variant.label
+                      const variantInStock = Number(variant.stock || 0) > 0
                       return (
                         <button
                           key={variant.label}
@@ -274,6 +311,7 @@ export default function ProductDetailPage() {
                             fontWeight: 600,
                             minWidth: 64,
                             fontSize: 14,
+                            opacity: variantInStock ? 1 : 0.55,
                           }}
                         >
                           {variant.label}
@@ -281,11 +319,26 @@ export default function ProductDetailPage() {
                       )
                     })}
                   </div>
+                  {selectedVariant && (
+                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <Tag color="blue">Trọng lượng: {selectedVariant.label}</Tag>
+                      <Tag color={stock > 0 ? 'green' : 'red'}>
+                        {stock > 0 ? `Còn ${stock} sản phẩm` : 'Hết hàng'}
+                      </Tag>
+                    </div>
+                  )}
+                </div>
+              )}
+              {weightVariants.length === 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <Tag color={stock > 0 ? 'green' : 'red'}>
+                    {stock > 0 ? `Còn ${stock} sản phẩm` : 'Hết hàng'}
+                  </Tag>
                 </div>
               )}
 
               {/* SỐ LƯỢNG */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
                 <span style={{ color: mutedText, fontSize: 14 }}>Số lượng:</span>
                 <InputNumber
                   min={1} max={stock || 99}
@@ -297,21 +350,21 @@ export default function ProductDetailPage() {
               </div>
 
               {/* NÚT */}
-              <div style={{ display: 'flex', gap: 12 }}>
+              <div className="member-responsive-actions" style={{ display: 'flex', gap: 12 }}>
                 <Button
                   type="primary"
                   size="large"
                   icon={<ShoppingCartOutlined />}
                   disabled={!inStock}
                   onClick={handleAddToCart}
-                  style={{ flex: 1, background: '#b6462f', borderColor: '#b6462f' }}
+                  style={{ flex: '1 1 220px', background: '#b6462f', borderColor: '#b6462f' }}
                 >
                   Thêm vào giỏ
                 </Button>
                 <Button
                   size="large"
                   onClick={() => navigate('/dashboard/member/cart')}
-                  style={{ flex: 1 }}
+                  style={{ flex: '1 1 180px' }}
                 >
                   Xem giỏ hàng
                 </Button>
@@ -327,6 +380,7 @@ export default function ProductDetailPage() {
             display: 'flex',
             alignItems: 'center',
             gap: 16,
+            flexWrap: 'wrap',
             cursor: shopId ? 'pointer' : 'default',
           }}>
             <Avatar
@@ -338,6 +392,12 @@ export default function ProductDetailPage() {
             />
             <div onClick={() => shopId && navigate(`/dashboard/member/shop/${shopId}`)}>
               <div style={{ fontWeight: 700, fontSize: 16 }}>{shopName}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <Rate disabled allowHalf value={shopRating} style={{ fontSize: 13 }} />
+                <span style={{ color: mutedText, fontSize: 13 }}>
+                  {shopRating.toFixed(1)} ({shopReviewCount} đánh giá shop)
+                </span>
+              </div>
               <div style={{ color: mutedText, fontSize: 13, marginTop: 4 }}>Shop bán sản phẩm này</div>
             </div>
           </div>
@@ -350,6 +410,7 @@ export default function ProductDetailPage() {
             display: 'flex',
             alignItems: 'center',
             gap: 16,
+            flexWrap: 'wrap',
           }}>
             <Avatar
               size={56}
@@ -480,7 +541,7 @@ export default function ProductDetailPage() {
               <Divider />
               <h3 style={{ marginBottom: 16 }}>Viết đánh giá của bạn</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <span style={{ color: mutedText }}>Đánh giá:</span>
                   <Rate
                     value={reviewForm.rating}
@@ -503,7 +564,7 @@ export default function ProductDetailPage() {
                   type="primary"
                   loading={submittingReview}
                   onClick={handleSubmitReview}
-                  style={{ width: 'fit-content', background: '#b6462f', borderColor: '#b6462f' }}
+                  style={{ width: 'fit-content', maxWidth: '100%', background: '#b6462f', borderColor: '#b6462f' }}
                 >
                   Gửi đánh giá
                 </Button>

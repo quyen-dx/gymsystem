@@ -19,6 +19,14 @@ export interface ProductShop {
   name?: string
   avatar?: string
   description?: string
+  address?: {
+    street?: string
+    ward?: string
+    district?: string
+    city?: string
+  }
+  rating?: number
+  reviewCount?: number
   user_id?: {
     _id: string
     name?: string
@@ -29,6 +37,7 @@ export interface ProductShop {
 export interface ProductWeightVariant {
   label: string
   priceDelta: number
+  stock?: number
 }
 
 export interface MemberProduct {

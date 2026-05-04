@@ -1,5 +1,5 @@
-import api from './api'
 import type { AuthProviderType, LoginPayload } from '../context/auth.context'
+import api from './api'
 
 export const authService = {
   sendRegisterOtp: (data: {
@@ -32,11 +32,16 @@ export const authService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
+  addPassword: (data: { newPassword: string }) =>
+    api.post('/auth/add-password', data),
+
   setPassword: (data: { newPassword: string }) =>
     api.put('/auth/set-password', data),
 
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put('/auth/change-password', data),
+
+  hasPassword: () => api.get('/auth/has-password'),
 
   enableSellerMode: (data?: { shopName?: string; description?: string }) =>
     api.post('/auth/seller/enable', data || {}),

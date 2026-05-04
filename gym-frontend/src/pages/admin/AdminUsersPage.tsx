@@ -1,17 +1,31 @@
+import {
+  DeleteOutlined,
+  EditOutlined,
+  FacebookOutlined,
+  LockOutlined,
+  MailOutlined, PhoneOutlined,
+  UnlockOutlined
+} from '@ant-design/icons'
+import {
+  Avatar,
+  Button,
+  Form,
+  Input,
+  Modal,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  message
+} from 'antd'
 import { useEffect, useState } from 'react'
 import DashboardLayout from '../../components/layout/DashboardLayout'
-import AdminHistoryButton from '../../components/admin/AdminHistoryButton'
-import api from '../../services/api'
-import {
-  Table, Button, Tag, Space, Popconfirm, message,
-  Input, Select, Avatar, Modal, Form, Tooltip
-} from 'antd'
-import {
-  DeleteOutlined, LockOutlined, UnlockOutlined, EditOutlined,
-  MailOutlined, PhoneOutlined, FacebookOutlined
-} from '@ant-design/icons'
-import type { AdminUser } from '../../types/admin/user'
 import { useAuth } from '../../hook/useAuth'
+import api from '../../services/api'
+import type { AdminUser } from '../../types/admin/user'
+import AdminHistoryButton from './AdminHistoryButton'
 
 const roleColors: Record<string, string> = {
   admin: 'red',
@@ -279,25 +293,25 @@ export default function AdminUsersPage() {
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
         <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <Input.Search
-            placeholder="Tìm theo tên, email, số điện thoại..."
-            allowClear
-            style={{ maxWidth: 320 }}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <Select
-            placeholder="Lọc theo role"
-            allowClear
-            style={{ width: 160 }}
-            onChange={(val) => setRoleFilter(val || '')}
-            options={[
-              { label: 'Admin', value: 'admin' },
-              { label: 'PT', value: 'pt' },
-              { label: 'Staff', value: 'staff' },
-              { label: 'Member', value: 'member' },
-              { label: 'Seller', value: 'seller' },
-            ]}
-          />
+            <Input.Search
+              placeholder="Tìm theo tên, email, số điện thoại..."
+              allowClear
+              style={{ maxWidth: 320 }}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <Select
+              placeholder="Lọc theo role"
+              allowClear
+              style={{ width: 160 }}
+              onChange={(val) => setRoleFilter(val || '')}
+              options={[
+                { label: 'Admin', value: 'admin' },
+                { label: 'PT', value: 'pt' },
+                { label: 'Staff', value: 'staff' },
+                { label: 'Member', value: 'member' },
+                { label: 'Seller', value: 'seller' },
+              ]}
+            />
           </div>
           <AdminHistoryButton module="users" title="người dùng" />
         </div>

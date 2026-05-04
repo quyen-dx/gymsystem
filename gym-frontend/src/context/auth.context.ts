@@ -18,6 +18,7 @@ export interface User {
   avatar?: string
   isActive: boolean
   isVerified: boolean
+  hasPassword?: boolean
   createdAt: string
 }
 

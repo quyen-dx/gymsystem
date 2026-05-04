@@ -1,15 +1,15 @@
 import express from 'express'
-import passport from '../config/passport.js'
 import { upload } from '../config/cloudinary.js'
-import { isGoogleOAuthConfigured, isFacebookOAuthConfigured } from '../config/passport.js'
+import passport, { isFacebookOAuthConfigured, isGoogleOAuthConfigured } from '../config/passport.js'
 import {
-  buildGoogleOauthRedirect,
   buildFacebookOauthRedirect,
+  buildGoogleOauthRedirect,
   changePassword,
   deleteUser,
   enableSellerMode,
   getAllUsers,
   getMe,
+  hasPassword,
   login,
   logout,
   refreshToken,
@@ -91,8 +91,10 @@ router.post('/forgot-password/verify-otp', verifyForgotPasswordOtp)
 router.post('/forgot-password/reset', resetPassword)
 
 router.get('/me', protect, getMe)
+router.get('/has-password', protect, hasPassword)
 router.put('/update-profile', protect, upload.single('avatar'), updateProfile)
 router.put('/change-password', protect, changePassword)
+router.post('/add-password', protect, setPassword)
 router.put('/set-password', protect, setPassword)
 router.post('/logout', protect, logout)
 router.post('/seller/enable', protect, enableSellerMode)

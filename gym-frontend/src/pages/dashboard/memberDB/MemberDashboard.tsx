@@ -1,7 +1,7 @@
-import MemberLayout from '../../components/layout/MemberLayout'
-import { useAuth } from '../../hook/useAuth'
+import { Button, Card, Col, Row, Typography } from 'antd'
 import { useNavigate } from 'react-router-dom'
-import { Card, Typography, Row, Col, Button } from 'antd'
+import MemberLayout from '../../../components/layout/MemberLayout'
+import { useAuth } from '../../../hook/useAuth'
 
 const { Title, Text } = Typography
 
@@ -34,6 +34,7 @@ export default function MemberDashboard() {
 
   return (
     <MemberLayout>
+      <div className="member-page">
 
       {/* HEADER SECTION */}
       <Card style={{ marginBottom: 24, borderRadius: 16 }}>
@@ -94,6 +95,7 @@ export default function MemberDashboard() {
           </Col>
         ))}
       </Row>
+      </div>
 
     </MemberLayout>
   )

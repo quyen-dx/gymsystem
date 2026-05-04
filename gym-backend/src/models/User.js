@@ -24,7 +24,6 @@ const userSchema = new mongoose.Schema(
     },
     facebookId: {
       type: String,
-      default: null,
       unique: true,
       sparse: true,
     },
@@ -69,6 +68,23 @@ const userSchema = new mongoose.Schema(
     isSeller: {
       type: Boolean,
       default: false,
+    },
+    specialties: [{ type: String, trim: true }],
+    rating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+    experienceYears: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    bio: {
+      type: String,
+      default: '',
+      trim: true,
     },
     shopId: {
       type: mongoose.Schema.Types.ObjectId,

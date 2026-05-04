@@ -1,6 +1,6 @@
 import express from 'express'
 import {
-  getAllProducts, getProductById,
+  getAllProducts, getProductById, getProductCategories,
   getAdminProducts, getMyProducts,
   createProduct, updateProduct, deleteProduct, addReview
 } from '../controllers/productController.js'
@@ -10,6 +10,7 @@ import { checkProductOwner } from '../middlewares/productOwnershipMiddleware.js'
 const router = express.Router()
 
 router.get('/', getAllProducts)
+router.get('/categories', getProductCategories)
 router.get('/admin/all', protect, adminOnly, getAdminProducts)
 router.get('/my-products', protect, sellerOnly, getMyProducts)
 router.get('/:id', getProductById)

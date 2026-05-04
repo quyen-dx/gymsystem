@@ -340,16 +340,58 @@ export const logout = async (req, res) => {
   }
 }
 
+const passwordStrengthRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/
+
+const validatePasswordStrength = (password) => {
+  if (!passwordStrengthRegex.test(password)) {
+    throw new AppError(
+      'Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường và số',
+      400,
+    )
+  }
+}
+
 export const getMe = async (req, res) => {
-  return res.json({ user: req.user })
+  const user = await User.findById(req.user._id).select('+password')
+  const hasPassword = !!user?.password
+  const responseUser = user ? user.toObject() : req.user.toObject()
+  delete responseUser.password
+  delete responseUser.refreshToken
+  return res.json({ user: { ...responseUser, hasPassword } })
+}
+
+export const hasPassword = async (req, res) => {
+  const user = await User.findById(req.user._id).select('+password')
+  return res.json({ hasPassword: !!user?.password })
 }
 
 export const updateProfile = async (req, res) => {
   try {
-    const { name, phone, dateOfBirth } = req.body
+    const { name, phone, email, dateOfBirth } = req.body
     const updateData = {}
 
     if (name) updateData.name = name.trim()
+
+    if (email !== undefined) {
+      const normalizedEmail = email?.trim().toLowerCase()
+      if (!normalizedEmail) {
+        throw new AppError('Email không được để trống', 400)
+      }
+      if (!isValidEmail(normalizedEmail)) {
+        throw new AppError('Email không hợp lệ', 400)
+      }
+      if (req.user.email && req.user.email !== normalizedEmail) {
+        throw new AppError('Email của tài khoản này không thể chỉnh sửa', 400)
+      }
+      const existingEmailUser = await User.findOne({
+        email: normalizedEmail,
+        _id: { $ne: req.user._id },
+      })
+      if (existingEmailUser) {
+        throw new AppError('Email đã được sử dụng', 400)
+      }
+      updateData.email = normalizedEmail
+    }
 
     if (phone) {
       const normalizedPhone = normalizePhone(phone)
@@ -387,9 +429,11 @@ export const setPassword = async (req, res) => {
   try {
     const { newPassword } = req.body
 
-    if (!newPassword || newPassword.length < 6) {
-      throw new AppError('Mật khẩu phải có ít nhất 6 ký tự', 400)
+    if (!newPassword) {
+      throw new AppError('Mật khẩu mới là bắt buộc', 400)
     }
+
+    validatePasswordStrength(newPassword)
 
     const user = await User.findById(req.user._id).select('+password')
 
@@ -410,9 +454,14 @@ export const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body
 
-    if (!newPassword || newPassword.length < 6) {
-      throw new AppError('Mật khẩu mới phải có ít nhất 6 ký tự', 400)
+    if (!currentPassword) {
+      throw new AppError('Mật khẩu hiện tại là bắt buộc', 400)
     }
+    if (!newPassword) {
+      throw new AppError('Mật khẩu mới là bắt buộc', 400)
+    }
+
+    validatePasswordStrength(newPassword)
 
     const user = await User.findById(req.user._id).select('+password')
 

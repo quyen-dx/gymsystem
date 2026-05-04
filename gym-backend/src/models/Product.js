@@ -11,6 +11,7 @@ const reviewSchema = new mongoose.Schema({
 const weightVariantSchema = new mongoose.Schema({
   label: { type: String, required: true, trim: true },
   priceDelta: { type: Number, default: 0, min: 0 },
+  stock: { type: Number, default: 0, min: 0 },
 }, { _id: false })
 
 const productSchema = new mongoose.Schema({

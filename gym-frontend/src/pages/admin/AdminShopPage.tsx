@@ -11,11 +11,11 @@ import {
 } from 'antd'
 import { useEffect, useState } from 'react'
 import DashboardLayout from '../../components/layout/DashboardLayout'
-import AdminHistoryButton from '../../components/admin/AdminHistoryButton'
-import { getAdminShops, deleteShop } from '../../services/shopService'
 import { getAdminShopProducts } from '../../services/productService'
-import type { AdminShop } from '../../types/admin/shop'
+import { deleteShop, getAdminShops } from '../../services/shopService'
 import type { AdminProduct } from '../../types/admin/product'
+import type { AdminShop } from '../../types/admin/shop'
+import AdminHistoryButton from './AdminHistoryButton'
 
 const { Text } = Typography
 

@@ -4,9 +4,10 @@ import {
   CalendarOutlined,
   DashboardOutlined,
   LogoutOutlined,
+  ShoppingCartOutlined,
+  ShopOutlined,
   TeamOutlined,
   UserOutlined,
-  ShopOutlined,
 } from '@ant-design/icons'
 import {
   Avatar,
@@ -20,7 +21,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hook/useAuth'
-import AccountProfileModal from '../account/AccountProfileModal'
+import AccountProfileModal from '../../pages/auth/AccountProfileModal'
 
 const { Sider, Content } = Layout
 const { Text } = Typography
@@ -45,7 +46,10 @@ const roleMenus: Record<string, any[]> = {
   ],
   seller: [
     { key: '/dashboard/seller/products', label: 'My Products', icon: <ShopOutlined /> },
+    { key: '/dashboard/seller/orders', label: 'Đơn hàng', icon: <ShoppingCartOutlined /> },
   ],
+  member: [],
+  user: [],
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

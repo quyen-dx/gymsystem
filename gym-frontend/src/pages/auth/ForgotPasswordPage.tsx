@@ -1,9 +1,9 @@
+import { MoonOutlined, SunOutlined } from '@ant-design/icons'
+import { Button, Divider, Form, Input, Steps, Typography, message } from 'antd'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { authService } from '../../services/authService'
-import { Button, Form, Input, Typography, Steps, message, Divider } from 'antd'
 import { useTheme } from '../../context/ThemeProvider'
-import { SunOutlined, MoonOutlined } from '@ant-design/icons'
+import { authService } from '../../services/authService'
 
 const { Title, Text } = Typography
 
@@ -20,14 +20,12 @@ export default function ForgotPasswordPage() {
   const [otpPreview, setOtpPreview] = useState('')
   const [resetToken, setResetToken] = useState('')
 
-  const [form] = Form.useForm()
-
   const identifierType = useMemo(
     () => (identifier.includes('@') ? 'email' : 'số điện thoại'),
     [identifier],
   )
 
-  const handleSendOtp = async (values: any) => {
+  const handleSendOtp = async (values: Record<string, string>) => {
     setLoading(true)
     try {
       setIdentifier(values.identifier)
@@ -35,14 +33,15 @@ export default function ForgotPasswordPage() {
       setOtpPreview(data.otpPreview || '')
       setStep('otp')
       message.success(data.message || 'OTP đã được gửi')
-    } catch (err: any) {
+    } catch (error) {
+      const err = error as any;
       message.error(err.response?.data?.message || 'Không thể gửi OTP')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleVerifyOtp = async (values: any) => {
+  const handleVerifyOtp = async (values: Record<string, string>) => {
     setLoading(true)
     try {
       const { data } = await authService.verifyForgotPasswordOtp({
@@ -52,14 +51,15 @@ export default function ForgotPasswordPage() {
       setResetToken(data.resetToken)
       setStep('password')
       message.success('OTP hợp lệ')
-    } catch (err: any) {
+    } catch (error) {
+      const err = error as any;
       message.error(err.response?.data?.message || 'OTP không đúng')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleResetPassword = async (values: any) => {
+  const handleResetPassword = async (values: Record<string, string>) => {
     setLoading(true)
     try {
       if (values.newPassword !== values.confirmPassword) {
@@ -72,7 +72,8 @@ export default function ForgotPasswordPage() {
       })
       message.success('Đổi mật khẩu thành công')
       setTimeout(() => navigate('/login'), 800)
-    } catch (err: any) {
+    } catch (error) {
+      const err = error as any;
       message.error(err.response?.data?.message || 'Không thể đặt lại mật khẩu')
     } finally {
       setLoading(false)

@@ -1,15 +1,25 @@
+import {
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined,
+  PoweroffOutlined
+} from '@ant-design/icons'
+import {
+  Button,
+  ColorPicker,
+  Form, Input, InputNumber,
+  Modal,
+  Popconfirm,
+  Space,
+  Table,
+  Tag,
+  message
+} from 'antd'
 import { useEffect, useState } from 'react'
 import DashboardLayout from '../../components/layout/DashboardLayout'
-import AdminHistoryButton from '../../components/admin/AdminHistoryButton'
 import api from '../../services/api'
-import {
-  Table, Button, Modal, Form, Input, InputNumber,
-  Tag, Space, Popconfirm, message, ColorPicker
-} from 'antd'
-import {
-  PlusOutlined, EditOutlined, DeleteOutlined, PoweroffOutlined
-} from '@ant-design/icons'
 import type { AdminPlan } from '../../types/admin/plan'
+import AdminHistoryButton from './AdminHistoryButton'
 
 export default function AdminPlansPage() {
   const [plans, setPlans] = useState<AdminPlan[]>([])
