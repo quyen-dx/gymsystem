@@ -25,6 +25,7 @@ import {
   verifyRegisterOtp,
 } from '../controllers/authController.js'
 import { adminOnly, protect } from '../middlewares/authMiddleware.js'
+import { buildClientUrl } from '../config/appUrls.js'
 
 const router = express.Router()
 
@@ -50,7 +51,7 @@ router.get(
   (req, res, next) => {
     passport.authenticate('google', { session: false }, async (err, user) => {
       if (err) return next(err)
-      if (!user) return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=google_oauth_failed`)
+      if (!user) return res.redirect(buildClientUrl('/login', { error: 'google_oauth_failed' }))
       try {
         const redirectUrl = await buildGoogleOauthRedirect(user)
         return res.redirect(redirectUrl)
@@ -69,7 +70,7 @@ router.get(
   (req, res, next) => {
     passport.authenticate('facebook', { session: false }, async (err, user) => {
       if (err) return next(err)
-      if (!user) return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=facebook_oauth_failed`)
+      if (!user) return res.redirect(buildClientUrl('/login', { error: 'facebook_oauth_failed' }))
       try {
         const redirectUrl = await buildFacebookOauthRedirect(user)
         return res.redirect(redirectUrl)

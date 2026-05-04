@@ -16,12 +16,13 @@ import productRoutes from './src/routes/productRoutes.js'
 import sellerRoutes from './src/routes/sellerRoutes.js'
 import shopRoutes from './src/routes/shopRoutes.js'
 import walletRoutes from './src/routes/walletRoutes.js'
+import { getClientUrls } from './src/config/appUrls.js'
 
 const app = express()
 
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: getClientUrls(),
     credentials: true,
   }),
 )

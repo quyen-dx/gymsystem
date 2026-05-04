@@ -1,6 +1,7 @@
 import passport from 'passport'
 import { Strategy as FacebookStrategy } from 'passport-facebook'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
+import { getBackendUrl } from './appUrls.js'
 import User from '../models/User.js'
 import { normalizeEmail } from '../utils/identifier.js'
 
@@ -31,7 +32,7 @@ if (isGoogleOAuthConfigured) {
       {
         clientID: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        callbackURL: `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/google/callback`,
+        callbackURL: `${getBackendUrl()}/api/auth/google/callback`,
       },
       async (_accessToken, _refreshToken, profile, done) => {
         try {
@@ -73,7 +74,7 @@ if (isFacebookOAuthConfigured) {
       {
         clientID: process.env.FACEBOOK_APP_ID,
         clientSecret: process.env.FACEBOOK_APP_SECRET,
-        callbackURL: `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/facebook/callback`,
+        callbackURL: `${getBackendUrl()}/api/auth/facebook/callback`,
         profileFields: ['id', 'displayName', 'name', 'profileUrl'],
       },
       async (_accessToken, _refreshToken, profile, done) => {

@@ -22,6 +22,7 @@ import {
   normalizeIdentifier,
   normalizePhone,
 } from '../utils/identifier.js'
+import { buildClientUrl } from '../config/appUrls.js'
 
 const sendError = (res, error) => {
   console.error(error)
@@ -86,11 +87,7 @@ export const buildGoogleOauthRedirect = async (user) => {
   user.refreshToken = refreshToken
   await user.save({ validateBeforeSave: false })
 
-  const frontendUrl = process.env.CLIENT_URL || 'http://localhost:5173'
-  const redirectUrl = new URL('/oauth-success', frontendUrl)
-  redirectUrl.searchParams.set('token', accessToken)
-
-  return redirectUrl.toString()
+  return buildClientUrl('/oauth-success', { token: accessToken })
 }
 export const buildFacebookOauthRedirect = async (user) => {
   const accessToken = generateAccessToken(user._id, user.role)
@@ -99,11 +96,7 @@ export const buildFacebookOauthRedirect = async (user) => {
   user.refreshToken = refreshToken
   await user.save({ validateBeforeSave: false })
 
-  const frontendUrl = process.env.CLIENT_URL || 'http://localhost:5173'
-  const redirectUrl = new URL('/oauth-success', frontendUrl)
-  redirectUrl.searchParams.set('token', accessToken)
-
-  return redirectUrl.toString()
+  return buildClientUrl('/oauth-success', { token: accessToken })
 }
 export const sendRegisterOtp = async (req, res) => {
   try {

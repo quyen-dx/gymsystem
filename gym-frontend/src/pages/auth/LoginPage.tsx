@@ -9,6 +9,7 @@ import {
 import { Button, Divider, Form, Input, Typography, message } from 'antd'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { API_URL } from '../../config/env'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hook/useAuth'
 
@@ -49,14 +50,10 @@ export default function LoginPage() {
   }
 
   const handleGoogle = () => {
-    window.location.href =
-      (import.meta.env.VITE_API_URL || 'http://localhost:5000/api') +
-      '/auth/google'
+    window.location.href = `${API_URL}/auth/google`
   }
   const handleFacebook = () => {
-    window.location.href =
-      (import.meta.env.VITE_API_URL || 'http://localhost:5000/api') +
-      '/auth/facebook'
+    window.location.href = `${API_URL}/auth/facebook`
   }
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
