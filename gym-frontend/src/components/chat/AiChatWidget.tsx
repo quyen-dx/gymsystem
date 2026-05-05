@@ -1,7 +1,7 @@
 import { CloseOutlined, DeleteOutlined, EditOutlined, ExpandAltOutlined, MoreOutlined, PlusOutlined, SendOutlined } from '@ant-design/icons'
 import { Avatar, Badge, Button, Drawer, Dropdown, Input, Modal, Segmented, Select, Space, Spin, Tooltip, Typography } from 'antd'
-import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hook/useAuth'
 import { deleteAiChatSession, getAiChatHistory, renameAiChatSession, requestAiAssistant, saveAiChatHistory, type AiMode } from '../../services/aiService'
@@ -112,7 +112,7 @@ const loadMascotPosition = (): MascotPosition => {
 const saveMascotPosition = (position: MascotPosition) => {
     try {
         localStorage.setItem(MASCOT_POSITION_KEY, JSON.stringify(position))
-    } catch {}
+    } catch { }
 }
 
 const clampMascotPosition = (position: MascotPosition): MascotPosition => ({
@@ -139,7 +139,7 @@ const loadChatState = (storageKey: string): StoredChatState => {
 const saveChatState = (storageKey: string, state: StoredChatState) => {
     try {
         localStorage.setItem(storageKey, JSON.stringify(state))
-    } catch {}
+    } catch { }
 }
 
 const createSession = (): ChatSession => ({
@@ -165,16 +165,16 @@ const playDoraemonClickSound = () => {
         gain.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.01)
         gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.18)
         gain.connect(audioContext.destination)
-        ;[660, 880].forEach((frequency, index) => {
-            const oscillator = audioContext.createOscillator()
-            oscillator.type = 'sine'
-            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime + index * 0.07)
-            oscillator.connect(gain)
-            oscillator.start(audioContext.currentTime + index * 0.07)
-            oscillator.stop(audioContext.currentTime + index * 0.07 + 0.11)
-        })
+            ;[660, 880].forEach((frequency, index) => {
+                const oscillator = audioContext.createOscillator()
+                oscillator.type = 'sine'
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime + index * 0.07)
+                oscillator.connect(gain)
+                oscillator.start(audioContext.currentTime + index * 0.07)
+                oscillator.stop(audioContext.currentTime + index * 0.07 + 0.11)
+            })
         window.setTimeout(() => audioContext.close(), 320)
-    } catch {}
+    } catch { }
 }
 
 const DoraemonChatMascot = ({ active }: { active: boolean }) => (
@@ -334,7 +334,7 @@ export default function AiChatWidget() {
     useEffect(() => {
         if (!user?._id || hydratedServerHistoryRef.current !== user._id || sessions.length === 0) return
         const timer = window.setTimeout(() => {
-            saveAiChatHistory({ sessions, activeSessionId }).catch(() => {})
+            saveAiChatHistory({ sessions, activeSessionId }).catch(() => { })
         }, 450)
         return () => window.clearTimeout(timer)
     }, [sessions, activeSessionId, user?._id])
@@ -395,7 +395,7 @@ export default function AiChatWidget() {
                     session.sessionId === editingSessionId ? { ...session, title } : session
                 ),
                 activeSessionId,
-            }).catch(() => {})
+            }).catch(() => { })
         })
         setEditingSessionId(null)
         setEditingTitle('')
@@ -768,12 +768,17 @@ export default function AiChatWidget() {
                     z-index: 10100 !important;
                 }
 
+
                 .ai-chat-session-actions {
                     opacity: 0;
                     transition: opacity 160ms ease;
                 }
                 .ai-chat-session-item:hover .ai-chat-session-actions,
                 .ai-chat-session-actions.is-open { opacity: 1; }
+
+                @media (hover: none) {
+                    .ai-chat-session-actions { opacity: 1 !important; }
+                }
 
                 .ai-chat-panel textarea::placeholder {
                     color: ${dark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.42)'};
