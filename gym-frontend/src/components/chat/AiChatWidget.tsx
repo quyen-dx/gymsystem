@@ -832,7 +832,7 @@ export default function AiChatWidget() {
             >
                 <div className="ai-chat-wrapper">
             {/* MASCOT BUTTON */}
-            <Tooltip title="Nói chuyện với Doraemon" placement="left">
+            <Tooltip  placement="left">
                 <Badge count={sessions.length} offset={[-4, 8]} color="#b6462f">
                     <button
                         type="button"
