@@ -434,6 +434,7 @@ export default function AiChatWidget() {
             okText: 'Xóa',
             cancelText: 'Hủy',
             okButtonProps: { danger: true },
+            zIndex: 10200,
             onOk: () => deleteSession(sessionId),
         })
     }
