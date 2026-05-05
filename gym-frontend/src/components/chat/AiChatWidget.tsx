@@ -11,9 +11,7 @@ const MASCOT_POSITION_KEY = 'doraemon_chat_position'
 const MASCOT_WIDTH = 88
 const MASCOT_HEIGHT = 112
 const VIEWPORT_PADDING = 10
-// Thay URL này để đổi hình nền mờ bên trong khung chat.
 const CHAT_PANEL_BACKGROUND_IMAGE = 'https://genk.mediacdn.vn/2019/7/3/photo-1-1562129061617297549771.jpg'
-
 const AI_AVATAR_IMAGE = 'https://vcdn1-giaitri.vnecdn.net/2023/04/28/doraemon4-1682675790-8961-1682675801.jpg?w=500&h=300&q=100&dpr=1&fit=crop&s=3dxqum5l0xkhHX-R0z_a1g'
 
 const AI_MODE_OPTIONS: { label: string; value: AiMode }[] = [
@@ -114,9 +112,7 @@ const loadMascotPosition = (): MascotPosition => {
 const saveMascotPosition = (position: MascotPosition) => {
     try {
         localStorage.setItem(MASCOT_POSITION_KEY, JSON.stringify(position))
-    } catch {
-        // ignore localStorage write errors
-    }
+    } catch {}
 }
 
 const clampMascotPosition = (position: MascotPosition): MascotPosition => ({
@@ -143,9 +139,7 @@ const loadChatState = (storageKey: string): StoredChatState => {
 const saveChatState = (storageKey: string, state: StoredChatState) => {
     try {
         localStorage.setItem(storageKey, JSON.stringify(state))
-    } catch {
-        // ignore localStorage write errors
-    }
+    } catch {}
 }
 
 const createSession = (): ChatSession => ({
@@ -171,7 +165,6 @@ const playDoraemonClickSound = () => {
         gain.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.01)
         gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.18)
         gain.connect(audioContext.destination)
-
         ;[660, 880].forEach((frequency, index) => {
             const oscillator = audioContext.createOscillator()
             oscillator.type = 'sine'
@@ -180,11 +173,8 @@ const playDoraemonClickSound = () => {
             oscillator.start(audioContext.currentTime + index * 0.07)
             oscillator.stop(audioContext.currentTime + index * 0.07 + 0.11)
         })
-
         window.setTimeout(() => audioContext.close(), 320)
-    } catch {
-        // Optional sound effect.
-    }
+    } catch {}
 }
 
 const DoraemonChatMascot = ({ active }: { active: boolean }) => (
@@ -249,13 +239,7 @@ const DoraemonMiniAvatar = () => (
     <img
         src={AI_AVATAR_IMAGE}
         alt="Doraemon"
-        style={{
-            width: 22,
-            height: 22,
-            borderRadius: '50%',
-            display: 'block',
-            objectFit: 'cover',
-        }}
+        style={{ width: 22, height: 22, borderRadius: '50%', display: 'block', objectFit: 'cover' }}
     />
 )
 
@@ -290,7 +274,6 @@ export default function AiChatWidget() {
     useEffect(() => {
         const initialPosition = clampMascotPosition(loadMascotPosition())
         setMascotPosition(initialPosition)
-
         const handleResize = () => {
             setViewport({ width: window.innerWidth, height: window.innerHeight })
             setMascotPosition((current) => {
@@ -299,7 +282,6 @@ export default function AiChatWidget() {
                 return next
             })
         }
-
         window.addEventListener('resize', handleResize)
         return () => window.removeEventListener('resize', handleResize)
     }, [])
@@ -320,13 +302,11 @@ export default function AiChatWidget() {
     useEffect(() => {
         if (!user?._id) return
         let cancelled = false
-
         const loadServerHistory = async () => {
             try {
                 const { data } = await getAiChatHistory()
                 if (cancelled) return
                 hydratedServerHistoryRef.current = user._id
-
                 if (Array.isArray(data.sessions) && data.sessions.length > 0) {
                     setSessions(data.sessions)
                     setActiveSessionId(data.activeSessionId || data.sessions[0].sessionId)
@@ -339,15 +319,12 @@ export default function AiChatWidget() {
                 hydratedServerHistoryRef.current = user._id
             }
         }
-
         loadServerHistory()
         return () => { cancelled = true }
     }, [user?._id, storageKey])
 
     useEffect(() => {
-        if (!activeSessionId && sessions.length > 0) {
-            setActiveSessionId(sessions[0].sessionId)
-        }
+        if (!activeSessionId && sessions.length > 0) setActiveSessionId(sessions[0].sessionId)
     }, [activeSessionId, sessions])
 
     useEffect(() => {
@@ -357,11 +334,8 @@ export default function AiChatWidget() {
     useEffect(() => {
         if (!user?._id || hydratedServerHistoryRef.current !== user._id || sessions.length === 0) return
         const timer = window.setTimeout(() => {
-            saveAiChatHistory({ sessions, activeSessionId }).catch(() => {
-                // Keep local history if server sync fails.
-            })
+            saveAiChatHistory({ sessions, activeSessionId }).catch(() => {})
         }, 450)
-
         return () => window.clearTimeout(timer)
     }, [sessions, activeSessionId, user?._id])
 
@@ -373,9 +347,7 @@ export default function AiChatWidget() {
 
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout>
-        if (retryCountdown > 0) {
-            timer = setTimeout(() => setRetryCountdown(retryCountdown - 1), 1000)
-        }
+        if (retryCountdown > 0) timer = setTimeout(() => setRetryCountdown(retryCountdown - 1), 1000)
         return () => { if (timer) clearTimeout(timer) }
     }, [retryCountdown])
 
@@ -389,10 +361,9 @@ export default function AiChatWidget() {
                 if (session.sessionId !== activeSession.sessionId) return session
                 return {
                     ...session,
-                    title:
-                        session.title === 'New Chat' && message.role === 'user'
-                            ? getSessionTitle(message.content)
-                            : session.title,
+                    title: session.title === 'New Chat' && message.role === 'user'
+                        ? getSessionTitle(message.content)
+                        : session.title,
                     messages: [...session.messages, message],
                 }
             })
@@ -462,12 +433,10 @@ export default function AiChatWidget() {
         const nextActiveSessionId = activeSessionId === sessionId
             ? nextSessions[0]?.sessionId || ''
             : activeSessionId
-
         setSessions(nextSessions)
         setActiveSessionId(nextActiveSessionId)
         setSessionDrawerOpen(false)
         cancelEditingSession()
-
         deleteAiChatSession(sessionId).catch(() => {
             setSessions(previousSessions)
             setActiveSessionId(previousActiveSessionId)
@@ -509,28 +478,21 @@ export default function AiChatWidget() {
     const handleMascotPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
         const drag = dragStateRef.current
         if (!drag || drag.pointerId !== event.pointerId) return
-
         const deltaX = event.clientX - drag.startX
         const deltaY = event.clientY - drag.startY
         if (Math.abs(deltaX) + Math.abs(deltaY) > 4) drag.moved = true
-
-        const next = clampMascotPosition({
-            x: drag.originX + deltaX,
-            y: drag.originY + deltaY,
-        })
+        const next = clampMascotPosition({ x: drag.originX + deltaX, y: drag.originY + deltaY })
         setMascotPosition(next)
     }
 
     const handleMascotPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
         const drag = dragStateRef.current
         if (!drag || drag.pointerId !== event.pointerId) return
-
         const finalPosition = clampMascotPosition(mascotPosition || getDefaultMascotPosition())
         setMascotPosition(finalPosition)
         saveMascotPosition(finalPosition)
         setIsDraggingMascot(false)
         dragStateRef.current = null
-
         if (!drag.moved) toggleWidget()
     }
 
@@ -555,7 +517,6 @@ export default function AiChatWidget() {
     const handleSend = async (messageText?: string) => {
         const trimmed = (messageText ?? query).trim()
         if (!trimmed) return
-
         const userMessage: ChatMessage = {
             id: `${Date.now()}-user`,
             userId: user?._id ?? 'guest',
@@ -563,13 +524,11 @@ export default function AiChatWidget() {
             content: trimmed,
             createdAt: new Date().toISOString(),
         }
-
         addMessageToSession(userMessage)
         setLastQuery(trimmed)
         setQuery('')
         setLoading(true)
         setErrorInfo(null)
-
         try {
             const response = await requestAiAssistant(trimmed, mode)
             const assistantMessage: ChatMessage = {
@@ -596,6 +555,7 @@ export default function AiChatWidget() {
         }
     }
 
+    // ─── Layout calculations ───────────────────────────────────────────────────
     const compactChat = viewport.width <= 720
     const mobileChat = viewport.width <= 560
     const showSessionSidebar = expanded && !compactChat
@@ -635,6 +595,95 @@ export default function AiChatWidget() {
             viewport.height - Math.min(panelHeight, viewport.height - 24) - 12,
         )
 
+    // ─── Session list renderer (shared between sidebar & drawer) ──────────────
+    const renderSessionList = () => (
+        <>
+            <div style={{ padding: 14, borderBottom: panelBorder }}>
+                <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    block
+                    onClick={createNewChat}
+                    style={{ background: '#b6462f', borderColor: '#b6462f' }}
+                >
+                    Cuộc trò chuyện mới
+                </Button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+                {sessions.map((session) => (
+                    <div
+                        key={session.sessionId}
+                        className="ai-chat-session-item"
+                        onClick={() => selectSession(session.sessionId)}
+                        style={{
+                            padding: '12px 14px',
+                            cursor: 'pointer',
+                            borderLeft: session.sessionId === activeSession?.sessionId
+                                ? '4px solid #b6462f'
+                                : '4px solid transparent',
+                            borderBottom: dark
+                                ? '1px solid rgba(255,255,255,0.08)'
+                                : '1px solid rgba(0,0,0,0.06)',
+                            background: session.sessionId === activeSession?.sessionId
+                                ? (dark ? 'rgba(182,70,47,0.18)' : 'rgba(182,70,47,0.08)')
+                                : 'transparent',
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            {editingSessionId === session.sessionId ? (
+                                <Input
+                                    size="small"
+                                    value={editingTitle}
+                                    onChange={(e) => setEditingTitle(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onBlur={commitEditingSession}
+                                    onPressEnter={(e) => { e.preventDefault(); commitEditingSession() }}
+                                    onKeyDown={(e) => { if (e.key === 'Escape') cancelEditingSession() }}
+                                    autoFocus
+                                    style={{ width: '100%' }}
+                                />
+                            ) : (
+                                <>
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                        <Typography.Text strong style={{ color: panelText, display: 'block' }}>
+                                            {session.title}
+                                        </Typography.Text>
+                                        <Typography.Text style={{ fontSize: 12, color: panelMutedText }}>
+                                            {new Date(session.createdAt).toLocaleString('vi-VN')}
+                                        </Typography.Text>
+                                    </div>
+                                    <Dropdown
+                                        trigger={['click']}
+                                        menu={{
+                                            items: [
+                                                { key: 'rename', icon: <EditOutlined />, label: 'Đổi tên' },
+                                                { key: 'delete', icon: <DeleteOutlined />, label: 'Xóa', danger: true },
+                                            ],
+                                            onClick: ({ key, domEvent }) => {
+                                                domEvent.stopPropagation()
+                                                if (key === 'rename') startEditingSession(session.sessionId, session.title)
+                                                if (key === 'delete') confirmDeleteSession(session.sessionId)
+                                            },
+                                        }}
+                                    >
+                                        <Button
+                                            type="text"
+                                            size="small"
+                                            className="ai-chat-session-actions"
+                                            icon={<MoreOutlined />}
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{ color: panelMutedText }}
+                                        />
+                                    </Dropdown>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </>
+    )
+
     return (
         <>
             <style>{`
@@ -668,9 +717,7 @@ export default function AiChatWidget() {
                     height: ${MASCOT_HEIGHT}px;
                     display: block;
                 }
-                .doraemon-chat-mascot svg {
-                    overflow: visible;
-                }
+                .doraemon-chat-mascot svg { overflow: visible; }
                 .mascot-body {
                     transform-origin: 70px 105px;
                     animation: doraemonIdle 3.2s ease-in-out infinite;
@@ -679,10 +726,7 @@ export default function AiChatWidget() {
                     transform-origin: 96px 100px;
                     transition: transform 180ms ease;
                 }
-                .mascot-mouth-happy {
-                    opacity: 0;
-                    transition: opacity 160ms ease;
-                }
+                .mascot-mouth-happy { opacity: 0; transition: opacity 160ms ease; }
                 .doraemon-chat-trigger:hover .mascot-right-arm,
                 .doraemon-chat-trigger.is-active .mascot-right-arm,
                 .doraemon-chat-mascot.is-active .mascot-right-arm {
@@ -690,14 +734,10 @@ export default function AiChatWidget() {
                 }
                 .doraemon-chat-trigger:hover .mascot-mouth-idle,
                 .doraemon-chat-trigger.is-active .mascot-mouth-idle,
-                .doraemon-chat-mascot.is-active .mascot-mouth-idle {
-                    opacity: 0;
-                }
+                .doraemon-chat-mascot.is-active .mascot-mouth-idle { opacity: 0; }
                 .doraemon-chat-trigger:hover .mascot-mouth-happy,
                 .doraemon-chat-trigger.is-active .mascot-mouth-happy,
-                .doraemon-chat-mascot.is-active .mascot-mouth-happy {
-                    opacity: 1;
-                }
+                .doraemon-chat-mascot.is-active .mascot-mouth-happy { opacity: 1; }
                 .doraemon-chat-trigger:hover .mascot-eye,
                 .doraemon-chat-trigger.is-active .mascot-eye {
                     animation: doraemonEyeJoy 850ms ease-in-out infinite;
@@ -715,100 +755,37 @@ export default function AiChatWidget() {
                     0%, 100% { transform: translateY(0); }
                     50% { transform: translateY(-1px); }
                 }
-                @media (max-width: 640px) {
-                    .doraemon-chat-trigger {
-                        width: 82px;
-                        height: 104px;
-                    }
-                    .doraemon-chat-mascot,
-                    .doraemon-chat-mascot svg {
-                        width: 82px;
-                        height: 104px;
-                    }
+
+                /* ── FIX: Drawer luôn nằm trên panel chat ── */
+                .ai-session-drawer .ant-drawer-content-wrapper {
+                    z-index: 10100 !important;
                 }
-                @media (max-width: 720px) {
-                    .ai-chat-panel {
-                        border-radius: 20px !important;
-                    }
-                    .ai-chat-widget-header {
-                        padding: 12px 14px !important;
-                    }
-                    .ai-chat-widget-header-title {
-                        font-size: 15px !important;
-                        line-height: 1.25 !important;
-                    }
-                    .ai-chat-widget-header-subtitle {
-                        display: none;
-                    }
-                    .ai-chat-session-header {
-                        align-items: stretch !important;
-                        flex-direction: column;
-                    }
-                    .ai-chat-session-toolbar,
-                    .ai-chat-session-toolbar .ant-space-item,
-                    .ai-chat-session-toolbar .ant-select,
-                    .ai-chat-session-toolbar .ant-segmented {
-                        width: 100% !important;
-                    }
-                    .ai-chat-message-bubble {
-                        max-width: 92% !important;
-                    }
-                    .ai-chat-input-footer {
-                        align-items: stretch !important;
-                        flex-direction: column;
-                    }
-                    .ai-chat-input-footer .ant-space,
-                    .ai-chat-input-footer .ant-space-item,
-                    .ai-chat-input-footer .ant-btn {
-                        width: 100%;
-                    }
-                    .ai-chat-mobile-session-select {
-                        display: none !important;
-                    }
+                .ai-session-drawer .ant-drawer-mask {
+                    z-index: 10099 !important;
                 }
-                @media (max-width: 480px) {
-                    .ai-chat-message-bubble {
-                        max-width: 96% !important;
-                        padding: 10px 12px !important;
-                    }
+                /* Ant Design drawer z-index override */
+                .ant-drawer.ai-session-drawer {
+                    z-index: 10100 !important;
                 }
-                .ai-chat-panel-bg-image {
-                    position: absolute;
-                    inset: -18px;
-                    width: calc(100% + 36px);
-                    height: calc(100% + 36px);
-                    object-fit: cover;
-                    transform: scale(1.03);
-                    z-index: 0;
-                    pointer-events: none;
-                }
-                .ai-chat-panel-bg-tint {
-                    position: absolute;
-                    inset: 0;
-                    z-index: 0;
-                    pointer-events: none;
-                }
-                .ai-chat-panel-content {
-                    position: relative;
-                    z-index: 1;
-                    display: flex;
-                    flex-direction: column;
-                    height: 100%;
-                    min-height: 0;
-                }
+
                 .ai-chat-session-actions {
                     opacity: 0;
                     transition: opacity 160ms ease;
                 }
                 .ai-chat-session-item:hover .ai-chat-session-actions,
-                .ai-chat-session-actions.is-open {
-                    opacity: 1;
-                }
+                .ai-chat-session-actions.is-open { opacity: 1; }
+
                 .ai-chat-panel textarea::placeholder {
                     color: ${dark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.42)'};
                 }
+
+                @media (max-width: 640px) {
+                    .doraemon-chat-trigger { width: 72px; height: 92px; }
+                    .doraemon-chat-mascot, .doraemon-chat-mascot svg { width: 72px; height: 92px; }
+                }
             `}</style>
 
+            {/* MASCOT BUTTON */}
             <Tooltip title="Nói chuyện với Doraemon" placement="left">
                 <Badge count={sessions.length} offset={[-4, 8]} color="#b6462f">
                     <button
@@ -826,32 +803,36 @@ export default function AiChatWidget() {
                 </Badge>
             </Tooltip>
 
-            {/* PANEL CHAT */}
-            <div className="ai-chat-panel" style={{
-                position: 'fixed',
-                left: panelLeft,
-                top: panelTop,
-                width: panelWidth,
-                maxWidth: compactChat ? 'calc(100vw - 20px)' : 'calc(100vw - 48px)',
-                height: panelHeight,
-                maxHeight: compactChat ? 'calc(100vh - 20px)' : 'calc(100vh - 48px)',
-                zIndex: visible && compactChat ? 10000 : 1199,
-                borderRadius: compactChat ? 20 : 28,
-                background: panelBackground,
-                border: panelBorder,
-                boxShadow: visible
-                    ? '0 28px 100px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.08)'
-                    : '0 24px 80px rgba(0,0,0,0.18)',
-                transform: visible ? 'scale(1)' : 'scale(0.75)',
-                opacity: visible ? 1 : 0,
-                visibility: visible ? 'visible' : 'hidden',
-                transition: 'all 220ms ease',
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-                backdropFilter: 'blur(18px)',
-                WebkitBackdropFilter: 'blur(18px)',
-            }}>
+            {/* CHAT PANEL */}
+            <div
+                className="ai-chat-panel"
+                style={{
+                    position: 'fixed',
+                    left: panelLeft,
+                    top: panelTop,
+                    width: panelWidth,
+                    maxWidth: compactChat ? 'calc(100vw - 20px)' : 'calc(100vw - 48px)',
+                    height: panelHeight,
+                    maxHeight: compactChat ? 'calc(100vh - 20px)' : 'calc(100vh - 48px)',
+                    // FIX: z-index thấp hơn drawer (10100) để drawer hiện lên trên
+                    zIndex: visible && compactChat ? 10000 : 1199,
+                    borderRadius: compactChat ? 20 : 28,
+                    background: panelBackground,
+                    border: panelBorder,
+                    boxShadow: visible
+                        ? '0 28px 100px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.08)'
+                        : '0 24px 80px rgba(0,0,0,0.18)',
+                    transform: visible ? 'scale(1)' : 'scale(0.75)',
+                    opacity: visible ? 1 : 0,
+                    visibility: visible ? 'visible' : 'hidden',
+                    transition: 'all 220ms ease',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backdropFilter: 'blur(18px)',
+                    WebkitBackdropFilter: 'blur(18px)',
+                }}
+            >
                 {CHAT_PANEL_BACKGROUND_IMAGE && (
                     <img
                         className="ai-chat-panel-bg-image"
@@ -859,417 +840,466 @@ export default function AiChatWidget() {
                         alt=""
                         aria-hidden="true"
                         style={{
+                            position: 'absolute',
+                            inset: -18,
+                            width: 'calc(100% + 36px)',
+                            height: 'calc(100% + 36px)',
+                            objectFit: 'cover',
+                            transform: 'scale(1.03)',
+                            zIndex: 0,
+                            pointerEvents: 'none',
                             filter: panelImageFilter,
                             opacity: dark ? 0.72 : 0.34,
                         }}
                     />
                 )}
-                <div className="ai-chat-panel-bg-tint" style={{ background: panelTint }} />
-                <div className="ai-chat-panel-content">
+                <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 0,
+                    pointerEvents: 'none',
+                    background: panelTint,
+                }} />
 
-                {/* HEADER */}
-                <div className="ai-chat-widget-header" style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 12,
-                    padding: '16px 18px',
-                    background: 'linear-gradient(135deg, #b6462f, #e8722a)',
-                    color: '#fff',
-                }}>
-                    <div>
-                        <Typography.Title className="ai-chat-widget-header-title" level={5} style={{ margin: 0, color: '#fff' }}>
-                            Gì cũng biết! Tò mò hỏi Doraemon
-                        </Typography.Title>
-                        <Typography.Text className="ai-chat-widget-header-subtitle" style={{ color: '#ffe0d6' }}>
-                            Chồn đến từ thế kỉ 22
-                        </Typography.Text>
+                {/* Panel content */}
+                <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+
+                    {/* HEADER */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        padding: mobileChat ? '12px 14px' : '16px 18px',
+                        background: 'linear-gradient(135deg, #b6462f, #e8722a)',
+                        color: '#fff',
+                        flexShrink: 0,
+                    }}>
+                        <div style={{ minWidth: 0 }}>
+                            <Typography.Title level={5} style={{ margin: 0, color: '#fff', fontSize: mobileChat ? 14 : 16 }}>
+                                Gì cũng biết! Tò mò hỏi Doraemon
+                            </Typography.Title>
+                            {!mobileChat && (
+                                <Typography.Text style={{ color: '#ffe0d6', fontSize: 12 }}>
+                                    Chồn đến từ thế kỉ 22
+                                </Typography.Text>
+                            )}
+                        </div>
+                        <Space size={mobileChat ? 2 : 8} style={{ flexShrink: 0 }}>
+                            <Button size="small" type="text" icon={<PlusOutlined />} style={{ color: '#fff' }} onClick={createNewChat} />
+                            {/* FIX: Nút "Phiên" chỉ hiện trên mobile/tablet, mở drawer với z-index cao */}
+                            {compactChat && (
+                                <Button
+                                    size="small"
+                                    type="text"
+                                    style={{ color: '#fff', fontWeight: 600 }}
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        setSessionDrawerOpen(true)
+                                    }}
+                                >
+                                    Phiên ({sessions.length})
+                                </Button>
+                            )}
+                            {!compactChat && (
+                                <Button
+                                    size="small"
+                                    type="text"
+                                    icon={<ExpandAltOutlined />}
+                                    style={{ color: '#fff' }}
+                                    onClick={() => setExpanded(!expanded)}
+                                />
+                            )}
+                            <Button size="small" type="text" icon={<CloseOutlined />} style={{ color: '#fff' }} onClick={closeWidget} />
+                        </Space>
                     </div>
-                    <Space size={mobileChat ? 2 : 8}>
-                        <Button size="small" type="text" icon={<PlusOutlined />} style={{ color: '#fff' }} onClick={createNewChat} />
-                        {compactChat && (
-                            <Button
-                                size="small"
-                                type="text"
-                                style={{ color: '#fff', fontWeight: 600 }}
-                                onClick={() => setSessionDrawerOpen(true)}
-                            >
-                                Phiên
-                            </Button>
-                        )}
-                        {!compactChat && (
-                            <Button size="small" type="text" icon={<ExpandAltOutlined />} style={{ color: '#fff' }} onClick={() => setExpanded(!expanded)} />
-                        )}
-                        <Button size="small" type="text" icon={<CloseOutlined />} style={{ color: '#fff' }} onClick={closeWidget} />
-                    </Space>
-                </div>
 
-                <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+                    <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
-                    {/* SIDEBAR SESSION */}
-                    {showSessionSidebar && (
-                        <div style={{
-                            width: 220,
-                            minWidth: 220,
-                            borderRight: panelBorder,
-                            background: panelBandBackground,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            overflow: 'hidden',
-                        }}>
-                            <div style={{ padding: 16, borderBottom: panelBorder }}>
-                                <Typography.Text strong style={{ color: panelText }}>Phiên chat</Typography.Text>
-                            </div>
-                            <div style={{ flex: 1, overflowY: 'auto' }}>
-                                {sessions.map((session) => (
-                                    <div
-                                        key={session.sessionId}
-                                        className="ai-chat-session-item"
-                                        onClick={() => selectSession(session.sessionId)}
-                                        style={{
-                                            padding: '12px 14px',
-                                            cursor: 'pointer',
-                                            borderLeft: session.sessionId === activeSession?.sessionId ? '3px solid #b6462f' : '3px solid transparent',
-                                            background: session.sessionId === activeSession?.sessionId
-                                                ? (dark ? 'rgba(182,70,47,0.15)' : 'rgba(182,70,47,0.08)')
-                                                : 'transparent',
-                                        }}
-                                    >
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                            {editingSessionId === session.sessionId ? (
-                                                <Input
-                                                    size="small"
-                                                    value={editingTitle}
-                                                    onChange={(e) => setEditingTitle(e.target.value)}
-                                                    onBlur={commitEditingSession}
-                                                    onPressEnter={(e) => {
-                                                        e.preventDefault()
-                                                        commitEditingSession()
-                                                    }}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Escape') cancelEditingSession()
-                                                    }}
-                                                    autoFocus
-                                                    style={{ width: '100%' }}
-                                                />
-                                            ) : (
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
-                                                    <Typography.Text strong style={{ color: panelText, flex: 1 }}>
-                                                        {session.title}
-                                                    </Typography.Text>
-                                                    <Dropdown
-                                                        trigger={['click']}
-                                                        menu={{
-                                                            items: [
-                                                                { key: 'rename', icon: <EditOutlined />, label: 'Đổi tên' },
-                                                                { key: 'delete', icon: <DeleteOutlined />, label: 'Xóa', danger: true },
-                                                            ],
-                                                            onClick: ({ key, domEvent }) => {
-                                                                domEvent.stopPropagation()
-                                                                if (key === 'rename') startEditingSession(session.sessionId, session.title)
-                                                                if (key === 'delete') confirmDeleteSession(session.sessionId)
-                                                            },
-                                                        }}
-                                                    >
-                                                        <Button
-                                                            type="text"
-                                                            size="small"
-                                                            className="ai-chat-session-actions"
-                                                            icon={<MoreOutlined />}
-                                                            onClick={(event) => event.stopPropagation()}
-                                                            style={{ color: panelMutedText }}
-                                                        />
-                                                    </Dropdown>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <Typography.Text style={{ fontSize: 12, color: panelMutedText }}>
+                        {/* SIDEBAR (desktop only) */}
+                        {showSessionSidebar && (
+                            <div style={{
+                                width: 220,
+                                minWidth: 220,
+                                borderRight: panelBorder,
+                                background: panelBandBackground,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                overflow: 'hidden',
+                            }}>
+                                <div style={{ padding: '12px 14px', borderBottom: panelBorder }}>
+                                    <Typography.Text strong style={{ color: panelText }}>Phiên chat</Typography.Text>
+                                </div>
+                                <div style={{ flex: 1, overflowY: 'auto' }}>
+                                    {sessions.map((session) => (
+                                        <div
+                                            key={session.sessionId}
+                                            className="ai-chat-session-item"
+                                            onClick={() => selectSession(session.sessionId)}
+                                            style={{
+                                                padding: '12px 14px',
+                                                cursor: 'pointer',
+                                                borderLeft: session.sessionId === activeSession?.sessionId
+                                                    ? '3px solid #b6462f'
+                                                    : '3px solid transparent',
+                                                background: session.sessionId === activeSession?.sessionId
+                                                    ? (dark ? 'rgba(182,70,47,0.15)' : 'rgba(182,70,47,0.08)')
+                                                    : 'transparent',
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                                {editingSessionId === session.sessionId ? (
+                                                    <Input
+                                                        size="small"
+                                                        value={editingTitle}
+                                                        onChange={(e) => setEditingTitle(e.target.value)}
+                                                        onBlur={commitEditingSession}
+                                                        onPressEnter={(e) => { e.preventDefault(); commitEditingSession() }}
+                                                        onKeyDown={(e) => { if (e.key === 'Escape') cancelEditingSession() }}
+                                                        autoFocus
+                                                        style={{ width: '100%' }}
+                                                    />
+                                                ) : (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
+                                                        <Typography.Text strong style={{ color: panelText, flex: 1, fontSize: 13 }}>
+                                                            {session.title}
+                                                        </Typography.Text>
+                                                        <Dropdown
+                                                            trigger={['click']}
+                                                            menu={{
+                                                                items: [
+                                                                    { key: 'rename', icon: <EditOutlined />, label: 'Đổi tên' },
+                                                                    { key: 'delete', icon: <DeleteOutlined />, label: 'Xóa', danger: true },
+                                                                ],
+                                                                onClick: ({ key, domEvent }) => {
+                                                                    domEvent.stopPropagation()
+                                                                    if (key === 'rename') startEditingSession(session.sessionId, session.title)
+                                                                    if (key === 'delete') confirmDeleteSession(session.sessionId)
+                                                                },
+                                                            }}
+                                                        >
+                                                            <Button
+                                                                type="text"
+                                                                size="small"
+                                                                className="ai-chat-session-actions"
+                                                                icon={<MoreOutlined />}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                style={{ color: panelMutedText }}
+                                                            />
+                                                        </Dropdown>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <Typography.Text style={{ fontSize: 11, color: panelMutedText }}>
                                                 {new Date(session.createdAt).toLocaleString('vi-VN')}
                                             </Typography.Text>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                        {/* MAIN CHAT AREA */}
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
 
-                        {/* SESSION HEADER */}
-                        <div className="ai-chat-session-header" style={{
-                            padding: '14px 16px',
-                            borderBottom: panelBorder,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            gap: 12,
-                            minHeight: 64,
-                        }}>
-                            <div style={{ minWidth: 0 }}>
-                                <Typography.Text strong style={{ color: panelText }}>
-                                    {activeSession?.title || 'New Chat'}
-                                </Typography.Text>
-                                <div>
-                                    <Typography.Text style={{ fontSize: 12, color: panelMutedText }}>
+                            {/* SESSION HEADER */}
+                            <div style={{
+                                padding: mobileChat ? '10px 12px' : '12px 16px',
+                                borderBottom: panelBorder,
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: 8,
+                                flexShrink: 0,
+                                flexWrap: 'wrap',
+                            }}>
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                    <Typography.Text strong style={{ color: panelText, fontSize: mobileChat ? 13 : 14, display: 'block' }}>
+                                        {activeSession?.title || 'New Chat'}
+                                    </Typography.Text>
+                                    <Typography.Text style={{ fontSize: 11, color: panelMutedText }}>
                                         {activeSession?.messages.length
                                             ? `${activeSession.messages.length} tin nhắn`
                                             : 'Bắt đầu cuộc trò chuyện mới'}
                                     </Typography.Text>
                                 </div>
-                            </div>
-                            <Space className="ai-chat-session-toolbar" size={8} wrap>
-                                <Segmented
-                                    value={mode}
-                                    onChange={(value) => setMode(value as AiMode)}
-                                    options={AI_MODE_OPTIONS}
-                                    size="small"
-                                />
-                                {!showSessionSidebar && (
-                                    <Select
-                                        className={compactChat ? 'ai-chat-mobile-session-select' : undefined}
-                                        value={activeSession?.sessionId}
-                                        onChange={selectSession}
-                                        style={{ width: compactChat ? '100%' : 140 }}
-                                        options={sessions.map((s) => ({ label: s.title, value: s.sessionId }))}
-                                    />
-                                )}
-                            </Space>
-                        </div>
-
-                        {/* MESSAGES */}
-                        <div
-                            ref={scrollRef}
-                            style={{
-                                flex: 1,
-                                overflowY: 'auto',
-                                padding: mobileChat ? '12px' : '16px',
-                                background: panelBandBackground,
-                            }}
-                        >
-                            {activeMessages.length === 0 ? (
-                                <div style={{ textAlign: 'center', marginTop: 32 }}>
-                                    <Typography.Text style={{ color: panelMutedText }}>
-                                        Viết câu hỏi, sau đó nhấn gửi để bắt đầu.
-                                    </Typography.Text>
-                                </div>
-                            ) : (
-                                activeMessages.map((message) => {
-                                    const isUser = message.role === 'user'
-                                    const bubbleBg = isUser ? '#b6462f' : assistantBubbleBackground
-                                    const bubbleColor = isUser ? '#fff' : panelText
-                                    const toolPayload = !isUser && message.role === 'assistant' ? parseAiToolPayload(message.content) : null
-                                    return (
-                                        <div
-                                            key={message.id}
-                                            style={{
-                                                display: 'flex',
-                                                justifyContent: isUser ? 'flex-end' : 'flex-start',
-                                                marginBottom: 12,
-                                            }}
-                                        >
-                                            <div className="ai-chat-message-bubble" style={{
-                                                maxWidth: compactChat ? '92%' : '78%',
-                                                padding: mobileChat ? '10px 12px' : '12px 16px',
-                                                borderRadius: 20,
-                                                borderTopRightRadius: isUser ? 4 : 20,
-                                                borderTopLeftRadius: isUser ? 20 : 4,
-                                                background: bubbleBg,
-                                                color: bubbleColor,
-                                                boxShadow: '0 6px 18px rgba(0,0,0,0.08)',
-                                                whiteSpace: 'pre-wrap',
-                                                lineHeight: 1.6,
-                                            }}>
-                                                {message.role === 'assistant' && (
-                                                    <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                        <Avatar size={22} style={{ backgroundColor: '#0aa7e6', color: '#fff' }} icon={<DoraemonMiniAvatar />} />
-                                                        <Typography.Text strong style={{ color: bubbleColor }}>Doraemon</Typography.Text>
-                                                    </div>
-                                                )}
-                                                {toolPayload?.type === 'empty' && (
-                                                    <Typography.Text style={{ color: bubbleColor }}>{toolPayload.message}</Typography.Text>
-                                                )}
-                                                {toolPayload?.type === 'product_list' && (
-                                                    <div style={{ display: 'grid', gap: 10 }}>
-                                                        {toolPayload.message && (
-                                                            <Typography.Text style={{ color: bubbleColor }}>
-                                                                {toolPayload.message}
-                                                            </Typography.Text>
-                                                        )}
-                                                        {toolPayload.items.map((item, index) => (
-                                                            <a
-                                                                key={`${item.link}-${index}`}
-                                                                href={item.link}
-                                                                style={{
-                                                                    display: 'grid',
-                                                                    gridTemplateColumns: mobileChat ? '48px minmax(0, 1fr)' : '54px minmax(0, 1fr)',
-                                                                    gap: 10,
-                                                                    alignItems: 'center',
-                                                                    padding: 10,
-                                                                    borderRadius: 14,
-                                                                    background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(182,70,47,0.06)',
-                                                                    color: bubbleColor,
-                                                                    textDecoration: 'none',
-                                                                }}
-                                                            >
-                                                                <img
-                                                                    src={item.image || AI_AVATAR_IMAGE}
-                                                                    alt={item.name}
-                                                                    style={{ width: 54, height: 54, borderRadius: 10, objectFit: 'cover' }}
-                                                                />
-                                                                <div style={{ minWidth: 0 }}>
-                                                                    <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
-                                                                        {item.name}
-                                                                    </Typography.Text>
-                                                                    <Typography.Text style={{ color: '#b6462f' }}>
-                                                                        {Number(item.price).toLocaleString('vi-VN')}đ
-                                                                    </Typography.Text>
-                                                                    {item.selectedVariant && (
-                                                                        <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
-                                                                            Mức tạ tối đa: {item.selectedVariant}
-                                                                        </Typography.Text>
-                                                                    )}
-                                                                </div>
-                                                            </a>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                {toolPayload?.type === 'category_list' && (
-                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                                        {toolPayload.items.map((item) => (
-                                                            <a
-                                                                key={item.slug}
-                                                                href={`/dashboard/member/store?category=${encodeURIComponent(item.name)}`}
-                                                                style={{
-                                                                    padding: '7px 10px',
-                                                                    borderRadius: 999,
-                                                                    background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(182,70,47,0.08)',
-                                                                    color: bubbleColor,
-                                                                    textDecoration: 'none',
-                                                                    fontSize: 13,
-                                                                }}
-                                                            >
-                                                                {item.name}
-                                                            </a>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                {toolPayload?.type === 'pt_list' && (
-                                                    <div style={{ display: 'grid', gap: 10 }}>
-                                                        {toolPayload.items.map((item, index) => (
-                                                            <div
-                                                                key={`${item.email || item.phone || item.name}-${index}`}
-                                                                style={{
-                                                                    display: 'grid',
-                                                                    gridTemplateColumns: mobileChat ? '40px minmax(0, 1fr)' : '44px minmax(0, 1fr)',
-                                                                    gap: 10,
-                                                                    alignItems: 'center',
-                                                                    padding: 10,
-                                                                    borderRadius: 14,
-                                                                    background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(182,70,47,0.06)',
-                                                                }}
-                                                            >
-                                                                <Avatar src={item.avatar || undefined} size={44}>
-                                                                    {item.name?.charAt(0) || 'PT'}
-                                                                </Avatar>
-                                                                <div style={{ minWidth: 0 }}>
-                                                                    <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
-                                                                        {item.name}
-                                                                    </Typography.Text>
-                                                                    <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
-                                                                        {item.specialty || 'Huấn luyện viên'}
-                                                                    </Typography.Text>
-                                                                    <Typography.Text style={{ color: panelMutedText, display: 'block', fontSize: 12 }}>
-                                                                        {item.phone || 'Chưa có SĐT'} {item.email ? `• ${item.email}` : ''}
-                                                                    </Typography.Text>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                {!toolPayload && (
-                                                    <Typography.Text style={{ color: bubbleColor }}>{message.content}</Typography.Text>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )
-                                })
-                            )}
-                            {loading && (
-                                <div style={{ textAlign: 'center', marginTop: 14 }}>
-                                    <Spin />
-                                </div>
-                            )}
-                        </div>
-
-                        {/* INPUT */}
-                        <div style={{ borderTop: panelBorder, padding: mobileChat ? '12px' : '14px 16px', background: panelBackground }}>
-                            {errorInfo && (
-                                <div style={{
-                                    marginBottom: 12,
-                                    padding: 12,
-                                    borderRadius: 16,
-                                    background: 'rgba(255,77,79,0.12)',
-                                    display: 'flex',
-                                    alignItems: mobileChat ? 'stretch' : 'center',
-                                    justifyContent: 'space-between',
-                                    gap: 12,
-                                    flexDirection: mobileChat ? 'column' : 'row',
-                                }}>
-                                    <Typography.Text style={{ color: '#a8071a' }}>{errorInfo.message}</Typography.Text>
-                                    <Button
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                                    <Segmented
+                                        value={mode}
+                                        onChange={(value) => setMode(value as AiMode)}
+                                        options={AI_MODE_OPTIONS}
                                         size="small"
-                                        disabled={retryCountdown > 0}
-                                        onClick={handleRetry}
-                                        style={{ background: '#b6462f', borderColor: '#b6462f', color: '#fff' }}
-                                    >
-                                        {retryCountdown > 0 ? `Thử lại sau ${retryCountdown}s` : 'Thử lại'}
-                                    </Button>
+                                    />
+                                    {!showSessionSidebar && !compactChat && (
+                                        <Select
+                                            value={activeSession?.sessionId}
+                                            onChange={selectSession}
+                                            style={{ width: 140 }}
+                                            options={sessions.map((s) => ({ label: s.title, value: s.sessionId }))}
+                                        />
+                                    )}
                                 </div>
-                            )}
+                            </div>
 
-                            <Input.TextArea
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                onPressEnter={(e) => {
-                                    if (!e.shiftKey) { e.preventDefault(); handleSend() }
-                                }}
-                                placeholder="Nhập câu hỏi..."
-                                rows={3}
-                                disabled={loading}
+                            {/* MESSAGES */}
+                            <div
+                                ref={scrollRef}
                                 style={{
-                                    borderRadius: 16,
-                                    marginBottom: 12,
-                                    background: inputBackground,
-                                    borderColor: inputBorder,
-                                    color: panelText,
+                                    flex: 1,
+                                    overflowY: 'auto',
+                                    padding: mobileChat ? 10 : 16,
+                                    background: panelBandBackground,
                                 }}
-                            />
+                            >
+                                {activeMessages.length === 0 ? (
+                                    <div style={{ textAlign: 'center', marginTop: 32 }}>
+                                        <Typography.Text style={{ color: panelMutedText }}>
+                                            Viết câu hỏi, sau đó nhấn gửi để bắt đầu.
+                                        </Typography.Text>
+                                    </div>
+                                ) : (
+                                    activeMessages.map((message) => {
+                                        const isUser = message.role === 'user'
+                                        const bubbleBg = isUser ? '#b6462f' : assistantBubbleBackground
+                                        const bubbleColor = isUser ? '#fff' : panelText
+                                        const toolPayload = !isUser && message.role === 'assistant'
+                                            ? parseAiToolPayload(message.content)
+                                            : null
+                                        return (
+                                            <div
+                                                key={message.id}
+                                                style={{
+                                                    display: 'flex',
+                                                    justifyContent: isUser ? 'flex-end' : 'flex-start',
+                                                    marginBottom: 10,
+                                                }}
+                                            >
+                                                <div style={{
+                                                    maxWidth: mobileChat ? '92%' : '78%',
+                                                    padding: mobileChat ? '9px 12px' : '12px 16px',
+                                                    borderRadius: 20,
+                                                    borderTopRightRadius: isUser ? 4 : 20,
+                                                    borderTopLeftRadius: isUser ? 20 : 4,
+                                                    background: bubbleBg,
+                                                    color: bubbleColor,
+                                                    boxShadow: '0 4px 14px rgba(0,0,0,0.08)',
+                                                    whiteSpace: 'pre-wrap',
+                                                    lineHeight: 1.6,
+                                                    wordBreak: 'break-word',
+                                                }}>
+                                                    {message.role === 'assistant' && (
+                                                        <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                            <Avatar size={22} style={{ backgroundColor: '#0aa7e6' }} icon={<DoraemonMiniAvatar />} />
+                                                            <Typography.Text strong style={{ color: bubbleColor }}>Doraemon</Typography.Text>
+                                                        </div>
+                                                    )}
+                                                    {toolPayload?.type === 'empty' && (
+                                                        <Typography.Text style={{ color: bubbleColor }}>{toolPayload.message}</Typography.Text>
+                                                    )}
+                                                    {toolPayload?.type === 'product_list' && (
+                                                        <div style={{ display: 'grid', gap: 10 }}>
+                                                            {toolPayload.message && (
+                                                                <Typography.Text style={{ color: bubbleColor }}>{toolPayload.message}</Typography.Text>
+                                                            )}
+                                                            {toolPayload.items.map((item, index) => (
+                                                                <a
+                                                                    key={`${item.link}-${index}`}
+                                                                    href={item.link}
+                                                                    style={{
+                                                                        display: 'grid',
+                                                                        gridTemplateColumns: '54px minmax(0, 1fr)',
+                                                                        gap: 10,
+                                                                        alignItems: 'center',
+                                                                        padding: 10,
+                                                                        borderRadius: 14,
+                                                                        background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(182,70,47,0.06)',
+                                                                        color: bubbleColor,
+                                                                        textDecoration: 'none',
+                                                                    }}
+                                                                >
+                                                                    <img src={item.image || AI_AVATAR_IMAGE} alt={item.name}
+                                                                        style={{ width: 54, height: 54, borderRadius: 10, objectFit: 'cover' }} />
+                                                                    <div style={{ minWidth: 0 }}>
+                                                                        <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
+                                                                            {item.name}
+                                                                        </Typography.Text>
+                                                                        <Typography.Text style={{ color: '#b6462f' }}>
+                                                                            {Number(item.price).toLocaleString('vi-VN')}đ
+                                                                        </Typography.Text>
+                                                                        {item.selectedVariant && (
+                                                                            <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
+                                                                                Mức tạ tối đa: {item.selectedVariant}
+                                                                            </Typography.Text>
+                                                                        )}
+                                                                    </div>
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {toolPayload?.type === 'category_list' && (
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                                            {toolPayload.items.map((item) => (
+                                                                <a
+                                                                    key={item.slug}
+                                                                    href={`/dashboard/member/store?category=${encodeURIComponent(item.name)}`}
+                                                                    style={{
+                                                                        padding: '7px 10px',
+                                                                        borderRadius: 999,
+                                                                        background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(182,70,47,0.08)',
+                                                                        color: bubbleColor,
+                                                                        textDecoration: 'none',
+                                                                        fontSize: 13,
+                                                                    }}
+                                                                >
+                                                                    {item.name}
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {toolPayload?.type === 'pt_list' && (
+                                                        <div style={{ display: 'grid', gap: 10 }}>
+                                                            {toolPayload.items.map((item, index) => (
+                                                                <div
+                                                                    key={`${item.email || item.phone || item.name}-${index}`}
+                                                                    style={{
+                                                                        display: 'grid',
+                                                                        gridTemplateColumns: '44px minmax(0, 1fr)',
+                                                                        gap: 10,
+                                                                        alignItems: 'center',
+                                                                        padding: 10,
+                                                                        borderRadius: 14,
+                                                                        background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(182,70,47,0.06)',
+                                                                    }}
+                                                                >
+                                                                    <Avatar src={item.avatar || undefined} size={44}>
+                                                                        {item.name?.charAt(0) || 'PT'}
+                                                                    </Avatar>
+                                                                    <div style={{ minWidth: 0 }}>
+                                                                        <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
+                                                                            {item.name}
+                                                                        </Typography.Text>
+                                                                        <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
+                                                                            {item.specialty || 'Huấn luyện viên'}
+                                                                        </Typography.Text>
+                                                                        <Typography.Text style={{ color: panelMutedText, display: 'block', fontSize: 12 }}>
+                                                                            {item.phone || 'Chưa có SĐT'} {item.email ? `• ${item.email}` : ''}
+                                                                        </Typography.Text>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {!toolPayload && (
+                                                        <Typography.Text style={{ color: bubbleColor }}>{message.content}</Typography.Text>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )
+                                    })
+                                )}
+                                {loading && (
+                                    <div style={{ textAlign: 'center', marginTop: 14 }}>
+                                        <Spin />
+                                    </div>
+                                )}
+                            </div>
 
-                            <div className="ai-chat-input-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                                <Typography.Text style={{ fontSize: 12, color: panelMutedText }}>
-                                    {expanded ? 'Nhấn Enter để gửi, Shift+Enter để xuống dòng' : 'Gửi câu hỏi AI nhanh'}
-                                </Typography.Text>
-                                <Space wrap>
-                                    <Button type="text" onClick={createNewChat} style={{ color: panelText }}>Cuộc trò chuyện mới</Button>
-                                    <Button
-                                        icon={<SendOutlined />}
-                                        onClick={() => handleSend()}
-                                        loading={loading}
-                                        style={{ background: '#b6462f', borderColor: '#b6462f', color: '#fff' }}
-                                    >
-                                        Gửi
-                                    </Button>
-                                </Space>
+                            {/* INPUT */}
+                            <div style={{
+                                borderTop: panelBorder,
+                                padding: mobileChat ? '10px 12px' : '14px 16px',
+                                background: panelBackground,
+                                flexShrink: 0,
+                            }}>
+                                {errorInfo && (
+                                    <div style={{
+                                        marginBottom: 10,
+                                        padding: 10,
+                                        borderRadius: 14,
+                                        background: 'rgba(255,77,79,0.12)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: 10,
+                                        flexWrap: 'wrap',
+                                    }}>
+                                        <Typography.Text style={{ color: '#a8071a', fontSize: 13 }}>{errorInfo.message}</Typography.Text>
+                                        <Button
+                                            size="small"
+                                            disabled={retryCountdown > 0}
+                                            onClick={handleRetry}
+                                            style={{ background: '#b6462f', borderColor: '#b6462f', color: '#fff' }}
+                                        >
+                                            {retryCountdown > 0 ? `Thử lại sau ${retryCountdown}s` : 'Thử lại'}
+                                        </Button>
+                                    </div>
+                                )}
+                                <Input.TextArea
+                                    value={query}
+                                    onChange={(e) => setQuery(e.target.value)}
+                                    onPressEnter={(e) => {
+                                        if (!e.shiftKey) { e.preventDefault(); handleSend() }
+                                    }}
+                                    placeholder="Nhập câu hỏi..."
+                                    rows={mobileChat ? 2 : 3}
+                                    disabled={loading}
+                                    style={{
+                                        borderRadius: 14,
+                                        marginBottom: 10,
+                                        background: inputBackground,
+                                        borderColor: inputBorder,
+                                        color: panelText,
+                                        fontSize: mobileChat ? 14 : 15,
+                                    }}
+                                />
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    flexWrap: 'wrap',
+                                }}>
+                                    {!mobileChat && (
+                                        <Typography.Text style={{ fontSize: 12, color: panelMutedText }}>
+                                            Enter để gửi · Shift+Enter xuống dòng
+                                        </Typography.Text>
+                                    )}
+                                    <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                                        <Button
+                                            type="text"
+                                            size={mobileChat ? 'small' : 'middle'}
+                                            onClick={createNewChat}
+                                            style={{ color: panelText }}
+                                        >
+                                            Mới
+                                        </Button>
+                                        <Button
+                                            icon={<SendOutlined />}
+                                            size={mobileChat ? 'small' : 'middle'}
+                                            onClick={() => handleSend()}
+                                            loading={loading}
+                                            style={{ background: '#b6462f', borderColor: '#b6462f', color: '#fff' }}
+                                        >
+                                            Gửi
+                                        </Button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-
                     </div>
                 </div>
-                </div>
             </div>
+
+            {/* SESSION DRAWER — mobile/tablet */}
+            {/* FIX: zIndex cao hơn panel (10000) để hiện trên cùng */}
             <Drawer
-                title="Phiên chat"
+                className="ai-session-drawer"
+                title={
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>Phiên chat</span>
+                        <Badge count={sessions.length} color="#b6462f" />
+                    </div>
+                }
                 placement="bottom"
                 open={sessionDrawerOpen}
                 onClose={() => {
@@ -1277,98 +1307,24 @@ export default function AiChatWidget() {
                     cancelEditingSession()
                 }}
                 height="72vh"
+                zIndex={10100}
                 styles={{
                     body: {
                         padding: 0,
                         background: dark ? '#14161d' : '#fff',
+                        display: 'flex',
+                        flexDirection: 'column',
                     },
                     header: {
                         background: dark ? '#14161d' : '#fff',
                         borderBottom: dark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(0,0,0,0.08)',
                     },
+                    wrapper: {
+                        zIndex: 10100,
+                    },
                 }}
             >
-                <div style={{ padding: 14, borderBottom: panelBorder }}>
-                    <Button
-                        type="primary"
-                        icon={<PlusOutlined />}
-                        block
-                        onClick={createNewChat}
-                        style={{ background: '#b6462f', borderColor: '#b6462f' }}
-                    >
-                        Cuộc trò chuyện mới
-                    </Button>
-                </div>
-                <div style={{ maxHeight: 'calc(72vh - 88px)', overflowY: 'auto' }}>
-                    {sessions.map((session) => (
-                        <div
-                            key={session.sessionId}
-                            onClick={() => selectSession(session.sessionId)}
-                            style={{
-                                padding: '12px 14px',
-                                cursor: 'pointer',
-                                borderLeft: session.sessionId === activeSession?.sessionId ? '4px solid #b6462f' : '4px solid transparent',
-                                borderBottom: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)',
-                                background: session.sessionId === activeSession?.sessionId
-                                    ? (dark ? 'rgba(182,70,47,0.18)' : 'rgba(182,70,47,0.08)')
-                                    : 'transparent',
-                            }}
-                        >
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                {editingSessionId === session.sessionId ? (
-                                    <Input
-                                        size="small"
-                                        value={editingTitle}
-                                        onChange={(event) => setEditingTitle(event.target.value)}
-                                        onClick={(event) => event.stopPropagation()}
-                                        onBlur={commitEditingSession}
-                                        onPressEnter={(event) => {
-                                            event.preventDefault()
-                                            commitEditingSession()
-                                        }}
-                                        onKeyDown={(event) => {
-                                            if (event.key === 'Escape') cancelEditingSession()
-                                        }}
-                                        autoFocus
-                                    />
-                                ) : (
-                                    <>
-                                        <div style={{ minWidth: 0, flex: 1 }}>
-                                            <Typography.Text strong style={{ color: panelText, display: 'block' }}>
-                                                {session.title}
-                                            </Typography.Text>
-                                            <Typography.Text style={{ fontSize: 12, color: panelMutedText }}>
-                                                {new Date(session.createdAt).toLocaleString('vi-VN')}
-                                            </Typography.Text>
-                                        </div>
-                                        <Dropdown
-                                            trigger={['click']}
-                                            menu={{
-                                                items: [
-                                                    { key: 'rename', icon: <EditOutlined />, label: 'Đổi tên' },
-                                                    { key: 'delete', icon: <DeleteOutlined />, label: 'Xóa', danger: true },
-                                                ],
-                                                onClick: ({ key, domEvent }) => {
-                                                    domEvent.stopPropagation()
-                                                    if (key === 'rename') startEditingSession(session.sessionId, session.title)
-                                                    if (key === 'delete') confirmDeleteSession(session.sessionId)
-                                                },
-                                            }}
-                                        >
-                                            <Button
-                                                type="text"
-                                                size="small"
-                                                icon={<MoreOutlined />}
-                                                onClick={(event) => event.stopPropagation()}
-                                                style={{ color: panelMutedText }}
-                                            />
-                                        </Dropdown>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                {renderSessionList()}
             </Drawer>
         </>
     )
