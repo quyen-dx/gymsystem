@@ -10,6 +10,7 @@ const STORAGE_KEY_PREFIX = 'chat_history_'
 const MASCOT_POSITION_KEY = 'doraemon_chat_position'
 const MASCOT_WIDTH = 88
 const MASCOT_HEIGHT = 112
+const MASCOT_ACTIVE_SCALE = 0.72
 const VIEWPORT_PADDING = 10
 const CHAT_PANEL_BACKGROUND_IMAGE = 'https://genk.mediacdn.vn/2019/7/3/photo-1-1562129061617297549771.jpg'
 const AI_AVATAR_IMAGE = 'https://vcdn1-giaitri.vnecdn.net/2023/04/28/doraemon4-1682675790-8961-1682675801.jpg?w=500&h=300&q=100&dpr=1&fit=crop&s=3dxqum5l0xkhHX-R0z_a1g'
@@ -177,61 +178,41 @@ const playDoraemonClickSound = () => {
     } catch { }
 }
 
-const DoraemonChatMascot = ({ active }: { active: boolean }) => (
-    <div className={`doraemon-chat-mascot ${active ? 'is-active' : ''}`}>
-        <svg viewBox="0 0 140 180" role="img" aria-label="Doraemon chat assistant">
-            <defs>
-                <radialGradient id="doraemonBlue" cx="35%" cy="25%" r="75%">
-                    <stop offset="0%" stopColor="#58d7ff" />
-                    <stop offset="58%" stopColor="#0aa7e6" />
-                    <stop offset="100%" stopColor="#067bb7" />
-                </radialGradient>
-                <radialGradient id="doraemonWhite" cx="35%" cy="25%" r="70%">
-                    <stop offset="0%" stopColor="#ffffff" />
-                    <stop offset="100%" stopColor="#edf8ff" />
-                </radialGradient>
-                <filter id="doraemonSoftShadow" x="-30%" y="-30%" width="160%" height="160%">
-                    <feDropShadow dx="0" dy="5" stdDeviation="4" floodColor="#00435c" floodOpacity="0.25" />
-                </filter>
-            </defs>
-            <ellipse cx="70" cy="169" rx="42" ry="8" fill="rgba(0,50,80,0.18)" />
-            <g className="mascot-body" filter="url(#doraemonSoftShadow)">
-                <circle cx="70" cy="55" r="42" fill="url(#doraemonBlue)" />
-                <ellipse cx="70" cy="66" rx="33" ry="30" fill="url(#doraemonWhite)" />
-                <ellipse cx="70" cy="120" rx="34" ry="43" fill="url(#doraemonBlue)" />
-                <ellipse cx="70" cy="121" rx="25" ry="31" fill="url(#doraemonWhite)" />
-                <g className="mascot-left-arm">
-                    <path d="M39 105 C20 111 17 132 32 138 C45 143 53 129 50 114" fill="#0aa7e6" stroke="#066b9c" strokeWidth="2.4" />
-                    <circle cx="31" cy="139" r="10" fill="#fff" stroke="#066b9c" strokeWidth="2.2" />
-                </g>
-                <g className="mascot-right-arm">
-                    <path d="M99 103 C119 92 126 74 117 66 C108 58 96 78 93 98" fill="#0aa7e6" stroke="#066b9c" strokeWidth="2.4" />
-                    <circle cx="118" cy="65" r="10" fill="#fff" stroke="#066b9c" strokeWidth="2.2" />
-                </g>
-                <ellipse cx="55" cy="44" rx="10" ry="13" fill="#fff" stroke="#0d587b" strokeWidth="2" />
-                <ellipse cx="85" cy="44" rx="10" ry="13" fill="#fff" stroke="#0d587b" strokeWidth="2" />
-                <circle className="mascot-eye" cx="59" cy="47" r="3.3" fill="#151515" />
-                <circle className="mascot-eye" cx="81" cy="47" r="3.3" fill="#151515" />
-                <circle cx="70" cy="55" r="5.5" fill="#e62635" stroke="#94131c" strokeWidth="1.5" />
-                <path d="M70 61 L70 75" stroke="#222" strokeWidth="2" strokeLinecap="round" />
-                <path className="mascot-mouth-idle" d="M57 74 Q70 83 83 74" fill="none" stroke="#222" strokeWidth="2.4" strokeLinecap="round" />
-                <path className="mascot-mouth-happy" d="M54 72 Q70 94 86 72 Q70 82 54 72" fill="#e94455" stroke="#222" strokeWidth="2" strokeLinejoin="round" />
-                <path d="M38 60 L59 63" stroke="#222" strokeWidth="1.7" strokeLinecap="round" />
-                <path d="M37 70 L59 68" stroke="#222" strokeWidth="1.7" strokeLinecap="round" />
-                <path d="M39 80 L60 73" stroke="#222" strokeWidth="1.7" strokeLinecap="round" />
-                <path d="M102 60 L81 63" stroke="#222" strokeWidth="1.7" strokeLinecap="round" />
-                <path d="M103 70 L81 68" stroke="#222" strokeWidth="1.7" strokeLinecap="round" />
-                <path d="M101 80 L80 73" stroke="#222" strokeWidth="1.7" strokeLinecap="round" />
-                <path d="M38 91 H102" stroke="#d8232f" strokeWidth="5" strokeLinecap="round" />
-                <circle cx="70" cy="96" r="7" fill="#ffd43b" stroke="#9a6a00" strokeWidth="2" />
-                <path d="M65 95 H75" stroke="#9a6a00" strokeWidth="1.6" />
-                <path d="M70 98 V103" stroke="#9a6a00" strokeWidth="1.6" strokeLinecap="round" />
-                <path d="M48 118 H92" stroke="#202020" strokeWidth="2" strokeLinecap="round" />
-                <path d="M52 118 C54 135 86 135 88 118 Z" fill="#fff" stroke="#202020" strokeWidth="2" />
-                <path d="M40 156 C46 145 62 146 65 160 C58 168 45 168 35 164 C35 160 37 158 40 156 Z" fill="#fff" stroke="#066b9c" strokeWidth="2.4" />
-                <path d="M100 156 C94 145 78 146 75 160 C82 168 95 168 105 164 C105 160 103 158 100 156 Z" fill="#fff" stroke="#066b9c" strokeWidth="2.4" />
-            </g>
-        </svg>
+const DoraemonChatMascot = ({ active, width = MASCOT_WIDTH, height = MASCOT_HEIGHT }: { active: boolean; width?: number; height?: number }) => (
+    <div style={{ width, height, position: 'relative' }}>
+        <img
+            src="https://upload.wikimedia.org/wikipedia/en/b/bd/Doraemon_character.png"
+            alt="Doraemon"
+            style={{
+                width,
+                height,
+                objectFit: 'contain',
+                display: 'block',
+                position: 'absolute',
+                top: 0, left: 0,
+                filter: 'brightness(0.9) saturate(0.95) drop-shadow(0 8px 20px rgba(0,116,170,0.5))',
+                opacity: active ? 0 : 1,
+                transform: active ? 'scale(0.8) translateY(10px)' : 'scale(1) translateY(0)',
+                transition: 'all 300ms ease',
+            }}
+        />
+        <img
+            src="/doremon-2-removebg-preview.png"
+            alt="Doraemon active"
+            style={{
+                width,
+                height,
+                objectFit: 'contain',
+                objectPosition: 'center top',
+                display: 'block',
+                position: 'absolute',
+                top: 0, left: 0,
+                filter: 'brightness(0.9) saturate(0.95) drop-shadow(0 8px 20px rgba(0,116,170,0.5))',
+                opacity: active ? 1 : 0,
+                transform: active ? 'scale(1) translateY(0)' : 'scale(0.8) translateY(10px)',
+                transition: 'all 300ms ease',
+            }}
+        />
     </div>
 )
 
@@ -260,6 +241,7 @@ export default function AiChatWidget() {
     const [mode, setMode] = useState<AiMode>('gym')
     const scrollRef = useRef<HTMLDivElement>(null)
     const dragStateRef = useRef<DragState | null>(null)
+    const latestMascotPositionRef = useRef<MascotPosition | null>(null)
     const hydratedServerHistoryRef = useRef('')
     const [mascotPosition, setMascotPosition] = useState<MascotPosition | null>(null)
     const [isDraggingMascot, setIsDraggingMascot] = useState(false)
@@ -273,11 +255,13 @@ export default function AiChatWidget() {
 
     useEffect(() => {
         const initialPosition = clampMascotPosition(loadMascotPosition())
+        latestMascotPositionRef.current = initialPosition
         setMascotPosition(initialPosition)
         const handleResize = () => {
             setViewport({ width: window.innerWidth, height: window.innerHeight })
             setMascotPosition((current) => {
                 const next = clampMascotPosition(current || getDefaultMascotPosition())
+                latestMascotPositionRef.current = next
                 saveMascotPosition(next)
                 return next
             })
@@ -461,9 +445,49 @@ export default function AiChatWidget() {
         setVisible(false); setExpanded(false)
     }
 
+    const moveMascotWithPointer = (event: PointerEvent) => {
+        const drag = dragStateRef.current
+        if (!drag || drag.pointerId !== event.pointerId) return
+        event.preventDefault()
+        const deltaX = event.clientX - drag.startX
+        const deltaY = event.clientY - drag.startY
+        if (Math.abs(deltaX) + Math.abs(deltaY) > 4) drag.moved = true
+        const next = clampMascotPosition({ x: drag.originX + deltaX, y: drag.originY + deltaY })
+        latestMascotPositionRef.current = next
+        setMascotPosition(next)
+    }
+
+    const cancelMascotDrag = () => {
+        window.removeEventListener('pointermove', moveMascotWithPointer)
+        window.removeEventListener('pointerup', finishMascotDrag)
+        window.removeEventListener('pointercancel', cancelMascotDrag)
+        const finalPosition = latestMascotPositionRef.current || mascotPosition
+        if (finalPosition) saveMascotPosition(clampMascotPosition(finalPosition))
+        setIsDraggingMascot(false)
+        dragStateRef.current = null
+    }
+
+    const finishMascotDrag = (event: PointerEvent) => {
+        const drag = dragStateRef.current
+        if (!drag || drag.pointerId !== event.pointerId) return
+        event.preventDefault()
+        window.removeEventListener('pointermove', moveMascotWithPointer)
+        window.removeEventListener('pointerup', finishMascotDrag)
+        window.removeEventListener('pointercancel', cancelMascotDrag)
+        const finalPosition = clampMascotPosition(latestMascotPositionRef.current || mascotPosition || getDefaultMascotPosition())
+        latestMascotPositionRef.current = finalPosition
+        setMascotPosition(finalPosition)
+        saveMascotPosition(finalPosition)
+        setIsDraggingMascot(false)
+        dragStateRef.current = null
+        if (!drag.moved) toggleWidget()
+    }
+
     const handleMascotPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
         if (!mascotPosition) return
+        event.preventDefault()
         event.currentTarget.setPointerCapture(event.pointerId)
+        latestMascotPositionRef.current = mascotPosition
         dragStateRef.current = {
             pointerId: event.pointerId,
             startX: event.clientX,
@@ -473,33 +497,21 @@ export default function AiChatWidget() {
             moved: false,
         }
         setIsDraggingMascot(true)
+        window.addEventListener('pointermove', moveMascotWithPointer, { passive: false })
+        window.addEventListener('pointerup', finishMascotDrag, { passive: false })
+        window.addEventListener('pointercancel', cancelMascotDrag)
     }
 
     const handleMascotPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
-        const drag = dragStateRef.current
-        if (!drag || drag.pointerId !== event.pointerId) return
-        const deltaX = event.clientX - drag.startX
-        const deltaY = event.clientY - drag.startY
-        if (Math.abs(deltaX) + Math.abs(deltaY) > 4) drag.moved = true
-        const next = clampMascotPosition({ x: drag.originX + deltaX, y: drag.originY + deltaY })
-        setMascotPosition(next)
+        moveMascotWithPointer(event.nativeEvent)
     }
 
     const handleMascotPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
-        const drag = dragStateRef.current
-        if (!drag || drag.pointerId !== event.pointerId) return
-        const finalPosition = clampMascotPosition(mascotPosition || getDefaultMascotPosition())
-        setMascotPosition(finalPosition)
-        saveMascotPosition(finalPosition)
-        setIsDraggingMascot(false)
-        dragStateRef.current = null
-        if (!drag.moved) toggleWidget()
+        finishMascotDrag(event.nativeEvent)
     }
 
     const handleMascotPointerCancel = () => {
-        if (mascotPosition) saveMascotPosition(clampMascotPosition(mascotPosition))
-        setIsDraggingMascot(false)
-        dragStateRef.current = null
+        cancelMascotDrag()
     }
 
     const closeWidget = () => {
@@ -559,41 +571,33 @@ export default function AiChatWidget() {
     const compactChat = viewport.width <= 720
     const mobileChat = viewport.width <= 560
     const showSessionSidebar = expanded && !compactChat
-    const panelWidth = compactChat ? Math.max(300, viewport.width - 20) : expanded ? 760 : 560
-    const panelHeight = compactChat ? Math.max(420, viewport.height - 20) : expanded ? 760 : 560
-    const panelBackground = dark ? 'rgba(17,19,24,0.86)' : 'rgba(255,255,255,0.94)'
-    const panelBandBackground = dark ? 'rgba(13,17,25,0.70)' : 'rgba(255,255,255,0.80)'
+    const activeMascotWidth = Math.round(MASCOT_WIDTH * MASCOT_ACTIVE_SCALE)
+    const activeMascotHeight = Math.round(MASCOT_HEIGHT * MASCOT_ACTIVE_SCALE)
+    const mascotButtonWidth = visible ? activeMascotWidth : MASCOT_WIDTH
+    const mascotButtonHeight = visible ? activeMascotHeight : MASCOT_HEIGHT
+    const panelWidth = compactChat ? 'min(350px, calc(100vw - 24px))' : expanded ? 760 : 560
+    const panelHeight = compactChat ? 'min(560px, calc(100vh - 140px))' : expanded ? 760 : 560
+    const panelBackground = dark ? 'rgba(17,19,24,0.86)' : 'rgba(255,255,255,0.72)'
+    const panelBandBackground = dark ? 'rgba(13,17,25,0.70)' : 'rgba(255,255,255,0.58)'
     const panelTint = dark
         ? 'linear-gradient(135deg, rgba(10,10,15,0.82), rgba(20,22,30,0.64))'
-        : 'linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,247,243,0.88))'
+        : 'linear-gradient(135deg, rgba(255,255,255,0.28), rgba(255,247,243,0.42))'
     const panelImageFilter = dark
         ? 'blur(12px) brightness(0.82) saturate(1.2) contrast(1.45)'
-        : 'blur(12px) brightness(1.18) saturate(0.95) contrast(1.02)'
+        : 'blur(12px) brightness(1.04) saturate(1.08) contrast(1.08)'
     const panelText = dark ? '#f3f3f3' : '#141414'
     const panelMutedText = dark ? '#d8d8d8' : '#666666'
     const panelBorder = dark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(0,0,0,0.10)'
-    const assistantBubbleBackground = dark ? 'rgba(31,34,43,0.96)' : 'rgba(255,255,255,0.98)'
-    const inputBackground = dark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.98)'
+    const assistantBubbleBackground = dark ? 'rgba(31,34,43,0.96)' : 'rgba(255,255,255,0.88)'
+    const inputBackground = dark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.90)'
     const inputBorder = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.14)'
     const resolvedMascotPosition = mascotPosition || {
         x: window.innerWidth - MASCOT_WIDTH - 24,
         y: window.innerHeight - MASCOT_HEIGHT - 24,
     }
-    const panelLeft = compactChat
-        ? 10
-        : clamp(
-            resolvedMascotPosition.x + MASCOT_WIDTH - panelWidth,
-            12,
-            viewport.width - Math.min(panelWidth, viewport.width - 24) - 12,
-        )
-    const preferredPanelTop = resolvedMascotPosition.y - panelHeight - 12
-    const panelTop = compactChat
-        ? 10
-        : clamp(
-            preferredPanelTop > 12 ? preferredPanelTop : resolvedMascotPosition.y + MASCOT_HEIGHT + 12,
-            12,
-            viewport.height - Math.min(panelHeight, viewport.height - 24) - 12,
-        )
+    const mascotButtonPosition = resolvedMascotPosition
+    const mascotPointerEvents = 'auto'
+    const mascotCursor = isDraggingMascot ? 'grabbing' : 'grab'
 
     // ─── Session list renderer (shared between sidebar & drawer) ──────────────
     const renderSessionList = () => (
@@ -688,28 +692,53 @@ export default function AiChatWidget() {
         <>
             <style>{`
                 .doraemon-chat-trigger {
-                    position: fixed;
-                    z-index: 9999;
+                    position: absolute;
+                    z-index: 2;
+                    left: 0;
+                    top: 0;
                     width: ${MASCOT_WIDTH}px;
                     height: ${MASCOT_HEIGHT}px;
                     border: 0;
-                    border-radius: 24px;
                     padding: 0;
                     background: transparent;
-                    box-shadow: 0 0 0 4px rgba(255,255,255,0.16), 0 16px 34px rgba(0,116,170,0.4), 0 0 28px rgba(43,195,255,0.35);
-                    cursor: pointer;
+                    box-shadow: none;
+                    cursor: grab;
                     transform: translateZ(0);
-                    transition: transform 180ms ease, filter 180ms ease, box-shadow 180ms ease;
-                    touch-action: none;
+                    transition: transform 180ms ease, filter 180ms ease;
+                    touch-action: manipulation;
                     user-select: none;
                     -webkit-user-select: none;
                 }
+                .ai-chat-overlay {
+                    position: fixed;
+                    inset: 0;
+                    background: transparent;
+                    z-index: 10000;
+                }
+                .ai-chat-anchor {
+                    position: fixed;
+                    z-index: 10050;
+                }
+                .ai-chat-wrapper {
+                    position: relative;
+                    width: 100%;
+                    height: 100%;
+                    overflow: visible;
+                }
+                .ai-chat-popup {
+                    position: absolute;
+                    right: 0;
+                    bottom: 100%;
+                    margin-bottom: 10px;
+                    z-index: 101;
+                }
                 .doraemon-chat-trigger:hover,
-                .doraemon-chat-trigger.is-active,
-                .doraemon-chat-trigger.is-dragging {
-                    transform: translateY(-4px) scale(1.05);
-                    filter: saturate(1.08);
-                    box-shadow: 0 0 0 4px rgba(255,255,255,0.2), 0 20px 44px rgba(0,116,170,0.48), 0 0 34px rgba(43,195,255,0.5);
+                .doraemon-chat-trigger.is-dragging,
+                .doraemon-chat-trigger:not(.is-active):hover {
+                    transform: translateY(-4px) scale(1.08);
+                }
+                .doraemon-chat-trigger.is-active:not(.is-dragging) {
+                    transform: translateZ(0);
                 }
                 .doraemon-chat-mascot,
                 .doraemon-chat-mascot svg {
@@ -776,7 +805,7 @@ export default function AiChatWidget() {
                 .ai-chat-session-item:hover .ai-chat-session-actions,
                 .ai-chat-session-actions.is-open { opacity: 1; }
 
-                @media (hover: none) {
+                @media (hover: none), (pointer: coarse) {
                     .ai-chat-session-actions { opacity: 1 !important; }
                 }
 
@@ -785,11 +814,23 @@ export default function AiChatWidget() {
                 }
 
                 @media (max-width: 640px) {
-                    .doraemon-chat-trigger { width: 72px; height: 92px; }
+                    .doraemon-chat-trigger:not(.is-active) { width: 72px; height: 92px; }
                     .doraemon-chat-mascot, .doraemon-chat-mascot svg { width: 72px; height: 92px; }
                 }
             `}</style>
 
+            {visible && <div className="ai-chat-overlay" onClick={closeWidget} />}
+
+            <div
+                className="ai-chat-anchor"
+                style={{
+                    left: mascotButtonPosition.x,
+                    top: mascotButtonPosition.y,
+                    width: mascotButtonWidth,
+                    height: mascotButtonHeight,
+                }}
+            >
+                <div className="ai-chat-wrapper">
             {/* MASCOT BUTTON */}
             <Tooltip title="Nói chuyện với Doraemon" placement="left">
                 <Badge count={sessions.length} offset={[-4, 8]} color="#b6462f">
@@ -797,30 +838,32 @@ export default function AiChatWidget() {
                         type="button"
                         className={`doraemon-chat-trigger ${visible ? 'is-active' : ''} ${isDraggingMascot ? 'is-dragging' : ''}`}
                         aria-label="Chat với AI"
-                        style={{ left: resolvedMascotPosition.x, top: resolvedMascotPosition.y }}
+                        style={{
+                            width: mascotButtonWidth,
+                            height: mascotButtonHeight,
+                            pointerEvents: mascotPointerEvents,
+                            cursor: mascotCursor,
+                        }}
                         onPointerDown={handleMascotPointerDown}
                         onPointerMove={handleMascotPointerMove}
                         onPointerUp={handleMascotPointerUp}
                         onPointerCancel={handleMascotPointerCancel}
                     >
-                        <DoraemonChatMascot active={visible} />
+                        <DoraemonChatMascot active={visible} width={mascotButtonWidth} height={mascotButtonHeight} />
                     </button>
                 </Badge>
             </Tooltip>
 
             {/* CHAT PANEL */}
             <div
-                className="ai-chat-panel"
+                className="ai-chat-panel ai-chat-popup"
+                onClick={(e) => e.stopPropagation()}
                 style={{
-                    position: 'fixed',
-                    left: panelLeft,
-                    top: panelTop,
                     width: panelWidth,
-                    maxWidth: compactChat ? 'calc(100vw - 20px)' : 'calc(100vw - 48px)',
+                    maxWidth: compactChat ? 'calc(100vw - 24px)' : 'calc(100vw - 48px)',
                     height: panelHeight,
-                    maxHeight: compactChat ? 'calc(100vh - 20px)' : 'calc(100vh - 48px)',
+                    maxHeight: compactChat ? 'calc(100vh - 140px)' : 'calc(100vh - 48px)',
                     // FIX: z-index thấp hơn drawer (10100) để drawer hiện lên trên
-                    zIndex: visible && compactChat ? 10000 : 1199,
                     borderRadius: compactChat ? 20 : 28,
                     background: panelBackground,
                     border: panelBorder,
@@ -854,7 +897,7 @@ export default function AiChatWidget() {
                             zIndex: 0,
                             pointerEvents: 'none',
                             filter: panelImageFilter,
-                            opacity: dark ? 0.72 : 0.34,
+                            opacity: dark ? 0.72 : 0.62,
                         }}
                     />
                 )}
@@ -971,6 +1014,7 @@ export default function AiChatWidget() {
                                                         </Typography.Text>
                                                         <Dropdown
                                                             trigger={['click']}
+                                                            getPopupContainer={(trigger) => trigger.parentElement || document.body}
                                                             menu={{
                                                                 items: [
                                                                     { key: 'rename', icon: <EditOutlined />, label: 'Đổi tên' },
@@ -1297,6 +1341,9 @@ export default function AiChatWidget() {
 
             {/* SESSION DRAWER — mobile/tablet */}
             {/* FIX: zIndex cao hơn panel (10000) để hiện trên cùnggg */}
+                </div>
+            </div>
+
             <Drawer
                 className="ai-session-drawer"
                 title={
@@ -1334,3 +1381,5 @@ export default function AiChatWidget() {
         </>
     )
 }
+
+
