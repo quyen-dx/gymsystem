@@ -1291,7 +1291,7 @@ export default function AiChatWidget() {
             </div>
 
             {/* SESSION DRAWER — mobile/tablet */}
-            {/* FIX: zIndex cao hơn panel (10000) để hiện trên cùng */}
+            {/* FIX: zIndex cao hơn panel (10000) để hiện trên cùnggg */}
             <Drawer
                 className="ai-session-drawer"
                 title={
