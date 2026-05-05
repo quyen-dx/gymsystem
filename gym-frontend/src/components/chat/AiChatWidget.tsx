@@ -1300,14 +1300,14 @@ export default function AiChatWidget() {
                         <Badge count={sessions.length} color="#b6462f" />
                     </div>
                 }
-                placement="bottom"
+                placement="left"
                 open={sessionDrawerOpen}
                 onClose={() => {
                     setSessionDrawerOpen(false)
                     cancelEditingSession()
                 }}
-                height="72vh"
                 zIndex={10100}
+                width={280}
                 styles={{
                     body: {
                         padding: 0,
