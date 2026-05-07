@@ -1,39 +1,48 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import MemberLayout from './components/layout/header/MemberLayout'
 import { useAuth } from './hook/useAuth'
-import AdminPlansPage from './pages/admin/AdminPlansPage'
-import AdminShopPage from './pages/admin/AdminShopPage'
-import AdminUsersPage from './pages/admin/AdminUsersPage'
-import AdminMembersPage from './pages/admin/AdminMembersPage'
-import AdminReports from './pages/admin/AdminReports'
-import AdminTrainersPage from './pages/admin/AdminTrainersPage'
-
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import LoginPage from './pages/auth/LoginPage'
 import OauthSuccessPage from './pages/auth/OauthSuccessPage'
 import RegisterPage from './pages/auth/Registerpage'
+import AdminDashboard from './pages/dashboard/admin/AdminDashboard'
+import AdminMembersPage from './pages/dashboard/admin/AdminMembersPage'
+import AdminPlansPage from './pages/dashboard/admin/AdminPlansPage'
+import AdminReports from './pages/dashboard/admin/AdminReports'
+import AdminShopPage from './pages/dashboard/admin/AdminShopPage'
+import AdminTrainersPage from './pages/dashboard/admin/AdminTrainersPage'
+import AdminUsersPage from './pages/dashboard/admin/AdminUsersPage'
+import BookingPage from './pages/dashboard/member/BookingPage'
+import CartPage from './pages/dashboard/member/CartPage'
+import CheckoutPage from './pages/dashboard/member/CheckoutPage'
+import DepositPage from './pages/dashboard/member/DepositPage'
+import HealthPage from './pages/dashboard/member/HealthPage'
+import MemberDashboard from './pages/dashboard/member/MemberDashboard'
+import MemberStorePage from './pages/dashboard/member/MemberStorePage'
+import OrderHistoryPage from './pages/dashboard/member/OrderHistoryPage'
+import OrderTrackingPage from './pages/dashboard/member/OrderTrackingPage'
+import ProductDetailPage from './pages/dashboard/member/ProductDetailPage'
+import TransferPage from './pages/dashboard/member/TransferPage'
+import WalletPage from './pages/dashboard/member/WalletPage'
+import WorkoutPage from './pages/dashboard/member/WorkoutPage'
+import PTSchedulePage from './pages/dashboard/pt/PTSchedulePage'
+import PTStudentPage from './pages/dashboard/pt/PTStudentPage'
+import SellerOrdersPage from './pages/dashboard/seller/SellerOrdersPage'
+import SellerProductsPage from './pages/dashboard/seller/SellerProductsPage'
+import StaffCheckinPage from './pages/dashboard/staff/StaffCheckinPage'
+import StaffMemberPage from './pages/dashboard/staff/StaffMemberPage'
 
-import AdminDashboard from './pages/dashboard/adminDB/AdminDashboard'
-import MemberDashboard from './pages/dashboard/memberDB/MemberDashboard'
-import PTDashboard from './pages/dashboard/ptDB/PTDashboard'
-import PTMemberPage from './pages/dashboard/ptDB/PTMemberPage'
-import StaffDashboard from './pages/dashboard/staffDB/StaffDashboard'
-import StaffMemberPage from './pages/dashboard/staffDB/StaffMemberPage'
+{/* ADMIN */ }
 
-import CartPage from './pages/member/CartPage'
-import CheckoutPage from './pages/member/CheckoutPage'
-import DepositPage from './pages/member/DepositPage'
-import MemberStorePage from './pages/member/MemberStorePage'
-import OrderHistoryPage from './pages/member/OrderHistoryPage'
-import OrderTrackingPage from './pages/member/OrderTrackingPage'
-import ProductDetailPage from './pages/member/ProductDetailPage'
-import TransferPage from './pages/member/TransferPage'
-import WalletPage from './pages/member/WalletPage'
-import BookingPage from './pages/member/BookingPage'
-import HealthPage from './pages/member/HealthPage'
-import WorkoutPage from './pages/member/WorkoutPage'
+{/* Auth */ }
 
-import SellerOrdersPage from './pages/seller/SellerOrdersPage'
-import SellerProductsPage from './pages/seller/SellerProductsPage'
+{/* PT */ }
+
+{/* Staff */ }
+
+{/* Member */ }
+
+{/* Seller */ }
 
 import ThemeProvider from './context/ThemeProvider'
 
@@ -51,6 +60,24 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   }
 
   return user ? <>{children}</> : <Navigate to="/login" />
+}
+
+function MemberCheckinPage() {
+  return (
+    <MemberLayout>
+      <div className="member-page">
+        <div className="rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8 max-[640px]:p-5">
+          <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">
+            QR Check-in
+          </p>
+          <h1 className="mt-3 text-2xl font-semibold text-[var(--gs-text)]">Check-in hội viên</h1>
+          <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
+            Chức năng QR Check-in đang được phát triển.
+          </p>
+        </div>
+      </div>
+    </MemberLayout>
+  )
 }
 
 export default function App() {
@@ -78,12 +105,12 @@ export default function App() {
         <Route path="/dashboard/seller/products" element={<PrivateRoute><SellerProductsPage /></PrivateRoute>} />
         <Route path="/dashboard/seller/orders" element={<PrivateRoute><SellerOrdersPage /></PrivateRoute>} />
         {/* STAFF */}
-        <Route path="/dashboard/staff" element={<PrivateRoute><StaffDashboard /></PrivateRoute>} />
+        <Route path="/dashboard/staff/checkin" element={<PrivateRoute><StaffCheckinPage /></PrivateRoute>} />
         <Route path="/dashboard/staff/members" element={<PrivateRoute><StaffMemberPage /></PrivateRoute>} />
 
         {/* PT */}
-        <Route path="/dashboard/pt" element={<PrivateRoute><PTDashboard /></PrivateRoute>} />
-        <Route path="/dashboard/pt/members" element={<PrivateRoute><PTMemberPage /></PrivateRoute>} />
+        <Route path="/dashboard/pt/schedule" element={<PrivateRoute><PTSchedulePage /></PrivateRoute>} />
+        <Route path="/dashboard/pt/student" element={<PrivateRoute><PTStudentPage /></PrivateRoute>} />
 
         {/* MEMBER */}
         <Route path="/dashboard/member" element={<PrivateRoute><MemberDashboard /></PrivateRoute>} />
@@ -100,6 +127,7 @@ export default function App() {
         <Route path="/dashboard/member/booking" element={<PrivateRoute><BookingPage /></PrivateRoute>} />
         <Route path="/dashboard/member/health" element={<PrivateRoute><HealthPage /></PrivateRoute>} />
         <Route path="/dashboard/member/workout" element={<PrivateRoute><WorkoutPage /></PrivateRoute>} />
+        <Route path="/dashboard/member/checkin" element={<PrivateRoute><MemberCheckinPage /></PrivateRoute>} />
         {/* DEFAULT */}
         <Route path="/" element={<Navigate to="/login" />} />
 

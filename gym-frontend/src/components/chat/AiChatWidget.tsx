@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hook/useAuth'
 import { deleteAiChatSession, getAiChatHistory, renameAiChatSession, requestAiAssistant, saveAiChatHistory, type AiMode } from '../../services/aiService'
+import type { AiToolPayload, ChatMessage, ChatSession, DragState, MascotPosition, StoredChatState } from '../../types/aichat/aichat'
 
 const STORAGE_KEY_PREFIX = 'chat_history_'
 const MASCOT_POSITION_KEY = 'doraemon_chat_position'
@@ -19,59 +20,6 @@ const AI_MODE_OPTIONS: { label: string; value: AiMode }[] = [
     { label: 'Gym', value: 'gym' },
     { label: 'Tất cả', value: 'general' },
 ]
-
-type ChatMessage = {
-    id: string
-    userId: string
-    role: 'user' | 'assistant' | 'system'
-    content: string
-    createdAt: string
-}
-
-type StoredChatState = {
-    sessions: ChatSession[]
-    activeSessionId?: string
-}
-
-type ChatSession = {
-    sessionId: string
-    title: string
-    createdAt: string
-    messages: ChatMessage[]
-}
-
-type MascotPosition = {
-    x: number
-    y: number
-}
-
-type DragState = {
-    pointerId: number
-    startX: number
-    startY: number
-    originX: number
-    originY: number
-    moved: boolean
-}
-
-type AiToolPayload =
-    | {
-        type: 'product_list'
-        items: { name: string; price: number; image: string; link: string; selectedVariant?: string }[]
-        message?: string
-    }
-    | {
-        type: 'pt_list'
-        items: { name: string; avatar: string; phone: string; email: string; specialty: string }[]
-    }
-    | {
-        type: 'category_list'
-        items: { name: string; slug: string }[]
-    }
-    | {
-        type: 'empty'
-        message: string
-    }
 
 const parseAiToolPayload = (content: string): AiToolPayload | null => {
     try {
