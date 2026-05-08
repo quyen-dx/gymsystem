@@ -30,6 +30,7 @@ export type DragState = {
     originX: number
     originY: number
     moved: boolean
+    source?: 'trigger' | 'panel'
 }
 
 export type AiToolPayload =

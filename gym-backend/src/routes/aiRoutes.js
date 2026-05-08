@@ -1,6 +1,8 @@
 import express from 'express'
 import {
     aiAssistant,
+    aiAssistantStream,
+    aiWebSearch,
     deleteAiChatSession,
     getAiChatHistory,
     renameAiChatSession,
@@ -14,6 +16,8 @@ router.get('/history', protect, getAiChatHistory)
 router.put('/history', protect, saveAiChatHistory)
 router.patch('/session/:sessionId', protect, renameAiChatSession)
 router.delete('/session/:sessionId', protect, deleteAiChatSession)
+router.post('/web-search', protect, aiWebSearch)
+router.post('/stream', protect, aiAssistantStream)
 router.post('/', protect, aiAssistant)
 
 export default router

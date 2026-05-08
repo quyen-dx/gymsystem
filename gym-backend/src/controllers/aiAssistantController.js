@@ -2,12 +2,47 @@ import Plan from '../models/Plan.js'
 import Product from '../models/Product.js'
 import User from '../models/User.js'
 import AiChatHistory from '../models/AiChatHistory.js'
-import { classifyQueryIntent, generateAssistantResponse } from '../services/aiAssistantService.js'
+import {
+    classifyQueryIntent,
+    generateAssistantResponse,
+    generateAssistantResponseStream,
+} from '../services/aiAssistantService.js'
 import { recordAuditLog } from '../services/auditLogService.js'
+import { searchWeb, shouldSearchWeb } from '../services/webSearchService.js'
 import AppError from '../utils/appError.js'
 
 const MAX_CHAT_SESSIONS = 20
 const CHAT_RETENTION_DAYS = 30
+
+const logAiAnswerBeforeSend = (label, answer) => {
+    const text = String(answer || '')
+    console.log(`[AI Assistant:${label}] answer before client:`, text)
+    console.log(`[AI Assistant:${label}] answer length:`, text.length)
+}
+
+const writeSseEvent = (res, event, data = {}) => {
+    if (res.destroyed || res.writableEnded) return false
+    const seq = (res.locals.sseSeq || 0) + 1
+    res.locals.sseSeq = seq
+    const payload = data && typeof data === 'object' && !Array.isArray(data)
+        ? { ...data, seq }
+        : { value: data, seq }
+    res.write(`id: ${seq}\n`)
+    res.write(`event: ${event}\n`)
+    res.write(`data: ${JSON.stringify(payload)}\n\n`)
+    res.flush?.()
+    return true
+}
+
+const initSseResponse = (res) => {
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+    res.write(': stream-open\n\n')
+    res.flush?.()
+}
 
 const getSessionLastActivityMs = (session) => {
     const latestMessageAt = Array.isArray(session.messages) && session.messages.length > 0
@@ -74,6 +109,15 @@ const productActionWords = new Set(['tim', 'kiem', 'mua', 'ban', 'gia', 'shop', 
 const productWords = new Set(['ta', 'dumbbell', 'dumbell', 'whey', 'protein', 'supplement', 'creatine', 'may', 'giay', 'gang', 'glove', 'gloves', 'wrist', 'strap', 'day', 'tham'])
 const ptWords = new Set(['pt', 'coach', 'trainer'])
 const ptGoalWords = new Set(['giam', 'mo', 'can', 'tang', 'co', 'suc', 'manh', 'lich', 'tap'])
+const generalKnowledgeIntentWords = new Set([
+    'explain', 'summary', 'summarize', 'code', 'math', 'toan', 'phim', 'movie', 'anime', 'technology',
+])
+const explicitProductIntentWords = new Set([
+    'tim', 'kiem', 'mua', 'ban', 'gia', 'shop', 'product', 'products', 'searchproducts',
+    'san', 'pham', 'danh', 'muc', 'category', 'cua', 'hang', 'bao', 'nhieu', 'tien',
+])
+const explicitPtIntentWords = new Set(['tim', 'kiem', 'dat', 'thue', 'chon', 'gioi', 'thieu', 'lich'])
+const urlLookupIntentWords = new Set(['link', 'url', 'website', 'source', 'docs', 'github', 'youtube', 'facebook', 'google', 'shopee'])
 const productStopWords = new Set([
     'tim', 'kiem', 'mua', 'san', 'pham', 'product', 'products', 'shop', 'ban', 'gia',
     'cho', 'toi', 'giup', 'minh', 'trong', 'cua', 'hang', 'o', 'tai', 'searchproducts',
@@ -205,18 +249,61 @@ const normalizeCategoryKey = (category) => normalizeLiteralText(category)
 
 const slugifyCategory = (category) => normalizeCategoryKey(category).replace(/\s+/g, '-')
 
-const detectToolIntent = (query) => {
+const isGeneralKnowledgeIntent = (query) => {
+    const normalized = normalizeSearchText(query)
+    const tokens = getSearchTokens(query)
+    if (/(tom tat|giai thich|viet code|sua code|debug|la gi|vi sao|tai sao|kien thuc|cong nghe|bo phim|phim|anime)/i.test(normalized)) {
+        return true
+    }
+    return tokens.some((token) => generalKnowledgeIntentWords.has(token))
+}
+
+const isUrlLookupIntent = (query) => {
+    const normalized = normalizeSearchText(query)
+    const tokens = getSearchTokens(query)
+    return tokens.some((token) => urlLookupIntentWords.has(token))
+        || normalized.includes('o dau')
+        || normalized.includes('trang web')
+        || normalized.includes('nguon')
+        || normalized.includes('tai lieu')
+}
+
+const detectToolIntent = (query, mode = 'gym') => {
     const normalized = normalizeSearchText(query)
     const tokens = getSearchTokens(query)
     const tokenSet = new Set(tokens)
+    const isGeneralMode = mode === 'general'
+
+    if (isGeneralMode && isGeneralKnowledgeIntent(query)) {
+        return null
+    }
+
+    if (isGeneralMode && isUrlLookupIntent(query)) {
+        return null
+    }
+
     const hasProductAction = tokens.some((token) => productActionWords.has(token)) || normalized.includes('san pham')
     const hasProductKeyword = tokens.some((token) => productWords.has(token)) || normalized.includes('may tap') || normalized.includes('giay gym')
-    const isProduct = hasProductKeyword || (hasProductAction && !tokenSet.has('pt') && !normalized.includes('huan luyen vien'))
+    const hasExplicitProductIntent = tokens.some((token) => explicitProductIntentWords.has(token))
+        || normalized.includes('san pham')
+        || normalized.includes('danh muc')
+        || normalized.includes('cua hang')
+        || normalized.includes('bao nhieu tien')
+        || normalized.includes('gia bao nhieu')
+    const isProduct = isGeneralMode
+        ? hasExplicitProductIntent && (hasProductKeyword || normalized.includes('san pham') || normalized.includes('shop') || normalized.includes('cua hang'))
+        : hasProductKeyword || (hasProductAction && !tokenSet.has('pt') && !normalized.includes('huan luyen vien'))
     const isPt = tokens.some((token) => ptWords.has(token)) || normalized.includes('huan luyen vien')
         || (tokens.includes('tim') && tokens.some((token) => ptGoalWords.has(token)))
-    if (isPt && !hasProductKeyword) return 'pt'
+    const isExplicitPt = isPt && (
+        tokens.some((token) => explicitPtIntentWords.has(token))
+        || normalized.includes('huan luyen vien')
+        || normalized.includes('pt')
+    )
+    if (isGeneralMode && isExplicitPt && !hasProductKeyword) return 'pt'
+    if (!isGeneralMode && isPt && !hasProductKeyword) return 'pt'
     if (isProduct) return 'product'
-    if (isPt) return 'pt'
+    if (!isGeneralMode && isPt) return 'pt'
     return null
 }
 
@@ -367,7 +454,7 @@ export const aiAssistant = async (req, res, next) => {
 
         const normalizedQuery = query.trim()
         const aiMode = mode === 'general' ? 'general' : 'gym'
-        const toolIntent = detectToolIntent(normalizedQuery)
+        const toolIntent = detectToolIntent(normalizedQuery, aiMode)
 
         if (toolIntent === 'product') {
             const categoryRequested = normalizeSearchText(normalizedQuery).includes('danh muc') || normalizeSearchText(normalizedQuery).includes('category')
@@ -565,6 +652,83 @@ export const aiAssistant = async (req, res, next) => {
             })
         }
 
+        if (aiMode === 'general') {
+            const needsWebSearch = shouldSearchWeb(normalizedQuery)
+            let webSearch = {
+                needed: needsWebSearch,
+                used: false,
+                reason: needsWebSearch ? 'not_started' : 'simple_query',
+                results: [],
+            }
+
+            if (needsWebSearch) {
+                try {
+                    webSearch = {
+                        needed: true,
+                        ...await searchWeb(normalizedQuery, { maxResults: 5 }),
+                    }
+                } catch (error) {
+                    console.error('Tavily web search error:', error)
+                    webSearch = {
+                        needed: true,
+                        used: false,
+                        reason: 'search_failed',
+                        results: [],
+                    }
+                }
+            }
+
+            if (needsWebSearch && !webSearch.used) {
+                const missingKeyMessage = webSearch.reason === 'missing_api_key'
+                    ? 'Câu hỏi này cần dữ liệu realtime, nhưng backend chưa cấu hình TAVILY_API_KEY để search web.'
+                    : 'Câu hỏi này cần dữ liệu realtime, nhưng hiện Tavily web search đang lỗi. Mình chưa thể trả lời chắc chắn mà không có nguồn mới.'
+
+                return res.json({
+                    answer: missingKeyMessage,
+                    pts: [],
+                    products: [],
+                    plans: [],
+                    mode: aiMode,
+                    webSearch,
+                })
+            }
+
+            const answer = await generateAssistantResponse(
+                normalizedQuery,
+                [],
+                [],
+                [],
+                aiMode,
+                {
+                    webContext: webSearch.context || '',
+                    webSearchUsed: webSearch.used,
+                },
+            )
+            logAiAnswerBeforeSend('general', answer)
+
+            await recordAuditLog({
+                req,
+                module: 'ai',
+                action: 'create',
+                entity: req.user,
+                details: `AI Assistant general query: ${normalizedQuery} | webSearch: ${webSearch.used ? 'used' : 'skipped'} | reason: ${webSearch.reason}`,
+            })
+
+            return res.json({
+                answer,
+                pts: [],
+                products: [],
+                plans: [],
+                mode: aiMode,
+                webSearch: {
+                    needed: webSearch.needed,
+                    used: webSearch.used,
+                    reason: webSearch.reason,
+                    results: webSearch.results,
+                },
+            })
+        }
+
         const classification = await classifyQueryIntent(normalizedQuery)
         const searchTerms = [classification.goal, ...(classification.keywords || []), normalizedQuery]
         const queryRegex = buildSearchRegex(searchTerms)
@@ -620,6 +784,7 @@ export const aiAssistant = async (req, res, next) => {
         const plans = planResults.map(mapPlanResult)
 
         const answer = await generateAssistantResponse(normalizedQuery, pts, products, plans, aiMode)
+        logAiAnswerBeforeSend(aiMode, answer)
 
         await recordAuditLog({
             req,
@@ -630,6 +795,240 @@ export const aiAssistant = async (req, res, next) => {
         })
 
         res.json({ answer, pts, products, plans, mode: aiMode })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const aiAssistantStream = async (req, res, next) => {
+    try {
+        const { query, mode = 'gym' } = req.body
+
+        if (!query || typeof query !== 'string' || query.trim().length === 0) {
+            return next(new AppError('Vui lòng nhập câu hỏi', 400))
+        }
+
+        const normalizedQuery = query.trim()
+        const aiMode = mode === 'general' ? 'general' : 'gym'
+        const toolIntent = detectToolIntent(normalizedQuery, aiMode)
+
+        initSseResponse(res)
+
+        req.on('close', () => {
+            console.log(`[AI Assistant stream] client closed connection | mode: ${aiMode}`)
+        })
+
+        if (toolIntent) {
+            writeSseEvent(res, 'fallback', {
+                reason: `tool_${toolIntent}`,
+                message: 'Tool response uses JSON fallback.',
+            })
+            writeSseEvent(res, 'done', { answer: '', mode: aiMode, fallback: true })
+            return res.end()
+        }
+
+        if (isPrivacyQuestion(normalizedQuery)) {
+            const answer = 'Tôi không thể cung cấp thông tin cá nhân của người dùng khác.'
+            writeSseEvent(res, 'chunk', { text: answer })
+            writeSseEvent(res, 'done', { answer, mode: aiMode })
+            return res.end()
+        }
+
+        let webSearch = {
+            needed: false,
+            used: false,
+            reason: 'not_needed',
+            results: [],
+        }
+
+        if (aiMode === 'general') {
+            const needsWebSearch = shouldSearchWeb(normalizedQuery)
+            webSearch = {
+                needed: needsWebSearch,
+                used: false,
+                reason: needsWebSearch ? 'not_started' : 'simple_query',
+                results: [],
+            }
+
+            if (needsWebSearch) {
+                try {
+                    webSearch = {
+                        needed: true,
+                        ...await searchWeb(normalizedQuery, { maxResults: 5 }),
+                    }
+                } catch (error) {
+                    console.error('Tavily web search stream error:', error)
+                    webSearch = {
+                        needed: true,
+                        used: false,
+                        reason: 'search_failed',
+                        results: [],
+                    }
+                }
+            }
+
+            writeSseEvent(res, 'meta', {
+                mode: aiMode,
+                webSearch: {
+                    needed: webSearch.needed,
+                    used: webSearch.used,
+                    reason: webSearch.reason,
+                    results: webSearch.results,
+                },
+            })
+
+            if (needsWebSearch && !webSearch.used) {
+                const answer = webSearch.reason === 'missing_api_key'
+                    ? 'Câu hỏi này cần dữ liệu realtime, nhưng backend chưa cấu hình TAVILY_API_KEY để search web.'
+                    : 'Câu hỏi này cần dữ liệu realtime, nhưng hiện Tavily web search đang lỗi. Mình chưa thể trả lời chắc chắn mà không có nguồn mới.'
+                writeSseEvent(res, 'chunk', { text: answer })
+                writeSseEvent(res, 'done', { answer, mode: aiMode, webSearch })
+                return res.end()
+            }
+
+            const answer = await generateAssistantResponseStream(
+                normalizedQuery,
+                [],
+                [],
+                [],
+                aiMode,
+                {
+                    webContext: webSearch.context || '',
+                    webSearchUsed: webSearch.used,
+                    onChunk: (text) => writeSseEvent(res, 'chunk', { text }),
+                },
+            )
+
+            logAiAnswerBeforeSend('general-stream', answer)
+
+            await recordAuditLog({
+                req,
+                module: 'ai',
+                action: 'create',
+                entity: req.user,
+                details: `AI Assistant general stream query: ${normalizedQuery} | webSearch: ${webSearch.used ? 'used' : 'skipped'} | reason: ${webSearch.reason}`,
+            })
+
+            writeSseEvent(res, 'done', {
+                answer,
+                mode: aiMode,
+                webSearch: {
+                    needed: webSearch.needed,
+                    used: webSearch.used,
+                    reason: webSearch.reason,
+                    results: webSearch.results,
+                },
+            })
+            return res.end()
+        }
+
+        const classification = await classifyQueryIntent(normalizedQuery)
+        const searchTerms = [classification.goal, ...(classification.keywords || []), normalizedQuery]
+        const queryRegex = buildSearchRegex(searchTerms)
+        const priceSort = classification.budget === 'rẻ' ? { price: 1 } : classification.budget === 'cao cấp' ? { price: -1 } : { price: 1 }
+
+        const [ptResults, productResults, planResults] = await Promise.all([
+            User.find({
+                role: 'pt',
+                isActive: true,
+                $or: [
+                    { name: queryRegex },
+                    { bio: queryRegex },
+                    { specialties: queryRegex },
+                ],
+            })
+                .select('name specialties rating experienceYears bio')
+                .limit(6)
+                .lean(),
+            Product.find({
+                isActive: true,
+                $or: [
+                    { name: queryRegex },
+                    { category: queryRegex },
+                    { description: queryRegex },
+                ],
+            })
+                .select('name price category description image')
+                .sort(priceSort)
+                .limit(6)
+                .lean(),
+            Plan.find({
+                isActive: true,
+                $or: [
+                    { name: queryRegex },
+                    { description: queryRegex },
+                ],
+            })
+                .select('name price durationDays description color')
+                .sort(priceSort)
+                .limit(6)
+                .lean(),
+        ])
+
+        const pts = ptResults.map(mapPtResult)
+        const products = productResults.map(mapProductResult)
+        const plans = planResults.map(mapPlanResult)
+
+        writeSseEvent(res, 'meta', { mode: aiMode, pts, products, plans })
+
+        const answer = await generateAssistantResponseStream(
+            normalizedQuery,
+            pts,
+            products,
+            plans,
+            aiMode,
+            {
+                onChunk: (text) => writeSseEvent(res, 'chunk', { text }),
+            },
+        )
+
+        logAiAnswerBeforeSend('gym-stream', answer)
+
+        await recordAuditLog({
+            req,
+            module: 'ai',
+            action: 'create',
+            entity: req.user,
+            details: `AI Assistant stream được gọi với truy vấn: ${normalizedQuery} | mode: ${aiMode}`,
+        })
+
+        writeSseEvent(res, 'done', { answer, pts, products, plans, mode: aiMode })
+        return res.end()
+    } catch (error) {
+        if (res.headersSent) {
+            console.error('AI Assistant stream error:', error)
+            writeSseEvent(res, 'error', { message: error?.message || 'Lỗi streaming AI' })
+            return res.end()
+        }
+        return next(error)
+    }
+}
+
+export const aiWebSearch = async (req, res, next) => {
+    try {
+        const { query } = req.body
+        if (!query || typeof query !== 'string' || query.trim().length === 0) {
+            return next(new AppError('Vui lòng nhập câu hỏi', 400))
+        }
+
+        const normalizedQuery = query.trim()
+        const needed = shouldSearchWeb(normalizedQuery)
+        if (!needed) {
+            return res.json({
+                needed,
+                used: false,
+                reason: 'simple_query',
+                results: [],
+            })
+        }
+
+        const result = await searchWeb(normalizedQuery, { maxResults: 5 })
+        return res.json({
+            needed,
+            used: result.used,
+            reason: result.reason,
+            results: result.results,
+        })
     } catch (error) {
         next(error)
     }

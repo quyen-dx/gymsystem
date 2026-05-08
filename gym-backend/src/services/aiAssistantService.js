@@ -21,6 +21,31 @@ const gymRelatedRegex = /(gym|tập|workout|cardio|dinh dưỡng|ăn|macro|prote
 
 const isGymRelatedQuery = (query) => gymRelatedRegex.test(query)
 
+const normalizePromptText = (value) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
+    .toLowerCase()
+
+const isSummaryQuery = (query) => {
+    const normalized = normalizePromptText(query)
+    return /\b(tom tat|summary|summarize|rut gon|tong ket|noi dung chinh)\b/i.test(normalized)
+}
+
+const buildSummaryRules = (query) => {
+    if (!isSummaryQuery(query)) return ''
+
+    return `QUY TẮC SUMMARY MODE BẮT BUỘC:
+- Đây là yêu cầu tóm tắt văn bản. Chỉ tóm tắt nội dung người dùng cung cấp trong câu hỏi.
+- Output phải là đoạn văn hoàn chỉnh về mặt ngữ nghĩa, không chỉ liệt kê ý rời rạc.
+- Bố cục phải có đủ 3 phần trong văn bản trả lời: mở ý giới thiệu nội dung chính, phần tóm tắt các ý quan trọng, và một câu kết luận ngắn.
+- Không được cắt câu giữa chừng, không bỏ dở ý, không kết thúc đột ngột.
+- Nếu văn bản dài, tự rút gọn nhưng vẫn giữ ý chính và bắt buộc có câu kết luận.
+- Ưu tiên mạch lạc và đủ ý hơn quá ngắn gọn.
+- Không thêm dữ liệu shop, gym, web hoặc thông tin ngoài văn bản được yêu cầu tóm tắt.`
+}
+
 const buildDefaultClassification = () => ({
     type: 'mixed',
     goal: 'không rõ',
@@ -28,16 +53,59 @@ const buildDefaultClassification = () => ({
     keywords: [],
 })
 
-const generateGeminiText = async (prompt, maxOutputTokens = 180, temperature = 0.35) => {
+const readGeminiText = (response, label = 'generate') => {
+    const text = response.text || ''
+    console.log(`[Gemini:${label}] full response text:`, text)
+    console.log(`[Gemini:${label}] response text length:`, text.length)
+    return text
+}
+
+const readGeminiStreamChunkText = (chunk) => {
+    return chunk.text || ''
+}
+
+const generateGeminiText = async (prompt, maxOutputTokens = 900, temperature = 0.35, label = 'generate') => {
     const geminiClient = createGeminiClient()
     const response = await geminiClient.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
-        temperature,
-        max_output_tokens: maxOutputTokens,
+        config: {
+            temperature,
+            maxOutputTokens,
+        },
     })
 
-    return response.text?.trim() || response.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    return readGeminiText(response, label)
+}
+
+const streamGeminiText = async (prompt, {
+    maxOutputTokens = 900,
+    temperature = 0.35,
+    label = 'stream',
+    onChunk,
+} = {}) => {
+    const geminiClient = createGeminiClient()
+    const stream = await geminiClient.models.generateContentStream({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            temperature,
+            maxOutputTokens,
+        },
+    })
+
+    let fullText = ''
+    for await (const chunk of stream) {
+        const text = readGeminiStreamChunkText(chunk)
+        if (!text) continue
+        console.log(`[Gemini:${label}] stream chunk:`, text)
+        fullText += text
+        await onChunk?.(text)
+    }
+
+    console.log(`[Gemini:${label}] full stream text:`, fullText)
+    console.log(`[Gemini:${label}] full stream text length:`, fullText.length)
+    return fullText
 }
 
 export const classifyQueryIntent = async (query) => {
@@ -59,11 +127,13 @@ Query: "${query}"`
         const response = await geminiClient.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            temperature: 0.2,
-            max_output_tokens: 200,
+            config: {
+                temperature: 0.2,
+                maxOutputTokens: 300,
+            },
         })
 
-        const content = response.text?.trim() || response.candidates?.[0]?.content?.parts?.[0]?.text || ''
+        const content = readGeminiText(response, 'classifyQueryIntent').trim()
         try {
             return safeJsonParse(content)
         } catch {
@@ -77,10 +147,14 @@ Query: "${query}"`
     }
 }
 
-export const generateAssistantResponse = async (query, pts, products, plans, mode = 'gym') => {
+export const generateAssistantResponse = async (query, pts, products, plans, mode = 'gym', options = {}) => {
     if (!process.env.GEMINI_API_KEY) return GEMINI_FALLBACK_MESSAGE
 
     const normalizedMode = mode === 'general' ? 'general' : 'gym'
+    const webContext = String(options.webContext || '').trim()
+    const webSearchUsed = Boolean(options.webSearchUsed && webContext)
+    const summaryRules = buildSummaryRules(query)
+    const summaryMode = Boolean(summaryRules)
     const styleRules = `PHONG CÁCH BẮT BUỘC:
 - Bạn là trợ lý AI của GymSystem, thân thiện kiểu Doraemon nhưng vẫn chuyên nghiệp.
 - Không trả lời cụt ngủn. Với câu hỏi đơn giản, trả lời câu chính rồi thêm 1 câu cảm xúc nhẹ nếu phù hợp.
@@ -103,14 +177,28 @@ Quy tắc:
 - Không roleplay PT và không thêm nội dung gym nếu câu hỏi không liên quan.
 - Nếu người dùng muốn tìm sản phẩm hoặc PT, backend đã gọi tool lấy dữ liệu thật trước khi vào prompt này.
 - Không bịa sản phẩm, PT, giá, số điện thoại hoặc email.
+- Không tự ý đưa dữ liệu shop/gym/sản phẩm vào câu trả lời nếu người dùng không hỏi rõ về mua hàng, giá, sản phẩm, PT hoặc gói tập.
+- Nếu người dùng yêu cầu tóm tắt, chỉ tóm tắt nội dung được cung cấp trong câu hỏi; không thêm dữ liệu shop, gym hoặc web.
+- Nếu có "Context web", ưu tiên thông tin trong context đó và luôn thêm mục "Nguồn:" ở cuối với URL thật dạng https://... hoặc [Tiêu đề](https://...).
+- Nếu người dùng hỏi "link", "URL", "ở đâu", "nguồn" hoặc "tài liệu", trả URL trực tiếp từ context; không thay bằng mô tả hoặc sản phẩm.
+- Không tạo link giả. Chỉ dùng URL có trong context web. Nếu không có URL thật, nói rõ không tìm thấy URL đáng tin cậy.
+- Nếu context web không đủ để kết luận, nói rõ phần chưa chắc thay vì đoán.
 - Trả lời bằng tiếng Việt, rõ ràng, logic, ngắn gọn nhưng đủ ý.
+- Không dừng giữa câu, không cắt ngang tên riêng hoặc câu trả lời.
 
 ${styleRules}
+
+${summaryRules ? `${summaryRules}
+` : ''}
+
+${webSearchUsed ? `Context web từ Tavily:
+${webContext}
+` : 'Không có context web; câu hỏi được xử lý bằng kiến thức chung.'}
 
 Câu hỏi: "${query}"`
 
         try {
-            const text = await generateGeminiText(prompt, 260, 0.35)
+            const text = await generateGeminiText(prompt, summaryMode ? 2200 : webSearchUsed ? 1400 : 900, 0.35, 'assistant-general')
             return text.trim() || 'Mình chưa có câu trả lời phù hợp.'
         } catch (error) {
             console.error('Gemini generateAssistantResponse general mode error:', error)
@@ -119,28 +207,7 @@ Câu hỏi: "${query}"`
     }
 
     if (!isGymRelatedQuery(query)) {
-        const prompt = `Bạn là trợ lý AI của GymSystem ở chế độ gym.
-
-Quy tắc:
-- Câu hỏi hiện tại không liên quan trực tiếp đến gym, tập luyện, dinh dưỡng hoặc sức khỏe.
-- Vẫn trả lời câu hỏi hợp lệ thật ngắn gọn trong 1-2 câu, đúng trọng tâm.
-- Không ép người dùng quay về gym nếu câu hỏi không liên quan gym.
-- Không nói "ngoài chuyên môn" và không từ chối.
-- Nếu người dùng muốn tìm sản phẩm hoặc PT, backend đã gọi tool lấy dữ liệu thật trước khi vào prompt này.
-- Không bịa sản phẩm, PT, giá, số điện thoại hoặc email.
-- Trả lời bằng tiếng Việt.
-
-${styleRules}
-
-Câu hỏi: "${query}"`
-
-        try {
-            const text = await generateGeminiText(prompt, 180, 0.25)
-            return text.trim() || 'Mình chưa có câu trả lời phù hợp. Bạn thử hỏi lại rõ hơn một chút nhé.'
-        } catch (error) {
-            console.error('Gemini generateAssistantResponse gym short mode error:', error)
-            return GEMINI_FALLBACK_MESSAGE
-        }
+        return 'Ở chế độ Gym, mình chỉ trả lời dựa trên dữ liệu hệ thống GymSystem hiện tại như PT, sản phẩm, gói tập, tập luyện, dinh dưỡng và sức khỏe. Bạn có thể chuyển sang chế độ Tất cả để hỏi nội dung ngoài hệ thống.'
     }
 
     const buildSummary = (items, label, fields) => {
@@ -164,6 +231,9 @@ Phong cách trả lời:
 - Không bao giờ yêu cầu người dùng nhập thêm từ khóa nếu họ chỉ chào hỏi.
 - Luôn gợi ý hành động tiếp theo rõ ràng và hữu ích.
 - Trả lời bằng tiếng Việt, dễ hiểu, không quá máy móc.
+- Không dừng giữa câu và không cắt ngang câu trả lời.
+- Chỉ sử dụng dữ liệu hệ thống GymSystem bên dưới, không tự lấy hoặc bịa dữ liệu ngoài hệ thống.
+- Nếu dữ liệu bên dưới không đủ để trả lời, nói rõ hiện hệ thống chưa có dữ liệu phù hợp và gợi ý người dùng hỏi về PT, sản phẩm hoặc gói tập hiện có.
 
 ${styleRules}
 
@@ -182,14 +252,138 @@ Câu hỏi: "${query}"`
         const response = await geminiClient.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            temperature: 0.35,
-            max_output_tokens: 180,
+            config: {
+                temperature: 0.35,
+                maxOutputTokens: 500,
+            },
         })
 
-        const text = response.text?.trim() || response.candidates?.[0]?.content?.parts?.[0]?.text || ''
+        const text = readGeminiText(response, 'assistant-gym').trim()
         return text.trim() || 'Mình không tìm thấy kết quả phù hợp.'
     } catch (error) {
         console.error('Gemini generateAssistantResponse error:', error)
         return GEMINI_FALLBACK_MESSAGE
     }
+}
+
+export const generateAssistantResponseStream = async (
+    query,
+    pts,
+    products,
+    plans,
+    mode = 'gym',
+    options = {},
+) => {
+    if (!process.env.GEMINI_API_KEY) {
+        await options.onChunk?.(GEMINI_FALLBACK_MESSAGE)
+        return GEMINI_FALLBACK_MESSAGE
+    }
+
+    const normalizedMode = mode === 'general' ? 'general' : 'gym'
+    const onChunk = options.onChunk
+    const webContext = String(options.webContext || '').trim()
+    const webSearchUsed = Boolean(options.webSearchUsed && webContext)
+    const summaryRules = buildSummaryRules(query)
+    const summaryMode = Boolean(summaryRules)
+    const styleRules = `PHONG CÁCH BẮT BUỘC:
+- Bạn là trợ lý AI của GymSystem, thân thiện kiểu Doraemon nhưng vẫn chuyên nghiệp.
+- Không trả lời cụt ngủn. Với câu hỏi đơn giản, trả lời câu chính rồi thêm 1 câu cảm xúc nhẹ nếu phù hợp.
+- Không lan man; ưu tiên 1 câu chính và 1 câu bổ sung nhẹ.
+- Tự nhiên như người thật, không robot, không roleplay quá đà.
+- Có thể dùng emoji nhẹ khi hợp ngữ cảnh.
+- Nếu người dùng muốn tìm sản phẩm hoặc PT, backend đã gọi tool lấy dữ liệu thật trước khi vào prompt này.
+- Không bịa sản phẩm, PT, giá, số điện thoại hoặc email.`
+
+    if (normalizedMode === 'gym' && isGreetingQuery(query)) {
+        const greeting = 'Chào bạn, mình là Doraemon AI của GymSystem đây! Hôm nay bạn muốn hỏi về tập luyện, dinh dưỡng hay cần mình hỗ trợ gì khác nào?'
+        await onChunk?.(greeting)
+        return greeting
+    }
+
+    if (normalizedMode === 'general') {
+        const prompt = `Bạn là trợ lý AI đa năng của GymSystem.
+
+Quy tắc:
+- Trả lời trực tiếp vào câu hỏi.
+- Có thể trả lời toán học, lập trình, đời sống, công nghệ và kiến thức chung.
+- Không roleplay PT và không thêm nội dung gym nếu câu hỏi không liên quan.
+- Nếu người dùng muốn tìm sản phẩm hoặc PT, backend đã gọi tool lấy dữ liệu thật trước khi vào prompt này.
+- Không bịa sản phẩm, PT, giá, số điện thoại hoặc email.
+- Không tự ý đưa dữ liệu shop/gym/sản phẩm vào câu trả lời nếu người dùng không hỏi rõ về mua hàng, giá, sản phẩm, PT hoặc gói tập.
+- Nếu người dùng yêu cầu tóm tắt, chỉ tóm tắt nội dung được cung cấp trong câu hỏi; không thêm dữ liệu shop, gym hoặc web.
+- Nếu có "Context web", ưu tiên thông tin trong context đó và luôn thêm mục "Nguồn:" ở cuối với URL thật dạng https://... hoặc [Tiêu đề](https://...).
+- Nếu người dùng hỏi "link", "URL", "ở đâu", "nguồn" hoặc "tài liệu", trả URL trực tiếp từ context; không thay bằng mô tả hoặc sản phẩm.
+- Không tạo link giả. Chỉ dùng URL có trong context web. Nếu không có URL thật, nói rõ không tìm thấy URL đáng tin cậy.
+- Nếu context web không đủ để kết luận, nói rõ phần chưa chắc thay vì đoán.
+- Trả lời bằng tiếng Việt, rõ ràng, logic, ngắn gọn nhưng đủ ý.
+- Không dừng giữa câu, không cắt ngang tên riêng hoặc câu trả lời.
+
+${styleRules}
+
+${summaryRules ? `${summaryRules}
+` : ''}
+
+${webSearchUsed ? `Context web từ Tavily:
+${webContext}
+` : 'Không có context web; câu hỏi được xử lý bằng kiến thức chung.'}
+
+Câu hỏi: "${query}"`
+
+        return streamGeminiText(prompt, {
+            maxOutputTokens: summaryMode ? 2200 : webSearchUsed ? 1400 : 900,
+            temperature: 0.35,
+            label: 'assistant-general-stream',
+            onChunk,
+        })
+    }
+
+    if (!isGymRelatedQuery(query)) {
+        const message = 'Ở chế độ Gym, mình chỉ trả lời dựa trên dữ liệu hệ thống GymSystem hiện tại như PT, sản phẩm, gói tập, tập luyện, dinh dưỡng và sức khỏe. Bạn có thể chuyển sang chế độ Tất cả để hỏi nội dung ngoài hệ thống.'
+        await onChunk?.(message)
+        return message
+    }
+
+    const buildSummary = (items, label, fields) => {
+        if (!items || items.length === 0) return `${label}: không tìm thấy kết quả phù hợp.`
+        return `${label}: ${items
+            .slice(0, 4)
+            .map((item) => fields.map((field) => item[field]).filter(Boolean).join(' • '))
+            .join(' | ')}`
+    }
+
+    const context = [
+        buildSummary(pts, 'PT phù hợp', ['name', 'specialties', 'rating', 'experienceYears']),
+        buildSummary(products, 'Sản phẩm gợi ý', ['name', 'category', 'price']),
+        buildSummary(plans, 'Gói tập gợi ý', ['name', 'durationDays', 'price']),
+    ].join('\n')
+
+    const prompt = `Bạn là một Huấn luyện viên cá nhân (PT) nhiệt tình, thân thiện và chuyên nghiệp cho GymSystem.
+
+Phong cách trả lời:
+- Sử dụng giọng nói khích lệ, gần gũi nhưng vẫn chuyên nghiệp.
+- Không bao giờ yêu cầu người dùng nhập thêm từ khóa nếu họ chỉ chào hỏi.
+- Luôn gợi ý hành động tiếp theo rõ ràng và hữu ích.
+- Trả lời bằng tiếng Việt, dễ hiểu, không quá máy móc.
+- Không dừng giữa câu và không cắt ngang câu trả lời.
+- Chỉ sử dụng dữ liệu hệ thống GymSystem bên dưới, không tự lấy hoặc bịa dữ liệu ngoài hệ thống.
+- Nếu dữ liệu bên dưới không đủ để trả lời, nói rõ hiện hệ thống chưa có dữ liệu phù hợp và gợi ý người dùng hỏi về PT, sản phẩm hoặc gói tập hiện có.
+
+${styleRules}
+
+Dữ liệu tìm được từ hệ thống:
+${context}
+
+Nội dung trả lời:
+- Nếu có kết quả phù hợp, đề xuất phương án rõ ràng.
+- Nếu không có dữ liệu phù hợp, hãy khuyến khích người dùng thử câu hỏi khác hoặc gợi ý bước tiếp theo.
+- Không chia sẻ thông tin cá nhân của người dùng khác.
+
+Câu hỏi: "${query}"`
+
+    return streamGeminiText(prompt, {
+        maxOutputTokens: 500,
+        temperature: 0.35,
+        label: 'assistant-gym-stream',
+        onChunk,
+    })
 }

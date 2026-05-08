@@ -1,17 +1,16 @@
 import { CloseOutlined, DeleteOutlined, EditOutlined, ExpandAltOutlined, MoreOutlined, PlusOutlined, SendOutlined } from '@ant-design/icons'
 import { Avatar, Badge, Button, Drawer, Dropdown, Input, Modal, Segmented, Select, Space, Spin, Tooltip, Typography } from 'antd'
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hook/useAuth'
-import { deleteAiChatSession, getAiChatHistory, renameAiChatSession, requestAiAssistant, saveAiChatHistory, type AiMode } from '../../services/aiService'
+import { deleteAiChatSession, getAiChatHistory, renameAiChatSession, requestAiAssistant, requestAiAssistantStream, saveAiChatHistory, type AiMode } from '../../services/aiService'
 import type { AiToolPayload, ChatMessage, ChatSession, DragState, MascotPosition, StoredChatState } from '../../types/aichat/aichat'
 
 const STORAGE_KEY_PREFIX = 'chat_history_'
 const MASCOT_POSITION_KEY = 'doraemon_chat_position'
 const MASCOT_WIDTH = 88
 const MASCOT_HEIGHT = 112
-const MASCOT_ACTIVE_SCALE = 0.72
 const VIEWPORT_PADDING = 10
 const CHAT_PANEL_BACKGROUND_IMAGE = 'https://genk.mediacdn.vn/2019/7/3/photo-1-1562129061617297549771.jpg'
 const AI_AVATAR_IMAGE = 'https://vcdn1-giaitri.vnecdn.net/2023/04/28/doraemon4-1682675790-8961-1682675801.jpg?w=500&h=300&q=100&dpr=1&fit=crop&s=3dxqum5l0xkhHX-R0z_a1g'
@@ -20,6 +19,11 @@ const AI_MODE_OPTIONS: { label: string; value: AiMode }[] = [
     { label: 'Gym', value: 'gym' },
     { label: 'Tất cả', value: 'general' },
 ]
+
+const TYPING_INTERVAL_MS = 24
+const TYPING_BASE_CHARS = 2
+const TYPING_FAST_BACKLOG = 700
+const TYPING_MAX_CHARS = 7
 
 const parseAiToolPayload = (content: string): AiToolPayload | null => {
     try {
@@ -32,6 +36,110 @@ const parseAiToolPayload = (content: string): AiToolPayload | null => {
     } catch {
         return null
     }
+}
+
+const renderInlineMarkdown = (text: string, color: string): ReactNode[] => {
+    const parts = text.split(/(\[[^\]]+\]\(https:\/\/[^)\s]+\)|https:\/\/[^\s<>)]+|`[^`]+`|\*\*[^*]+\*\*)/g)
+    return parts.map((part, index) => {
+        const markdownLink = part.match(/^\[([^\]]+)\]\((https:\/\/[^)\s]+)\)$/)
+        if (markdownLink) {
+            return (
+                <a
+                    key={index}
+                    href={markdownLink[2]}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: '#1677ff', textDecoration: 'underline', overflowWrap: 'anywhere' }}
+                >
+                    {markdownLink[1]}
+                </a>
+            )
+        }
+        if (/^https:\/\/[^\s<>)]+$/i.test(part)) {
+            const trailing = part.match(/[.,!?;:]+$/)?.[0] || ''
+            const href = trailing ? part.slice(0, -trailing.length) : part
+            return (
+                <span key={index}>
+                    <a
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: '#1677ff', textDecoration: 'underline', overflowWrap: 'anywhere' }}
+                    >
+                        {href}
+                    </a>
+                    {trailing}
+                </span>
+            )
+        }
+        if (part.startsWith('**') && part.endsWith('**')) {
+            return <strong key={index}>{part.slice(2, -2)}</strong>
+        }
+        if (part.startsWith('`') && part.endsWith('`')) {
+            return (
+                <code
+                    key={index}
+                    style={{
+                        padding: '1px 5px',
+                        borderRadius: 5,
+                        background: 'rgba(0,0,0,0.10)',
+                        color,
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                        fontSize: '0.92em',
+                    }}
+                >
+                    {part.slice(1, -1)}
+                </code>
+            )
+        }
+        return part
+    })
+}
+
+const renderMarkdownText = (text: string, color: string) => {
+    const blocks = text.split(/(```[\s\S]*?```)/g)
+    return (
+        <div style={{ color, whiteSpace: 'pre-wrap' }}>
+            {blocks.map((block, blockIndex) => {
+                if (block.startsWith('```')) {
+                    const code = block
+                        .replace(/^```[a-zA-Z0-9_-]*\n?/, '')
+                        .replace(/```$/, '')
+                    return (
+                        <pre
+                            key={`code-${blockIndex}`}
+                            style={{
+                                margin: '8px 0',
+                                padding: '10px 12px',
+                                borderRadius: 8,
+                                overflowX: 'auto',
+                                background: 'rgba(0,0,0,0.14)',
+                                color,
+                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                                fontSize: 13,
+                                lineHeight: 1.55,
+                            }}
+                        >
+                            <code>{code}</code>
+                        </pre>
+                    )
+                }
+
+                return block.split('\n').map((line, lineIndex) => {
+                    const bullet = line.match(/^(\s*[-*]\s+)(.+)$/)
+                    return (
+                        <div
+                            key={`text-${blockIndex}-${lineIndex}`}
+                            style={{ margin: bullet ? '2px 0 2px 12px' : undefined, minHeight: line ? undefined : 6 }}
+                        >
+                            {bullet ? '• ' : ''}
+                            {renderInlineMarkdown(bullet ? bullet[2] : line, color)}
+                        </div>
+                    )
+                })
+            })}
+        </div>
+    )
 }
 
 const clamp = (value: number, min: number, max: number) => {
@@ -126,7 +234,7 @@ const playDoraemonClickSound = () => {
     } catch { }
 }
 
-const DoraemonChatMascot = ({ active, width = MASCOT_WIDTH, height = MASCOT_HEIGHT }: { active: boolean; width?: number; height?: number }) => (
+const DoraemonChatMascot = ({ width = MASCOT_WIDTH, height = MASCOT_HEIGHT }: { width?: number; height?: number }) => (
     <div style={{ width, height, position: 'relative' }}>
         <img
             src="https://upload.wikimedia.org/wikipedia/en/b/bd/Doraemon_character.png"
@@ -139,26 +247,9 @@ const DoraemonChatMascot = ({ active, width = MASCOT_WIDTH, height = MASCOT_HEIG
                 position: 'absolute',
                 top: 0, left: 0,
                 filter: 'brightness(0.9) saturate(0.95) drop-shadow(0 8px 20px rgba(0,116,170,0.5))',
-                opacity: active ? 0 : 1,
-                transform: active ? 'scale(0.8) translateY(10px)' : 'scale(1) translateY(0)',
-                transition: 'all 300ms ease',
-            }}
-        />
-        <img
-            src="/doremon-2-removebg-preview.png"
-            alt="Doraemon active"
-            style={{
-                width,
-                height,
-                objectFit: 'contain',
-                objectPosition: 'center top',
-                display: 'block',
-                position: 'absolute',
-                top: 0, left: 0,
-                filter: 'brightness(0.9) saturate(0.95) drop-shadow(0 8px 20px rgba(0,116,170,0.5))',
-                opacity: active ? 1 : 0,
-                transform: active ? 'scale(1) translateY(0)' : 'scale(0.8) translateY(10px)',
-                transition: 'all 300ms ease',
+                opacity: 1,
+                transform: 'scale(1) translateY(0)',
+                transition: 'filter 180ms ease, transform 180ms ease',
             }}
         />
     </div>
@@ -190,7 +281,11 @@ export default function AiChatWidget() {
     const scrollRef = useRef<HTMLDivElement>(null)
     const dragStateRef = useRef<DragState | null>(null)
     const latestMascotPositionRef = useRef<MascotPosition | null>(null)
+    const suppressNextWidgetClickRef = useRef(false)
     const hydratedServerHistoryRef = useRef('')
+    const streamTextBufferRef = useRef('')
+    const streamTypingTimerRef = useRef<number | null>(null)
+    const streamTargetMessageIdRef = useRef('')
     const [mascotPosition, setMascotPosition] = useState<MascotPosition | null>(null)
     const [isDraggingMascot, setIsDraggingMascot] = useState(false)
     const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false)
@@ -278,6 +373,20 @@ export default function AiChatWidget() {
     }, [sessions, visible])
 
     useEffect(() => {
+        return () => {
+            if (streamTypingTimerRef.current) {
+                window.clearInterval(streamTypingTimerRef.current)
+                streamTypingTimerRef.current = null
+            }
+            window.removeEventListener('pointermove', moveMascotWithPointer)
+            window.removeEventListener('pointerup', finishMascotDrag)
+            window.removeEventListener('pointercancel', cancelMascotDrag)
+            document.body.style.userSelect = ''
+            document.body.style.touchAction = ''
+        }
+    }, [])
+
+    useEffect(() => {
         let timer: ReturnType<typeof setTimeout>
         if (retryCountdown > 0) timer = setTimeout(() => setRetryCountdown(retryCountdown - 1), 1000)
         return () => { if (timer) clearTimeout(timer) }
@@ -300,6 +409,82 @@ export default function AiChatWidget() {
                 }
             })
         )
+    }
+
+    const updateMessageInSession = (messageId: string, updater: (message: ChatMessage) => ChatMessage) => {
+        setSessions((current) =>
+            current.map((session) => ({
+                ...session,
+                messages: session.messages.map((message) =>
+                    message.id === messageId ? updater(message) : message
+                ),
+            }))
+        )
+    }
+
+    const stopStreamTyping = () => {
+        if (streamTypingTimerRef.current) {
+            window.clearInterval(streamTypingTimerRef.current)
+            streamTypingTimerRef.current = null
+        }
+    }
+
+    const flushStreamTextBuffer = (messageId: string) => {
+        const remaining = streamTextBufferRef.current
+        if (!remaining) return
+        streamTextBufferRef.current = ''
+        updateMessageInSession(messageId, (message) => ({
+            ...message,
+            content: `${message.content}${remaining}`,
+        }))
+    }
+
+    const getNextTypingSliceLength = () => {
+        const backlog = streamTextBufferRef.current.length
+        if (backlog > TYPING_FAST_BACKLOG) return TYPING_MAX_CHARS
+        if (backlog > 320) return 5
+        if (backlog > 140) return 4
+        return TYPING_BASE_CHARS
+    }
+
+    const waitForStreamTypingDrain = (timeoutMs = 30000) => new Promise<void>((resolve) => {
+        const startedAt = Date.now()
+        const checker = window.setInterval(() => {
+            const drained = streamTextBufferRef.current.length === 0 && !streamTypingTimerRef.current
+            const timedOut = Date.now() - startedAt > timeoutMs
+            if (drained || timedOut) {
+                window.clearInterval(checker)
+                if (timedOut) {
+                    const targetId = streamTargetMessageIdRef.current
+                    if (targetId) flushStreamTextBuffer(targetId)
+                    stopStreamTyping()
+                }
+                resolve()
+            }
+        }, 40)
+    })
+
+    const enqueueStreamText = (messageId: string, text: string) => {
+        if (!text) return
+        streamTargetMessageIdRef.current = messageId
+        streamTextBufferRef.current += text
+        if (streamTypingTimerRef.current) return
+
+        streamTypingTimerRef.current = window.setInterval(() => {
+            const targetId = streamTargetMessageIdRef.current
+            if (!targetId || streamTextBufferRef.current.length === 0) {
+                stopStreamTyping()
+                return
+            }
+
+            const sliceLength = getNextTypingSliceLength()
+            const nextText = streamTextBufferRef.current.slice(0, sliceLength)
+            streamTextBufferRef.current = streamTextBufferRef.current.slice(nextText.length)
+            updateMessageInSession(targetId, (message) => ({
+                ...message,
+                content: `${message.content}${nextText}`,
+            }))
+        }, TYPING_INTERVAL_MS)
     }
 
     const renameSession = (sessionId: string, newTitle: string) => {
@@ -394,6 +579,23 @@ export default function AiChatWidget() {
         setVisible(false); setExpanded(false)
     }
 
+    const clampFloatingWidgetPosition = (position: MascotPosition): MascotPosition => {
+        if (!visible) return clampMascotPosition(position)
+
+        const compact = viewport.width <= 720
+        const width = compact ? Math.min(350, window.innerWidth - 24) : expanded ? 760 : 560
+        const height = compact ? Math.min(560, window.innerHeight - 140) : expanded ? 760 : 560
+        const minX = Math.max(VIEWPORT_PADDING, width - MASCOT_WIDTH + VIEWPORT_PADDING)
+        const maxX = window.innerWidth - MASCOT_WIDTH - VIEWPORT_PADDING
+        const minY = Math.max(VIEWPORT_PADDING, height + 10 + VIEWPORT_PADDING)
+        const maxY = window.innerHeight - MASCOT_HEIGHT - VIEWPORT_PADDING
+
+        return {
+            x: clamp(position.x, minX, maxX),
+            y: clamp(position.y, minY, maxY),
+        }
+    }
+
     const moveMascotWithPointer = (event: PointerEvent) => {
         const drag = dragStateRef.current
         if (!drag || drag.pointerId !== event.pointerId) return
@@ -401,7 +603,7 @@ export default function AiChatWidget() {
         const deltaX = event.clientX - drag.startX
         const deltaY = event.clientY - drag.startY
         if (Math.abs(deltaX) + Math.abs(deltaY) > 4) drag.moved = true
-        const next = clampMascotPosition({ x: drag.originX + deltaX, y: drag.originY + deltaY })
+        const next = clampFloatingWidgetPosition({ x: drag.originX + deltaX, y: drag.originY + deltaY })
         latestMascotPositionRef.current = next
         setMascotPosition(next)
     }
@@ -411,9 +613,11 @@ export default function AiChatWidget() {
         window.removeEventListener('pointerup', finishMascotDrag)
         window.removeEventListener('pointercancel', cancelMascotDrag)
         const finalPosition = latestMascotPositionRef.current || mascotPosition
-        if (finalPosition) saveMascotPosition(clampMascotPosition(finalPosition))
+        if (finalPosition) saveMascotPosition(clampFloatingWidgetPosition(finalPosition))
         setIsDraggingMascot(false)
         dragStateRef.current = null
+        document.body.style.userSelect = ''
+        document.body.style.touchAction = ''
     }
 
     const finishMascotDrag = (event: PointerEvent) => {
@@ -423,44 +627,55 @@ export default function AiChatWidget() {
         window.removeEventListener('pointermove', moveMascotWithPointer)
         window.removeEventListener('pointerup', finishMascotDrag)
         window.removeEventListener('pointercancel', cancelMascotDrag)
-        const finalPosition = clampMascotPosition(latestMascotPositionRef.current || mascotPosition || getDefaultMascotPosition())
+        const finalPosition = clampFloatingWidgetPosition(latestMascotPositionRef.current || mascotPosition || getDefaultMascotPosition())
         latestMascotPositionRef.current = finalPosition
         setMascotPosition(finalPosition)
         saveMascotPosition(finalPosition)
         setIsDraggingMascot(false)
         dragStateRef.current = null
-        if (!drag.moved) toggleWidget()
+        document.body.style.userSelect = ''
+        document.body.style.touchAction = ''
+        if (drag.moved) suppressNextWidgetClickRef.current = true
+        if (!drag.moved && drag.source === 'trigger') toggleWidget()
     }
 
-    const handleMascotPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
-        if (!mascotPosition) return
+    const handleFloatingWidgetPointerDown = (
+        event: ReactPointerEvent<HTMLButtonElement | HTMLDivElement>,
+        source: 'trigger' | 'panel',
+    ) => {
+        const target = event.target as HTMLElement
+        if (source === 'panel' && target.closest('button, input, textarea, select, a, [role="button"], .ant-select, .ant-dropdown-trigger, .ant-segmented, .ant-drawer, .ant-modal')) {
+            return
+        }
         event.preventDefault()
-        event.currentTarget.setPointerCapture(event.pointerId)
-        latestMascotPositionRef.current = mascotPosition
+        event.stopPropagation()
+        const origin = mascotPosition || latestMascotPositionRef.current || getDefaultMascotPosition()
+        latestMascotPositionRef.current = origin
         dragStateRef.current = {
             pointerId: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
-            originX: mascotPosition.x,
-            originY: mascotPosition.y,
+            originX: origin.x,
+            originY: origin.y,
             moved: false,
+            source,
         }
         setIsDraggingMascot(true)
+        document.body.style.userSelect = 'none'
+        document.body.style.touchAction = 'none'
         window.addEventListener('pointermove', moveMascotWithPointer, { passive: false })
         window.addEventListener('pointerup', finishMascotDrag, { passive: false })
         window.addEventListener('pointercancel', cancelMascotDrag)
     }
 
-    const handleMascotPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
-        moveMascotWithPointer(event.nativeEvent)
-    }
-
-    const handleMascotPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
-        finishMascotDrag(event.nativeEvent)
-    }
-
-    const handleMascotPointerCancel = () => {
-        cancelMascotDrag()
+    const handleFloatingWidgetClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+        if (suppressNextWidgetClickRef.current) {
+            suppressNextWidgetClickRef.current = false
+            event.preventDefault()
+            event.stopPropagation()
+            return
+        }
+        event.stopPropagation()
     }
 
     const closeWidget = () => {
@@ -490,27 +705,66 @@ export default function AiChatWidget() {
         setQuery('')
         setLoading(true)
         setErrorInfo(null)
+        const assistantMessageId = `${Date.now()}-assistant`
+        const assistantMessage: ChatMessage = {
+            id: assistantMessageId,
+            userId: user?._id ?? 'guest',
+            role: 'assistant',
+            content: '',
+            createdAt: new Date().toISOString(),
+        }
+        stopStreamTyping()
+        streamTextBufferRef.current = ''
+        streamTargetMessageIdRef.current = assistantMessageId
+        addMessageToSession(assistantMessage)
         try {
-            const response = await requestAiAssistant(trimmed, mode)
-            const assistantMessage: ChatMessage = {
-                id: `${Date.now()}-assistant`,
-                userId: user?._id ?? 'guest',
-                role: 'assistant',
-                content: response.answer || 'Mình không có câu trả lời cho câu hỏi này.',
-                createdAt: new Date().toISOString(),
+            let usedFallback = false
+            const response = await requestAiAssistantStream(trimmed, mode, {
+                onFirstChunk: () => setLoading(false),
+                onChunk: (chunk) => {
+                    console.log('[AI chat widget] enqueue chunk:', chunk)
+                    enqueueStreamText(assistantMessageId, chunk)
+                },
+                onFallback: () => {
+                    usedFallback = true
+                },
+            })
+
+            if (usedFallback) {
+                flushStreamTextBuffer(assistantMessageId)
+                stopStreamTyping()
+                const fallbackResponse = await requestAiAssistant(trimmed, mode)
+                updateMessageInSession(assistantMessageId, (message) => ({
+                    ...message,
+                    content: fallbackResponse.answer || 'Mình không có câu trả lời cho câu hỏi này.',
+                }))
+                return
             }
-            addMessageToSession(assistantMessage)
+
+            if (response.answer) {
+                await waitForStreamTypingDrain()
+                updateMessageInSession(assistantMessageId, (message) => ({
+                    ...message,
+                    content: message.content || response.answer,
+                }))
+            } else {
+                await waitForStreamTypingDrain()
+                updateMessageInSession(assistantMessageId, (message) => ({
+                    ...message,
+                    content: message.content || 'Mình không có câu trả lời cho câu hỏi này.',
+                }))
+            }
         } catch (error: any) {
             const errMsg = error?.userMessage || 'Có lỗi khi gọi AI. Vui lòng thử lại.'
             if (error?.code === 429) setRetryCountdown(4)
             setErrorInfo({ code: error?.code || 500, message: errMsg })
-            addMessageToSession({
-                id: `${Date.now()}-assistant-error`,
-                userId: user?._id ?? 'guest',
+            flushStreamTextBuffer(assistantMessageId)
+            stopStreamTyping()
+            updateMessageInSession(assistantMessageId, (message) => ({
+                ...message,
                 role: 'system',
                 content: errMsg,
-                createdAt: new Date().toISOString(),
-            })
+            }))
         } finally {
             setLoading(false)
         }
@@ -520,10 +774,8 @@ export default function AiChatWidget() {
     const compactChat = viewport.width <= 720
     const mobileChat = viewport.width <= 560
     const showSessionSidebar = expanded && !compactChat
-    const activeMascotWidth = Math.round(MASCOT_WIDTH * MASCOT_ACTIVE_SCALE)
-    const activeMascotHeight = Math.round(MASCOT_HEIGHT * MASCOT_ACTIVE_SCALE)
-    const mascotButtonWidth = visible ? activeMascotWidth : MASCOT_WIDTH
-    const mascotButtonHeight = visible ? activeMascotHeight : MASCOT_HEIGHT
+    const mascotButtonWidth = MASCOT_WIDTH
+    const mascotButtonHeight = MASCOT_HEIGHT
     const panelWidth = compactChat ? 'min(350px, calc(100vw - 24px))' : expanded ? 760 : 560
     const panelHeight = compactChat ? 'min(560px, calc(100vh - 140px))' : expanded ? 760 : 560
     const panelBackground = dark ? 'rgba(17,19,24,0.86)' : 'rgba(255,255,255,0.72)'
@@ -540,13 +792,9 @@ export default function AiChatWidget() {
     const assistantBubbleBackground = dark ? 'rgba(31,34,43,0.96)' : 'rgba(255,255,255,0.88)'
     const inputBackground = dark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.90)'
     const inputBorder = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.14)'
-    const resolvedMascotPosition = mascotPosition || {
-        x: window.innerWidth - MASCOT_WIDTH - 24,
-        y: window.innerHeight - MASCOT_HEIGHT - 24,
-    }
-    const mascotButtonPosition = resolvedMascotPosition
-    const mascotPointerEvents = 'auto'
+    const mascotButtonPosition = mascotPosition || getDefaultMascotPosition()
     const mascotCursor = isDraggingMascot ? 'grabbing' : 'grab'
+    const sessionBadgeCount = sessions.length
 
     // ─── Session list renderer (shared between sidebar & drawer) ──────────────
     const renderSessionList = () => (
@@ -641,10 +889,8 @@ export default function AiChatWidget() {
         <>
             <style>{`
                 .doraemon-chat-trigger {
-                    position: absolute;
+                    position: relative;
                     z-index: 2;
-                    left: 0;
-                    top: 0;
                     width: ${MASCOT_WIDTH}px;
                     height: ${MASCOT_HEIGHT}px;
                     border: 0;
@@ -686,7 +932,7 @@ export default function AiChatWidget() {
                 .doraemon-chat-trigger:not(.is-active):hover {
                     transform: translateY(-4px) scale(1.08);
                 }
-                .doraemon-chat-trigger.is-active:not(.is-dragging) {
+                .doraemon-chat-trigger.is-active {
                     transform: translateZ(0);
                 }
                 .doraemon-chat-mascot,
@@ -773,16 +1019,17 @@ export default function AiChatWidget() {
             <div
                 className="ai-chat-anchor"
                 style={{
-                    left: mascotButtonPosition.x,
-                    top: mascotButtonPosition.y,
+                    left: 0,
+                    top: 0,
+                    transform: `translate3d(${mascotButtonPosition.x}px, ${mascotButtonPosition.y}px, 0)`,
                     width: mascotButtonWidth,
                     height: mascotButtonHeight,
+                    willChange: isDraggingMascot ? 'transform' : 'auto',
                 }}
             >
                 <div className="ai-chat-wrapper">
             {/* MASCOT BUTTON */}
             <Tooltip  placement="left">
-                <Badge count={sessions.length} offset={[-4, 8]} color="#b6462f">
                     <button
                         type="button"
                         className={`doraemon-chat-trigger ${visible ? 'is-active' : ''} ${isDraggingMascot ? 'is-dragging' : ''}`}
@@ -790,28 +1037,25 @@ export default function AiChatWidget() {
                         style={{
                             width: mascotButtonWidth,
                             height: mascotButtonHeight,
-                            pointerEvents: mascotPointerEvents,
                             cursor: mascotCursor,
                         }}
-                        onPointerDown={handleMascotPointerDown}
-                        onPointerMove={handleMascotPointerMove}
-                        onPointerUp={handleMascotPointerUp}
-                        onPointerCancel={handleMascotPointerCancel}
+                        onPointerDown={(event) => handleFloatingWidgetPointerDown(event, 'trigger')}
                     >
-                        <DoraemonChatMascot active={visible} width={mascotButtonWidth} height={mascotButtonHeight} />
+                        <DoraemonChatMascot width={mascotButtonWidth} height={mascotButtonHeight} />
                     </button>
-                </Badge>
             </Tooltip>
 
             {/* CHAT PANEL */}
             <div
                 className="ai-chat-panel ai-chat-popup"
-                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(event) => handleFloatingWidgetPointerDown(event, 'panel')}
+                onClick={handleFloatingWidgetClick}
                 style={{
                     width: panelWidth,
                     maxWidth: compactChat ? 'calc(100vw - 24px)' : 'calc(100vw - 48px)',
                     height: panelHeight,
                     maxHeight: compactChat ? 'calc(100vh - 140px)' : 'calc(100vh - 48px)',
+                    zIndex: 10080,
                     // FIX: z-index thấp hơn drawer (10100) để drawer hiện lên trên
                     borderRadius: compactChat ? 20 : 28,
                     background: panelBackground,
@@ -828,6 +1072,7 @@ export default function AiChatWidget() {
                     flexDirection: 'column',
                     backdropFilter: 'blur(18px)',
                     WebkitBackdropFilter: 'blur(18px)',
+                    cursor: mascotCursor,
                 }}
             >
                 {CHAT_PANEL_BACKGROUND_IMAGE && (
@@ -862,7 +1107,8 @@ export default function AiChatWidget() {
                 <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
                     {/* HEADER */}
-                    <div style={{
+                    <div
+                        style={{
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
@@ -871,6 +1117,9 @@ export default function AiChatWidget() {
                         background: 'linear-gradient(135deg, #b6462f, #e8722a)',
                         color: '#fff',
                         flexShrink: 0,
+                        cursor: mascotCursor,
+                        userSelect: 'none',
+                        touchAction: 'none',
                     }}>
                         <div style={{ minWidth: 0 }}>
                             <Typography.Title level={5} style={{ margin: 0, color: '#fff', fontSize: mobileChat ? 14 : 16 }}>
@@ -882,7 +1131,10 @@ export default function AiChatWidget() {
                                 </Typography.Text>
                             )}
                         </div>
-                        <Space size={mobileChat ? 2 : 8} style={{ flexShrink: 0 }}>
+                        <Space
+                            size={mobileChat ? 2 : 8}
+                            style={{ flexShrink: 0 }}
+                        >
                             <Button size="small" type="text" icon={<PlusOutlined />} style={{ color: '#fff' }} onClick={createNewChat} />
                             {/* FIX: Nút "Phiên" chỉ hiện trên mobile/tablet, mở drawer với z-index cao */}
                             {compactChat && (
@@ -1188,7 +1440,9 @@ export default function AiChatWidget() {
                                                         </div>
                                                     )}
                                                     {!toolPayload && (
-                                                        <Typography.Text style={{ color: bubbleColor }}>{message.content}</Typography.Text>
+                                                        message.content
+                                                            ? renderMarkdownText(message.content, bubbleColor)
+                                                            : <Typography.Text style={{ color: panelMutedText }}>Đang trả lời...</Typography.Text>
                                                     )}
                                                 </div>
                                             </div>
