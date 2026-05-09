@@ -794,7 +794,6 @@ export default function AiChatWidget() {
     const inputBorder = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.14)'
     const mascotButtonPosition = mascotPosition || getDefaultMascotPosition()
     const mascotCursor = isDraggingMascot ? 'grabbing' : 'grab'
-    const sessionBadgeCount = sessions.length
 
     // ─── Session list renderer (shared between sidebar & drawer) ──────────────
     const renderSessionList = () => (
