@@ -1045,7 +1045,7 @@ export default function AiChatWidget() {
                     </button>
             </Tooltip>
 
-            {/* CHAT PANEL */}
+            {/* CHAT PANELl */}
             <div
                 className="ai-chat-panel ai-chat-popup"
                 onPointerDown={(event) => handleFloatingWidgetPointerDown(event, 'panel')}
