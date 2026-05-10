@@ -6,6 +6,8 @@ import { AuthProvider } from './context/AuthProvider.tsx';
 import { CartProvider } from './context/CartProvider';
 import { WalletProvider } from './context/WalletProvider.tsx';
 import './index.css';
+import 'swiper/css'
+import 'swiper/css/pagination'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>

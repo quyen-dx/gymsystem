@@ -4,6 +4,7 @@ import {
   CalendarOutlined,
   DashboardOutlined,
   LogoutOutlined,
+  PlaySquareOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
   TeamOutlined,
@@ -34,6 +35,7 @@ const roleMenus: Record<string, any[]> = {
     { key: '/dashboard/admin/shop', label: 'Shop', icon: <BulbOutlined /> },
     { key: '/dashboard/admin/members', label: 'Members', icon: <TeamOutlined /> },
     { key: '/dashboard/admin/pts', label: 'Trainers (PT)', icon: <UserOutlined /> },
+    { key: '/dashboard/admin/shorts', label: 'Shorts', icon: <PlaySquareOutlined /> },
     { key: '/dashboard/admin/reports', label: 'Reports', icon: <BarChartOutlined /> },
   ],
   staff: [

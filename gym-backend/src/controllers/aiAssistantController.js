@@ -7,8 +7,21 @@ import {
     generateAssistantResponse,
     generateAssistantResponseStream,
 } from '../services/aiAssistantService.js'
+import {
+    buildAiMemoryContext,
+    getAiUserMemory,
+    updateAiUserMemoryIfDue,
+} from '../services/aiMemoryService.js'
 import { recordAuditLog } from '../services/auditLogService.js'
-import { searchWeb, shouldSearchWeb } from '../services/webSearchService.js'
+import {
+    buildShopeeLinkAnswer,
+    getShopeeWebSearchQuery,
+    isShopeeLinkIntent,
+    searchWeb,
+    searchFitnessWeb,
+    shouldSearchFitnessWeb,
+    shouldSearchWeb,
+} from '../services/webSearchService.js'
 import AppError from '../utils/appError.js'
 
 const MAX_CHAT_SESSIONS = 20
@@ -68,6 +81,7 @@ const normalizeSessions = (sessions) => {
                 role: ['user', 'assistant', 'system'].includes(message.role) ? message.role : 'system',
                 content: String(message.content || '').slice(0, 8000),
                 createdAt: String(message.createdAt || new Date().toISOString()),
+                ...(message.webSearch && typeof message.webSearch === 'object' ? { webSearch: message.webSearch } : {}),
             })).filter((message) => message.content)
             : [],
         }))
@@ -258,6 +272,18 @@ const isGeneralKnowledgeIntent = (query) => {
     return tokens.some((token) => generalKnowledgeIntentWords.has(token))
 }
 
+const updateAiMemoryAfterResponse = async (req, query, mode) => {
+    try {
+        await updateAiUserMemoryIfDue({
+            userId: req.user?._id,
+            query,
+            mode,
+        })
+    } catch (error) {
+        console.error('AI memory update error:', error)
+    }
+}
+
 const isUrlLookupIntent = (query) => {
     const normalized = normalizeSearchText(query)
     const tokens = getSearchTokens(query)
@@ -435,6 +461,61 @@ const mapProductToolItem = (product, selectedVariant = '') => ({
     ...(selectedVariant ? { selectedVariant } : {}),
 })
 
+const createWebSearchState = (needed = false, reason = 'not_needed') => ({
+    needed,
+    used: false,
+    reason,
+    results: [],
+})
+
+const resolveShopeeLinkResponse = async (query, mode = 'general') => {
+    let webSearch = createWebSearchState(true, 'not_started')
+
+    try {
+        webSearch = {
+            needed: true,
+            ...await searchWeb(getShopeeWebSearchQuery(query), { maxResults: 5 }),
+        }
+    } catch (error) {
+        console.error('Tavily Shopee link search error:', error)
+        webSearch = createWebSearchState(true, 'search_failed')
+    }
+
+    const answer = buildShopeeLinkAnswer(query, webSearch.results)
+
+    return {
+        answer,
+        pts: [],
+        products: [],
+        plans: [],
+        mode,
+        webSearch: {
+            needed: true,
+            used: webSearch.used,
+            reason: webSearch.reason,
+            results: webSearch.results,
+        },
+    }
+}
+
+const resolveGymFitnessWebSearch = async (query) => {
+    const needsWebSearch = shouldSearchFitnessWeb(query)
+    let webSearch = createWebSearchState(needsWebSearch, needsWebSearch ? 'not_started' : 'not_fitness_search')
+    if (!needsWebSearch) return webSearch
+
+    try {
+        webSearch = {
+            needed: true,
+            ...await searchFitnessWeb(query, { maxResults: 5 }),
+        }
+    } catch (error) {
+        console.error('Tavily gym fitness web search error:', error)
+        webSearch = createWebSearchState(true, 'search_failed')
+    }
+
+    return webSearch
+}
+
 const mapPlanResult = (plan) => ({
     _id: plan._id,
     name: plan.name,
@@ -454,6 +535,21 @@ export const aiAssistant = async (req, res, next) => {
 
         const normalizedQuery = query.trim()
         const aiMode = mode === 'general' ? 'general' : 'gym'
+        const memoryContext = buildAiMemoryContext(await getAiUserMemory(req.user?._id))
+
+        if (aiMode !== 'gym' && isShopeeLinkIntent(normalizedQuery)) {
+            const shopeeResponse = await resolveShopeeLinkResponse(normalizedQuery, aiMode)
+            await recordAuditLog({
+                req,
+                module: 'ai',
+                action: 'create',
+                entity: req.user,
+                details: `AI Shopee link lookup: ${normalizedQuery} | webSearch: ${shopeeResponse.webSearch.used ? 'used' : 'fallback_search_url'} | mode: ${aiMode}`,
+            })
+            await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
+            return res.json(shopeeResponse)
+        }
+
         const toolIntent = detectToolIntent(normalizedQuery, aiMode)
 
         if (toolIntent === 'product') {
@@ -514,6 +610,7 @@ export const aiAssistant = async (req, res, next) => {
 
             if (productResults.length === 0 && categoryRequested) {
                 const payload = await buildGlobalCategoryPayload(strictGroup ? strictGroup.terms : categoryTerms)
+                await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
                 return res.json({
                     answer: JSON.stringify(payload),
                     pts: [],
@@ -547,6 +644,8 @@ export const aiAssistant = async (req, res, next) => {
                     entity: req.user,
                     details: `AI tool searchProducts strict group empty | keyword: ${searchTerms.join(', ') || normalizedQuery} | mode: ${aiMode}`,
                 })
+
+                await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
 
                 return res.json({
                     answer: JSON.stringify(payload),
@@ -591,6 +690,8 @@ export const aiAssistant = async (req, res, next) => {
                 details: `AI tool searchProducts keyword: ${searchTerms.join(', ') || normalizedQuery} | mode: ${aiMode}`,
             })
 
+            await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
+
             return res.json({
                 answer: JSON.stringify(payload),
                 pts: [],
@@ -631,6 +732,8 @@ export const aiAssistant = async (req, res, next) => {
                 details: `AI tool searchPT goal: ${goal || normalizedQuery} | from: ${availableFrom || 'none'} | to: ${availableTo || 'none'} | mode: ${aiMode}`,
             })
 
+            await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
+
             return res.json({
                 answer: JSON.stringify(payload),
                 pts: ptResults.map(mapPtResult),
@@ -643,6 +746,7 @@ export const aiAssistant = async (req, res, next) => {
         }
 
         if (isPrivacyQuestion(normalizedQuery)) {
+            await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
             return res.json({
                 answer: 'Tôi không thể cung cấp thông tin cá nhân của người dùng khác.',
                 pts: [],
@@ -683,6 +787,8 @@ export const aiAssistant = async (req, res, next) => {
                     ? 'Câu hỏi này cần dữ liệu realtime, nhưng backend chưa cấu hình TAVILY_API_KEY để search web.'
                     : 'Câu hỏi này cần dữ liệu realtime, nhưng hiện Tavily web search đang lỗi. Mình chưa thể trả lời chắc chắn mà không có nguồn mới.'
 
+                await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
+
                 return res.json({
                     answer: missingKeyMessage,
                     pts: [],
@@ -702,6 +808,7 @@ export const aiAssistant = async (req, res, next) => {
                 {
                     webContext: webSearch.context || '',
                     webSearchUsed: webSearch.used,
+                    memoryContext,
                 },
             )
             logAiAnswerBeforeSend('general', answer)
@@ -713,6 +820,8 @@ export const aiAssistant = async (req, res, next) => {
                 entity: req.user,
                 details: `AI Assistant general query: ${normalizedQuery} | webSearch: ${webSearch.used ? 'used' : 'skipped'} | reason: ${webSearch.reason}`,
             })
+
+            await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
 
             return res.json({
                 answer,
@@ -782,8 +891,13 @@ export const aiAssistant = async (req, res, next) => {
         const pts = ptResults.map(mapPtResult)
         const products = productResults.map(mapProductResult)
         const plans = planResults.map(mapPlanResult)
+        const webSearch = await resolveGymFitnessWebSearch(normalizedQuery)
 
-        const answer = await generateAssistantResponse(normalizedQuery, pts, products, plans, aiMode)
+        const answer = await generateAssistantResponse(normalizedQuery, pts, products, plans, aiMode, {
+            memoryContext,
+            webContext: webSearch.context || '',
+            webSearchUsed: webSearch.used,
+        })
         logAiAnswerBeforeSend(aiMode, answer)
 
         await recordAuditLog({
@@ -791,10 +905,24 @@ export const aiAssistant = async (req, res, next) => {
             module: 'ai',
             action: 'create',
             entity: req.user,
-            details: `AI Assistant được gọi với truy vấn: ${normalizedQuery} | mode: ${aiMode}`,
+            details: `AI Assistant được gọi với truy vấn: ${normalizedQuery} | mode: ${aiMode} | fitnessWebSearch: ${webSearch.used ? 'used' : webSearch.reason}`,
         })
 
-        res.json({ answer, pts, products, plans, mode: aiMode })
+        await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
+
+        res.json({
+            answer,
+            pts,
+            products,
+            plans,
+            mode: aiMode,
+            webSearch: {
+                needed: webSearch.needed,
+                used: webSearch.used,
+                reason: webSearch.reason,
+                results: webSearch.results,
+            },
+        })
     } catch (error) {
         next(error)
     }
@@ -810,13 +938,34 @@ export const aiAssistantStream = async (req, res, next) => {
 
         const normalizedQuery = query.trim()
         const aiMode = mode === 'general' ? 'general' : 'gym'
-        const toolIntent = detectToolIntent(normalizedQuery, aiMode)
+        const memoryContext = buildAiMemoryContext(await getAiUserMemory(req.user?._id))
 
         initSseResponse(res)
 
         req.on('close', () => {
             console.log(`[AI Assistant stream] client closed connection | mode: ${aiMode}`)
         })
+
+        if (aiMode !== 'gym' && isShopeeLinkIntent(normalizedQuery)) {
+            const shopeeResponse = await resolveShopeeLinkResponse(normalizedQuery, aiMode)
+            writeSseEvent(res, 'meta', {
+                mode: aiMode,
+                webSearch: shopeeResponse.webSearch,
+            })
+            writeSseEvent(res, 'chunk', { text: shopeeResponse.answer })
+            writeSseEvent(res, 'done', shopeeResponse)
+            await recordAuditLog({
+                req,
+                module: 'ai',
+                action: 'create',
+                entity: req.user,
+                details: `AI Shopee link stream lookup: ${normalizedQuery} | webSearch: ${shopeeResponse.webSearch.used ? 'used' : 'fallback_search_url'} | mode: ${aiMode}`,
+            })
+            await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
+            return res.end()
+        }
+
+        const toolIntent = detectToolIntent(normalizedQuery, aiMode)
 
         if (toolIntent) {
             writeSseEvent(res, 'fallback', {
@@ -831,6 +980,7 @@ export const aiAssistantStream = async (req, res, next) => {
             const answer = 'Tôi không thể cung cấp thông tin cá nhân của người dùng khác.'
             writeSseEvent(res, 'chunk', { text: answer })
             writeSseEvent(res, 'done', { answer, mode: aiMode })
+            await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
             return res.end()
         }
 
@@ -883,6 +1033,7 @@ export const aiAssistantStream = async (req, res, next) => {
                     : 'Câu hỏi này cần dữ liệu realtime, nhưng hiện Tavily web search đang lỗi. Mình chưa thể trả lời chắc chắn mà không có nguồn mới.'
                 writeSseEvent(res, 'chunk', { text: answer })
                 writeSseEvent(res, 'done', { answer, mode: aiMode, webSearch })
+                await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
                 return res.end()
             }
 
@@ -895,6 +1046,7 @@ export const aiAssistantStream = async (req, res, next) => {
                 {
                     webContext: webSearch.context || '',
                     webSearchUsed: webSearch.used,
+                    memoryContext,
                     onChunk: (text) => writeSseEvent(res, 'chunk', { text }),
                 },
             )
@@ -919,6 +1071,7 @@ export const aiAssistantStream = async (req, res, next) => {
                     results: webSearch.results,
                 },
             })
+            await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
             return res.end()
         }
 
@@ -968,8 +1121,20 @@ export const aiAssistantStream = async (req, res, next) => {
         const pts = ptResults.map(mapPtResult)
         const products = productResults.map(mapProductResult)
         const plans = planResults.map(mapPlanResult)
+        const gymWebSearch = await resolveGymFitnessWebSearch(normalizedQuery)
 
-        writeSseEvent(res, 'meta', { mode: aiMode, pts, products, plans })
+        writeSseEvent(res, 'meta', {
+            mode: aiMode,
+            pts,
+            products,
+            plans,
+            webSearch: {
+                needed: gymWebSearch.needed,
+                used: gymWebSearch.used,
+                reason: gymWebSearch.reason,
+                results: gymWebSearch.results,
+            },
+        })
 
         const answer = await generateAssistantResponseStream(
             normalizedQuery,
@@ -978,6 +1143,9 @@ export const aiAssistantStream = async (req, res, next) => {
             plans,
             aiMode,
             {
+                memoryContext,
+                webContext: gymWebSearch.context || '',
+                webSearchUsed: gymWebSearch.used,
                 onChunk: (text) => writeSseEvent(res, 'chunk', { text }),
             },
         )
@@ -989,10 +1157,23 @@ export const aiAssistantStream = async (req, res, next) => {
             module: 'ai',
             action: 'create',
             entity: req.user,
-            details: `AI Assistant stream được gọi với truy vấn: ${normalizedQuery} | mode: ${aiMode}`,
+            details: `AI Assistant stream được gọi với truy vấn: ${normalizedQuery} | mode: ${aiMode} | fitnessWebSearch: ${gymWebSearch.used ? 'used' : gymWebSearch.reason}`,
         })
 
-        writeSseEvent(res, 'done', { answer, pts, products, plans, mode: aiMode })
+        writeSseEvent(res, 'done', {
+            answer,
+            pts,
+            products,
+            plans,
+            mode: aiMode,
+            webSearch: {
+                needed: gymWebSearch.needed,
+                used: gymWebSearch.used,
+                reason: gymWebSearch.reason,
+                results: gymWebSearch.results,
+            },
+        })
+        await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
         return res.end()
     } catch (error) {
         if (res.headersSent) {

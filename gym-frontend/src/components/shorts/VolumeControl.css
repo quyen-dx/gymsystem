@@ -1,0 +1,106 @@
+.shorts-volume-control {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(8, 8, 8, 0.52);
+  color: #fff;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.26);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.shorts-volume-control:hover,
+.shorts-volume-control:focus-within {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(10, 10, 10, 0.72);
+  transform: translateY(-1px);
+}
+
+.shorts-volume-trigger {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.shorts-volume-trigger:hover {
+  background: rgba(255, 255, 255, 0.12);
+  transform: scale(1.05);
+}
+
+.shorts-volume-slider-wrap {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateX(-6px);
+  transition: width 190ms ease, opacity 160ms ease, transform 190ms ease;
+  pointer-events: none;
+}
+
+.shorts-volume-control:hover .shorts-volume-slider-wrap,
+.shorts-volume-control:focus-within .shorts-volume-slider-wrap {
+  width: 116px;
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.shorts-volume-slider {
+  width: 108px;
+  height: 4px;
+  display: block;
+  accent-color: #fff;
+  cursor: pointer;
+}
+
+.shorts-volume-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.shorts-volume-slider::-webkit-slider-thumb {
+  width: 15px;
+  height: 15px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32);
+}
+
+@media (max-width: 640px) {
+  .shorts-volume-control {
+    top: 12px;
+    left: 12px;
+    min-height: 40px;
+  }
+
+  .shorts-volume-trigger {
+    width: 30px;
+    height: 30px;
+  }
+
+  .shorts-volume-control:hover .shorts-volume-slider-wrap,
+  .shorts-volume-control:focus-within .shorts-volume-slider-wrap {
+    width: 96px;
+  }
+
+  .shorts-volume-slider {
+    width: 88px;
+  }
+}

@@ -1,17 +1,16 @@
 import { CloseOutlined, DeleteOutlined, EditOutlined, ExpandAltOutlined, MoreOutlined, PlusOutlined, SendOutlined } from '@ant-design/icons'
 import { Avatar, Badge, Button, Drawer, Dropdown, Input, Modal, Segmented, Select, Space, Spin, Tooltip, Typography } from 'antd'
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
+import type { MouseEvent as ReactMouseEvent, ReactNode, TouchEvent as ReactTouchEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hook/useAuth'
+import { useDraggable } from '../../hooks/useDraggable'
 import { deleteAiChatSession, getAiChatHistory, renameAiChatSession, requestAiAssistant, requestAiAssistantStream, saveAiChatHistory, type AiMode } from '../../services/aiService'
-import type { AiToolPayload, ChatMessage, ChatSession, DragState, MascotPosition, StoredChatState } from '../../types/aichat/aichat'
+import type { AiToolPayload, ChatMessage, ChatSession, StoredChatState, WebSearchResult } from '../../types/aichat/aichat'
 
 const STORAGE_KEY_PREFIX = 'chat_history_'
-const MASCOT_POSITION_KEY = 'doraemon_chat_position'
-const MASCOT_WIDTH = 88
-const MASCOT_HEIGHT = 112
-const VIEWPORT_PADDING = 10
+const MASCOT_WIDTH = 100
+const MASCOT_HEIGHT = 100
 const CHAT_PANEL_BACKGROUND_IMAGE = 'https://genk.mediacdn.vn/2019/7/3/photo-1-1562129061617297549771.jpg'
 const AI_AVATAR_IMAGE = 'https://vcdn1-giaitri.vnecdn.net/2023/04/28/doraemon4-1682675790-8961-1682675801.jpg?w=500&h=300&q=100&dpr=1&fit=crop&s=3dxqum5l0xkhHX-R0z_a1g'
 
@@ -19,6 +18,49 @@ const AI_MODE_OPTIONS: { label: string; value: AiMode }[] = [
     { label: 'Gym', value: 'gym' },
     { label: 'Tất cả', value: 'general' },
 ]
+
+const getSourceDomain = (url: string) => {
+    try {
+        return new URL(url).hostname.replace(/^www\./, '')
+    } catch {
+        return ''
+    }
+}
+
+const getSourceName = (source: WebSearchResult) => {
+    const domain = getSourceDomain(source.url)
+    const title = String(source.title || '').replace(/\s+/g, ' ').trim()
+    if (!title) return domain || 'Nguồn web'
+    return title
+        .replace(/\s*[-|]\s*.*$/, '')
+        .slice(0, 80)
+}
+
+const stripWebSourceSection = (text: string) => {
+    return String(text || '')
+        .replace(/\n?\s*(Nguồn|Sources)\s*:\s*[\s\S]*$/i, '')
+        .trim()
+}
+
+const extractSourceResultsFromText = (text: string): WebSearchResult[] => {
+    const sourceMatch = String(text || '').match(/(?:^|\n)\s*(Nguồn|Sources)\s*:\s*([\s\S]*)$/i)
+    if (!sourceMatch) return []
+
+    const seen = new Set<string>()
+    const results: WebSearchResult[] = []
+    const sourceText = sourceMatch[2]
+    const linkPattern = /\[([^\]]+)\]\((https:\/\/[^)\s]+)\)|(https:\/\/[^\s<>)]+)/g
+    let match: RegExpExecArray | null
+
+    while ((match = linkPattern.exec(sourceText)) !== null) {
+        const url = (match[2] || match[3] || '').replace(/[.,!?;:]+$/, '')
+        if (!url || seen.has(url)) continue
+        seen.add(url)
+        results.push({ title: match[1] || getSourceDomain(url), url })
+    }
+
+    return results
+}
 
 const TYPING_INTERVAL_MS = 24
 const TYPING_BASE_CHARS = 2
@@ -142,40 +184,59 @@ const renderMarkdownText = (text: string, color: string) => {
     )
 }
 
-const clamp = (value: number, min: number, max: number) => {
-    if (max < min) return min
-    return Math.min(Math.max(value, min), max)
+const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean) => {
+    const uniqueSources = sources
+        .filter((source) => /^https:\/\//i.test(source.url || '') && getSourceDomain(source.url))
+        .filter((source, index, list) => list.findIndex((item) => item.url === source.url) === index)
+        .slice(0, 5)
+
+    if (uniqueSources.length === 0) return null
+
+    return (
+        <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+            {uniqueSources.map((source) => {
+                const domain = getSourceDomain(source.url)
+                const name = getSourceName(source)
+                return (
+                    <a
+                        key={source.url}
+                        href={source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: '32px minmax(0, 1fr)',
+                            gap: 10,
+                            alignItems: 'center',
+                            padding: '9px 10px',
+                            borderRadius: 8,
+                            border: dark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,0,0,0.08)',
+                            background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.72)',
+                            color: 'inherit',
+                            textDecoration: 'none',
+                        }}
+                    >
+                        <Avatar
+                            size={32}
+                            src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`}
+                            style={{ background: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)' }}
+                        >
+                            {domain.charAt(0).toUpperCase()}
+                        </Avatar>
+                        <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
+                            <Typography.Text strong ellipsis style={{ color: 'inherit', lineHeight: 1.25 }}>
+                                {name}
+                            </Typography.Text>
+                            <Typography.Text ellipsis style={{ color: dark ? '#d8d8d8' : '#555', fontSize: 12, lineHeight: 1.2 }}>
+                                {domain}
+                            </Typography.Text>
+                        </span>
+                    </a>
+                )
+            })}
+        </div>
+    )
 }
-
-const getDefaultMascotPosition = (): MascotPosition => ({
-    x: Math.max(VIEWPORT_PADDING, window.innerWidth - MASCOT_WIDTH - 24),
-    y: Math.max(VIEWPORT_PADDING, window.innerHeight - MASCOT_HEIGHT - 24),
-})
-
-const loadMascotPosition = (): MascotPosition => {
-    try {
-        const raw = localStorage.getItem(MASCOT_POSITION_KEY)
-        if (!raw) return getDefaultMascotPosition()
-        const parsed = JSON.parse(raw)
-        return {
-            x: Number(parsed.x) || getDefaultMascotPosition().x,
-            y: Number(parsed.y) || getDefaultMascotPosition().y,
-        }
-    } catch {
-        return getDefaultMascotPosition()
-    }
-}
-
-const saveMascotPosition = (position: MascotPosition) => {
-    try {
-        localStorage.setItem(MASCOT_POSITION_KEY, JSON.stringify(position))
-    } catch { }
-}
-
-const clampMascotPosition = (position: MascotPosition): MascotPosition => ({
-    x: clamp(position.x, VIEWPORT_PADDING, window.innerWidth - MASCOT_WIDTH - VIEWPORT_PADDING),
-    y: clamp(position.y, VIEWPORT_PADDING, window.innerHeight - MASCOT_HEIGHT - VIEWPORT_PADDING),
-})
 
 const getStorageKey = (userId?: string) => `${STORAGE_KEY_PREFIX}${userId ?? 'guest'}`
 
@@ -235,14 +296,14 @@ const playDoraemonClickSound = () => {
 }
 
 const DoraemonChatMascot = ({ width = MASCOT_WIDTH, height = MASCOT_HEIGHT }: { width?: number; height?: number }) => (
-    <div style={{ width, height, position: 'relative' }}>
+    <div style={{ width, height, position: 'relative', borderRadius: '9999px', overflow: 'hidden' }}>
         <img
             src="https://upload.wikimedia.org/wikipedia/en/b/bd/Doraemon_character.png"
             alt="Doraemon"
             style={{
                 width,
                 height,
-                objectFit: 'contain',
+                objectFit: 'cover',
                 display: 'block',
                 position: 'absolute',
                 top: 0, left: 0,
@@ -279,15 +340,10 @@ export default function AiChatWidget() {
     const [editingTitle, setEditingTitle] = useState('')
     const [mode, setMode] = useState<AiMode>('gym')
     const scrollRef = useRef<HTMLDivElement>(null)
-    const dragStateRef = useRef<DragState | null>(null)
-    const latestMascotPositionRef = useRef<MascotPosition | null>(null)
-    const suppressNextWidgetClickRef = useRef(false)
     const hydratedServerHistoryRef = useRef('')
     const streamTextBufferRef = useRef('')
     const streamTypingTimerRef = useRef<number | null>(null)
     const streamTargetMessageIdRef = useRef('')
-    const [mascotPosition, setMascotPosition] = useState<MascotPosition | null>(null)
-    const [isDraggingMascot, setIsDraggingMascot] = useState(false)
     const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false)
     const [viewport, setViewport] = useState(() => ({
         width: window.innerWidth,
@@ -297,17 +353,8 @@ export default function AiChatWidget() {
     const storageKey = getStorageKey(user?._id)
 
     useEffect(() => {
-        const initialPosition = clampMascotPosition(loadMascotPosition())
-        latestMascotPositionRef.current = initialPosition
-        setMascotPosition(initialPosition)
         const handleResize = () => {
             setViewport({ width: window.innerWidth, height: window.innerHeight })
-            setMascotPosition((current) => {
-                const next = clampMascotPosition(current || getDefaultMascotPosition())
-                latestMascotPositionRef.current = next
-                saveMascotPosition(next)
-                return next
-            })
         }
         window.addEventListener('resize', handleResize)
         return () => window.removeEventListener('resize', handleResize)
@@ -378,9 +425,6 @@ export default function AiChatWidget() {
                 window.clearInterval(streamTypingTimerRef.current)
                 streamTypingTimerRef.current = null
             }
-            window.removeEventListener('pointermove', moveMascotWithPointer)
-            window.removeEventListener('pointerup', finishMascotDrag)
-            window.removeEventListener('pointercancel', cancelMascotDrag)
             document.body.style.userSelect = ''
             document.body.style.touchAction = ''
         }
@@ -567,7 +611,7 @@ export default function AiChatWidget() {
             okText: 'Xóa',
             cancelText: 'Hủy',
             okButtonProps: { danger: true },
-            zIndex: 10200,
+            zIndex: 12000,
             onOk: () => deleteSession(sessionId),
         })
     }
@@ -579,102 +623,7 @@ export default function AiChatWidget() {
         setVisible(false); setExpanded(false)
     }
 
-    const clampFloatingWidgetPosition = (position: MascotPosition): MascotPosition => {
-        if (!visible) return clampMascotPosition(position)
-
-        const compact = viewport.width <= 720
-        const width = compact ? Math.min(350, window.innerWidth - 24) : expanded ? 760 : 560
-        const height = compact ? Math.min(560, window.innerHeight - 140) : expanded ? 760 : 560
-        const minX = Math.max(VIEWPORT_PADDING, width - MASCOT_WIDTH + VIEWPORT_PADDING)
-        const maxX = window.innerWidth - MASCOT_WIDTH - VIEWPORT_PADDING
-        const minY = Math.max(VIEWPORT_PADDING, height + 10 + VIEWPORT_PADDING)
-        const maxY = window.innerHeight - MASCOT_HEIGHT - VIEWPORT_PADDING
-
-        return {
-            x: clamp(position.x, minX, maxX),
-            y: clamp(position.y, minY, maxY),
-        }
-    }
-
-    const moveMascotWithPointer = (event: PointerEvent) => {
-        const drag = dragStateRef.current
-        if (!drag || drag.pointerId !== event.pointerId) return
-        event.preventDefault()
-        const deltaX = event.clientX - drag.startX
-        const deltaY = event.clientY - drag.startY
-        if (Math.abs(deltaX) + Math.abs(deltaY) > 4) drag.moved = true
-        const next = clampFloatingWidgetPosition({ x: drag.originX + deltaX, y: drag.originY + deltaY })
-        latestMascotPositionRef.current = next
-        setMascotPosition(next)
-    }
-
-    const cancelMascotDrag = () => {
-        window.removeEventListener('pointermove', moveMascotWithPointer)
-        window.removeEventListener('pointerup', finishMascotDrag)
-        window.removeEventListener('pointercancel', cancelMascotDrag)
-        const finalPosition = latestMascotPositionRef.current || mascotPosition
-        if (finalPosition) saveMascotPosition(clampFloatingWidgetPosition(finalPosition))
-        setIsDraggingMascot(false)
-        dragStateRef.current = null
-        document.body.style.userSelect = ''
-        document.body.style.touchAction = ''
-    }
-
-    const finishMascotDrag = (event: PointerEvent) => {
-        const drag = dragStateRef.current
-        if (!drag || drag.pointerId !== event.pointerId) return
-        event.preventDefault()
-        window.removeEventListener('pointermove', moveMascotWithPointer)
-        window.removeEventListener('pointerup', finishMascotDrag)
-        window.removeEventListener('pointercancel', cancelMascotDrag)
-        const finalPosition = clampFloatingWidgetPosition(latestMascotPositionRef.current || mascotPosition || getDefaultMascotPosition())
-        latestMascotPositionRef.current = finalPosition
-        setMascotPosition(finalPosition)
-        saveMascotPosition(finalPosition)
-        setIsDraggingMascot(false)
-        dragStateRef.current = null
-        document.body.style.userSelect = ''
-        document.body.style.touchAction = ''
-        if (drag.moved) suppressNextWidgetClickRef.current = true
-        if (!drag.moved && drag.source === 'trigger') toggleWidget()
-    }
-
-    const handleFloatingWidgetPointerDown = (
-        event: ReactPointerEvent<HTMLButtonElement | HTMLDivElement>,
-        source: 'trigger' | 'panel',
-    ) => {
-        const target = event.target as HTMLElement
-        if (source === 'panel' && target.closest('button, input, textarea, select, a, [role="button"], .ant-select, .ant-dropdown-trigger, .ant-segmented, .ant-drawer, .ant-modal')) {
-            return
-        }
-        event.preventDefault()
-        event.stopPropagation()
-        const origin = mascotPosition || latestMascotPositionRef.current || getDefaultMascotPosition()
-        latestMascotPositionRef.current = origin
-        dragStateRef.current = {
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startY: event.clientY,
-            originX: origin.x,
-            originY: origin.y,
-            moved: false,
-            source,
-        }
-        setIsDraggingMascot(true)
-        document.body.style.userSelect = 'none'
-        document.body.style.touchAction = 'none'
-        window.addEventListener('pointermove', moveMascotWithPointer, { passive: false })
-        window.addEventListener('pointerup', finishMascotDrag, { passive: false })
-        window.addEventListener('pointercancel', cancelMascotDrag)
-    }
-
     const handleFloatingWidgetClick = (event: ReactMouseEvent<HTMLDivElement>) => {
-        if (suppressNextWidgetClickRef.current) {
-            suppressNextWidgetClickRef.current = false
-            event.preventDefault()
-            event.stopPropagation()
-            return
-        }
         event.stopPropagation()
     }
 
@@ -737,6 +686,7 @@ export default function AiChatWidget() {
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
                     content: fallbackResponse.answer || 'Mình không có câu trả lời cho câu hỏi này.',
+                    webSearch: fallbackResponse.webSearch,
                 }))
                 return
             }
@@ -746,12 +696,14 @@ export default function AiChatWidget() {
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
                     content: message.content || response.answer,
+                    webSearch: response.webSearch,
                 }))
             } else {
                 await waitForStreamTypingDrain()
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
                     content: message.content || 'Mình không có câu trả lời cho câu hỏi này.',
+                    webSearch: response.webSearch,
                 }))
             }
         } catch (error: any) {
@@ -774,8 +726,17 @@ export default function AiChatWidget() {
     const compactChat = viewport.width <= 720
     const mobileChat = viewport.width <= 560
     const showSessionSidebar = expanded && !compactChat
-    const mascotButtonWidth = MASCOT_WIDTH
-    const mascotButtonHeight = MASCOT_HEIGHT
+    const mascotButtonWidth = viewport.width >= 1024 ? 100 : viewport.width >= 768 ? 64 : 56
+    const mascotButtonHeight = mascotButtonWidth
+    const defaultChatPosition = {
+        x: Math.max(0, viewport.width - mascotButtonWidth - 24),
+        y: Math.max(0, viewport.height - mascotButtonHeight - 24),
+    }
+    const {
+        pos: draggableChatPosition,
+        onStart: startDraggingChat,
+        hasMoved: hasDraggedChat,
+    } = useDraggable(defaultChatPosition, mascotButtonWidth)
     const panelWidth = compactChat ? 'min(350px, calc(100vw - 24px))' : expanded ? 760 : 560
     const panelHeight = compactChat ? 'min(560px, calc(100vh - 140px))' : expanded ? 760 : 560
     const panelBackground = dark ? 'rgba(17,19,24,0.86)' : 'rgba(255,255,255,0.72)'
@@ -792,8 +753,16 @@ export default function AiChatWidget() {
     const assistantBubbleBackground = dark ? 'rgba(31,34,43,0.96)' : 'rgba(255,255,255,0.88)'
     const inputBackground = dark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.90)'
     const inputBorder = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.14)'
-    const mascotButtonPosition = mascotPosition || getDefaultMascotPosition()
-    const mascotCursor = isDraggingMascot ? 'grabbing' : 'grab'
+    const mascotCursor = 'pointer'
+    const panelAlignRight = draggableChatPosition.x > viewport.width / 2
+
+    const startDraggingFromHeader = (event: ReactMouseEvent<HTMLDivElement> | ReactTouchEvent<HTMLDivElement>) => {
+        const target = event.target as HTMLElement
+        if (target.closest('button, input, textarea, select, a, [role="button"], .ant-select, .ant-dropdown-trigger, .ant-segmented, .ant-drawer, .ant-modal')) {
+            return
+        }
+        startDraggingChat(event)
+    }
 
     // ─── Session list renderer (shared between sidebar & drawer) ──────────────
     const renderSessionList = () => (
@@ -907,11 +876,11 @@ export default function AiChatWidget() {
                     position: fixed;
                     inset: 0;
                     background: transparent;
-                    z-index: 10000;
+                    z-index: 10990;
                 }
                 .ai-chat-anchor {
                     position: fixed;
-                    z-index: 10050;
+                    z-index: 11000;
                 }
                 .ai-chat-wrapper {
                     position: relative;
@@ -921,10 +890,9 @@ export default function AiChatWidget() {
                 }
                 .ai-chat-popup {
                     position: absolute;
-                    right: 0;
                     bottom: 100%;
                     margin-bottom: 10px;
-                    z-index: 101;
+                    z-index: 11010;
                 }
                 .doraemon-chat-trigger:hover,
                 .doraemon-chat-trigger.is-dragging,
@@ -1007,10 +975,6 @@ export default function AiChatWidget() {
                     color: ${dark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.42)'};
                 }
 
-                @media (max-width: 640px) {
-                    .doraemon-chat-trigger:not(.is-active) { width: 72px; height: 92px; }
-                    .doraemon-chat-mascot, .doraemon-chat-mascot svg { width: 72px; height: 92px; }
-                }
             `}</style>
 
             {visible && <div className="ai-chat-overlay" onClick={closeWidget} />}
@@ -1018,27 +982,32 @@ export default function AiChatWidget() {
             <div
                 className="ai-chat-anchor"
                 style={{
-                    left: 0,
-                    top: 0,
-                    transform: `translate3d(${mascotButtonPosition.x}px, ${mascotButtonPosition.y}px, 0)`,
+                    left: draggableChatPosition.x,
+                    top: draggableChatPosition.y,
                     width: mascotButtonWidth,
                     height: mascotButtonHeight,
-                    willChange: isDraggingMascot ? 'transform' : 'auto',
+                    touchAction: 'none',
                 }}
             >
-                <div className="ai-chat-wrapper">
+                <div className="ai-chat-wrapper" style={{ touchAction: 'none' }}>
             {/* MASCOT BUTTON */}
             <Tooltip  placement="left">
                     <button
                         type="button"
-                        className={`doraemon-chat-trigger ${visible ? 'is-active' : ''} ${isDraggingMascot ? 'is-dragging' : ''}`}
+                        className={`doraemon-chat-trigger ${visible ? 'is-active' : ''}`}
                         aria-label="Chat với AI"
                         style={{
                             width: mascotButtonWidth,
                             height: mascotButtonHeight,
                             cursor: mascotCursor,
+                            touchAction: 'none',
                         }}
-                        onPointerDown={(event) => handleFloatingWidgetPointerDown(event, 'trigger')}
+                        onMouseDown={startDraggingChat}
+                        onTouchStart={startDraggingChat}
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            if (!hasDraggedChat.current) toggleWidget()
+                        }}
                     >
                         <DoraemonChatMascot width={mascotButtonWidth} height={mascotButtonHeight} />
                     </button>
@@ -1047,15 +1016,16 @@ export default function AiChatWidget() {
             {/* CHAT PANELl */}
             <div
                 className="ai-chat-panel ai-chat-popup"
-                onPointerDown={(event) => handleFloatingWidgetPointerDown(event, 'panel')}
                 onClick={handleFloatingWidgetClick}
                 style={{
+                    left: panelAlignRight ? 'auto' : 0,
+                    right: panelAlignRight ? 0 : 'auto',
                     width: panelWidth,
                     maxWidth: compactChat ? 'calc(100vw - 24px)' : 'calc(100vw - 48px)',
                     height: panelHeight,
                     maxHeight: compactChat ? 'calc(100vh - 140px)' : 'calc(100vh - 48px)',
-                    zIndex: 10080,
-                    // FIX: z-index thấp hơn drawer (10100) để drawer hiện lên trên
+                    zIndex: 11010,
+                    // Chat panel must float above the member header/menu.
                     borderRadius: compactChat ? 20 : 28,
                     background: panelBackground,
                     border: panelBorder,
@@ -1071,7 +1041,9 @@ export default function AiChatWidget() {
                     flexDirection: 'column',
                     backdropFilter: 'blur(18px)',
                     WebkitBackdropFilter: 'blur(18px)',
-                    cursor: mascotCursor,
+                    cursor: 'default',
+                    userSelect: 'text',
+                    WebkitUserSelect: 'text',
                 }}
             >
                 {CHAT_PANEL_BACKGROUND_IMAGE && (
@@ -1107,6 +1079,8 @@ export default function AiChatWidget() {
 
                     {/* HEADER */}
                     <div
+                        onMouseDown={startDraggingFromHeader}
+                        onTouchStart={startDraggingFromHeader}
                         style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -1116,8 +1090,9 @@ export default function AiChatWidget() {
                         background: 'linear-gradient(135deg, #b6462f, #e8722a)',
                         color: '#fff',
                         flexShrink: 0,
-                        cursor: mascotCursor,
+                        cursor: 'grab',
                         userSelect: 'none',
+                        WebkitUserSelect: 'none',
                         touchAction: 'none',
                     }}>
                         <div style={{ minWidth: 0 }}>
@@ -1298,6 +1273,10 @@ export default function AiChatWidget() {
                                     overflowY: 'auto',
                                     padding: mobileChat ? 10 : 16,
                                     background: panelBandBackground,
+                                    cursor: 'text',
+                                    pointerEvents: 'auto',
+                                    userSelect: 'text',
+                                    WebkitUserSelect: 'text',
                                 }}
                             >
                                 {activeMessages.length === 0 ? (
@@ -1314,6 +1293,14 @@ export default function AiChatWidget() {
                                         const toolPayload = !isUser && message.role === 'assistant'
                                             ? parseAiToolPayload(message.content)
                                             : null
+                                        const sourceCards = !isUser
+                                            ? (message.webSearch?.results?.length
+                                                ? message.webSearch.results
+                                                : extractSourceResultsFromText(message.content))
+                                            : []
+                                        const visibleContent = sourceCards.length > 0
+                                            ? stripWebSourceSection(message.content)
+                                            : message.content
                                         return (
                                             <div
                                                 key={message.id}
@@ -1335,6 +1322,9 @@ export default function AiChatWidget() {
                                                     whiteSpace: 'pre-wrap',
                                                     lineHeight: 1.6,
                                                     wordBreak: 'break-word',
+                                                    cursor: 'text',
+                                                    userSelect: 'text',
+                                                    WebkitUserSelect: 'text',
                                                 }}>
                                                     {message.role === 'assistant' && (
                                                         <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1439,10 +1429,11 @@ export default function AiChatWidget() {
                                                         </div>
                                                     )}
                                                     {!toolPayload && (
-                                                        message.content
-                                                            ? renderMarkdownText(message.content, bubbleColor)
+                                                        visibleContent
+                                                            ? renderMarkdownText(visibleContent, bubbleColor)
                                                             : <Typography.Text style={{ color: panelMutedText }}>Đang trả lời...</Typography.Text>
                                                     )}
+                                                    {!toolPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark)}
                                                 </div>
                                             </div>
                                         )

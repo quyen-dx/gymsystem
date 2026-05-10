@@ -4,6 +4,21 @@ export type ChatMessage = {
     role: 'user' | 'assistant' | 'system'
     content: string
     createdAt: string
+    webSearch?: WebSearchPayload
+}
+
+export type WebSearchResult = {
+    title?: string
+    url: string
+    content?: string
+    score?: number
+}
+
+export type WebSearchPayload = {
+    needed?: boolean
+    used?: boolean
+    reason?: string
+    results?: WebSearchResult[]
 }
 
 export type StoredChatState = {

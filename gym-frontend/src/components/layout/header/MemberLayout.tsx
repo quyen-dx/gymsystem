@@ -1,12 +1,11 @@
 import {
-  BulbOutlined,
   CalendarOutlined,
   CreditCardOutlined,
   FundOutlined,
   HeartOutlined,
   HomeOutlined,
-  LogoutOutlined,
   MenuOutlined,
+  PlaySquareOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
 } from '@ant-design/icons'
@@ -39,23 +38,23 @@ export default function MemberLayout({
   children: React.ReactNode
   hideFooter?: boolean
 }) {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const [accountOpen, setAccountOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const { cartCount } = useCart()
   const { wallet } = useWallet()
   const navigate = useNavigate()
   const location = useLocation()
-  const { dark, toggleTheme } = useTheme()
+  const { dark } = useTheme()
 
   const navItems = [
     { key: '/dashboard/member', label: 'Trang chủ', icon: <HomeOutlined /> },
     { key: '/dashboard/member/store', label: 'Cửa hàng', icon: <ShopOutlined /> },
+    { key: '/shorts', label: 'Shorts', icon: <PlaySquareOutlined /> },
     { key: '/dashboard/member/booking', label: 'Đặt lịch PT', icon: <CalendarOutlined /> },
     { key: '/dashboard/member/health', label: 'Sức khoẻ', icon: <HeartOutlined /> },
     { key: '/dashboard/member/workout', label: 'Lộ trình', icon: <FundOutlined /> },
     { key: '/dashboard/member/checkin', label: 'Checkin', icon: <CreditCardOutlined /> },
-    { key: '/dashboard/member/orders', label: 'Các đơn hàng', icon: <ShoppingCartOutlined /> },
   ]
 
   const selectedKey =
@@ -71,6 +70,14 @@ export default function MemberLayout({
   }
 
   const walletText = wallet ? `${wallet.balance.toLocaleString('vi-VN')}đ` : '0đ'
+  const avatarUrl =
+    user?.avatar ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
+
+  const openProfileModal = () => {
+    setAccountOpen(true)
+    setMenuOpen(false)
+  }
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -92,9 +99,6 @@ export default function MemberLayout({
         >
           <div className="member-shell-logo-mark">GS</div>
           <div className="member-shell-brand">GymSystem</div>
-          <Text className="member-shell-space-label" type="secondary">
-            Member space
-          </Text>
         </div>
 
         <Menu
@@ -139,32 +143,25 @@ export default function MemberLayout({
             />
           </Badge>
 
-          <Button
-            icon={<BulbOutlined />}
-            onClick={toggleTheme}
-            style={{ display: 'flex', alignItems: 'center' }}
-          >
-            {dark ? 'Light' : 'Dark'}
-          </Button>
+          {location.pathname === '/shorts' && (
+            <Button
+              type="primary"
+              icon={<PlaySquareOutlined />}
+              onClick={() => navigate('/shorts?upload=1')}
+            >
+              Tải video short
+            </Button>
+          )}
 
           <div
             className="member-shell-user"
-            onClick={() => setAccountOpen(true)}
+            onClick={openProfileModal}
           >
-            <Avatar
-              src={
-                user?.avatar ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
-              }
-            />
+            <Avatar src={avatarUrl} />
             <Text strong style={{ color: dark ? '#fff' : '#000' }}>
               {user?.name}
             </Text>
           </div>
-
-          <Button danger icon={<LogoutOutlined />} onClick={logout}>
-            Đăng xuất
-          </Button>
         </div>
 
         <div className="member-shell-mobile-actions">
@@ -197,22 +194,19 @@ export default function MemberLayout({
         onClose={() => setMenuOpen(false)}
         width={320}
       >
-        <div className="member-shell-drawer-profile">
-          <Avatar
-            size={44}
-            src={
-              user?.avatar ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
-            }
-          />
-          <div style={{ minWidth: 0 }}>
-            <Text strong>{user?.name}</Text>
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Member
-              </Text>
-            </div>
+        <div className="flex items-center gap-3 p-4">
+          <img className="h-10 w-10 rounded-full object-cover" src={avatarUrl} alt={user?.name || 'Avatar'} />
+          <div className="min-w-0 flex-1">
+            <p className="m-0 truncate text-sm font-medium text-gray-900 dark:text-gray-100">{user?.name}</p>
+            <p className="m-0 truncate text-xs text-gray-400">{user?.role || 'Member'}</p>
           </div>
+          <button
+            onClick={openProfileModal}
+            className="whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-gray-300 transition-colors hover:bg-white/10"
+            type="button"
+          >
+            Tài khoản
+          </button>
         </div>
 
         <div className="member-shell-drawer-wallet">
@@ -234,20 +228,16 @@ export default function MemberLayout({
         />
 
         <div className="member-shell-drawer-actions">
-          <Button block icon={<BulbOutlined />} onClick={toggleTheme}>
-            {dark ? 'Light' : 'Dark'}
-          </Button>
-          <Button block onClick={() => { setAccountOpen(true); setMenuOpen(false) }}>
-            Tài khoản
-          </Button>
-          <Button block danger icon={<LogoutOutlined />} onClick={logout}>
-            Đăng xuất
-          </Button>
+          {location.pathname === '/shorts' && (
+            <Button block type="primary" icon={<PlaySquareOutlined />} onClick={() => goTo('/shorts?upload=1')}>
+              Tải video short
+            </Button>
+          )}
         </div>
       </Drawer>
 
       <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
-      <AiChatWidget />
+      {location.pathname !== '/shorts' && !accountOpen && !menuOpen && <AiChatWidget />}
     </Layout>
   )
 }

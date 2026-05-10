@@ -15,6 +15,7 @@ import planRoutes from './src/routes/planRoutes.js'
 import productRoutes from './src/routes/productRoutes.js'
 import sellerRoutes from './src/routes/sellerRoutes.js'
 import shopRoutes from './src/routes/shopRoutes.js'
+import shortRoutes from './src/routes/shortRoutes.js'
 import walletRoutes from './src/routes/walletRoutes.js'
 import { getClientUrls } from './src/config/appUrls.js'
 
@@ -57,6 +58,7 @@ app.use('/api/payment', paymentRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/seller', sellerRoutes)
 app.use('/api/ai-assistant', aiRoutes)
+app.use('/api/shorts', shortRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', message: 'GymSystem API is running' })

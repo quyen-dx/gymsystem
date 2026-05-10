@@ -3,7 +3,7 @@ import api from './api'
 import { API_URL } from '../config/env'
 
 const aiCache = new Map<string, any>()
-const AI_CACHE_VERSION = 'tool-v6-full-response'
+const AI_CACHE_VERSION = 'tool-v7-web-source-cards'
 
 export type AiMode = 'gym' | 'general'
 

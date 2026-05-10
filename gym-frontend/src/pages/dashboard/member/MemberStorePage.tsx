@@ -1,5 +1,5 @@
 import { ArrowLeftOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Col, Divider, Empty, Input, Rate, Row, Select, Spin, Tabs, Tag, message } from 'antd'
+import { Avatar, Button, Card, Col, Divider, Empty, Input, InputNumber, Rate, Row, Select, Space, Spin, Tabs, Tag, message } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import SellerFooter from '../../../components/layout/footer/SellerFooter'
@@ -15,6 +15,10 @@ export default function MemberStorePage() {
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<string>()
+  const [sortPrice, setSortPrice] = useState<string>()
+  const [minPrice, setMinPrice] = useState<number | null>(null)
+  const [maxPrice, setMaxPrice] = useState<number | null>(null)
+  const [priceMode, setPriceMode] = useState<'range' | 'above'>('range')
   const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([])
   const [shopDetail, setShopDetail] = useState<any>(null)
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' })
@@ -26,13 +30,19 @@ export default function MemberStorePage() {
 
   useEffect(() => {
     setLoading(true)
-    const params = { category, limit: 100 }
+    const params = {
+      category,
+      limit: 100,
+      sortPrice,
+      minPrice: minPrice ?? undefined,
+      maxPrice: priceMode === 'range' ? maxPrice ?? undefined : undefined,
+    }
     const request = shopId ? getShopProducts(shopId, params) : getProducts(params)
     request
       .then((res) => setProducts(res.data.products || res.data))
       .catch(() => message.error('Không thể tải sản phẩm'))
       .finally(() => setLoading(false))
-  }, [shopId, category])
+  }, [shopId, category, sortPrice, minPrice, maxPrice, priceMode])
 
   useEffect(() => {
     const params = shopId ? { shopId } : undefined
@@ -81,6 +91,90 @@ export default function MemberStorePage() {
       p.category?.toLowerCase().includes(search.toLowerCase()))
   )
 
+  const resetPriceFilters = () => {
+    setSortPrice(undefined)
+    setPriceMode('range')
+    setMinPrice(null)
+    setMaxPrice(null)
+  }
+
+  const priceFilterControls = (
+    <div className="mb-6 rounded-2xl border border-[var(--gs-border)] bg-[var(--gs-panel)] p-4">
+      <div className="member-responsive-actions">
+        <Input.Search
+          placeholder="Tìm sản phẩm..."
+          allowClear
+          style={{ flex: '1 1 240px', minWidth: 0 }}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Select
+          allowClear
+          placeholder="Lọc danh mục"
+          style={{ flex: '0 1 220px', minWidth: 170 }}
+          value={category}
+          onChange={setCategory}
+          options={categoryOptions}
+        />
+        <Select
+          allowClear
+          placeholder="Sắp xếp giá"
+          style={{ flex: '0 1 180px', minWidth: 160 }}
+          value={sortPrice}
+          onChange={setSortPrice}
+          options={[
+            { label: 'Giá thấp tới cao', value: 'asc' },
+            { label: 'Giá cao xuống thấp', value: 'desc' },
+          ]}
+        />
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Select
+          value={priceMode}
+          style={{ width: 180 }}
+          onChange={(value) => {
+            setPriceMode(value)
+            if (value === 'above') setMaxPrice(null)
+          }}
+          options={[
+            { label: 'Khoảng giá', value: 'range' },
+            { label: 'Trên số tiền', value: 'above' },
+          ]}
+        />
+        <InputNumber
+          min={0}
+          value={minPrice}
+          placeholder={priceMode === 'above' ? 'Trên bao nhiêu tiền' : 'Từ giá'}
+          formatter={(value) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : ''}
+          parser={(value) => Number(value?.replace(/\./g, '') || 0)}
+          onChange={(value) => setMinPrice(typeof value === 'number' ? value : null)}
+          style={{ width: 190 }}
+        />
+        {priceMode === 'range' && (
+          <InputNumber
+            min={0}
+            value={maxPrice}
+            placeholder="Đến giá"
+            formatter={(value) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : ''}
+            parser={(value) => Number(value?.replace(/\./g, '') || 0)}
+            onChange={(value) => setMaxPrice(typeof value === 'number' ? value : null)}
+            style={{ width: 190 }}
+          />
+        )}
+        <Space>
+          <Button onClick={resetPriceFilters}>Xóa lọc giá</Button>
+          <Tag color="orange">
+            {priceMode === 'above'
+              ? `Trên ${(minPrice || 0).toLocaleString('vi-VN')}đ`
+              : minPrice || maxPrice
+                ? `${(minPrice || 0).toLocaleString('vi-VN')}đ - ${maxPrice ? maxPrice.toLocaleString('vi-VN') : '∞'}`
+                : 'Tất cả mức giá'}
+          </Tag>
+        </Space>
+      </div>
+    </div>
+  )
+
   const handleSubmitShopReview = async () => {
     if (!shopId) return
     setSubmittingReview(true)
@@ -105,22 +199,7 @@ export default function MemberStorePage() {
 
   const productPanel = (
     <>
-      <div className="mb-6 member-responsive-actions">
-        <Input.Search
-          placeholder="Tìm sản phẩm..."
-          allowClear
-          style={{ flex: '1 1 260px', minWidth: 0 }}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <Select
-          allowClear
-          placeholder="Lọc danh mục"
-          style={{ flex: '0 1 260px', minWidth: 180 }}
-          value={category}
-          onChange={setCategory}
-          options={categoryOptions}
-        />
-      </div>
+      {priceFilterControls}
 
       {loading ? (
         <div className="text-center my-10"><Spin size="large" /></div>
@@ -296,22 +375,7 @@ export default function MemberStorePage() {
 
         {!shopId && (
           <>
-            <div className="mb-6 member-responsive-actions">
-              <Input.Search
-                placeholder="Tìm sản phẩm..."
-                allowClear
-                style={{ flex: '1 1 260px', minWidth: 0 }}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <Select
-                allowClear
-                placeholder="Lọc danh mục"
-                style={{ flex: '0 1 260px', minWidth: 180 }}
-                value={category}
-                onChange={setCategory}
-                options={categoryOptions}
-              />
-            </div>
+            {priceFilterControls}
 
             {loading ? (
               <div className="text-center my-10"><Spin size="large" /></div>

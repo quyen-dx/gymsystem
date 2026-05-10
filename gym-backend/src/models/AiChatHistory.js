@@ -7,6 +7,7 @@ const chatMessageSchema = new mongoose.Schema(
         role: { type: String, enum: ['user', 'assistant', 'system'], required: true },
         content: { type: String, required: true },
         createdAt: { type: String, required: true },
+        webSearch: { type: mongoose.Schema.Types.Mixed, default: undefined },
     },
     { _id: false },
 )

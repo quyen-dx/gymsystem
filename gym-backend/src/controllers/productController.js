@@ -79,11 +79,20 @@ const hydrateProductReviews = (product) => {
 
 export const getAllProducts = async (req, res, next) => {
   try {
-    const { page = 1, limit = 12, search = '', category = '', shopId = '' } = req.query
+    const { page = 1, limit = 12, search = '', category = '', shopId = '', sortPrice = '', minPrice = '', maxPrice = '' } = req.query
     const filter = { isActive: true }
     if (search) filter.name = { $regex: search, $options: 'i' }
     if (shopId) filter.shop_id = shopId
     if (category) filter.category = await getCategoryFilter(category, shopId ? { isActive: true, shop_id: shopId } : { isActive: true })
+    const hasMinPrice = minPrice !== '' && minPrice !== undefined && minPrice !== null
+    const hasMaxPrice = maxPrice !== '' && maxPrice !== undefined && maxPrice !== null
+    const min = hasMinPrice ? Number(minPrice) : NaN
+    const max = hasMaxPrice ? Number(maxPrice) : NaN
+    if (Number.isFinite(min) || Number.isFinite(max)) {
+      filter.price = {}
+      if (Number.isFinite(min)) filter.price.$gte = min
+      if (Number.isFinite(max)) filter.price.$lte = max
+    }
     const total = await Product.countDocuments(filter)
     let query = Product.find(filter)
     if (shopId) {
@@ -93,8 +102,13 @@ export const getAllProducts = async (req, res, next) => {
         populate: { path: 'user_id', select: 'name avatar' },
       })
     }
+    const sort = sortPrice === 'asc'
+      ? { price: 1, createdAt: -1 }
+      : sortPrice === 'desc'
+        ? { price: -1, createdAt: -1 }
+        : { createdAt: -1 }
     const products = await query
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip((page - 1) * limit)
       .limit(Number(limit))
     res.json({ products, total, page: Number(page), totalPages: Math.ceil(total / limit) })

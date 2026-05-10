@@ -153,6 +153,7 @@ export const generateAssistantResponse = async (query, pts, products, plans, mod
     const normalizedMode = mode === 'general' ? 'general' : 'gym'
     const webContext = String(options.webContext || '').trim()
     const webSearchUsed = Boolean(options.webSearchUsed && webContext)
+    const memoryContext = String(options.memoryContext || '').trim()
     const summaryRules = buildSummaryRules(query)
     const summaryMode = Boolean(summaryRules)
     const styleRules = `PHONG CÁCH BẮT BUỘC:
@@ -179,14 +180,18 @@ Quy tắc:
 - Không bịa sản phẩm, PT, giá, số điện thoại hoặc email.
 - Không tự ý đưa dữ liệu shop/gym/sản phẩm vào câu trả lời nếu người dùng không hỏi rõ về mua hàng, giá, sản phẩm, PT hoặc gói tập.
 - Nếu người dùng yêu cầu tóm tắt, chỉ tóm tắt nội dung được cung cấp trong câu hỏi; không thêm dữ liệu shop, gym hoặc web.
-- Nếu có "Context web", ưu tiên thông tin trong context đó và luôn thêm mục "Nguồn:" ở cuối với URL thật dạng https://... hoặc [Tiêu đề](https://...).
+- Nếu có "Context web", ưu tiên thông tin trong context đó và luôn thêm mục "Nguồn:" ở cuối với URL thật dạng https://...; không dùng markdown link.
 - Nếu người dùng hỏi "link", "URL", "ở đâu", "nguồn" hoặc "tài liệu", trả URL trực tiếp từ context; không thay bằng mô tả hoặc sản phẩm.
+- Nếu người dùng hỏi link Shopee, không hướng dẫn cách copy/tìm thủ công; trả link trực tiếp nếu có, nếu không có thì nói rõ không tìm thấy link trực tiếp.
 - Không tạo link giả. Chỉ dùng URL có trong context web. Nếu không có URL thật, nói rõ không tìm thấy URL đáng tin cậy.
 - Nếu context web không đủ để kết luận, nói rõ phần chưa chắc thay vì đoán.
 - Trả lời bằng tiếng Việt, rõ ràng, logic, ngắn gọn nhưng đủ ý.
 - Không dừng giữa câu, không cắt ngang tên riêng hoặc câu trả lời.
 
 ${styleRules}
+
+${memoryContext ? `${memoryContext}
+` : ''}
 
 ${summaryRules ? `${summaryRules}
 ` : ''}
@@ -233,12 +238,20 @@ Phong cách trả lời:
 - Trả lời bằng tiếng Việt, dễ hiểu, không quá máy móc.
 - Không dừng giữa câu và không cắt ngang câu trả lời.
 - Chỉ sử dụng dữ liệu hệ thống GymSystem bên dưới, không tự lấy hoặc bịa dữ liệu ngoài hệ thống.
+- Nếu có "Context web fitness", chỉ dùng nó như nguồn tham khảo chuyên môn về tập luyện, dinh dưỡng, thể hình và khoa học vận động.
 - Nếu dữ liệu bên dưới không đủ để trả lời, nói rõ hiện hệ thống chưa có dữ liệu phù hợp và gợi ý người dùng hỏi về PT, sản phẩm hoặc gói tập hiện có.
 
 ${styleRules}
 
+${memoryContext ? `${memoryContext}
+` : ''}
+
 Dữ liệu tìm được từ hệ thống:
 ${context}
+
+${webSearchUsed ? `Context web fitness từ Tavily:
+${webContext}
+` : 'Không có context web fitness; trả lời bằng kiến thức fitness nội bộ và dữ liệu hệ thống.'}
 
 Nội dung trả lời:
 - Nếu có kết quả phù hợp, đề xuất phương án rõ ràng.
@@ -254,7 +267,7 @@ Câu hỏi: "${query}"`
             contents: prompt,
             config: {
                 temperature: 0.35,
-                maxOutputTokens: 500,
+                maxOutputTokens: webSearchUsed ? 800 : 500,
             },
         })
 
@@ -283,6 +296,7 @@ export const generateAssistantResponseStream = async (
     const onChunk = options.onChunk
     const webContext = String(options.webContext || '').trim()
     const webSearchUsed = Boolean(options.webSearchUsed && webContext)
+    const memoryContext = String(options.memoryContext || '').trim()
     const summaryRules = buildSummaryRules(query)
     const summaryMode = Boolean(summaryRules)
     const styleRules = `PHONG CÁCH BẮT BUỘC:
@@ -311,14 +325,18 @@ Quy tắc:
 - Không bịa sản phẩm, PT, giá, số điện thoại hoặc email.
 - Không tự ý đưa dữ liệu shop/gym/sản phẩm vào câu trả lời nếu người dùng không hỏi rõ về mua hàng, giá, sản phẩm, PT hoặc gói tập.
 - Nếu người dùng yêu cầu tóm tắt, chỉ tóm tắt nội dung được cung cấp trong câu hỏi; không thêm dữ liệu shop, gym hoặc web.
-- Nếu có "Context web", ưu tiên thông tin trong context đó và luôn thêm mục "Nguồn:" ở cuối với URL thật dạng https://... hoặc [Tiêu đề](https://...).
+- Nếu có "Context web", ưu tiên thông tin trong context đó và luôn thêm mục "Nguồn:" ở cuối với URL thật dạng https://...; không dùng markdown link.
 - Nếu người dùng hỏi "link", "URL", "ở đâu", "nguồn" hoặc "tài liệu", trả URL trực tiếp từ context; không thay bằng mô tả hoặc sản phẩm.
+- Nếu người dùng hỏi link Shopee, không hướng dẫn cách copy/tìm thủ công; trả link trực tiếp nếu có, nếu không có thì nói rõ không tìm thấy link trực tiếp.
 - Không tạo link giả. Chỉ dùng URL có trong context web. Nếu không có URL thật, nói rõ không tìm thấy URL đáng tin cậy.
 - Nếu context web không đủ để kết luận, nói rõ phần chưa chắc thay vì đoán.
 - Trả lời bằng tiếng Việt, rõ ràng, logic, ngắn gọn nhưng đủ ý.
 - Không dừng giữa câu, không cắt ngang tên riêng hoặc câu trả lời.
 
 ${styleRules}
+
+${memoryContext ? `${memoryContext}
+` : ''}
 
 ${summaryRules ? `${summaryRules}
 ` : ''}
@@ -366,12 +384,20 @@ Phong cách trả lời:
 - Trả lời bằng tiếng Việt, dễ hiểu, không quá máy móc.
 - Không dừng giữa câu và không cắt ngang câu trả lời.
 - Chỉ sử dụng dữ liệu hệ thống GymSystem bên dưới, không tự lấy hoặc bịa dữ liệu ngoài hệ thống.
+- Nếu có "Context web fitness", chỉ dùng nó như nguồn tham khảo chuyên môn về tập luyện, dinh dưỡng, thể hình và khoa học vận động.
 - Nếu dữ liệu bên dưới không đủ để trả lời, nói rõ hiện hệ thống chưa có dữ liệu phù hợp và gợi ý người dùng hỏi về PT, sản phẩm hoặc gói tập hiện có.
 
 ${styleRules}
 
+${memoryContext ? `${memoryContext}
+` : ''}
+
 Dữ liệu tìm được từ hệ thống:
 ${context}
+
+${webSearchUsed ? `Context web fitness từ Tavily:
+${webContext}
+` : 'Không có context web fitness; trả lời bằng kiến thức fitness nội bộ và dữ liệu hệ thống.'}
 
 Nội dung trả lời:
 - Nếu có kết quả phù hợp, đề xuất phương án rõ ràng.
@@ -381,7 +407,7 @@ Nội dung trả lời:
 Câu hỏi: "${query}"`
 
     return streamGeminiText(prompt, {
-        maxOutputTokens: 500,
+        maxOutputTokens: webSearchUsed ? 800 : 500,
         temperature: 0.35,
         label: 'assistant-gym-stream',
         onChunk,
