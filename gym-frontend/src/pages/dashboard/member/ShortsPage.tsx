@@ -19,9 +19,9 @@ import {
 } from '../../../services/shortService'
 import type { ShortVideo } from '../../../types/shorts'
 
-const PAGE_SIZE = 6
-const MAX_FILE_SIZE = 100 * 1024 * 1024
-const MAX_DURATION_SECONDS = 60
+const PAGE_SIZE = 10
+const MAX_FILE_SIZE = 300 * 1024 * 1024
+const MAX_DURATION_SECONDS = 300
 const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
 
 const isValidHttpUrl = (value: string) => {
@@ -76,7 +76,7 @@ const validateVideoFile = (file: File) =>
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      reject(new Error('Video tối đa 100MB'))
+      reject(new Error('Video tối đa 300MB'))
       return
     }
 
@@ -86,7 +86,7 @@ const validateVideoFile = (file: File) =>
     video.onloadedmetadata = () => {
       URL.revokeObjectURL(objectUrl)
       if (video.duration > MAX_DURATION_SECONDS) {
-        reject(new Error('Video local tối đa 60 giây'))
+        reject(new Error('Video local tối đa 5 phút'))
       } else {
         resolve()
       }
@@ -111,6 +111,8 @@ export default function ShortsPage() {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [feedReady, setFeedReady] = useState(false)
+  const [feedRenderKey, setFeedRenderKey] = useState('initial')
   const [loadingMore, setLoadingMore] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -127,7 +129,9 @@ export default function ShortsPage() {
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({})
   const volumeRef = useRef(readStoredShortsVolume())
   const viewedVideos = useRef(new Set<string>())
+  const displayedVideoIdsRef = useRef(new Set<string>())
   const likeOnlyInFlightRef = useRef(new Set<string>())
+  const feedRequestSeq = useRef(0)
 
   const applyVolumeToVideo = useCallback((video: HTMLVideoElement | null, volume: number) => {
     if (!video) return
@@ -145,21 +149,61 @@ export default function ShortsPage() {
   }, [])
 
   const loadFeed = useCallback(async (targetPage: number, append = false) => {
-    if (append) setLoadingMore(true)
-    else setLoading(true)
+    const requestId = ++feedRequestSeq.current
+    if (append) {
+      setLoadingMore(true)
+    } else {
+      console.debug('[Shorts feed] render gate: clear stale feed before random fetch')
+      setFeedReady(false)
+      setLoading(true)
+      setActiveIndex(0)
+      setVideos([])
+      videoRefs.current = {}
+      displayedVideoIdsRef.current = new Set()
+    }
 
     try {
-      const { data } = await getShortFeed({ page: targetPage, limit: PAGE_SIZE })
-      setVideos((current) => append ? [...current, ...data.videos] : data.videos)
+      const initialVideo = targetPage === 1 && !append ? searchParams.get('video') || undefined : undefined
+      const excludedIds = append ? Array.from(displayedVideoIdsRef.current).join(',') : undefined
+      const { data } = await getShortFeed({ page: targetPage, limit: PAGE_SIZE, video: initialVideo, excludedIds })
+      if (requestId !== feedRequestSeq.current) {
+        console.debug('[Shorts feed] ignored stale random response', { requestId })
+        return
+      }
+      console.debug('[Shorts feed] loaded videos', data.videos.map((video) => ({
+        id: video._id,
+        thumbnail: video.thumbnail,
+        videoUrl: video.videoUrl,
+      })))
+      const uniqueVideos = data.videos.filter((video) => {
+        if (!append) return true
+        return !displayedVideoIdsRef.current.has(video._id)
+      })
+
+      uniqueVideos.forEach((video) => displayedVideoIdsRef.current.add(video._id))
+
+      setVideos((current) => append ? [...current, ...uniqueVideos] : uniqueVideos)
+      if (!append) {
+        setFeedRenderKey(uniqueVideos.map((video) => video._id).join(':') || `empty-${Date.now()}`)
+        setFeedReady(true)
+      }
+      if (initialVideo && !append) {
+        const nextIndex = uniqueVideos.findIndex((video) => video._id === initialVideo)
+        if (nextIndex >= 0) setActiveIndex(nextIndex)
+      }
       setPage(data.page)
       setHasMore(data.hasMore)
     } catch {
+      if (requestId !== feedRequestSeq.current) return
       api.error('Không thể tải Shorts')
+      if (!append) setFeedReady(true)
     } finally {
-      setLoading(false)
-      setLoadingMore(false)
+      if (requestId === feedRequestSeq.current) {
+        setLoading(false)
+        setLoadingMore(false)
+      }
     }
-  }, [api])
+  }, [api, searchParams])
 
   useEffect(() => {
     void loadFeed(1)
@@ -191,6 +235,14 @@ export default function ShortsPage() {
     })
 
     const activeVideo = videos[activeIndex]
+    if (activeVideo) {
+      console.debug('[Shorts feed] active video', {
+        index: activeIndex,
+        id: activeVideo._id,
+        thumbnail: activeVideo.thumbnail,
+        videoUrl: activeVideo.videoUrl,
+      })
+    }
     if (activeVideo && !viewedVideos.current.has(activeVideo._id)) {
       viewedVideos.current.add(activeVideo._id)
       viewShort(activeVideo._id)
@@ -420,7 +472,8 @@ export default function ShortsPage() {
     }
   }
 
-  if (loading) {
+  if (loading || !feedReady) {
+    console.debug('[Shorts feed] render loading gate', { loading, feedReady, videosCount: videos.length })
     return (
       <div className={loadingStateClass}>
         {contextHolder}
@@ -432,6 +485,7 @@ export default function ShortsPage() {
   }
 
   if (!videos.length) {
+    console.debug('[Shorts feed] render empty state after random fetch')
     return (
       <div className={loadingStateClass}>
         {contextHolder}
@@ -465,6 +519,7 @@ export default function ShortsPage() {
       {contextHolder}
       <div className="h-full w-full">
         <Swiper
+          key={feedRenderKey}
           className="h-full w-full"
           direction="vertical"
           slidesPerView={1}
@@ -594,7 +649,7 @@ function UploadModal({
                   >
                     <p className="ant-upload-drag-icon"><UploadOutlined /></p>
                     <p className="ant-upload-text">Kéo thả video hoặc bấm để chọn file</p>
-                    <p className="ant-upload-hint">Mp4/WebM/MOV, tối đa 100MB và 60 giây.</p>
+                    <p className="ant-upload-hint">Mp4/WebM/MOV, tối đa 300MB và 5 phút. Khuyến nghị 720p để upload nhanh và hiển thị đẹp.</p>
                   </Upload.Dragger>
                   {filePreviewUrl && (
                     <div className={uploadPreviewClass}>

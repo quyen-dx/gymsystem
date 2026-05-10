@@ -1,4 +1,5 @@
 import cors from 'cors'
+import cookieParser from 'cookie-parser'
 import express from 'express'
 import session from 'express-session'
 import connectDB from './src/config/db.js'
@@ -9,6 +10,7 @@ import addressRoutes from './src/routes/addressRoutes.js'
 import aiRoutes from './src/routes/aiRoutes.js'
 import auditLogRoutes from './src/routes/auditLogRoutes.js'
 import authRoutes from './src/routes/authRoutes.js'
+import channelRoutes from './src/routes/channelRoutes.js'
 import orderRoutes from './src/routes/orderRoutes.js'
 import paymentRoutes from './src/routes/paymentRoutes.js'
 import planRoutes from './src/routes/planRoutes.js'
@@ -29,6 +31,7 @@ app.use(
 )
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
+app.use(cookieParser())
 
 app.use(
   session({
@@ -59,6 +62,7 @@ app.use('/api/orders', orderRoutes)
 app.use('/api/seller', sellerRoutes)
 app.use('/api/ai-assistant', aiRoutes)
 app.use('/api/shorts', shortRoutes)
+app.use('/api/channels', channelRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', message: 'GymSystem API is running' })

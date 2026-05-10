@@ -25,6 +25,8 @@ export const authService = {
 
   logout: () => api.post('/auth/logout'),
 
+  refresh: () => api.post('/auth/refresh', undefined, { skipAuthRefresh: true } as any),
+
   getProfile: () => api.get('/auth/me'),
 
   updateProfile: (data: FormData) =>

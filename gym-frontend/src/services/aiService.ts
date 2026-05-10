@@ -1,5 +1,6 @@
 import axios from 'axios'
 import api from './api'
+import { clearAuthSession, refreshAccessToken } from './api'
 import { API_URL } from '../config/env'
 
 const aiCache = new Map<string, any>()
@@ -91,9 +92,9 @@ export const requestAiAssistantStream = async (
         return { answer: '', pts: [], products: [], plans: [], mode }
     }
 
-    const token = localStorage.getItem('token')
-    const response = await fetch(`${API_URL}/ai-assistant/stream`, {
+    const buildRequest = (token: string | null) => fetch(`${API_URL}/ai-assistant/stream`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -102,9 +103,17 @@ export const requestAiAssistantStream = async (
         signal: options.signal,
     })
 
+    let token = localStorage.getItem('token')
+    let response = await buildRequest(token)
+
     if (response.status === 401 && token) {
-        localStorage.removeItem('token')
-        window.location.href = '/login'
+        try {
+            token = await refreshAccessToken()
+            response = await buildRequest(token)
+        } catch {
+            clearAuthSession()
+            window.location.href = '/login'
+        }
     }
 
     if (!response.ok || !response.body) {

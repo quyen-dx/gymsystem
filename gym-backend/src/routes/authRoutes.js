@@ -53,7 +53,7 @@ router.get(
       if (err) return next(err)
       if (!user) return res.redirect(buildClientUrl('/login', { error: 'google_oauth_failed' }))
       try {
-        const redirectUrl = await buildGoogleOauthRedirect(user)
+        const redirectUrl = await buildGoogleOauthRedirect(user, res)
         return res.redirect(redirectUrl)
       } catch (error) {
         return next(error)
@@ -72,7 +72,7 @@ router.get(
       if (err) return next(err)
       if (!user) return res.redirect(buildClientUrl('/login', { error: 'facebook_oauth_failed' }))
       try {
-        const redirectUrl = await buildFacebookOauthRedirect(user)
+        const redirectUrl = await buildFacebookOauthRedirect(user, res)
         return res.redirect(redirectUrl)
       } catch (error) {
         return next(error)
@@ -85,6 +85,7 @@ router.post('/register/send-otp', sendRegisterOtp)
 router.post('/register/verify-otp', verifyRegisterOtp)
 router.post('/register/facebook', registerFacebook)
 router.post('/login', login)
+router.post('/refresh', refreshToken)
 router.post('/refresh-token', refreshToken)
 
 router.post('/forgot-password/send-otp', sendForgotPasswordOtp)
@@ -97,7 +98,7 @@ router.put('/update-profile', protect, upload.single('avatar'), updateProfile)
 router.put('/change-password', protect, changePassword)
 router.post('/add-password', protect, setPassword)
 router.put('/set-password', protect, setPassword)
-router.post('/logout', protect, logout)
+router.post('/logout', logout)
 router.post('/seller/enable', protect, enableSellerMode)
 
 router.get('/users', protect, adminOnly, getAllUsers)

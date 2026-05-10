@@ -1,9 +1,10 @@
-import { CloseOutlined, PictureOutlined } from '@ant-design/icons'
-import { Button, Empty, Input, Skeleton } from 'antd'
+import { CloseOutlined } from '@ant-design/icons'
+import { Button, Empty, Skeleton } from 'antd'
 import type { InputRef } from 'antd/es/input'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addShortComment, getShortComments } from '../../services/shortService'
 import type { ShortComment, ShortVideo } from '../../types/shorts'
+import CommentInput from './CommentInput'
 import CommentItem from './CommentItem'
 import './ShortsComments.css'
 
@@ -157,12 +158,6 @@ export default function ShortsComments({
               <button type="button" onClick={() => setReplyingTo(null)}>Hủy</button>
             </div>
           )}
-          {imagePreview && (
-            <div className="shorts-comment-image-preview">
-              <img src={imagePreview} alt="Ảnh sẽ gửi" />
-              <button type="button" onClick={clearImage}>Xóa ảnh</button>
-            </div>
-          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -170,23 +165,18 @@ export default function ShortsComments({
             hidden
             onChange={(event) => chooseImage(event.target.files?.[0])}
           />
-          <Button
-            className="shorts-comment-image-button"
-            shape="circle"
-            icon={<PictureOutlined />}
-            onClick={() => fileInputRef.current?.click()}
-          />
-          <Input
-            ref={inputRef}
-            value={text}
-            maxLength={1000}
+          <CommentInput
+            dark={dark}
+            text={text}
+            inputRef={inputRef}
+            imagePreview={imagePreview}
+            submitting={submitting}
             placeholder={replyingTo ? `Trả lời ${replyingTo.userId.name}...` : 'Thêm bình luận...'}
-            onChange={(event) => setText(event.target.value)}
-            onPressEnter={() => void submitComment()}
+            onTextChange={setText}
+            onSubmit={() => void submitComment()}
+            onChooseImage={() => fileInputRef.current?.click()}
+            onClearImage={clearImage}
           />
-          <Button type="primary" loading={submitting} onClick={() => void submitComment()}>
-            Gửi
-          </Button>
         </footer>
       </section>
     </div>

@@ -9,7 +9,7 @@ export const generateAccessToken = (userId, role) =>
 
 export const generateRefreshToken = (userId) =>
   jwt.sign({ id: userId }, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
     issuer: 'gym-system',
   })
 

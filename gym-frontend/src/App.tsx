@@ -15,6 +15,7 @@ import AdminTrainersPage from './pages/dashboard/admin/AdminTrainersPage'
 import AdminUsersPage from './pages/dashboard/admin/AdminUsersPage'
 import BookingPage from './pages/dashboard/member/BookingPage'
 import CartPage from './pages/dashboard/member/CartPage'
+import ChannelPage from './pages/dashboard/member/ChannelPage'
 import CheckoutPage from './pages/dashboard/member/CheckoutPage'
 import DepositPage from './pages/dashboard/member/DepositPage'
 import HealthPage from './pages/dashboard/member/HealthPage'
@@ -132,6 +133,7 @@ export default function App() {
         <Route path="/dashboard/member/workout" element={<PrivateRoute><WorkoutPage /></PrivateRoute>} />
         <Route path="/dashboard/member/checkin" element={<PrivateRoute><MemberCheckinPage /></PrivateRoute>} />
         <Route path="/shorts" element={<PrivateRoute><MemberLayout hideFooter><ShortsPage /></MemberLayout></PrivateRoute>} />
+        <Route path="/channel/:userId" element={<PrivateRoute><MemberLayout><ChannelPage /></MemberLayout></PrivateRoute>} />
         {/* DEFAULT */}
         <Route path="/" element={<Navigate to="/login" />} />
 

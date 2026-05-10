@@ -45,6 +45,23 @@ export interface ShortsFeedResponse {
   hasMore: boolean
 }
 
+export interface ChannelStats {
+  totalVideos: number
+  totalLikes: number
+  totalViews: number
+  totalComments: number
+  followersCount: number
+}
+
+export interface ChannelProfileResponse {
+  profile: ShortUser & {
+    bio?: string
+    createdAt?: string
+  }
+  stats: ChannelStats
+  canManage: boolean
+}
+
 export interface ShortsCommentsResponse {
   comments: ShortComment[]
   page: number

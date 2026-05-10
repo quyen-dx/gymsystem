@@ -46,18 +46,49 @@ const validateMockOAuthToken = (provider, token) => {
   return token.startsWith(`${provider}-demo-`) || token === `${provider}-demo-token`
 }
 
-const buildAuthResponse = async (user) => {
+const refreshCookieName = 'refreshToken'
+
+const getRefreshCookieOptions = () => {
+  const isProduction = process.env.NODE_ENV === 'production'
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/api/auth',
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  }
+}
+
+const setRefreshCookie = (res, token) => {
+  res.cookie(refreshCookieName, token, getRefreshCookieOptions())
+}
+
+const clearRefreshCookie = (res) => {
+  res.clearCookie(refreshCookieName, {
+    ...getRefreshCookieOptions(),
+    maxAge: undefined,
+  })
+}
+
+const sanitizeUser = (user) => {
+  const responseUser = user.toObject ? user.toObject() : { ...user }
+  delete responseUser.password
+  delete responseUser.refreshToken
+  return responseUser
+}
+
+const buildAuthResponse = async (user, res) => {
   const accessToken = generateAccessToken(user._id, user.role)
   const refreshToken = generateRefreshToken(user._id)
 
   user.refreshToken = refreshToken
   await user.save({ validateBeforeSave: false })
+  if (res) setRefreshCookie(res, refreshToken)
 
   return {
     message: 'Đăng nhập thành công',
     accessToken,
-    refreshToken,
-    user,
+    user: sanitizeUser(user),
   }
 }
 
@@ -80,21 +111,23 @@ const createVerifiedUser = async (payload) => {
   return user
 }
 
-export const buildGoogleOauthRedirect = async (user) => {
+export const buildGoogleOauthRedirect = async (user, res) => {
   const accessToken = generateAccessToken(user._id, user.role)
   const refreshToken = generateRefreshToken(user._id)
 
   user.refreshToken = refreshToken
   await user.save({ validateBeforeSave: false })
+  if (res) setRefreshCookie(res, refreshToken)
 
   return buildClientUrl('/oauth-success', { token: accessToken })
 }
-export const buildFacebookOauthRedirect = async (user) => {
+export const buildFacebookOauthRedirect = async (user, res) => {
   const accessToken = generateAccessToken(user._id, user.role)
   const refreshToken = generateRefreshToken(user._id)
 
   user.refreshToken = refreshToken
   await user.save({ validateBeforeSave: false })
+  if (res) setRefreshCookie(res, refreshToken)
 
   return buildClientUrl('/oauth-success', { token: accessToken })
 }
@@ -177,7 +210,7 @@ export const verifyRegisterOtp = async (req, res) => {
     const user = await createVerifiedUser(otpRecord.payload)
     await consumeOtp(otpRecord._id)
 
-    const authPayload = await buildAuthResponse(user)
+    const authPayload = await buildAuthResponse(user, res)
 
     return res.status(201).json({
       ...authPayload,
@@ -221,7 +254,7 @@ export const registerFacebook = async (req, res) => {
 
     await user.save()
 
-    const authPayload = await buildAuthResponse(user)
+    const authPayload = await buildAuthResponse(user, res)
 
     return res.status(201).json({
       ...authPayload,
@@ -270,7 +303,7 @@ export const login = async (req, res) => {
       if (!validateMockOAuthToken(provider, oauthToken)) {
         throw new AppError('OAuth token không hợp lệ', 401)
       }
-      return res.json(await buildAuthResponse(user))
+      return res.json(await buildAuthResponse(user, res))
     }
 
     if (!password) {
@@ -286,17 +319,17 @@ export const login = async (req, res) => {
       throw new AppError('Mật khẩu không đúng', 401)
     }
 
-    return res.json(await buildAuthResponse(user))
+    return res.json(await buildAuthResponse(user, res))
   } catch (error) {
     return sendError(res, error)
   }
 }
 export const refreshToken = async (req, res) => {
   try {
-    const { refreshToken: token } = req.body
+    const token = req.cookies?.[refreshCookieName] || req.body?.refreshToken
 
     if (!token) {
-      throw new AppError('Refresh token là bắt buộc', 400)
+      throw new AppError('Refresh token là bắt buộc', 401)
     }
 
     const decoded = verifyRefreshToken(token)
@@ -306,7 +339,15 @@ export const refreshToken = async (req, res) => {
 
     const user = await User.findById(decoded.id).select('+refreshToken')
     if (!user || user.refreshToken !== token) {
+      clearRefreshCookie(res)
       throw new AppError('Refresh token không hợp lệ hoặc đã hết hạn', 401)
+    }
+
+    if (!user.isActive) {
+      user.refreshToken = null
+      await user.save({ validateBeforeSave: false })
+      clearRefreshCookie(res)
+      throw new AppError('Tài khoản đã bị khóa', 403)
     }
 
     const accessToken = generateAccessToken(user._id, user.role)
@@ -314,21 +355,35 @@ export const refreshToken = async (req, res) => {
 
     user.refreshToken = refreshTokenValue
     await user.save({ validateBeforeSave: false })
+    setRefreshCookie(res, refreshTokenValue)
 
     return res.json({
       accessToken,
-      refreshToken: refreshTokenValue,
+      user: sanitizeUser(user),
     })
   } catch (error) {
+    clearRefreshCookie(res)
     return sendError(res, error)
   }
 }
 
 export const logout = async (req, res) => {
   try {
-    await User.findByIdAndUpdate(req.user._id, { refreshToken: null })
+    const token = req.cookies?.[refreshCookieName] || req.body?.refreshToken
+    if (token) {
+      const decoded = verifyRefreshToken(token)
+      if (decoded?.id) {
+        await User.findByIdAndUpdate(decoded.id, { refreshToken: null })
+      } else {
+        await User.findOneAndUpdate({ refreshToken: token }, { refreshToken: null })
+      }
+    } else if (req.user?._id) {
+      await User.findByIdAndUpdate(req.user._id, { refreshToken: null })
+    }
+    clearRefreshCookie(res)
     return res.json({ message: 'Đăng xuất thành công' })
   } catch (error) {
+    clearRefreshCookie(res)
     return sendError(res, error)
   }
 }

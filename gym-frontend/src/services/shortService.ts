@@ -1,8 +1,8 @@
 import type { AxiosProgressEvent } from 'axios'
 import api from './api'
-import type { ShortsCommentsResponse, ShortsFeedResponse } from '../types/shorts'
+import type { ChannelProfileResponse, ShortsCommentsResponse, ShortsFeedResponse } from '../types/shorts'
 
-export const getShortFeed = (params?: { page?: number; limit?: number }) =>
+export const getShortFeed = (params?: { page?: number; limit?: number; video?: string; excludedIds?: string }) =>
   api.get<ShortsFeedResponse>('/shorts/feed', { params })
 
 export const getAdminShorts = (params?: { page?: number; limit?: number; search?: string }) =>
@@ -54,4 +54,13 @@ export const likeShortComment = (id: string) =>
 export const updateShortStatus = (id: string, isActive: boolean) =>
   api.patch(`/shorts/${id}/status`, { isActive })
 
+export const updateShort = (id: string, data: { caption?: string; tags?: string | string[]; isActive?: boolean }) =>
+  api.patch(`/shorts/${id}`, data)
+
 export const deleteShort = (id: string) => api.delete(`/shorts/${id}`)
+
+export const getChannelProfile = (userId: string) =>
+  api.get<ChannelProfileResponse>(`/channels/${userId}`)
+
+export const getChannelVideos = (userId: string, params?: { page?: number; limit?: number }) =>
+  api.get<ShortsFeedResponse>(`/channels/${userId}/videos`, { params })

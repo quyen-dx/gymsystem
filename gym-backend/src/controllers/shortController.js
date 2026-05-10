@@ -16,7 +16,7 @@ const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id)
 
 const normalizePagination = (query) => {
   const page = Math.max(Number(query.page) || 1, 1)
-  const rawLimit = Math.max(Number(query.limit) || 8, 1)
+  const rawLimit = Math.max(Number(query.limit) || 10, 1)
   const limit = Math.min(rawLimit, MAX_FEED_LIMIT)
   return { page, limit, skip: (page - 1) * limit }
 }
@@ -31,6 +31,17 @@ const normalizeTags = (tags) => {
     .map((tag) => String(tag).trim().replace(/^#/, '').toLowerCase())
     .filter(Boolean))]
     .slice(0, 12)
+}
+
+const normalizeExcludedIds = (value) => {
+  const values = Array.isArray(value)
+    ? value
+    : String(value || '').split(',')
+
+  return values
+    .map((id) => String(id).trim())
+    .filter(isValidObjectId)
+    .map((id) => new mongoose.Types.ObjectId(id))
 }
 
 const isValidHttpUrl = (value) => {
@@ -130,8 +141,18 @@ const getThumbnailUrl = (publicId) =>
     ],
   })
 
+const getOptimizedVideoUrl = (publicId) =>
+  cloudinary.url(publicId, {
+    resource_type: 'video',
+    secure: true,
+    transformation: [
+      { width: 720, height: 1280, crop: 'limit' },
+      { quality: 'auto', fetch_format: 'auto' },
+    ],
+  })
+
 const withViewerState = async (videos, userId) => {
-  const plainVideos = videos.map((video) => video.toObject())
+  const plainVideos = videos.map((video) => (video.toObject ? video.toObject() : video))
   if (!userId || plainVideos.length === 0) {
     return plainVideos.map((video) => ({ ...video, isLiked: false }))
   }
@@ -197,7 +218,7 @@ export const uploadShortVideo = async (req, res, next) => {
       userId: req.user._id,
       type: 'upload',
       caption: req.body.caption || '',
-      videoUrl: result.secure_url,
+      videoUrl: getOptimizedVideoUrl(result.public_id) || result.secure_url,
       thumbnail: getThumbnailUrl(result.public_id),
       tags: normalizeTags(req.body.tags),
     })
@@ -258,14 +279,74 @@ export const uploadShortVideoByUrl = async (req, res, next) => {
 
 export const getShortFeed = async (req, res, next) => {
   try {
-    const { page, limit, skip } = normalizePagination(req.query)
-    const filter = { isActive: true }
-    const total = await ShortVideo.countDocuments(filter)
-    const videos = await ShortVideo.find(filter)
-      .populate('userId', userSelect)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
+    const { page, limit } = normalizePagination(req.query)
+    const excludedObjectIds = normalizeExcludedIds(req.query.excludedIds)
+    const filter = {
+      isActive: true,
+      ...(excludedObjectIds.length ? { _id: { $nin: excludedObjectIds } } : {}),
+    }
+    const initialVideoId = String(req.query.video || '').trim()
+    const total = await ShortVideo.countDocuments({ isActive: true })
+    const availableTotal = await ShortVideo.countDocuments(filter)
+    const trendingSize = Math.min(Math.ceil(limit * 0.3), 3)
+    const randomSize = Math.max(limit - trendingSize, 1)
+
+    let videos = await ShortVideo.aggregate([
+      {
+        $facet: {
+          random: [
+            { $match: filter },
+            { $sample: { size: randomSize + trendingSize } },
+          ],
+          trending: [
+            { $match: filter },
+            {
+              $addFields: {
+                trendingScore: {
+                  $add: [
+                    '$viewsCount',
+                    { $multiply: ['$likesCount', 5] },
+                    { $multiply: ['$commentsCount', 8] },
+                  ],
+                },
+              },
+            },
+            { $sort: { trendingScore: -1, createdAt: -1 } },
+            { $limit: trendingSize },
+            { $project: { trendingScore: 0 } },
+          ],
+        },
+      },
+      { $project: { videos: { $concatArrays: ['$random', '$trending'] } } },
+      { $unwind: '$videos' },
+      { $replaceRoot: { newRoot: '$videos' } },
+      { $group: { _id: '$_id', video: { $first: '$$ROOT' } } },
+      { $replaceRoot: { newRoot: '$video' } },
+      { $sample: { size: limit } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'userId',
+          pipeline: [
+            { $project: { name: 1, avatar: 1, role: 1 } },
+          ],
+        },
+      },
+      { $unwind: { path: '$userId', preserveNullAndEmptyArrays: true } },
+    ])
+
+    if (page === 1 && isValidObjectId(initialVideoId)) {
+      const initialVideo = await ShortVideo.findOne({ _id: initialVideoId, isActive: true })
+        .populate('userId', userSelect)
+      if (initialVideo) {
+        videos = [
+          initialVideo.toObject(),
+          ...videos.filter((video) => video._id.toString() !== initialVideoId),
+        ].slice(0, limit)
+      }
+    }
 
     res.json({
       videos: await withViewerState(videos, req.user?._id),
@@ -273,7 +354,7 @@ export const getShortFeed = async (req, res, next) => {
       limit,
       total,
       totalPages: Math.ceil(total / limit),
-      hasMore: page * limit < total,
+      hasMore: availableTotal > videos.length,
     })
   } catch (err) {
     next(err)
@@ -529,6 +610,32 @@ export const updateShortStatus = async (req, res, next) => {
 
     if (!video) return next(new AppError('Không tìm thấy video', 404))
     res.json({ message: video.isActive ? 'Đã mở video' : 'Đã khóa video', video })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const updateShortVideo = async (req, res, next) => {
+  try {
+    const { id } = req.params
+    if (!isValidObjectId(id)) return next(new AppError('Video không hợp lệ', 400))
+
+    const video = await ShortVideo.findById(id)
+    if (!video) return next(new AppError('Không tìm thấy video', 404))
+
+    assertVideoAccess(video, req.user)
+
+    if (req.body.caption !== undefined) video.caption = String(req.body.caption || '').trim()
+    if (req.body.tags !== undefined) video.tags = normalizeTags(req.body.tags)
+    if (req.body.isActive !== undefined) video.isActive = Boolean(req.body.isActive)
+
+    await video.save()
+    const populatedVideo = await ShortVideo.findById(video._id).populate('userId', userSelect)
+
+    res.json({
+      message: 'Đã cập nhật video',
+      video: populatedVideo,
+    })
   } catch (err) {
     next(err)
   }

@@ -12,6 +12,7 @@ import {
   toggleShortLike,
   uploadShortVideoByUrl,
   updateShortStatus,
+  updateShortVideo,
   uploadShortVideo,
 } from '../controllers/shortController.js'
 import { adminOnly, protect } from '../middlewares/authMiddleware.js'
@@ -20,7 +21,7 @@ const router = express.Router()
 
 const uploadShort = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: 300 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype?.startsWith('video/')) cb(null, true)
     else cb(new Error('File upload phải là video'))
@@ -46,6 +47,7 @@ router.post('/:id/comment', protect, uploadCommentImage.single('image'), addShor
 router.get('/:id/comments', protect, getShortComments)
 router.get('/comments/:id/replies', protect, getCommentReplies)
 router.post('/comments/:id/like', protect, toggleCommentLike)
+router.patch('/:id', protect, updateShortVideo)
 router.patch('/:id/status', protect, adminOnly, updateShortStatus)
 router.delete('/:id', protect, deleteShortVideo)
 

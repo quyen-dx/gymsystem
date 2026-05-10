@@ -6,7 +6,9 @@ import {
 } from '@ant-design/icons'
 import { Avatar, Button } from 'antd'
 import { memo, useCallback, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import useDoubleTap from '../../hooks/useDoubleTap'
+import { getChannelProfile } from '../../services/shortService'
 import type { ShortVideo } from '../../types/shorts'
 import HeartAnimationLayer, { type FloatingHeart } from './HeartAnimationLayer'
 import VolumeControl from './VolumeControl'
@@ -50,6 +52,7 @@ function ShortsVideoCard({
   onOpenComments,
   onShare,
 }: ShortsVideoCardProps) {
+  const navigate = useNavigate()
   const [hearts, setHearts] = useState<FloatingHeart[]>([])
 
   const addHeart = useCallback((point: { x: number; y: number }) => {
@@ -78,6 +81,17 @@ function ShortsVideoCard({
   }, [addHeart, onLikeOnly, video])
 
   const doubleTapHandlers = useDoubleTap({ onDoubleTap: handleDoubleTap })
+  const channelUserId = video.userId?._id
+
+  const openChannel = useCallback(() => {
+    if (!channelUserId) return
+    navigate(`/channel/${channelUserId}`)
+  }, [channelUserId, navigate])
+
+  const prefetchChannel = useCallback(() => {
+    if (!channelUserId || window.matchMedia('(hover: none)').matches) return
+    getChannelProfile(channelUserId).catch(() => undefined)
+  }, [channelUserId])
 
   return (
     <div
@@ -150,12 +164,33 @@ function ShortsVideoCard({
       </div>
 
       <div className="absolute bottom-7 left-[18px] right-[86px] z-[3] grid gap-2.5 max-[640px]:bottom-[22px] max-[640px]:left-3.5 max-[640px]:right-[72px]">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Avatar
-            size={42}
-            src={video.userId?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.userId?.name || 'GS')}`}
-          />
-          <span className="font-extrabold text-white [text-shadow:0_2px_12px_rgba(0,0,0,0.6)]">@{video.userId?.name || 'GymSystem'}</span>
+        <div
+          className="flex min-w-0 items-center gap-2.5"
+          onMouseEnter={prefetchChannel}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            openChannel()
+          }}
+        >
+          <button
+            className="group/avatar grid rounded-full outline-none transition-transform duration-200 hover:scale-105 focus-visible:ring-2 focus-visible:ring-white/80"
+            type="button"
+            aria-label={`Mở kênh ${video.userId?.name || 'GymSystem'}`}
+          >
+            <Avatar
+              size={42}
+              src={video.userId?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.userId?.name || 'GS')}`}
+              className="cursor-pointer ring-2 ring-white/20 transition group-hover/avatar:ring-white/60"
+            />
+          </button>
+          <button
+            className="min-w-0 cursor-pointer truncate border-0 bg-transparent p-0 text-left font-extrabold text-white [text-shadow:0_2px_12px_rgba(0,0,0,0.6)] transition hover:underline hover:decoration-white/70 hover:underline-offset-4"
+            type="button"
+          >
+            @{video.userId?.name || 'GymSystem'}
+          </button>
         </div>
         {video.caption && <div className="whitespace-pre-wrap break-words text-[15px] leading-[1.4] text-white/95 [text-shadow:0_2px_12px_rgba(0,0,0,0.65)] max-[640px]:text-sm">{video.caption}</div>}
         {video.tags.length > 0 && (
