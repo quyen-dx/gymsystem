@@ -947,16 +947,16 @@ export default function AiChatWidget() {
                     50% { transform: translateY(-1px); }
                 }
 
-                /* ── FIX: Drawer luôn nằm trên panel chat ── */
+                /* Drawer phien chat nam tren khung chat (11010) va duoi modal xoa (12000). */
                 .ai-session-drawer .ant-drawer-content-wrapper {
-                    z-index: 10100 !important;
+                    z-index: 11500 !important;
                 }
                 .ai-session-drawer .ant-drawer-mask {
-                    z-index: 10099 !important;
+                    z-index: 11499 !important;
                 }
                 /* Ant Design drawer z-index override */
                 .ant-drawer.ai-session-drawer {
-                    z-index: 10100 !important;
+                    z-index: 11500 !important;
                 }
 
 
@@ -1533,7 +1533,7 @@ export default function AiChatWidget() {
             </div>
 
             {/* SESSION DRAWER — mobile/tablet */}
-            {/* FIX: zIndex cao hơn panel (10000) để hiện trên cùnggg */}
+            {/* Drawer phien chat cao hon khung chat va thap hon modal xoa. */}
                 </div>
             </div>
 
@@ -1551,7 +1551,7 @@ export default function AiChatWidget() {
                     setSessionDrawerOpen(false)
                     cancelEditingSession()
                 }}
-                zIndex={10100}
+                zIndex={11500}
                 width={280}
                 styles={{
                     body: {
@@ -1565,7 +1565,7 @@ export default function AiChatWidget() {
                         borderBottom: dark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(0,0,0,0.08)',
                     },
                     wrapper: {
-                        zIndex: 10100,
+                        zIndex: 11500,
                     },
                 }}
             >
