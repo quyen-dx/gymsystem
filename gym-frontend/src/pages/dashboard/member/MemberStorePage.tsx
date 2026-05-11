@@ -163,13 +163,6 @@ export default function MemberStorePage() {
         )}
         <Space>
           <Button onClick={resetPriceFilters}>Xóa lọc giá</Button>
-          <Tag color="orange">
-            {priceMode === 'above'
-              ? `Trên ${(minPrice || 0).toLocaleString('vi-VN')}đ`
-              : minPrice || maxPrice
-                ? `${(minPrice || 0).toLocaleString('vi-VN')}đ - ${maxPrice ? maxPrice.toLocaleString('vi-VN') : '∞'}`
-                : 'Tất cả mức giá'}
-          </Tag>
         </Space>
       </div>
     </div>

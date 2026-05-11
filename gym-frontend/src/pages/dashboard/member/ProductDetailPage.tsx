@@ -267,10 +267,6 @@ export default function ProductDetailPage() {
 
             {/* CỘT THÔNG TIN */}
             <Col xs={24} md={14}>
-              {product.category && (
-                <Tag color="orange" style={{ marginBottom: 8 }}>{product.category}</Tag>
-              )}
-
               <h1 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 700, lineHeight: 1.4 }}>
                 {product.name}
               </h1>
