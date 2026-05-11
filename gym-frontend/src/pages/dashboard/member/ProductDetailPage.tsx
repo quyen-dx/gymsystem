@@ -439,7 +439,7 @@ export default function ProductDetailPage() {
                   src={img}
                   alt={`${product.name} mô tả ${index + 1}`}
                   style={{
-                    width: '100%', maxHeight: 720, objectFit: 'contain',
+                    width: '100%', maxHeight: 500, objectFit: 'contain',
                     borderRadius: 12, border: `1px solid ${borderColor}`,
                     background: thumbBg,
                   }}
