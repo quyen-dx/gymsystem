@@ -13,7 +13,7 @@ import type { ShortVideo } from '../../types/shorts'
 import HeartAnimationLayer, { type FloatingHeart } from './HeartAnimationLayer'
 import VolumeControl from './VolumeControl'
 
-const mediaClass = 'absolute inset-0 h-full w-full border-0 bg-[#111] object-contain object-center'
+const mediaClass = 'shorts-video-player absolute inset-0 z-[1] h-full w-full border-0 bg-[#101010] object-contain object-center'
 const actionClass = 'grid justify-items-center gap-1.5 text-xs font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,0.55)]'
 const iconButtonClass = '!h-12 !w-12 !border-white/20 !bg-[rgba(15,15,15,0.42)] !text-white !backdrop-blur-xl !transition hover:!-translate-y-0.5 hover:!scale-105 hover:!border-white/35 hover:!bg-[rgba(28,28,28,0.62)] max-[640px]:!h-11 max-[640px]:!w-11'
 
@@ -115,6 +115,7 @@ function ShortsVideoCard({
           className={mediaClass}
           src={video.videoUrl}
           poster={video.thumbnail}
+          autoPlay
           playsInline
           muted={volume === 0}
           controls={false}
@@ -127,7 +128,7 @@ function ShortsVideoCard({
         <div className={`${mediaClass} brightness-[0.78]`} />
       )}
 
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.26),transparent_22%,transparent_50%,rgba(0,0,0,0.88)),linear-gradient(90deg,transparent_54%,rgba(0,0,0,0.32))]" />
+      <div className="shorts-video-overlay pointer-events-none absolute inset-0 z-[2] bg-[linear-gradient(180deg,rgba(0,0,0,0.26),transparent_22%,transparent_50%,rgba(0,0,0,0.88)),linear-gradient(90deg,transparent_54%,rgba(0,0,0,0.32))]" />
       <HeartAnimationLayer hearts={hearts} onHeartDone={removeHeart} />
       {isActive && <VolumeControl onVolumeChange={onVolumeChange} />}
 

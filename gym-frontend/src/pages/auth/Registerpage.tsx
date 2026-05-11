@@ -17,7 +17,7 @@ const getDashboardPath = (role: string) => {
 
 export default function RegisterPage() {
   const navigate = useNavigate()
-  const { dark ,toggleTheme } = useTheme()
+  const { dark, toggleTheme } = useTheme()
 
   const [step, setStep] = useState<'form' | 'otp'>('form')
   const [loading, setLoading] = useState(false)
@@ -83,13 +83,14 @@ export default function RegisterPage() {
         }}
       />
 
-      <div className="absolute inset-0 bg-black/60" />
+      <div className="absolute inset-0 bg-black/65" />
 
       {/* CARD */}
       <div
         className={`relative z-10 w-full max-w-md rounded-2xl p-7 shadow-2xl transition-all
-          ${dark ? 'bg-[#141414] text-white' : 'bg-white text-black'}
+          ${dark ? 'bg-[#141414] text-white' : 'bg-[#484848] text-[#edebe6]'}
         `}
+        style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a' }}
       >
 
         {/* HEADER */}
@@ -100,7 +101,7 @@ export default function RegisterPage() {
               type="text"
               icon={<ArrowLeftOutlined />}
               onClick={() => setStep('form')}
-              style={{ color: dark ? '#fff' : '#000' }}
+              style={{ color: dark ? '#fff' : '#edebe6' }}
             />
           )}
 
@@ -108,45 +109,45 @@ export default function RegisterPage() {
             level={3}
             style={{
               margin: 0,
-              color: dark ? '#fff' : '#000',
+              color: dark ? '#fff' : '#edebe6',
             }}
           >
             Đăng ký
           </Title>
         </div>
-<div style={{ position: 'absolute', top: 16, right: 16 }}>
-  <Button
-    shape="circle"
-    onClick={toggleTheme}
-    icon={dark ? <SunOutlined /> : <MoonOutlined />}
-  />
-</div>
+        <div style={{ position: 'absolute', top: 16, right: 16 }}>
+          <Button
+            shape="circle"
+            onClick={toggleTheme}
+            icon={dark ? <SunOutlined /> : <MoonOutlined />}
+          />
+        </div>
         {/* FORM STEP 1 */}
         {step === 'form' && (
           <Form layout="vertical" form={form} onFinish={handleSendOtp}>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#000' }}>Họ và tên</span>}
+              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Họ và tên</span>}
               name="name"
               rules={[{ required: true, message: 'Nhập họ tên' }]}
             >
-              <Input size="large" />
+              <Input size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
             </Form.Item>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#000' }}>Số điện thoại</span>}
+              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Số điện thoại</span>}
               name="phone"
               rules={[{ required: true, message: 'Nhập số điện thoại' }]}
             >
-              <Input size="large" />
+              <Input size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
             </Form.Item>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#000' }}>Mật khẩu</span>}
+              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Mật khẩu</span>}
               name="password"
               rules={[{ required: true, message: 'Nhập mật khẩu' }]}
             >
-              <Input.Password size="large" />
+              <Input.Password size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
             </Form.Item>
 
             <Button
@@ -163,7 +164,7 @@ export default function RegisterPage() {
 
             <div
               className="text-center text-sm"
-              style={{ color: dark ? '#ccc' : '#000' }}
+              style={{ color: dark ? '#ccc' : 'rgba(237,235,230,0.65)' }}
             >
               Đã có tài khoản?{' '}
               <Link to="/login" className="!text-orange-500 font-semibold">
@@ -184,7 +185,7 @@ export default function RegisterPage() {
               </div>
             )}
 
-            <Text style={{ color: dark ? '#fff' : '#000' }}>
+            <Text style={{ color: dark ? '#fff' : '#edebe6' }}>
               Nhập OTP
             </Text>
 

@@ -65,10 +65,10 @@ function SellerFooter() {
         href={item.href}
         className={[
           'group flex items-center gap-2 text-sm transition-colors',
-          dark ? 'text-zinc-300 hover:text-white' : 'text-zinc-600 hover:text-zinc-950',
+          dark ? 'text-zinc-300 hover:text-white' : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]',
         ].join(' ')}
       >
-        <Icon className={['h-4 w-4 shrink-0 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-zinc-500 group-hover:text-zinc-950'].join(' ')} />
+        <Icon className={['h-4 w-4 shrink-0 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-[rgba(237,235,230,0.5)] group-hover:text-[#edebe6]'].join(' ')} />
         <span>{item.label}</span>
       </a>
     )
@@ -80,10 +80,10 @@ function SellerFooter() {
         'w-full border-t',
         dark
           ? 'border-zinc-800 bg-zinc-950 text-white'
-          : 'border-zinc-200 bg-white text-zinc-950',
+          : 'border-[#5a5a5a] bg-[#3e3e3e] text-[#edebe6]',
       ].join(' ')}
     >
-      <section className={['border-b px-5 py-7 md:px-8', dark ? 'border-zinc-800 bg-zinc-950 text-white' : 'border-zinc-200 bg-white text-zinc-950'].join(' ')}>
+      <section className={['border-b px-5 py-7 md:px-8', dark ? 'border-zinc-800 bg-zinc-950 text-white' : 'border-[#5a5a5a] bg-[#3e3e3e] text-[#edebe6]'].join(' ')}>
         <div className="w-full">
           <h2 className="text-center text-xl font-extrabold md:text-2xl">
             Cam Kết Của Chúng Tôi
@@ -95,9 +95,9 @@ function SellerFooter() {
               return (
                 <div
                   key={item.label}
-                  className={['flex min-h-20 items-center gap-3 rounded-2xl border p-4 shadow-sm backdrop-blur', dark ? 'border-zinc-800 bg-zinc-900 text-white' : 'border-zinc-200 bg-zinc-50 text-zinc-950'].join(' ')}
+                  className={['flex min-h-20 items-center gap-3 rounded-2xl border p-4 shadow-sm backdrop-blur', dark ? 'border-zinc-800 bg-zinc-900 text-white' : 'border-[#5a5a5a] bg-[#484848] text-[#edebe6]'].join(' ')}
                 >
-                  <span className={['flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', dark ? 'bg-white text-zinc-950' : 'bg-zinc-950 text-white'].join(' ')}>
+                  <span className={['flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', dark ? 'bg-[#484848] text-[#edebe6]' : 'bg-[#484848] text-[#edebe6]'].join(' ')}>
                     <Icon className="h-5 w-5" />
                   </span>
                   <span className="text-sm font-bold leading-5">{item.label}</span>
@@ -112,38 +112,38 @@ function SellerFooter() {
         <div className="grid w-full gap-9 md:grid-cols-2 lg:grid-cols-4">
           <div>
             <div className="flex items-center gap-3">
-              <span className={['flex h-12 w-12 items-center justify-center rounded-2xl', dark ? 'bg-white text-zinc-950' : 'bg-zinc-950 text-white'].join(' ')}>
+              <span className={['flex h-12 w-12 items-center justify-center rounded-2xl', dark ? 'bg-[#484848] text-[#edebe6]' : 'bg-[#484848] text-[#edebe6]'].join(' ')}>
                 <Store className="h-6 w-6" />
               </span>
               <div>
                 <p className="text-lg font-extrabold leading-tight">GymSystem Seller</p>
-                <p className={['text-sm', dark ? 'text-zinc-400' : 'text-zinc-600'].join(' ')}>
+                <p className={['text-sm', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
                   Bán hàng dễ hơn mỗi ngày
                 </p>
               </div>
             </div>
-            <p className={['mt-5 text-sm leading-6', dark ? 'text-zinc-300' : 'text-zinc-600'].join(' ')}>
+            <p className={['mt-5 text-sm leading-6', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
               Nền tảng giúp Seller tiếp cận hội viên, quản lý sản phẩm và vận hành đơn hàng
               trong cùng một hệ sinh thái GymSystem.
             </p>
           </div>
 
           <div>
-            <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-zinc-950'].join(' ')}>
+            <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
               Dành cho Seller
             </h3>
             <div className="mt-5 space-y-3">{sellerLinks.map(renderLink)}</div>
           </div>
 
           <div>
-            <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-zinc-950'].join(' ')}>
+            <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
               Hỗ trợ
             </h3>
             <div className="mt-5 space-y-3">{supportLinks.map(renderLink)}</div>
           </div>
 
           <div>
-            <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-zinc-950'].join(' ')}>
+            <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
               Kết nối
             </h3>
             <div className="mt-5 flex items-center gap-3">
@@ -152,7 +152,7 @@ function SellerFooter() {
                 aria-label="Facebook"
                 target="_blank"
                 rel="noreferrer"
-                className={['flex h-10 w-10 items-center justify-center rounded-xl transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-white hover:text-zinc-950' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-950 hover:text-white'].join(' ')}
+                className={['flex h-10 w-10 items-center justify-center rounded-xl transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-[#484848] hover:text-[#edebe6]' : 'bg-[#484848] text-[rgba(237,235,230,0.65)] hover:bg-[#525252] hover:text-[#edebe6]'].join(' ')}
               >
                 <Share2 className="h-5 w-5" />
               </a>
@@ -161,7 +161,7 @@ function SellerFooter() {
                 aria-label="Zalo"
                 target="_blank"
                 rel="noreferrer"
-                className={['flex h-10 w-10 items-center justify-center rounded-xl transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-white hover:text-zinc-950' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-950 hover:text-white'].join(' ')}
+                className={['flex h-10 w-10 items-center justify-center rounded-xl transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-[#484848] hover:text-[#edebe6]' : 'bg-[#484848] text-[rgba(237,235,230,0.65)] hover:bg-[#525252] hover:text-[#edebe6]'].join(' ')}
               >
                 <MessageCircle className="h-5 w-5" />
               </a>
@@ -170,7 +170,7 @@ function SellerFooter() {
                 aria-label="Instagram"
                 target="_blank"
                 rel="noreferrer"
-                className={['flex h-10 w-10 items-center justify-center rounded-xl transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-white hover:text-zinc-950' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-950 hover:text-white'].join(' ')}
+                className={['flex h-10 w-10 items-center justify-center rounded-xl transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-[#484848] hover:text-[#edebe6]' : 'bg-[#484848] text-[rgba(237,235,230,0.65)] hover:bg-[#525252] hover:text-[#edebe6]'].join(' ')}
               >
                 <Camera className="h-5 w-5" />
               </a>
@@ -179,10 +179,10 @@ function SellerFooter() {
         </div>
       </section>
 
-      <div className={['border-t px-5 py-5 md:px-8', dark ? 'border-zinc-800' : 'border-zinc-200'].join(' ')}>
-        <div className={['flex w-full flex-col gap-2 text-sm md:flex-row md:items-center md:justify-between', dark ? 'text-zinc-400' : 'text-zinc-600'].join(' ')}>
+      <div className={['border-t px-5 py-5 md:px-8', dark ? 'border-zinc-800' : 'border-[#5a5a5a]'].join(' ')}>
+        <div className={['flex w-full flex-col gap-2 text-sm md:flex-row md:items-center md:justify-between', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
           <p>Copyright © {currentYear} GymSystem Seller. All rights reserved.</p>
-          <p className={['flex items-center gap-2 font-semibold', dark ? 'text-white' : 'text-zinc-950'].join(' ')}>
+          <p className={['flex items-center gap-2 font-semibold', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
             <BadgeCheck className="h-4 w-4" />
             Nền tảng hợp tác uy tín
           </p>

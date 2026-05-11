@@ -22,42 +22,50 @@
 
 html[data-theme="light"] {
   color-scheme: light;
-  --gs-bg: #f6f2ec;
-  --gs-bg-elevated: #fffaf4;
-  --gs-bg-soft: #f1e7dc;
-  --gs-panel: rgba(255, 250, 244, 0.92);
-  --gs-panel-strong: rgba(255, 255, 255, 0.96);
-  --gs-border: rgba(89, 55, 38, 0.14);
-  --gs-border-strong: rgba(89, 55, 38, 0.22);
-  --gs-text: #241b16;
-  --gs-text-muted: #6f6258;
-  --gs-text-soft: #9a8374;
-  --gs-accent: #b6462f;
-  --gs-accent-strong: #873322;
-  --gs-accent-soft: rgba(182, 70, 47, 0.1);
-  --gs-success: #5f7d3e;
+  --gs-bg: #3e3e3e;
+  --gs-bg-elevated: #484848;
+  --gs-bg-soft: #525252;
+  --gs-panel: rgba(72, 72, 72, 0.94);
+  --gs-panel-strong: rgba(82, 82, 82, 0.96);
+  --gs-border: #5a5a5a;
+  --gs-border-strong: #686868;
+  --gs-text: #edebe6;
+  --gs-text-muted: rgba(237, 235, 230, 0.55);
+  --gs-text-soft: rgba(237, 235, 230, 0.35);
+  --gs-accent: #e05a30;
+  --gs-accent-strong: #c94d26;
+  --gs-accent-soft: rgba(224, 90, 48, 0.15);
+  --gs-success: #9a9a9a;
   --gs-danger: #b84d42;
-  --gs-shadow: 0 24px 70px rgba(105, 70, 43, 0.16);
+  --gs-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
 }
 
 body {
   margin: 0;
+  min-height: 100vh;
   background:
     radial-gradient(circle at top left, rgba(182, 70, 47, 0.14), transparent 28%),
     radial-gradient(circle at top right, rgba(116, 140, 84, 0.1), transparent 24%),
     linear-gradient(180deg, #111111 0%, #171717 40%, #1d1d1d 100%);
-  color: var(--gs-text);
+  background-color: #3e3e3e !important;
+  color: #edebe6 !important;
   font-family: "Segoe UI", "Inter", sans-serif;
 }
 
 html[data-theme="light"] body {
-  background:
-    radial-gradient(circle at top left, rgba(182, 70, 47, 0.12), transparent 30%),
-    radial-gradient(circle at top right, rgba(116, 140, 84, 0.1), transparent 26%),
-    linear-gradient(180deg, #fffaf4 0%, #f6f2ec 44%, #efe3d5 100%);
+  background-color: #3e3e3e !important;
+  background-image: none !important;
+  color: #edebe6 !important;
 }
 
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #3e3e3e; }
+::-webkit-scrollbar-thumb { background: #5a5a5a; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #686868; }
+
 #root {
+  background-color: #3e3e3e !important;
+  color: #edebe6 !important;
   min-height: 100vh;
 }
 
@@ -85,7 +93,7 @@ select {
 }
 
 html[data-theme="light"] .member-shell-header {
-  box-shadow: 0 12px 36px rgba(105, 70, 43, 0.12);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
 }
 
 .member-shell-logo {
@@ -102,7 +110,7 @@ html[data-theme="light"] .member-shell-header {
   flex: 0 0 36px;
   border-radius: 12px;
   background: #b6462f;
-  color: #fff;
+  color: #484848;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -176,6 +184,28 @@ html[data-theme="light"] .member-shell-header {
   color: var(--gs-text);
 }
 
+body.member-interaction-lock,
+body.member-interaction-lock * {
+  font-weight: 400 !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+body.member-interaction-lock :where(input, textarea, [contenteditable="true"], .ant-input, .ant-input-number-input) {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+body.member-interaction-lock .ai-chat-message-content,
+body.member-interaction-lock .ai-chat-message-content * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+body.member-interaction-lock .ai-chat-message-content :where(strong, b) {
+  font-weight: 700 !important;
+}
+
 .member-shell-drawer-profile {
   display: flex;
   align-items: center;
@@ -196,7 +226,7 @@ html[data-theme="light"] .member-shell-header {
 
 html[data-theme="light"] .member-shell-drawer-wallet {
   border: 1px solid var(--gs-border);
-  background: #fff3e8;
+  background: #484848;
 }
 
 .member-shell-drawer-actions {
@@ -234,15 +264,31 @@ html[data-theme="light"] .member-shell-content .ant-list,
 html[data-theme="light"] .member-shell-content .ant-descriptions,
 html[data-theme="light"] .member-shell-content [class*="bg-[rgba(23,23,23"] {
   border-color: var(--gs-border) !important;
-  background: rgba(255, 250, 244, 0.92) !important;
+  background: #484848 !important;
   box-shadow: var(--gs-shadow);
 }
 
 html[data-theme="light"] .member-shell-content [class*="bg-[linear-gradient"] {
   background:
-    linear-gradient(135deg, rgba(182, 70, 47, 0.1), rgba(255, 250, 244, 0.82)),
-    #fffaf4 !important;
+    linear-gradient(135deg, rgba(224, 90, 48, 0.12), rgba(82, 82, 82, 0.82)),
+    #484848 !important;
   box-shadow: var(--gs-shadow);
+}
+
+html[data-theme="light"] .member-shell-content .shorts-video-overlay {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.26), transparent 22%, transparent 50%, rgba(0, 0, 0, 0.88)),
+    linear-gradient(90deg, transparent 54%, rgba(0, 0, 0, 0.32)) !important;
+  box-shadow: none !important;
+}
+
+.shorts-video-player {
+  backface-visibility: hidden;
+  filter: none !important;
+  isolation: isolate;
+  mix-blend-mode: normal !important;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 html[data-theme="light"] .member-shell-content .ant-table,
@@ -253,30 +299,31 @@ html[data-theme="light"] .member-shell-content .ant-table-tbody > tr > td {
 }
 
 html[data-theme="light"] .member-shell-content .ant-table-thead > tr > th {
-  color: #4e3729;
-  border-bottom-color: rgba(89, 55, 38, 0.14);
-  background: rgba(182, 70, 47, 0.07) !important;
+  color: #edebe6;
+  border-bottom-color: #5a5a5a;
+  background: #525252 !important;
 }
 
 html[data-theme="light"] .member-shell-content .ant-table-tbody > tr > td {
-  border-bottom-color: rgba(89, 55, 38, 0.1);
+  border-bottom-color: #525252;
 }
 
 html[data-theme="light"] .member-shell-content .ant-table-tbody > tr:hover > td {
-  background: rgba(182, 70, 47, 0.06) !important;
+  background: #505050 !important;
 }
 
 html[data-theme="light"] .member-shell-content .ant-input,
 html[data-theme="light"] .member-shell-content .ant-input-number,
 html[data-theme="light"] .member-shell-content .ant-select-selector,
 html[data-theme="light"] .member-shell-content .ant-picker {
-  border-color: rgba(89, 55, 38, 0.16) !important;
-  background: rgba(255, 255, 255, 0.86) !important;
+  border-color: #5a5a5a !important;
+  background: #525252 !important;
 }
 
 html[data-theme="light"] .member-shell-content .ant-btn-default {
-  border-color: rgba(89, 55, 38, 0.16);
-  background: rgba(255, 255, 255, 0.82);
+  border-color: #5a5a5a;
+  background: #525252;
+  color: #edebe6;
 }
 
 html[data-theme="light"] .member-shell-content .ant-statistic-title,

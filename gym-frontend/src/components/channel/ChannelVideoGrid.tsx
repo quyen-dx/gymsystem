@@ -58,7 +58,7 @@ export default function ChannelVideoGrid({
 
         return (
           <article
-            className="group relative aspect-[9/16] overflow-hidden rounded-2xl border border-[var(--gs-border)] bg-[#080808] shadow-[var(--gs-shadow)]"
+            className="group relative aspect-[9/16] overflow-hidden rounded-2xl border border-[var(--gs-border)] bg-[#2e2e2e] shadow-[var(--gs-shadow)]"
             key={video._id}
           >
             <button className="h-full w-full text-left" type="button" onClick={() => onOpenVideo(video)}>

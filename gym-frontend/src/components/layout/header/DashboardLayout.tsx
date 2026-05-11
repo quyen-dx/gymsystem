@@ -80,7 +80,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             fontWeight: 700,
             fontSize: 16,
             letterSpacing: 2,
-            color: dark ? '#fff' : '#000',
+            color: dark ? '#edebe6' : '#edebe6',
           }}
         >
           GS DASHBOARD
@@ -133,7 +133,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             />
 
             <div>
-              <div style={{ fontWeight: 600, color: dark ? '#fff' : '#000' }}>
+              <div style={{ fontWeight: 600, color: dark ? '#edebe6' : '#edebe6' }}>
                 {user?.name}
               </div>
               <Text type="secondary" style={{ fontSize: 12 }}>
@@ -160,7 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Content
           style={{
             padding: 24,
-            background: dark ? '#0f0f0f' : '#f5f5f5',
+            background: dark ? '#0f0f0f' : '#3e3e3e',
           }}
         >
           {children}

@@ -210,7 +210,7 @@ export default function MemberStorePage() {
                   product.image ? (
                     <img src={product.image} className="h-[200px] w-full object-cover" alt={product.name} />
                   ) : (
-                    <div className="h-[200px] flex items-center justify-center bg-gray-100 text-gray-400">
+                    <div className="h-[200px] flex items-center justify-center text-gray-400" style={{ backgroundColor: '#3e3e3e' }}>
                       No image
                     </div>
                   )
@@ -386,7 +386,7 @@ export default function MemberStorePage() {
                         product.image ? (
                           <img src={product.image} className="h-[200px] w-full object-cover" alt={product.name} />
                         ) : (
-                          <div className="h-[200px] flex items-center justify-center bg-gray-100 text-gray-400">
+                          <div className="h-[200px] flex items-center justify-center text-gray-400" style={{ backgroundColor: '#3e3e3e' }}>
                             No image
                           </div>
                         )

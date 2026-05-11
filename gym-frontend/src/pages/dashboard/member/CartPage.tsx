@@ -19,9 +19,9 @@ export default function CartPage() {
   const { cart, setCart } = useCart()
   const navigate = useNavigate()
   const { dark } = useTheme()
-  const panelBg = dark ? 'rgba(23,23,23,0.92)' : '#ffffff'
-  const borderColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)'
-  const mutedText = dark ? '#bbb' : '#666'
+  const panelBg = dark ? 'rgba(23,23,23,0.92)' : '#484848'
+  const borderColor = dark ? 'rgba(255,255,255,0.08)' : '#5a5a5a'
+  const mutedText = dark ? '#bbb' : 'rgba(237,235,230,0.5)'
 
   const updateQty = (id: string, weight: string | undefined, qty: number) => {
     const w = weight || ''

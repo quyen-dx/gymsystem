@@ -80,9 +80,12 @@ export default function ForgotPasswordPage() {
     }
   }
 
-  const cardBg = dark ? '#141414' : '#ffffff'
-  const textColor = dark ? '#ffffff' : '#000000'
-  const subTextColor = dark ? '#9ca3af' : '#6b7280'
+  const cardBg = dark ? '#141414' : '#484848'
+  const textColor = dark ? '#ffffff' : '#edebe6'
+  const subTextColor = dark ? '#9ca3af' : 'rgba(237,235,230,0.65)'
+  const inputStyle = !dark
+    ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' }
+    : undefined
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
@@ -107,7 +110,11 @@ export default function ForgotPasswordPage() {
       {/* CARD */}
       <div
         className="relative z-10 w-full max-w-md rounded-2xl p-7 shadow-2xl"
-        style={{ background: cardBg }}
+        style={{
+          background: cardBg,
+          border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a',
+          color: textColor,
+        }}
       >
         {/* TOGGLE THEME */}
         <div style={{ position: 'absolute', top: 16, right: 16 }}>
@@ -137,8 +144,8 @@ export default function ForgotPasswordPage() {
           <div
             className="mb-4 rounded-lg p-2 text-center"
             style={{
-              background: dark ? 'rgba(234,88,12,0.15)' : '#fff7ed',
-              color: dark ? '#fb923c' : '#c2410c',
+              background: dark ? 'rgba(234,88,12,0.15)' : 'rgba(224,90,48,0.15)',
+              color: dark ? '#fb923c' : '#e05a30',
             }}
           >
             OTP demo: <b>{otpPreview}</b>
@@ -157,6 +164,7 @@ export default function ForgotPasswordPage() {
                 size="large"
                 placeholder="Email hoặc số điện thoại"
                 onChange={(e) => setIdentifier(e.target.value)}
+                style={inputStyle}
               />
             </Form.Item>
 
@@ -179,7 +187,7 @@ export default function ForgotPasswordPage() {
               rules={[{ required: true, message: 'Nhập OTP' }]}
               className="mt-3"
             >
-              <Input.OTP length={6} />
+              <Input.OTP length={6} style={inputStyle} />
             </Form.Item>
 
             <Button type="primary" htmlType="submit" block size="large" loading={loading}>
@@ -188,7 +196,7 @@ export default function ForgotPasswordPage() {
 
             <Divider />
 
-            <Button block onClick={() => setStep('identifier')}>
+            <Button block onClick={() => setStep('identifier')} style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined}>
               Quay lại
             </Button>
           </Form>
@@ -202,7 +210,7 @@ export default function ForgotPasswordPage() {
               name="newPassword"
               rules={[{ required: true, message: 'Nhập mật khẩu mới' }]}
             >
-              <Input.Password size="large" />
+              <Input.Password size="large" style={inputStyle} />
             </Form.Item>
 
             <Form.Item
@@ -210,7 +218,7 @@ export default function ForgotPasswordPage() {
               name="confirmPassword"
               rules={[{ required: true, message: 'Nhập lại mật khẩu' }]}
             >
-              <Input.Password size="large" />
+              <Input.Password size="large" style={inputStyle} />
             </Form.Item>
 
             <Button type="primary" htmlType="submit" block size="large" loading={loading}>

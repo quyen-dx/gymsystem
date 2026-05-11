@@ -1,0 +1,51 @@
+{
+  "name": "gymsystem-desktop",
+  "version": "1.0.0",
+  "description": "GymSystem desktop app",
+  "author": "GymSystem",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "desktop": "node electron/dev-start.js",
+    "build-desktop": "node electron/build-desktop.js"
+  },
+  "devDependencies": {
+    "electron": "^42.0.1",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.gymsystem.app",
+    "productName": "GymSystem",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "GymSystem-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "GymSystem"
+    }
+  }
+}

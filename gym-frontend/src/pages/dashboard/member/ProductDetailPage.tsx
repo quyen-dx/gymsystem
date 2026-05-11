@@ -169,10 +169,10 @@ export default function ProductDetailPage() {
   const rating = product.rating ?? 0
   const reviewCount = product.reviewCount ?? reviews.length
   const inStock = stock > 0
-  const panelBg = dark ? 'rgba(23,23,23,0.92)' : '#ffffff'
-  const borderColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)'
-  const mutedText = dark ? '#888' : '#666'
-  const softText = dark ? '#aaa' : '#444'
+  const panelBg = dark ? 'rgba(23,23,23,0.92)' : '#484848'
+  const borderColor = dark ? 'rgba(255,255,255,0.08)' : '#5a5a5a'
+  const mutedText = dark ? '#888' : 'rgba(237,235,230,0.5)'
+  const softText = dark ? '#aaa' : 'rgba(237,235,230,0.65)'
   const thumbBg = dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'
   const thumbBorder = dark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,0,0,0.12)'
   const shop = typeof product.shop_id === 'object' ? product.shop_id : null
@@ -551,7 +551,7 @@ export default function ProductDetailPage() {
                   rows={4}
                   style={{
                     width: '100%', padding: 12, borderRadius: 8,
-                    background: dark ? 'rgba(255,255,255,0.05)' : '#fff',
+                    background: dark ? 'rgba(255,255,255,0.05)' : '#525252',
                     border: `1px solid ${borderColor}`,
                     color: 'inherit', resize: 'vertical', fontSize: 14, outline: 'none',
                   }}

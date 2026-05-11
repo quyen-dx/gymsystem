@@ -16,7 +16,7 @@ export default function ChannelHeader({
 
   return (
     <section className="overflow-hidden rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(229,57,53,0.16),rgba(255,255,255,0.03))] shadow-[var(--gs-shadow)]">
-      <div className="h-32 bg-[radial-gradient(circle_at_20%_20%,rgba(229,57,53,0.42),transparent_32%),linear-gradient(135deg,#111827,#2b1414_55%,#050505)] max-[640px]:h-24" />
+      <div className="h-32 bg-[radial-gradient(circle_at_20%_20%,rgba(229,57,53,0.42),transparent_32%),linear-gradient(135deg,#3e3e3e,#343434_55%,#2e2e2e)] max-[640px]:h-24" />
       <div className="-mt-12 px-7 pb-7 max-[640px]:px-4 max-[640px]:pb-5">
         <div className="flex items-end gap-5 max-[640px]:items-center">
           <Avatar

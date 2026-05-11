@@ -210,8 +210,8 @@ const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean) => {
                             alignItems: 'center',
                             padding: '9px 10px',
                             borderRadius: 8,
-                            border: dark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,0,0,0.08)',
-                            background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.72)',
+                            border: dark ? '1px solid rgba(255,255,255,0.12)' : '1px solid #5a5a5a',
+                            background: dark ? 'rgba(255,255,255,0.06)' : '#484848',
                             color: 'inherit',
                             textDecoration: 'none',
                         }}
@@ -219,7 +219,7 @@ const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean) => {
                         <Avatar
                             size={32}
                             src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`}
-                            style={{ background: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)' }}
+                            style={{ background: dark ? 'rgba(255,255,255,0.12)' : '#525252' }}
                         >
                             {domain.charAt(0).toUpperCase()}
                         </Avatar>
@@ -227,7 +227,7 @@ const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean) => {
                             <Typography.Text strong ellipsis style={{ color: 'inherit', lineHeight: 1.25 }}>
                                 {name}
                             </Typography.Text>
-                            <Typography.Text ellipsis style={{ color: dark ? '#d8d8d8' : '#555', fontSize: 12, lineHeight: 1.2 }}>
+                            <Typography.Text ellipsis style={{ color: dark ? '#d8d8d8' : 'rgba(237,235,230,0.55)', fontSize: 12, lineHeight: 1.2 }}>
                                 {domain}
                             </Typography.Text>
                         </span>
@@ -739,20 +739,20 @@ export default function AiChatWidget() {
     } = useDraggable(defaultChatPosition, mascotButtonWidth)
     const panelWidth = compactChat ? 'min(350px, calc(100vw - 24px))' : expanded ? 760 : 560
     const panelHeight = compactChat ? 'min(560px, calc(100vh - 140px))' : expanded ? 760 : 560
-    const panelBackground = dark ? 'rgba(17,19,24,0.86)' : 'rgba(255,255,255,0.72)'
-    const panelBandBackground = dark ? 'rgba(13,17,25,0.70)' : 'rgba(255,255,255,0.58)'
+    const panelBackground = dark ? 'rgba(17,19,24,0.86)' : 'rgba(72,72,72,0.76)'
+    const panelBandBackground = dark ? 'rgba(13,17,25,0.70)' : 'rgba(62,62,62,0.68)'
     const panelTint = dark
         ? 'linear-gradient(135deg, rgba(10,10,15,0.82), rgba(20,22,30,0.64))'
-        : 'linear-gradient(135deg, rgba(255,255,255,0.28), rgba(255,247,243,0.42))'
+        : 'linear-gradient(135deg, rgba(46,46,46,0.58), rgba(72,72,72,0.46))'
     const panelImageFilter = dark
         ? 'blur(12px) brightness(0.82) saturate(1.2) contrast(1.45)'
-        : 'blur(12px) brightness(1.04) saturate(1.08) contrast(1.08)'
-    const panelText = dark ? '#f3f3f3' : '#141414'
-    const panelMutedText = dark ? '#d8d8d8' : '#666666'
-    const panelBorder = dark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(0,0,0,0.10)'
-    const assistantBubbleBackground = dark ? 'rgba(31,34,43,0.96)' : 'rgba(255,255,255,0.88)'
-    const inputBackground = dark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.90)'
-    const inputBorder = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.14)'
+        : 'blur(12px) brightness(0.78) saturate(1.08) contrast(1.24)'
+    const panelText = dark ? '#f3f3f3' : '#edebe6'
+    const panelMutedText = dark ? '#d8d8d8' : 'rgba(237,235,230,0.55)'
+    const panelBorder = dark ? '1px solid rgba(255,255,255,0.10)' : '1px solid #5a5a5a'
+    const assistantBubbleBackground = dark ? 'rgba(31,34,43,0.96)' : '#525252'
+    const inputBackground = dark ? 'rgba(255,255,255,0.07)' : '#525252'
+    const inputBorder = dark ? 'rgba(255,255,255,0.16)' : '#5a5a5a'
     const mascotCursor = 'pointer'
     const panelAlignRight = draggableChatPosition.x > viewport.width / 2
 
@@ -792,9 +792,9 @@ export default function AiChatWidget() {
                                 : '4px solid transparent',
                             borderBottom: dark
                                 ? '1px solid rgba(255,255,255,0.08)'
-                                : '1px solid rgba(0,0,0,0.06)',
+                                : '1px solid #5a5a5a',
                             background: session.sessionId === activeSession?.sessionId
-                                ? (dark ? 'rgba(182,70,47,0.18)' : 'rgba(182,70,47,0.08)')
+                                ? (dark ? 'rgba(182,70,47,0.18)' : 'rgba(224,90,48,0.15)')
                                 : 'transparent',
                         }}
                     >
@@ -972,7 +972,7 @@ export default function AiChatWidget() {
                 }
 
                 .ai-chat-panel textarea::placeholder {
-                    color: ${dark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.42)'};
+                    color: ${dark ? 'rgba(255,255,255,0.48)' : 'rgba(237,235,230,0.35)'};
                 }
 
             `}</style>
@@ -1062,7 +1062,7 @@ export default function AiChatWidget() {
                             zIndex: 0,
                             pointerEvents: 'none',
                             filter: panelImageFilter,
-                            opacity: dark ? 0.72 : 0.62,
+                            opacity: dark ? 0.72 : 0.76,
                         }}
                     />
                 )}
@@ -1088,7 +1088,7 @@ export default function AiChatWidget() {
                         gap: 12,
                         padding: mobileChat ? '12px 14px' : '16px 18px',
                         background: 'linear-gradient(135deg, #b6462f, #e8722a)',
-                        color: '#fff',
+                        color: '#edebe6',
                         flexShrink: 0,
                         cursor: 'grab',
                         userSelect: 'none',
@@ -1096,7 +1096,7 @@ export default function AiChatWidget() {
                         touchAction: 'none',
                     }}>
                         <div style={{ minWidth: 0 }}>
-                            <Typography.Title level={5} style={{ margin: 0, color: '#fff', fontSize: mobileChat ? 14 : 16 }}>
+                            <Typography.Title level={5} style={{ margin: 0, color: '#edebe6', fontSize: mobileChat ? 14 : 16 }}>
                                 Gì cũng biết! Tò mò hỏi Doraemon
                             </Typography.Title>
                             {!mobileChat && (
@@ -1109,13 +1109,13 @@ export default function AiChatWidget() {
                             size={mobileChat ? 2 : 8}
                             style={{ flexShrink: 0 }}
                         >
-                            <Button size="small" type="text" icon={<PlusOutlined />} style={{ color: '#fff' }} onClick={createNewChat} />
+                            <Button size="small" type="text" icon={<PlusOutlined />} style={{ color: '#edebe6' }} onClick={createNewChat} />
                             {/* FIX: Nút "Phiên" chỉ hiện trên mobile/tablet, mở drawer với z-index cao */}
                             {compactChat && (
                                 <Button
                                     size="small"
                                     type="text"
-                                    style={{ color: '#fff', fontWeight: 600 }}
+                                    style={{ color: '#edebe6', fontWeight: 600 }}
                                     onClick={(e) => {
                                         e.stopPropagation()
                                         setSessionDrawerOpen(true)
@@ -1129,11 +1129,11 @@ export default function AiChatWidget() {
                                     size="small"
                                     type="text"
                                     icon={<ExpandAltOutlined />}
-                                    style={{ color: '#fff' }}
+                                    style={{ color: '#edebe6' }}
                                     onClick={() => setExpanded(!expanded)}
                                 />
                             )}
-                            <Button size="small" type="text" icon={<CloseOutlined />} style={{ color: '#fff' }} onClick={closeWidget} />
+                            <Button size="small" type="text" icon={<CloseOutlined />} style={{ color: '#edebe6' }} onClick={closeWidget} />
                         </Space>
                     </div>
 
@@ -1289,7 +1289,7 @@ export default function AiChatWidget() {
                                     activeMessages.map((message) => {
                                         const isUser = message.role === 'user'
                                         const bubbleBg = isUser ? '#b6462f' : assistantBubbleBackground
-                                        const bubbleColor = isUser ? '#fff' : panelText
+                                        const bubbleColor = isUser ? '#edebe6' : panelText
                                         const toolPayload = !isUser && message.role === 'assistant'
                                             ? parseAiToolPayload(message.content)
                                             : null
@@ -1332,108 +1332,110 @@ export default function AiChatWidget() {
                                                             <Typography.Text strong style={{ color: bubbleColor }}>Doraemon</Typography.Text>
                                                         </div>
                                                     )}
-                                                    {toolPayload?.type === 'empty' && (
-                                                        <Typography.Text style={{ color: bubbleColor }}>{toolPayload.message}</Typography.Text>
-                                                    )}
-                                                    {toolPayload?.type === 'product_list' && (
-                                                        <div style={{ display: 'grid', gap: 10 }}>
-                                                            {toolPayload.message && (
-                                                                <Typography.Text style={{ color: bubbleColor }}>{toolPayload.message}</Typography.Text>
-                                                            )}
-                                                            {toolPayload.items.map((item, index) => (
-                                                                <a
-                                                                    key={`${item.link}-${index}`}
-                                                                    href={item.link}
-                                                                    style={{
-                                                                        display: 'grid',
-                                                                        gridTemplateColumns: '54px minmax(0, 1fr)',
-                                                                        gap: 10,
-                                                                        alignItems: 'center',
-                                                                        padding: 10,
-                                                                        borderRadius: 14,
-                                                                        background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(182,70,47,0.06)',
-                                                                        color: bubbleColor,
-                                                                        textDecoration: 'none',
-                                                                    }}
-                                                                >
-                                                                    <img src={item.image || AI_AVATAR_IMAGE} alt={item.name}
-                                                                        style={{ width: 54, height: 54, borderRadius: 10, objectFit: 'cover' }} />
-                                                                    <div style={{ minWidth: 0 }}>
-                                                                        <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
-                                                                            {item.name}
-                                                                        </Typography.Text>
-                                                                        <Typography.Text style={{ color: '#b6462f' }}>
-                                                                            {Number(item.price).toLocaleString('vi-VN')}đ
-                                                                        </Typography.Text>
-                                                                        {item.selectedVariant && (
-                                                                            <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
-                                                                                Mức tạ tối đa: {item.selectedVariant}
+                                                    <div className="ai-chat-message-content">
+                                                        {toolPayload?.type === 'empty' && (
+                                                            <Typography.Text style={{ color: bubbleColor }}>{toolPayload.message}</Typography.Text>
+                                                        )}
+                                                        {toolPayload?.type === 'product_list' && (
+                                                            <div style={{ display: 'grid', gap: 10 }}>
+                                                                {toolPayload.message && (
+                                                                    <Typography.Text style={{ color: bubbleColor }}>{toolPayload.message}</Typography.Text>
+                                                                )}
+                                                                {toolPayload.items.map((item, index) => (
+                                                                    <a
+                                                                        key={`${item.link}-${index}`}
+                                                                        href={item.link}
+                                                                        style={{
+                                                                            display: 'grid',
+                                                                            gridTemplateColumns: '54px minmax(0, 1fr)',
+                                                                            gap: 10,
+                                                                            alignItems: 'center',
+                                                                            padding: 10,
+                                                                            borderRadius: 14,
+                                                                            background: dark ? 'rgba(255,255,255,0.06)' : '#484848',
+                                                                            color: bubbleColor,
+                                                                            textDecoration: 'none',
+                                                                        }}
+                                                                    >
+                                                                        <img src={item.image || AI_AVATAR_IMAGE} alt={item.name}
+                                                                            style={{ width: 54, height: 54, borderRadius: 10, objectFit: 'cover' }} />
+                                                                        <div style={{ minWidth: 0 }}>
+                                                                            <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
+                                                                                {item.name}
                                                                             </Typography.Text>
-                                                                        )}
+                                                                            <Typography.Text style={{ color: '#b6462f' }}>
+                                                                                {Number(item.price).toLocaleString('vi-VN')}đ
+                                                                            </Typography.Text>
+                                                                            {item.selectedVariant && (
+                                                                                <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
+                                                                                    Mức tạ tối đa: {item.selectedVariant}
+                                                                                </Typography.Text>
+                                                                            )}
+                                                                        </div>
+                                                                    </a>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        {toolPayload?.type === 'category_list' && (
+                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                                                {toolPayload.items.map((item) => (
+                                                                    <a
+                                                                        key={item.slug}
+                                                                        href={`/dashboard/member/store?category=${encodeURIComponent(item.name)}`}
+                                                                        style={{
+                                                                            padding: '7px 10px',
+                                                                            borderRadius: 999,
+                                                                            background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(224,90,48,0.15)',
+                                                                            color: bubbleColor,
+                                                                            textDecoration: 'none',
+                                                                            fontSize: 13,
+                                                                        }}
+                                                                    >
+                                                                        {item.name}
+                                                                    </a>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        {toolPayload?.type === 'pt_list' && (
+                                                            <div style={{ display: 'grid', gap: 10 }}>
+                                                                {toolPayload.items.map((item, index) => (
+                                                                    <div
+                                                                        key={`${item.email || item.phone || item.name}-${index}`}
+                                                                        style={{
+                                                                            display: 'grid',
+                                                                            gridTemplateColumns: '44px minmax(0, 1fr)',
+                                                                            gap: 10,
+                                                                            alignItems: 'center',
+                                                                            padding: 10,
+                                                                            borderRadius: 14,
+                                                                            background: dark ? 'rgba(255,255,255,0.06)' : '#484848',
+                                                                        }}
+                                                                    >
+                                                                        <Avatar src={item.avatar || undefined} size={44}>
+                                                                            {item.name?.charAt(0) || 'PT'}
+                                                                        </Avatar>
+                                                                        <div style={{ minWidth: 0 }}>
+                                                                            <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
+                                                                                {item.name}
+                                                                            </Typography.Text>
+                                                                            <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
+                                                                                {item.specialty || 'Huấn luyện viên'}
+                                                                            </Typography.Text>
+                                                                            <Typography.Text style={{ color: panelMutedText, display: 'block', fontSize: 12 }}>
+                                                                                {item.phone || 'Chưa có SĐT'} {item.email ? `• ${item.email}` : ''}
+                                                                            </Typography.Text>
+                                                                        </div>
                                                                     </div>
-                                                                </a>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    {toolPayload?.type === 'category_list' && (
-                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                                            {toolPayload.items.map((item) => (
-                                                                <a
-                                                                    key={item.slug}
-                                                                    href={`/dashboard/member/store?category=${encodeURIComponent(item.name)}`}
-                                                                    style={{
-                                                                        padding: '7px 10px',
-                                                                        borderRadius: 999,
-                                                                        background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(182,70,47,0.08)',
-                                                                        color: bubbleColor,
-                                                                        textDecoration: 'none',
-                                                                        fontSize: 13,
-                                                                    }}
-                                                                >
-                                                                    {item.name}
-                                                                </a>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    {toolPayload?.type === 'pt_list' && (
-                                                        <div style={{ display: 'grid', gap: 10 }}>
-                                                            {toolPayload.items.map((item, index) => (
-                                                                <div
-                                                                    key={`${item.email || item.phone || item.name}-${index}`}
-                                                                    style={{
-                                                                        display: 'grid',
-                                                                        gridTemplateColumns: '44px minmax(0, 1fr)',
-                                                                        gap: 10,
-                                                                        alignItems: 'center',
-                                                                        padding: 10,
-                                                                        borderRadius: 14,
-                                                                        background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(182,70,47,0.06)',
-                                                                    }}
-                                                                >
-                                                                    <Avatar src={item.avatar || undefined} size={44}>
-                                                                        {item.name?.charAt(0) || 'PT'}
-                                                                    </Avatar>
-                                                                    <div style={{ minWidth: 0 }}>
-                                                                        <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
-                                                                            {item.name}
-                                                                        </Typography.Text>
-                                                                        <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
-                                                                            {item.specialty || 'Huấn luyện viên'}
-                                                                        </Typography.Text>
-                                                                        <Typography.Text style={{ color: panelMutedText, display: 'block', fontSize: 12 }}>
-                                                                            {item.phone || 'Chưa có SĐT'} {item.email ? `• ${item.email}` : ''}
-                                                                        </Typography.Text>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    {!toolPayload && (
-                                                        visibleContent
-                                                            ? renderMarkdownText(visibleContent, bubbleColor)
-                                                            : <Typography.Text style={{ color: panelMutedText }}>Đang trả lời...</Typography.Text>
-                                                    )}
-                                                    {!toolPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark)}
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        {!toolPayload && (
+                                                            visibleContent
+                                                                ? renderMarkdownText(visibleContent, bubbleColor)
+                                                                : <Typography.Text style={{ color: panelMutedText }}>Đang trả lời...</Typography.Text>
+                                                        )}
+                                                        {!toolPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark)}
+                                                    </div>
                                                 </div>
                                             </div>
                                         )
@@ -1470,7 +1472,7 @@ export default function AiChatWidget() {
                                             size="small"
                                             disabled={retryCountdown > 0}
                                             onClick={handleRetry}
-                                            style={{ background: '#b6462f', borderColor: '#b6462f', color: '#fff' }}
+                                            style={{ background: '#b6462f', borderColor: '#b6462f', color: '#edebe6' }}
                                         >
                                             {retryCountdown > 0 ? `Thử lại sau ${retryCountdown}s` : 'Thử lại'}
                                         </Button>
@@ -1520,7 +1522,7 @@ export default function AiChatWidget() {
                                             size={mobileChat ? 'small' : 'middle'}
                                             onClick={() => handleSend()}
                                             loading={loading}
-                                            style={{ background: '#b6462f', borderColor: '#b6462f', color: '#fff' }}
+                                            style={{ background: '#b6462f', borderColor: '#b6462f', color: '#edebe6' }}
                                         >
                                             Gửi
                                         </Button>
@@ -1556,13 +1558,13 @@ export default function AiChatWidget() {
                 styles={{
                     body: {
                         padding: 0,
-                        background: dark ? '#14161d' : '#fff',
+                        background: dark ? '#14161d' : '#484848',
                         display: 'flex',
                         flexDirection: 'column',
                     },
                     header: {
-                        background: dark ? '#14161d' : '#fff',
-                        borderBottom: dark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(0,0,0,0.08)',
+                        background: dark ? '#14161d' : '#484848',
+                        borderBottom: dark ? '1px solid rgba(255,255,255,0.10)' : '1px solid #5a5a5a',
                     },
                     wrapper: {
                         zIndex: 11500,

@@ -71,13 +71,14 @@ export default function LoginPage() {
         }}
       />
 
-      <div className="absolute inset-0 bg-black/60" />
+      <div className="absolute inset-0 bg-black/65" />
 
       {/* CARD */}
       <div
         className={`relative z-10 w-full max-w-sm rounded-2xl p-7 shadow-2xl transition-all
-          ${dark ? 'bg-[#141414] text-white' : 'bg-white text-black'}
+          ${dark ? 'bg-[#141414] text-white' : 'bg-[#484848] text-[#edebe6]'}
         `}
+        style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a' }}
       >
 
         {/* TITLE */}
@@ -86,7 +87,7 @@ export default function LoginPage() {
           style={{
             textAlign: 'center',
             marginBottom: 24,
-            color: dark ? '#fff' : '#000',
+            color: dark ? '#fff' : '#edebe6',
           }}
         >
           Đăng nhập
@@ -102,21 +103,22 @@ export default function LoginPage() {
         <Form layout="vertical" onFinish={handleSubmit}>
 
           <Form.Item
-            label={<span style={{ color: dark ? '#fff' : '#000' }}>Số điện thoại / Email / Username</span>}
+            label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Số điện thoại / Email / Username</span>}
             name="phone"
             rules={[{ required: true, message: 'Nhập thông tin đăng nhập' }]}
           >
-            <Input size="large" placeholder="Số điện thoại, email hoặc username" />
+            <Input size="large" placeholder="Số điện thoại, email hoặc username" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
           </Form.Item>
 
           <Form.Item
-            label={<span style={{ color: dark ? '#fff' : '#000' }}>Mật khẩu</span>}
+            label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Mật khẩu</span>}
             name="password"
             rules={[{ required: true, message: 'Nhập mật khẩu' }]}
           >
             <Input.Password
               size="large"
               placeholder="Mật khẩu"
+              style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined}
               iconRender={(v) =>
                 v ? <EyeTwoTone /> : <EyeInvisibleOutlined />
               }
@@ -134,7 +136,7 @@ export default function LoginPage() {
           </Button>
 
           <div className="text-right mt-2">
-            <Link to="/forgot-password" className="text-sm text-blue-500">
+          <Link to="/forgot-password" className="text-sm text-[#e05a30]">
               Quên mật khẩu?
             </Link>
           </div>
@@ -165,7 +167,7 @@ export default function LoginPage() {
 
         {/* REGISTER */}
         <div
-          className={`text-center mt-6 text-sm ${dark ? 'text-gray-300' : 'text-black'
+          className={`text-center mt-6 text-sm ${dark ? 'text-gray-300' : 'text-[rgba(237,235,230,0.65)]'
             }`}
         >
           Chưa có tài khoản?{' '}

@@ -18,7 +18,7 @@ import {
   Menu,
   Typography,
 } from 'antd'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeProvider'
 import { useCart } from '../../../context/useCart'
@@ -30,6 +30,25 @@ import MemberFooter from '../footer/MemberFooter'
 
 const { Header, Content } = Layout
 const { Text } = Typography
+const MEMBER_INTERACTION_LOCK_ROUTES = [
+  '/dashboard/member',
+  '/dashboard/member/wallet',
+  '/dashboard/member/wallet/deposit',
+  '/dashboard/member/transfer',
+  '/dashboard/member/checkout',
+  '/dashboard/member/orders',
+  '/dashboard/member/cart',
+  '/dashboard/member/workout',
+  '/dashboard/member/checkin',
+  '/shorts',
+]
+
+const shouldLockMemberInteractions = (pathname: string) => (
+  MEMBER_INTERACTION_LOCK_ROUTES.includes(pathname) ||
+  pathname.startsWith('/dashboard/member/track/') ||
+  pathname.startsWith('/dashboard/member/store') ||
+  pathname.startsWith('/dashboard/member/shop/')
+)
 
 export default function MemberLayout({
   children,
@@ -79,13 +98,22 @@ export default function MemberLayout({
     setMenuOpen(false)
   }
 
+  const lockMemberInteractions = shouldLockMemberInteractions(location.pathname)
+
+  useEffect(() => {
+    document.body.classList.toggle('member-interaction-lock', lockMemberInteractions)
+    return () => {
+      document.body.classList.remove('member-interaction-lock')
+    }
+  }, [lockMemberInteractions])
+
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout className="member-shell" style={{ minHeight: '100vh' }}>
       <Header
         className="member-shell-header"
         style={{
-          background: dark ? '#141414' : '#fff',
-          borderBottom: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)',
+          background: dark ? '#141414' : '#3e3e3e',
+          borderBottom: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a',
         }}
       >
         <div
@@ -119,9 +147,9 @@ export default function MemberLayout({
         <div className="member-shell-desktop-actions">
           <div
             className="member-shell-wallet-pill"
-            style={{ background: dark ? '#262626' : '#f0f0f0' }}
+            style={{ background: dark ? '#262626' : '#484848' }}
           >
-            <Text style={{ fontSize: 12, color: dark ? '#aaa' : '#666' }}>Ví:</Text>
+            <Text style={{ fontSize: 12, color: dark ? '#aaa' : 'rgba(237,235,230,0.5)' }}>Ví:</Text>
             <Text strong style={{ fontSize: 14 }}>
               {walletText}
             </Text>
@@ -158,7 +186,7 @@ export default function MemberLayout({
             onClick={openProfileModal}
           >
             <Avatar src={avatarUrl} />
-            <Text strong style={{ color: dark ? '#fff' : '#000' }}>
+            <Text strong style={{ color: '#edebe6' }}>
               {user?.name}
             </Text>
           </div>
@@ -179,7 +207,7 @@ export default function MemberLayout({
       <Content
         className="member-shell-content"
         style={{
-          background: dark ? '#0f0f0f' : '#f5f5f5',
+          background: dark ? '#0f0f0f' : '#3e3e3e',
         }}
       >
         {children}
@@ -197,12 +225,13 @@ export default function MemberLayout({
         <div className="flex items-center gap-3 p-4">
           <img className="h-10 w-10 rounded-full object-cover" src={avatarUrl} alt={user?.name || 'Avatar'} />
           <div className="min-w-0 flex-1">
-            <p className="m-0 truncate text-sm font-medium text-gray-900 dark:text-gray-100">{user?.name}</p>
-            <p className="m-0 truncate text-xs text-gray-400">{user?.role || 'Member'}</p>
+            <p className="m-0 truncate text-sm font-medium text-[#edebe6]">{user?.name}</p>
+            <p className="m-0 truncate text-xs text-[rgba(237,235,230,0.5)]">{user?.role || 'Member'}</p>
           </div>
           <button
             onClick={openProfileModal}
-            className="whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-gray-300 transition-colors hover:bg-white/10"
+            className="whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs text-gray-300 transition-colors"
+            style={{ borderColor: '#5a5a5a', backgroundColor: '#484848' }}
             type="button"
           >
             Tài khoản
