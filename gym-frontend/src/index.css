@@ -463,3 +463,31 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
     transform: translate(calc(-50% + var(--heart-drift-x)), -205%) rotate(calc(var(--heart-rotate) * -0.2)) scale(calc(var(--heart-scale) * 0.72));
   }
 }
+
+.ant-menu-item-selected,
+.ant-menu-item-selected .ant-menu-title-content,
+.ant-menu-item-selected a,
+.ant-menu-horizontal .ant-menu-item-selected {
+  color: var(--theme-text) !important;
+}
+
+.ant-menu-item,
+.ant-menu-item .ant-menu-title-content {
+  color: var(--theme-text) !important;
+}
+
+.ant-btn-primary {
+  background: var(--theme-accent) !important;
+  border-color: var(--theme-accent) !important;
+  color: var(--theme-button-text) !important;
+}
+
+.ant-btn-primary span {
+  color: var(--theme-button-text) !important;
+}
+
+.ant-btn-primary:hover,
+.ant-btn-primary:focus-visible {
+  background: var(--theme-accent-hover) !important;
+  border-color: var(--theme-accent-hover) !important;
+}

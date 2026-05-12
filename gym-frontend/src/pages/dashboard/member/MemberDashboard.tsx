@@ -81,7 +81,6 @@ export default function MemberDashboard() {
   const slogan2 = 'CHINH PHỤC TỪNG NGÀY'
   const slogans = [slogan1, slogan2]
   const [displayText, setDisplayText] = useState('')
-  const [sloganIndex, setSloganIndex] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -92,7 +91,6 @@ export default function MemberDashboard() {
 
       while (!cancelled) {
         const slogan = slogans[currentIndex]
-        setSloganIndex(currentIndex)
 
         for (let i = 1; i <= slogan.length; i += 1) {
           if (cancelled) return
@@ -129,7 +127,7 @@ export default function MemberDashboard() {
         <style>
           {`
             .cursor {
-              color: #e05a30;
+              color: var(--theme-accent);
               animation: blink-cursor 0.7s step-end infinite;
             }
 
@@ -158,7 +156,7 @@ export default function MemberDashboard() {
                 color: token.colorTextSecondary,
               }}
             >
-              <span className="h-2 w-2 animate-pulse rounded-full bg-[#e05a30]" />
+              <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--theme-accent)]" />
               Hệ thống quản lý gym chuyên nghiệp
             </div>
 
@@ -170,7 +168,7 @@ export default function MemberDashboard() {
                 lineHeight: 0.92,
                 letterSpacing: 1,
                 fontWeight: 400,
-                color: sloganIndex === 1 ? '#e05a30' : token.colorText,
+                color: 'var(--theme-text)',
               }}
             >
               {displayText}
@@ -185,7 +183,11 @@ export default function MemberDashboard() {
               <Button
                 size="large"
                 className="!h-[46px] !rounded-full !px-5 !font-extrabold !shadow-none min-[421px]:!px-6"
-                style={{ backgroundColor: '#e05a30', borderColor: '#e05a30', color: token.colorWhite }}
+                style={{
+                  background: 'var(--theme-accent)',
+                  borderColor: 'var(--theme-accent)',
+                  color: 'var(--theme-button-text)',
+                }}
                 onClick={() => navigate('/dashboard/member/booking')}
               >
                 Đặt lịch tập ngay
@@ -193,7 +195,11 @@ export default function MemberDashboard() {
               <Button
                 size="large"
                 className="!h-[46px] !rounded-full !bg-transparent !px-5 !font-extrabold !shadow-none min-[421px]:!px-6"
-                style={{ borderColor: token.colorBorder, color: token.colorText }}
+                style={{
+                  background: 'transparent',
+                  borderColor: 'var(--theme-accent)',
+                  color: 'var(--theme-accent)',
+                }}
                 onClick={() => navigate('/dashboard/member/checkin')}
               >
                 Check-in ngay
@@ -216,7 +222,7 @@ export default function MemberDashboard() {
         </section>
 
         <section className="mx-auto w-[calc(100%-40px)] max-w-6xl pt-14 md:w-[calc(100%-64px)] md:pt-[74px]">
-          <p className="mb-2.5 text-xs font-black uppercase tracking-[0.14em] text-[#e05a30]">Dịch vụ & tiện ích</p>
+          <p className="mb-2.5 text-xs font-black uppercase tracking-[0.14em] text-[var(--theme-accent)]">Dịch vụ & tiện ích</p>
           <h2 className="font-['Bebas_Neue'] text-[44px] font-normal leading-none tracking-normal" style={{ color: token.colorText }}>
             MỌI THỨ BẠN CẦN
           </h2>
@@ -249,7 +255,7 @@ export default function MemberDashboard() {
         </section>
 
         <section className="mx-auto w-[calc(100%-40px)] max-w-6xl pt-14 md:w-[calc(100%-64px)] md:pt-[74px]">
-          <p className="mb-2.5 text-xs font-black uppercase tracking-[0.14em] text-[#e05a30]">Thành viên nói gì</p>
+          <p className="mb-2.5 text-xs font-black uppercase tracking-[0.14em] text-[var(--theme-accent)]">Thành viên nói gì</p>
           <h2 className="font-['Bebas_Neue'] text-[44px] font-normal leading-none tracking-normal" style={{ color: token.colorText }}>
             ĐƯỢC TIN TƯỞNG
           </h2>
@@ -262,7 +268,7 @@ export default function MemberDashboard() {
                   "{item.quote}"
                 </p>
                 <div className="flex items-center gap-3">
-                  <span className="grid h-[42px] w-[42px] place-items-center rounded-full bg-[#e05a30] font-black" style={{ color: token.colorWhite }}>
+                  <span className="grid h-[42px] w-[42px] place-items-center rounded-full font-black" style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}>
                     {item.name.charAt(0)}
                   </span>
                   <span>
@@ -287,7 +293,7 @@ export default function MemberDashboard() {
             <Button
               size="large"
               className="!h-[46px] !rounded-full !px-5 !font-extrabold !shadow-none min-[421px]:!px-6"
-              style={{ backgroundColor: '#e05a30', borderColor: '#e05a30', color: token.colorWhite }}
+              style={{ backgroundColor: 'var(--theme-accent)', borderColor: 'var(--theme-accent)', color: 'var(--theme-button-text)' }}
               onClick={() => navigate('/dashboard/member/booking')}
             >
               Đặt lịch PT ngay

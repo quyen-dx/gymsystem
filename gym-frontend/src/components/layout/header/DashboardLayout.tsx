@@ -71,6 +71,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <Sider
         width={260}
         theme={dark ? 'dark' : 'light'}
+        style={{ background: 'var(--theme-card)', color: 'var(--theme-text)' }}
       >
 
         {/* LOGO */}
@@ -80,7 +81,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             fontWeight: 700,
             fontSize: 16,
             letterSpacing: 2,
-            color: dark ? '#edebe6' : '#edebe6',
+            color: 'var(--theme-text)',
           }}
         >
           GS DASHBOARD
@@ -133,7 +134,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             />
 
             <div>
-              <div style={{ fontWeight: 600, color: dark ? '#edebe6' : '#edebe6' }}>
+              <div style={{ fontWeight: 600, color: 'var(--theme-text)' }}>
                 {user?.name}
               </div>
               <Text type="secondary" style={{ fontSize: 12 }}>
@@ -160,7 +161,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Content
           style={{
             padding: 24,
-            background: dark ? '#0f0f0f' : '#3e3e3e',
+            background: 'var(--theme-bg)',
+            color: 'var(--theme-text)',
           }}
         >
           {children}

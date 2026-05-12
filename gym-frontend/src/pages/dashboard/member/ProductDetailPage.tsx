@@ -169,10 +169,10 @@ export default function ProductDetailPage() {
   const rating = product.rating ?? 0
   const reviewCount = product.reviewCount ?? reviews.length
   const inStock = stock > 0
-  const panelBg = dark ? 'rgba(23,23,23,0.92)' : '#484848'
-  const borderColor = dark ? 'rgba(255,255,255,0.08)' : '#5a5a5a'
-  const mutedText = dark ? '#888' : 'rgba(237,235,230,0.5)'
-  const softText = dark ? '#aaa' : 'rgba(237,235,230,0.65)'
+  const panelBg = 'var(--theme-card)'
+  const borderColor = 'var(--theme-border)'
+  const mutedText = 'var(--theme-muted)'
+  const softText = 'var(--theme-muted)'
   const thumbBg = dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'
   const thumbBorder = dark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,0,0,0.12)'
   const shop = typeof product.shop_id === 'object' ? product.shop_id : null
@@ -255,7 +255,7 @@ export default function ProductDetailPage() {
                       style={{
                         width: 64, height: 64, objectFit: 'cover',
                         borderRadius: 8, cursor: 'pointer',
-                        border: activeImg === img ? '2px solid #b6462f' : '2px solid transparent',
+                        border: activeImg === img ? '2px solid var(--theme-accent)' : '2px solid transparent',
                         opacity: activeImg === img ? 1 : 0.6,
                         transition: 'all 0.2s',
                       }}
@@ -273,12 +273,12 @@ export default function ProductDetailPage() {
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
                 <Rate disabled defaultValue={rating} allowHalf style={{ fontSize: 16 }} />
-                <span style={{ color: '#b6462f', fontWeight: 600 }}>{rating.toFixed(1)}</span>
+                <span style={{ color: 'var(--theme-accent)', fontWeight: 600 }}>{rating.toFixed(1)}</span>
                 <span style={{ color: mutedText }}>({reviewCount} đánh giá)</span>
               </div>
 
               <div style={{
-                fontSize: 32, fontWeight: 800, color: '#b6462f', marginBottom: 24,
+                fontSize: 32, fontWeight: 800, color: 'var(--theme-accent)', marginBottom: 24,
                 padding: '16px 0', borderTop: `1px solid ${borderColor}`, borderBottom: `1px solid ${borderColor}`,
               }}>
                 {dynamicPrice.toLocaleString('vi-VN')}đ
@@ -301,8 +301,8 @@ export default function ProductDetailPage() {
                             padding: '8px 16px',
                             borderRadius: 10,
                             cursor: 'pointer',
-                            background: active ? 'rgba(182,70,47,0.18)' : thumbBg,
-                            border: active ? '1px solid #b6462f' : thumbBorder,
+                            background: active ? 'var(--theme-elevated)' : thumbBg,
+                            border: active ? '1px solid var(--theme-accent)' : thumbBorder,
                             color: 'inherit',
                             fontWeight: 600,
                             minWidth: 64,
@@ -353,7 +353,7 @@ export default function ProductDetailPage() {
                   icon={<ShoppingCartOutlined />}
                   disabled={!inStock}
                   onClick={handleAddToCart}
-                  style={{ flex: '1 1 220px', background: '#b6462f', borderColor: '#b6462f' }}
+                  style={{ flex: '1 1 220px', background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)' }}
                 >
                   Thêm vào giỏ
                 </Button>
@@ -383,7 +383,7 @@ export default function ProductDetailPage() {
               size={56}
               src={shopAvatar}
               icon={<UserOutlined />}
-              style={{ background: '#b6462f' }}
+              style={{ background: 'var(--theme-accent)' }}
               onClick={() => shopId && navigate(`/dashboard/member/shop/${shopId}`)}
             />
             <div onClick={() => shopId && navigate(`/dashboard/member/shop/${shopId}`)}>
@@ -412,7 +412,7 @@ export default function ProductDetailPage() {
               size={56}
               src={product.partner.avatar}
               icon={<UserOutlined />}
-              style={{ background: '#b6462f' }}
+              style={{ background: 'var(--theme-accent)' }}
             />
             <div>
               <div style={{ fontWeight: 700, fontSize: 16 }}>{product.partner.name}</div>
@@ -455,7 +455,7 @@ export default function ProductDetailPage() {
 
           <div style={{ display: 'flex', gap: 40, alignItems: 'center', marginBottom: 24, flexWrap: 'wrap' }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 48, fontWeight: 800, color: '#b6462f' }}>{rating.toFixed(1)}</div>
+              <div style={{ fontSize: 48, fontWeight: 800, color: 'var(--theme-accent)' }}>{rating.toFixed(1)}</div>
               <Rate disabled value={rating} allowHalf style={{ fontSize: 18 }} />
               <div style={{ color: mutedText, marginTop: 4 }}>{reviewCount} đánh giá</div>
             </div>
@@ -471,7 +471,7 @@ export default function ProductDetailPage() {
                   }}>
                     <div style={{
                       width: reviewCount > 0 ? `${(count / reviewCount) * 100}%` : '0%',
-                      height: '100%', background: '#b6462f', borderRadius: 4,
+                      height: '100%', background: 'var(--theme-accent)', borderRadius: 4,
                     }} />
                   </div>
                   <span style={{ width: 24, color: mutedText, fontSize: 13 }}>{count}</span>
@@ -486,7 +486,7 @@ export default function ProductDetailPage() {
               size="small"
               type={ratingFilter === null ? 'primary' : 'default'}
               onClick={() => setRatingFilter(null)}
-              style={ratingFilter === null ? { background: '#b6462f', borderColor: '#b6462f' } : {}}
+              style={ratingFilter === null ? { background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)' } : {}}
             >
               Tất cả
             </Button>
@@ -496,7 +496,7 @@ export default function ProductDetailPage() {
                 size="small"
                 type={ratingFilter === s ? 'primary' : 'default'}
                 onClick={() => setRatingFilter(ratingFilter === s ? null : s)}
-                style={ratingFilter === s ? { background: '#b6462f', borderColor: '#b6462f' } : {}}
+                style={ratingFilter === s ? { background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)' } : {}}
               >
                 {s} Sao ({starDist.find(d => d.star === s)?.count || 0})
               </Button>
@@ -515,7 +515,7 @@ export default function ProductDetailPage() {
                 borderBottom: `1px solid ${borderColor}`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                  <Avatar src={review.avatar} icon={<UserOutlined />} style={{ background: '#b6462f' }} />
+                  <Avatar src={review.avatar} icon={<UserOutlined />} style={{ background: 'var(--theme-accent)' }} />
                   <div>
                     <div style={{ fontWeight: 600 }}>{review.name}</div>
                     <div style={{ fontSize: 12, color: mutedText }}>
@@ -551,7 +551,7 @@ export default function ProductDetailPage() {
                   rows={4}
                   style={{
                     width: '100%', padding: 12, borderRadius: 8,
-                    background: dark ? 'rgba(255,255,255,0.05)' : '#525252',
+                    background: 'var(--theme-card)',
                     border: `1px solid ${borderColor}`,
                     color: 'inherit', resize: 'vertical', fontSize: 14, outline: 'none',
                   }}
@@ -560,7 +560,7 @@ export default function ProductDetailPage() {
                   type="primary"
                   loading={submittingReview}
                   onClick={handleSubmitReview}
-                  style={{ width: 'fit-content', maxWidth: '100%', background: '#b6462f', borderColor: '#b6462f' }}
+                  style={{ width: 'fit-content', maxWidth: '100%', background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)' }}
                 >
                   Gửi đánh giá
                 </Button>
@@ -588,7 +588,7 @@ export default function ProductDetailPage() {
                     <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
                       {p.name?.slice(0, 40)}{p.name?.length > 40 ? '...' : ''}
                     </div>
-                    <div style={{ color: '#b6462f', fontWeight: 700 }}>
+                    <div style={{ color: 'var(--theme-accent)', fontWeight: 700 }}>
                       {p.price?.toLocaleString('vi-VN')}đ
                     </div>
                     {(p.rating ?? 0) > 0 && (

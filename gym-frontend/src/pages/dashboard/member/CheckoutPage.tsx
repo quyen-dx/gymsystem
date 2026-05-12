@@ -178,10 +178,10 @@ export default function CheckoutPage() {
           {address.isDefault && <Tag color="green">Mặc định</Tag>}
         </div>
         <div style={{ marginTop: 4 }}><Text>{address.phone}</Text></div>
-        <div style={{ marginTop: 8, color: '#888' }}>
+        <div style={{ marginTop: 8, color: 'var(--theme-muted)' }}>
           {address.street}{address.ward ? `, ${address.ward}` : ''}
         </div>
-        <div style={{ color: '#888' }}>{address.district}, {address.city}</div>
+        <div style={{ color: 'var(--theme-muted)' }}>{address.district}, {address.city}</div>
       </div>
     )
   }
@@ -257,7 +257,7 @@ export default function CheckoutPage() {
                 <Row>
                   <Col span={12}><Text strong style={{ fontSize: 16 }}>Tổng cộng:</Text></Col>
                   <Col span={12} style={{ textAlign: 'right' }}>
-                    <Text strong style={{ fontSize: 20, color: '#b6462f' }}>
+                    <Text strong style={{ fontSize: 20, color: 'var(--theme-accent)' }}>
                       {grandTotal.toLocaleString('vi-VN')}đ
                     </Text>
                   </Col>
@@ -287,7 +287,7 @@ export default function CheckoutPage() {
                 <Col span={12}><Text>Dự kiến giao hàng:</Text></Col>
                 <Col span={12} style={{ textAlign: 'right' }}>
                   {isShippingLoading ? '...' : (
-                    <Text strong style={{ color: '#b6462f' }}>
+                    <Text strong style={{ color: 'var(--theme-accent)' }}>
                       {shippingInfo.estimatedDays === 1 ? 'Ngày mai' : `${shippingInfo.estimatedDays} ngày`}
                       {shippingInfo.estimatedDeliveryDate ? ` (${shippingInfo.estimatedDeliveryDate})` : ''}
                     </Text>
@@ -297,7 +297,7 @@ export default function CheckoutPage() {
               <Row style={{ marginBottom: 16, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12 }}>
                 <Col span={14}><Text strong>Tổng cộng:</Text></Col>
                 <Col span={10} style={{ textAlign: 'right' }}>
-                  <Text strong style={{ color: '#b6462f', fontSize: 20 }}>
+                  <Text strong style={{ color: 'var(--theme-accent)', fontSize: 20 }}>
                     {grandTotal.toLocaleString('vi-VN')}đ
                   </Text>
                 </Col>
@@ -337,7 +337,7 @@ export default function CheckoutPage() {
                   loading={loading}
                   onClick={handleSubmit}
                   disabled={notEnough}
-                  style={{ background: notEnough ? undefined : '#b6462f', borderColor: notEnough ? undefined : '#b6462f', flex: '1 1 180px' }}
+                  style={{ background: notEnough ? undefined : 'var(--theme-accent)', borderColor: notEnough ? undefined : 'var(--theme-accent)', flex: '1 1 180px' }}
                 >
                   Thanh toán ngay
                 </Button>

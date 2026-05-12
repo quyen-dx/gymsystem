@@ -13,10 +13,10 @@ import {
   StarOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { Avatar, Button, Checkbox, Empty, Form, Input, Modal, Space, Switch, Tabs, message, theme } from 'antd'
+import { Avatar, Button, Checkbox, Empty, Form, Input, Modal, Space, Tabs, message, theme } from 'antd'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTheme } from '../../context/ThemeProvider'
+import { generateTheme, PRESET_ACCENT_COLORS, useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../hook/useAuth'
 import { createAddress, deleteAddress, getAddresses, setDefaultAddress, updateAddress } from '../../services/addressService'
 import { authService } from '../../services/authService'
@@ -36,10 +36,10 @@ const profileTabsClass =
   'sticky top-0 z-[2] bg-[var(--profile-bg-elevated)] pt-3 [&_.ant-tabs-nav]:!mb-[18px] [&_.ant-tabs-nav:before]:!border-b-[var(--profile-border)] [&_.ant-tabs-tab]:!rounded-full [&_.ant-tabs-tab]:!px-3 [&_.ant-tabs-tab]:!py-[9px] [&_.ant-tabs-tab]:!text-[var(--profile-text-secondary)] [&_.ant-tabs-tab]:!transition-colors [&_.ant-tabs-tab-active]:!bg-[var(--profile-accent-bg)] [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!text-[var(--profile-accent)] [&_.ant-tabs-ink-bar]:!h-[3px] [&_.ant-tabs-ink-bar]:!rounded-full [&_.ant-tabs-ink-bar]:!bg-[var(--profile-accent)] max-[768px]:[&_.ant-tabs-nav-wrap]:overflow-x-auto max-[768px]:[&_.ant-tabs-nav-wrap]:[scrollbar-width:none] max-[768px]:[&_.ant-tabs-nav-wrap::-webkit-scrollbar]:hidden max-[768px]:[&_.ant-tabs-nav-list]:min-w-max'
 
 const profileFormClass =
-  '[&_.ant-form-item-label>label]:!font-semibold [&_.ant-form-item-label>label]:!text-[var(--profile-text-secondary)] [&_.ant-input]:!min-h-[42px] [&_.ant-input]:!rounded-[14px] [&_.ant-input]:!border-[var(--profile-border)] [&_.ant-input]:!bg-[var(--profile-bg-container)] [&_.ant-input]:!text-[var(--profile-text)] [&_.ant-input::placeholder]:!text-[var(--profile-text-secondary)] [&_.ant-input-affix-wrapper]:!min-h-[42px] [&_.ant-input-affix-wrapper]:!rounded-[14px] [&_.ant-input-affix-wrapper]:!border-[var(--profile-border)] [&_.ant-input-affix-wrapper]:!bg-[var(--profile-bg-container)] [&_.ant-input-affix-wrapper_input]:!bg-transparent [&_.ant-input-affix-wrapper_input]:!text-[var(--profile-text)] [&_.ant-input-affix-wrapper_input::placeholder]:!text-[var(--profile-text-secondary)] [&_.ant-input:focus]:!border-[var(--profile-accent)] [&_.ant-input:focus]:!shadow-none [&_.ant-input-focused]:!border-[var(--profile-accent)] [&_.ant-input-focused]:!shadow-none [&_.ant-input-affix-wrapper-focused]:!border-[var(--profile-accent)] [&_.ant-input-affix-wrapper-focused]:!shadow-none [&_.ant-input[disabled]]:!cursor-not-allowed [&_.ant-input[disabled]]:!bg-[var(--profile-bg-container)] [&_.ant-input[disabled]]:!text-[var(--profile-text-secondary)] [&_.ant-input-disabled]:!cursor-not-allowed [&_.ant-input-disabled]:!bg-[var(--profile-bg-container)] [&_.ant-input-disabled]:!text-[var(--profile-text-secondary)]'
+  '[&_.ant-form-item-label>label]:!font-semibold [&_.ant-form-item-label>label]:!text-[var(--profile-text)] [&_.ant-input]:!min-h-[42px] [&_.ant-input]:!rounded-[14px] [&_.ant-input]:!border-[var(--profile-border)] [&_.ant-input]:!bg-[var(--profile-bg-container)] [&_.ant-input]:!text-[var(--profile-text)] [&_.ant-input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input-affix-wrapper]:!min-h-[42px] [&_.ant-input-affix-wrapper]:!rounded-[14px] [&_.ant-input-affix-wrapper]:!border-[var(--profile-border)] [&_.ant-input-affix-wrapper]:!bg-[var(--profile-bg-container)] [&_.ant-input-affix-wrapper_input]:!bg-transparent [&_.ant-input-affix-wrapper_input]:!text-[var(--profile-text)] [&_.ant-input-affix-wrapper_input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input:focus]:!border-[var(--profile-accent)] [&_.ant-input:focus]:!shadow-none [&_.ant-input-focused]:!border-[var(--profile-accent)] [&_.ant-input-focused]:!shadow-none [&_.ant-input-affix-wrapper-focused]:!border-[var(--profile-accent)] [&_.ant-input-affix-wrapper-focused]:!shadow-none [&_.ant-input[disabled]]:!cursor-not-allowed [&_.ant-input[disabled]]:!bg-[var(--theme-elevated)] [&_.ant-input[disabled]]:!text-[var(--theme-muted)] [&_.ant-input-disabled]:!cursor-not-allowed [&_.ant-input-disabled]:!bg-[var(--theme-elevated)] [&_.ant-input-disabled]:!text-[var(--theme-muted)]'
 
 const primaryButtonClass =
-  '!h-11 !rounded-full !border-0 !bg-[var(--profile-accent)] !font-extrabold !shadow-none hover:!bg-[var(--profile-accent-hover)]'
+  '!h-11 !rounded-full !border-0 !bg-[var(--profile-accent)] !font-extrabold !text-[var(--theme-button-text)] !shadow-none hover:!bg-[var(--profile-accent-hover)]'
 
 const outlineButtonClass =
   '!min-h-[42px] !rounded-full !border-[var(--profile-border)] !bg-transparent !font-bold !text-[var(--profile-text)] hover:!border-[var(--profile-accent-border)] hover:!text-[var(--profile-accent)]'
@@ -50,6 +50,19 @@ const addressActionButtonClass =
 const addressEditModalClass =
   '[&_.ant-modal-content]:!rounded-3xl [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-header]:!bg-transparent [&_.ant-modal-title]:!text-[var(--profile-text)] [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
 
+const profileInputStyle = {
+  background: 'var(--theme-input-bg)',
+  borderColor: 'var(--theme-border-strong)',
+  color: 'var(--theme-text)',
+} as CSSProperties
+
+const profileDisabledInputStyle = {
+  background: 'var(--theme-elevated)',
+  borderColor: 'var(--theme-border-strong)',
+  color: 'var(--theme-muted)',
+  opacity: 0.8,
+} as CSSProperties
+
 export default function AccountProfileModal({
   open,
   onClose,
@@ -58,7 +71,7 @@ export default function AccountProfileModal({
   onClose: () => void
 }) {
   const { user, updateUser, logout } = useAuth()
-  const { dark, toggleTheme } = useTheme()
+  const { applyAccentFast, applyThemeFull, commitPending, accentColor: savedAccentColor } = useTheme()
   const { token } = theme.useToken()
   const navigate = useNavigate()
   const [form] = Form.useForm()
@@ -70,20 +83,46 @@ export default function AccountProfileModal({
   const [addresses, setAddresses] = useState<any[]>([])
   const [addressModalOpen, setAddressModalOpen] = useState(false)
   const [editAddress, setEditAddress] = useState<any>(null)
+  const [accentColor, setAccentColor] = useState(savedAccentColor)
   const fileRef = useRef<HTMLInputElement>(null)
   const watchedEmail = Form.useWatch('email', form)
+  const previewTheme = generateTheme(accentColor)
 
   const hasPassword = Boolean(user?.hasPassword || user?.password)
 
   const goToOrders = () => {
-    onClose()
+    handleClose()
     navigate('/dashboard/member/orders')
   }
 
   const goToChannel = () => {
     if (!user?._id) return
-    onClose()
+    handleClose()
     navigate(`/channel/${user._id}`)
+  }
+
+  const handlePresetSelect = (hex: string) => {
+    setAccentColor(hex)
+    applyThemeFull(hex)
+  }
+
+  const handleAccentPreview = (hex: string) => {
+    setAccentColor(hex)
+    applyAccentFast(hex)
+  }
+
+  const handleAccentCommit = (hex = accentColor) => {
+    setAccentColor(hex)
+    applyThemeFull(hex)
+  }
+
+  const handleLogout = () => {
+    logout()
+  }
+
+  const handleClose = () => {
+    commitPending()
+    onClose()
   }
 
   useEffect(() => {
@@ -102,20 +141,26 @@ export default function AccountProfileModal({
     setAddresses([])
   }, [open, user, form, passwordForm, addressForm])
 
+  useEffect(() => {
+    if (open) {
+      setAccentColor(savedAccentColor)
+    }
+  }, [open, savedAccentColor])
+
   if (!user) return null
 
   const profileThemeStyle = {
     '--profile-bg-layout': token.colorBgLayout,
-    '--profile-bg-container': token.colorBgContainer,
+    '--profile-bg-container': 'var(--theme-input-bg)',
     '--profile-bg-elevated': token.colorBgElevated,
     '--profile-text': token.colorText,
     '--profile-text-secondary': token.colorTextSecondary,
-    '--profile-border': token.colorBorder,
+    '--profile-border': 'var(--theme-border-strong)',
     '--profile-mask': token.colorBgMask,
-    '--profile-accent': token.colorPrimary,
-    '--profile-accent-hover': token.colorPrimaryHover,
-    '--profile-accent-bg': token.colorPrimaryBg,
-    '--profile-accent-border': token.colorPrimaryBorder,
+    '--profile-accent': 'var(--theme-accent)',
+    '--profile-accent-hover': 'var(--theme-accent-hover)',
+    '--profile-accent-bg': 'var(--theme-accent-muted)',
+    '--profile-accent-border': 'var(--theme-accent-border)',
     '--profile-success': token.colorSuccess,
   } as CSSProperties
 
@@ -133,7 +178,7 @@ export default function AccountProfileModal({
       const { data } = await authService.updateProfile(formData)
       updateUser(data.user)
       message.success('Cập nhật tài khoản thành công')
-      onClose()
+      handleClose()
     } catch (err: any) {
       message.error(err.response?.data?.message || 'Cập nhật thất bại')
     } finally {
@@ -165,7 +210,7 @@ export default function AccountProfileModal({
       const { data } = await authService.enableSellerMode()
       updateUser(data.user)
       message.success('Đã bật chế độ bán hàng')
-      onClose()
+      handleClose()
       window.location.href = '/dashboard/seller/products'
     } catch (err: any) {
       message.error(err.response?.data?.message || 'Bật bán hàng thất bại')
@@ -270,12 +315,19 @@ export default function AccountProfileModal({
     }
   }, [open, activeTab])
 
+  useEffect(() => {
+    return () => {
+      commitPending()
+    }
+  }, [])
+
   return (
     <Modal
       title={null}
       open={open}
-      onCancel={onClose}
+      onCancel={handleClose}
       footer={null}
+      maskClosable={false}
       destroyOnClose
       width={560}
       centered
@@ -291,7 +343,7 @@ export default function AccountProfileModal({
           <div className="cursor-pointer" onClick={() => fileRef.current?.click()}>
             <div
               className="group relative grid h-[100px] w-[100px] place-items-center rounded-full p-[3px] max-[768px]:h-[92px] max-[768px]:w-[92px]"
-              style={{ background: `linear-gradient(135deg, ${token.colorPrimary}, ${token.colorPrimaryBg})` }}
+              style={{ background: 'linear-gradient(135deg, var(--profile-accent), var(--profile-accent-bg))' }}
             >
               <Avatar
                 size={92}
@@ -338,6 +390,7 @@ export default function AccountProfileModal({
         >
           <Tabs
             className={profileTabsClass}
+            style={{ color: 'var(--theme-text)' }}
             activeKey={activeTab}
             onChange={setActiveTab}
             items={[
@@ -352,11 +405,11 @@ export default function AccountProfileModal({
             <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
               <div className="grid grid-cols-2 gap-x-3.5 max-[768px]:grid-cols-1">
                 <Form.Item label="Tên tài khoản" name="name" rules={[{ required: true, message: 'Nhập tên' }]}>
-                  <Input placeholder="Tên của bạn" />
+                  <Input placeholder="Tên của bạn" style={profileInputStyle} />
                 </Form.Item>
 
                 <Form.Item label="Số điện thoại" name="phone">
-                  <Input placeholder="Thêm số điện thoại" />
+                  <Input placeholder="Thêm số điện thoại" style={profileInputStyle} />
                 </Form.Item>
 
                 <Form.Item
@@ -367,15 +420,15 @@ export default function AccountProfileModal({
                     { required: !user.email, message: 'Nhập email' },
                   ]}
                 >
-                  <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder="Thêm email" />
+                  <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder="Thêm email" style={user.email ? profileDisabledInputStyle : profileInputStyle} />
                 </Form.Item>
 
                 <Form.Item label="Username">
-                  <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} />
+                  <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} style={profileDisabledInputStyle} />
                 </Form.Item>
 
                 <Form.Item label="Ngày sinh" name="dateOfBirth" className="col-span-full">
-                  <Input type="date" />
+                  <Input type="date" style={profileInputStyle} />
                 </Form.Item>
               </div>
 
@@ -419,8 +472,16 @@ export default function AccountProfileModal({
                 block
                 danger
                 icon={<LogoutOutlined />}
-                onClick={logout}
-                className="!mt-[18px] !h-[42px] !rounded-full !border-[var(--profile-accent)] !font-extrabold !text-[var(--profile-accent)] hover:!border-[var(--profile-accent)] hover:!bg-[var(--profile-accent-bg)] hover:!text-[var(--profile-accent)]"
+                onClick={handleLogout}
+                style={{
+                  marginTop: 8,
+                  height: 40,
+                  borderRadius: 8,
+                  background: 'transparent',
+                  borderColor: '#e05a30',
+                  color: '#e05a30',
+                  fontWeight: 500,
+                }}
               >
                 Đăng xuất
               </Button>
@@ -429,35 +490,87 @@ export default function AccountProfileModal({
 
           {activeTab === 'appearance' && (
             <div
-              className="flex items-center justify-between gap-4 rounded-[18px] border p-4 max-[768px]:flex-col max-[768px]:items-start"
-              style={{ backgroundColor: token.colorBgContainer, borderColor: token.colorBorder }}
+              className="rounded-[18px] border p-4"
+              style={{ backgroundColor: token.colorBgContainer, borderColor: 'var(--theme-border-strong)' }}
             >
-              <div>
-                <div className="font-extrabold" style={{ color: token.colorText }}>Chế độ giao diện</div>
-                <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                  {dark ? 'Đang dùng giao diện tối' : 'Đang dùng giao diện sáng'}
+              <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
+                <div>
+                  <div className="font-extrabold" style={{ color: token.colorText }}>Màu chủ đạo</div>
+                  <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
+                    Tuỳ chỉnh màu sắc theo sở thích
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {[
+                    { label: 'Nền', color: previewTheme.bg },
+                    { label: 'Card', color: previewTheme.card },
+                    { label: 'Text', color: previewTheme.text },
+                  ].map((item) => (
+                    <span
+                      key={item.label}
+                      className="h-8 w-8 rounded-lg border"
+                      title={item.label}
+                      style={{ backgroundColor: item.color, borderColor: 'var(--theme-border-strong)' }}
+                    />
+                  ))}
                 </div>
               </div>
-              <Switch
-                checked={dark}
-                checkedChildren="Tối"
-                unCheckedChildren="Sáng"
-                onChange={toggleTheme}
-              />
+
+              <div className="mt-5 flex items-center gap-3 max-[560px]:flex-wrap">
+                <div
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ position: 'relative', zIndex: 9999 }}
+                >
+                  <input
+                    type="color"
+                    value={accentColor}
+                    onChange={(event) => {
+                      const hex = event.target.value
+                      handleAccentPreview(hex)
+                    }}
+                    onBlur={(event) => handleAccentCommit(event.target.value)}
+                    onMouseUp={(event) => handleAccentCommit(event.currentTarget.value)}
+                    onPointerUp={(event) => handleAccentCommit(event.currentTarget.value)}
+                    onTouchEnd={(event) => handleAccentCommit(event.currentTarget.value)}
+                    className="h-11 w-16 cursor-pointer rounded-xl border bg-transparent p-1"
+                    style={{ borderColor: 'var(--theme-border-strong)' }}
+                    aria-label="Chọn màu chủ đạo"
+                  />
+                </div>
+                <div className="font-semibold" style={{ color: token.colorText }}>{accentColor.toUpperCase()}</div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {PRESET_ACCENT_COLORS.map((item) => (
+                  <button
+                    key={item.color}
+                    type="button"
+                    onClick={() => handlePresetSelect(item.color)}
+                    className="h-8 w-8 cursor-pointer rounded-full border transition-transform duration-150 hover:scale-110"
+                    style={{
+                      backgroundColor: item.color,
+                      borderColor: accentColor === item.color ? '#ffffff' : token.colorBorder,
+                    }}
+                    aria-label={`Chọn màu ${item.label}`}
+                    title={item.label}
+                  />
+                ))}
+              </div>
             </div>
           )}
 
           {activeTab === 'addresses' && (
             <div
               className={`rounded-[18px] border p-4 ${profileFormClass}`}
-              style={{ backgroundColor: token.colorBgContainer, borderColor: token.colorBorder }}
+              style={{ backgroundColor: token.colorBgContainer, borderColor: 'var(--theme-border-strong)' }}
             >
               <div className="flex items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
                 <div>
                   <div className="font-extrabold" style={{ color: token.colorText }}>Địa chỉ giao hàng</div>
                   <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>Thêm, sửa, xóa và đặt mặc định địa chỉ.</div>
                 </div>
-                <Button type="primary" icon={<PlusOutlined />} onClick={openCreateAddress} loading={loading} className="!rounded-lg !border-0 !bg-[var(--profile-accent)] !font-bold hover:!bg-[var(--profile-accent-hover)]" style={{ color: token.colorWhite }}>
+                <Button type="primary" icon={<PlusOutlined />} onClick={openCreateAddress} loading={loading} className="!rounded-lg !border-0 !bg-[var(--profile-accent)] !font-bold !text-[var(--theme-button-text)] hover:!bg-[var(--profile-accent-hover)]">
                   Thêm địa chỉ
                 </Button>
               </div>
@@ -479,10 +592,10 @@ export default function AccountProfileModal({
                       key={address._id}
                       style={{
                         backgroundColor: token.colorBgElevated,
-                        borderColor: address.isDefault ? token.colorPrimaryBorder : token.colorBorder,
+                        borderColor: address.isDefault ? 'var(--profile-accent-border)' : 'var(--theme-border-strong)',
                       }}
                     >
-                      <div className="grid h-9 w-9 flex-none place-items-center rounded-[9px]" style={{ backgroundColor: token.colorBgContainer, color: token.colorPrimary }}>
+                      <div className="grid h-9 w-9 flex-none place-items-center rounded-[9px]" style={{ backgroundColor: token.colorBgContainer, color: 'var(--profile-accent)' }}>
                         <EnvironmentOutlined />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -492,9 +605,9 @@ export default function AccountProfileModal({
                             <span
                               className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
                               style={{
-                                backgroundColor: token.colorPrimaryBg,
-                                borderColor: token.colorPrimaryBorder,
-                                color: token.colorPrimary,
+                                backgroundColor: 'var(--profile-accent-bg)',
+                                borderColor: 'var(--profile-accent-border)',
+                                color: 'var(--profile-accent)',
                               }}
                             >
                               <StarFilled />
@@ -552,22 +665,22 @@ export default function AccountProfileModal({
               >
                 <Form form={addressForm} layout="vertical" onFinish={handleSaveAddress} initialValues={{ isDefault: false }} className={profileFormClass}>
                   <Form.Item name="fullName" label="Tên người nhận" rules={[{ required: true, message: 'Vui lòng nhập tên người nhận' }]}>
-                    <Input />
+                    <Input style={profileInputStyle} />
                   </Form.Item>
                   <Form.Item name="phone" label="Số điện thoại" rules={[{ required: true, message: 'Vui lòng nhập số điện thoại' }, { pattern: /^0\d{9,10}$/, message: 'Số điện thoại không hợp lệ' }]}>
-                    <Input />
+                    <Input style={profileInputStyle} />
                   </Form.Item>
                   <Form.Item name="street" label="Địa chỉ cụ thể" rules={[{ required: true, message: 'Vui lòng nhập địa chỉ cụ thể' }]}>
-                    <Input />
+                    <Input style={profileInputStyle} />
                   </Form.Item>
                   <Form.Item name="ward" label="Phường / xã">
-                    <Input />
+                    <Input style={profileInputStyle} />
                   </Form.Item>
                   <Form.Item name="district" label="Quận / huyện" rules={[{ required: true, message: 'Vui lòng nhập quận/huyện' }]}>
-                    <Input />
+                    <Input style={profileInputStyle} />
                   </Form.Item>
                   <Form.Item name="city" label="Tỉnh / thành phố" rules={[{ required: true, message: 'Vui lòng nhập tỉnh/thành phố' }]}>
-                    <Input />
+                    <Input style={profileInputStyle} />
                   </Form.Item>
                   <Form.Item name="isDefault" valuePropName="checked">
                     <Checkbox>Đặt mặc định</Checkbox>
@@ -587,17 +700,17 @@ export default function AccountProfileModal({
             <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
               <div
                 className="mb-4 rounded-xl border p-3 text-[13px]"
-                style={{ backgroundColor: token.colorPrimaryBg, borderColor: token.colorPrimaryBorder, color: token.colorText }}
+                style={{ backgroundColor: 'var(--profile-accent-bg)', borderColor: 'var(--profile-accent-border)', color: token.colorText }}
               >
                 Tài khoản chưa có mật khẩu riêng. Đặt mật khẩu để đăng nhập bằng số điện thoại/email.
               </div>
 
               <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu' }]}>
-                <Input.Password placeholder="Tối thiểu 6 ký tự" />
+                <Input.Password placeholder="Tối thiểu 6 ký tự" style={profileInputStyle} />
               </Form.Item>
 
               <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
-                <Input.Password placeholder="Nhập lại mật khẩu" />
+                <Input.Password placeholder="Nhập lại mật khẩu" style={profileInputStyle} />
               </Form.Item>
 
               <Button type="primary" htmlType="submit" block loading={loading} className={primaryButtonClass}>
@@ -609,15 +722,15 @@ export default function AccountProfileModal({
           {activeTab === 'password' && hasPassword && (
             <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
               <Form.Item label="Mật khẩu hiện tại" name="currentPassword" rules={[{ required: true, message: 'Nhập mật khẩu hiện tại' }]}>
-                <Input.Password />
+                <Input.Password style={profileInputStyle} />
               </Form.Item>
 
               <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu mới' }]}>
-                <Input.Password placeholder="Tối thiểu 6 ký tự" />
+                <Input.Password placeholder="Tối thiểu 6 ký tự" style={profileInputStyle} />
               </Form.Item>
 
               <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
-                <Input.Password placeholder="Nhập lại mật khẩu mới" />
+                <Input.Password placeholder="Nhập lại mật khẩu mới" style={profileInputStyle} />
               </Form.Item>
 
               <Button type="primary" htmlType="submit" block loading={loading} className={primaryButtonClass}>

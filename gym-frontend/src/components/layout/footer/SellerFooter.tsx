@@ -2,18 +2,15 @@ import type { LucideIcon } from 'lucide-react'
 import {
   BadgeCheck,
   BarChart3,
-  Camera,
   ClipboardList,
   FileText,
   Flag,
   Headphones,
   LifeBuoy,
   LockKeyhole,
-  MessageCircle,
   Package,
   RotateCcw,
   ScrollText,
-  Share2,
   ShieldCheck,
   Store,
   Truck,
@@ -52,6 +49,12 @@ const supportLinks: FooterLink[] = [
   { label: 'Điều khoản sử dụng', href: '/terms', icon: FileText },
 ]
 
+const socialLogos = {
+  facebook: '/facebook.png',
+  zalo: '/zalo.png',
+  instagram: '/instagram.png',
+}
+
 function SellerFooter() {
   const currentYear = new Date().getFullYear()
   const { dark } = useTheme()
@@ -67,8 +70,9 @@ function SellerFooter() {
           'group flex items-center gap-2 text-sm transition-colors',
           dark ? 'text-zinc-300 hover:text-white' : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]',
         ].join(' ')}
+        style={{ color: 'var(--theme-text)' }}
       >
-        <Icon className={['h-4 w-4 shrink-0 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-[rgba(237,235,230,0.5)] group-hover:text-[#edebe6]'].join(' ')} />
+        <Icon className={['h-4 w-4 shrink-0 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-[rgba(237,235,230,0.5)] group-hover:text-[#edebe6]'].join(' ')} style={{ color: 'var(--theme-muted)' }} />
         <span>{item.label}</span>
       </a>
     )
@@ -82,8 +86,12 @@ function SellerFooter() {
           ? 'border-zinc-800 bg-zinc-950 text-white'
           : 'border-[#5a5a5a] bg-[#3e3e3e] text-[#edebe6]',
       ].join(' ')}
+      style={{ background: 'var(--theme-card)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
     >
-      <section className={['border-b px-5 py-7 md:px-8', dark ? 'border-zinc-800 bg-zinc-950 text-white' : 'border-[#5a5a5a] bg-[#3e3e3e] text-[#edebe6]'].join(' ')}>
+      <section
+        className={['border-b px-5 py-7 md:px-8', dark ? 'border-zinc-800 bg-zinc-950 text-white' : 'border-[#5a5a5a] bg-[#3e3e3e] text-[#edebe6]'].join(' ')}
+        style={{ background: 'var(--theme-card)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
+      >
         <div className="w-full">
           <h2 className="text-center text-xl font-extrabold md:text-2xl">
             Cam Kết Của Chúng Tôi
@@ -96,8 +104,12 @@ function SellerFooter() {
                 <div
                   key={item.label}
                   className={['flex min-h-20 items-center gap-3 rounded-2xl border p-4 shadow-sm backdrop-blur', dark ? 'border-zinc-800 bg-zinc-900 text-white' : 'border-[#5a5a5a] bg-[#484848] text-[#edebe6]'].join(' ')}
+                  style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
                 >
-                  <span className={['flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', dark ? 'bg-[#484848] text-[#edebe6]' : 'bg-[#484848] text-[#edebe6]'].join(' ')}>
+                  <span
+                    className={['flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', dark ? 'bg-[#484848] text-[#edebe6]' : 'bg-[#484848] text-[#edebe6]'].join(' ')}
+                    style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)' }}
+                  >
                     <Icon className="h-5 w-5" />
                   </span>
                   <span className="text-sm font-bold leading-5">{item.label}</span>
@@ -112,11 +124,14 @@ function SellerFooter() {
         <div className="grid w-full gap-9 md:grid-cols-2 lg:grid-cols-4">
           <div>
             <div className="flex items-center gap-3">
-              <span className={['flex h-12 w-12 items-center justify-center rounded-2xl', dark ? 'bg-[#484848] text-[#edebe6]' : 'bg-[#484848] text-[#edebe6]'].join(' ')}>
+              <span
+                className={['flex h-12 w-12 items-center justify-center rounded-2xl', dark ? 'bg-[#484848] text-[#edebe6]' : 'bg-[#484848] text-[#edebe6]'].join(' ')}
+                style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)' }}
+              >
                 <Store className="h-6 w-6" />
               </span>
               <div>
-                <p className="text-lg font-extrabold leading-tight">GymSystem Seller</p>
+                <p className="text-lg font-extrabold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymSystem Seller</p>
                 <p className={['text-sm', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
                   Bán hàng dễ hơn mỗi ngày
                 </p>
@@ -152,38 +167,44 @@ function SellerFooter() {
                 aria-label="Facebook"
                 target="_blank"
                 rel="noreferrer"
-                className={['flex h-10 w-10 items-center justify-center rounded-xl transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-[#484848] hover:text-[#edebe6]' : 'bg-[#484848] text-[rgba(237,235,230,0.65)] hover:bg-[#525252] hover:text-[#edebe6]'].join(' ')}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-transparent transition-transform duration-150 hover:scale-110"
+                style={{ color: '#1877f2' }}
               >
-                <Share2 className="h-5 w-5" />
+                <img src={socialLogos.facebook} alt="" className="h-8 w-8 object-contain" />
               </a>
               <a
                 href="https://zalo.me"
                 aria-label="Zalo"
                 target="_blank"
                 rel="noreferrer"
-                className={['flex h-10 w-10 items-center justify-center rounded-xl transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-[#484848] hover:text-[#edebe6]' : 'bg-[#484848] text-[rgba(237,235,230,0.65)] hover:bg-[#525252] hover:text-[#edebe6]'].join(' ')}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-transparent transition-transform duration-150 hover:scale-110"
+                style={{ color: '#0068ff' }}
               >
-                <MessageCircle className="h-5 w-5" />
+                <img src={socialLogos.zalo} alt="" className="h-9 w-9 object-contain" />
               </a>
               <a
                 href="https://instagram.com"
                 aria-label="Instagram"
                 target="_blank"
                 rel="noreferrer"
-                className={['flex h-10 w-10 items-center justify-center rounded-xl transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-[#484848] hover:text-[#edebe6]' : 'bg-[#484848] text-[rgba(237,235,230,0.65)] hover:bg-[#525252] hover:text-[#edebe6]'].join(' ')}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-transparent transition-transform duration-150 hover:scale-110"
+                style={{ color: '#e4405f' }}
               >
-                <Camera className="h-5 w-5" />
+                <img src={socialLogos.instagram} alt="" className="h-8 w-8 object-contain" />
               </a>
             </div>
           </div>
         </div>
       </section>
 
-      <div className={['border-t px-5 py-5 md:px-8', dark ? 'border-zinc-800' : 'border-[#5a5a5a]'].join(' ')}>
+      <div
+        className={['border-t px-5 py-5 md:px-8', dark ? 'border-zinc-800' : 'border-[#5a5a5a]'].join(' ')}
+        style={{ borderColor: 'var(--theme-border)' }}
+      >
         <div className={['flex w-full flex-col gap-2 text-sm md:flex-row md:items-center md:justify-between', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
           <p>Copyright © {currentYear} GymSystem Seller. All rights reserved.</p>
           <p className={['flex items-center gap-2 font-semibold', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
-            <BadgeCheck className="h-4 w-4" />
+            <BadgeCheck className="h-4 w-4" style={{ color: 'var(--theme-accent)' }} />
             Nền tảng hợp tác uy tín
           </p>
         </div>

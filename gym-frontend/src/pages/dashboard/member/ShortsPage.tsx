@@ -98,8 +98,8 @@ const validateVideoFile = (file: File) =>
     video.src = objectUrl
   })
 
-const shortsFrameClass = 'relative h-[calc(100dvh-112px)] min-h-[calc(100dvh-112px)] overflow-hidden rounded-[18px] bg-[#2e2e2e] text-white max-[640px]:h-[calc(100dvh-86px)] max-[640px]:min-h-[calc(100dvh-86px)] max-[640px]:rounded-none'
-const loadingStateClass = 'relative grid h-[calc(100dvh-112px)] min-h-[calc(100dvh-112px)] place-items-center bg-[radial-gradient(circle_at_top,rgba(255,45,85,0.2),transparent_34%),#2e2e2e] p-6 text-white max-[640px]:h-[calc(100dvh-86px)] max-[640px]:min-h-[calc(100dvh-86px)]'
+const shortsFrameClass = 'relative h-[calc(100dvh-112px)] min-h-[calc(100dvh-112px)] overflow-hidden rounded-[18px] bg-[var(--theme-bg)] text-[var(--theme-text)] max-[640px]:h-[calc(100dvh-86px)] max-[640px]:min-h-[calc(100dvh-86px)] max-[640px]:rounded-none'
+const loadingStateClass = 'relative grid h-[calc(100dvh-112px)] min-h-[calc(100dvh-112px)] place-items-center bg-[var(--theme-bg)] p-6 text-[var(--theme-text)] max-[640px]:h-[calc(100dvh-86px)] max-[640px]:min-h-[calc(100dvh-86px)]'
 const panelClass = 'w-[min(420px,92vw)] rounded-3xl border border-white/10 bg-[rgba(20,20,20,0.82)] p-7 text-center backdrop-blur-xl'
 const uploadPreviewClass = 'mt-3.5 aspect-[9/16] max-h-[420px] overflow-hidden rounded-[18px] border border-white/10 bg-[#2e2e2e]'
 const uploadPreviewMediaClass = 'block h-full w-full border-0 object-cover'
@@ -492,7 +492,7 @@ export default function ShortsPage() {
         <div className={panelClass}>
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={<span style={{ color: '#edebe6' }}>Chưa có video Shorts nào</span>}
+            description={<span style={{ color: 'var(--theme-text)' }}>Chưa có video Shorts nào</span>}
           />
         </div>
         <UploadModal
@@ -530,7 +530,7 @@ export default function ShortsPage() {
           {videos.map((video, index) => {
             const shouldRenderVideo = Math.abs(index - activeIndex) <= 1
             return (
-              <SwiperSlide className="grid place-items-center" style={{ backgroundColor: '#2e2e2e' }} key={video._id}>
+              <SwiperSlide className="grid place-items-center" style={{ backgroundColor: 'var(--theme-bg)' }} key={video._id}>
                 <ShortsVideoCard
                   video={video}
                   isActive={index === activeIndex}
@@ -549,7 +549,7 @@ export default function ShortsPage() {
             )
           })}
           {loadingMore && (
-            <SwiperSlide className="grid place-items-center" style={{ backgroundColor: '#2e2e2e' }}>
+            <SwiperSlide className="grid place-items-center" style={{ backgroundColor: 'var(--theme-bg)' }}>
               <div className={panelClass}>
                 <Skeleton active avatar paragraph={{ rows: 3 }} />
               </div>

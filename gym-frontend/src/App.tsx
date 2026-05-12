@@ -1,5 +1,7 @@
+import { ConfigProvider, theme } from 'antd'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import MemberLayout from './components/layout/header/MemberLayout'
+import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { useAuth } from './hook/useAuth'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import LoginPage from './pages/auth/LoginPage'
@@ -47,10 +49,6 @@ import StaffMemberPage from './pages/dashboard/staff/StaffMemberPage'
 
 {/* Seller */ }
 
-import ThemeProvider from './context/ThemeProvider'
-
-
-
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
 
@@ -83,9 +81,97 @@ function MemberCheckinPage() {
   )
 }
 
-export default function App() {
+function AppWithTheme() {
+  const { tokens, themeKey } = useTheme()
+
   return (
-    <ThemeProvider>
+    <ConfigProvider
+      key={themeKey}
+      theme={{
+        algorithm: theme.darkAlgorithm,
+        token: {
+          colorBgBase: tokens.bg,
+          colorBgContainer: tokens.card,
+          colorBgElevated: tokens.elevated,
+          colorBgLayout: tokens.bg,
+          colorBorder: tokens.border,
+          colorBorderSecondary: 'rgba(255,255,255,0.06)',
+          colorFillTertiary: tokens.inputBg,
+          colorText: tokens.text,
+          colorTextBase: tokens.text,
+          colorTextHeading: tokens.text,
+          colorTextLabel: tokens.text,
+          colorTextSecondary: tokens.muted,
+          colorTextTertiary: tokens.muted,
+          colorTextDescription: tokens.muted,
+          colorTextDisabled: tokens.muted,
+          colorTextPlaceholder: tokens.placeholder,
+          colorIcon: tokens.text,
+          colorIconHover: tokens.accent,
+          colorPrimary: tokens.accent,
+          colorPrimaryHover: tokens.accentHover,
+          colorPrimaryText: tokens.buttonText,
+        },
+        components: {
+          Layout: {
+            headerBg: tokens.card,
+            bodyBg: tokens.bg,
+            siderBg: tokens.card,
+            footerBg: tokens.card,
+          },
+          Menu: {
+            itemBg: tokens.card,
+            itemColor: tokens.text,
+            itemHoverColor: tokens.text,
+            colorBgContainer: tokens.card,
+            itemSelectedBg: tokens.elevated,
+            itemSelectedColor: tokens.text,
+            itemHoverBg: tokens.elevated,
+            itemActiveBg: tokens.elevated,
+            subMenuItemBg: tokens.card,
+            groupTitleColor: tokens.muted,
+            colorText: tokens.text,
+            darkItemColor: tokens.text,
+            darkItemBg: tokens.card,
+            darkItemHoverBg: tokens.elevated,
+            activeBarBorderWidth: 0,
+          },
+          Card: { colorBgContainer: tokens.card },
+          Modal: { contentBg: tokens.elevated, headerBg: tokens.elevated },
+          Table: { colorBgContainer: tokens.card, headerBg: tokens.elevated },
+          Select: { colorBgContainer: tokens.inputBg, colorBorder: tokens.border },
+          Input: {
+            colorBgContainer: tokens.inputBg,
+            colorBorder: tokens.border,
+            colorText: tokens.text,
+            colorTextPlaceholder: tokens.placeholder,
+            activeBorderColor: tokens.accent,
+            hoverBorderColor: tokens.accent,
+          },
+          Button: {
+            colorBgContainer: tokens.elevated,
+            colorBorder: tokens.border,
+            colorText: tokens.text,
+            primaryColor: tokens.buttonText,
+            defaultBg: 'transparent',
+            defaultBorderColor: tokens.safeAccent,
+            defaultColor: tokens.safeAccent,
+            defaultHoverBg: tokens.accentMuted,
+            defaultHoverBorderColor: tokens.safeAccent,
+            defaultHoverColor: tokens.safeAccent,
+          },
+          DatePicker: { colorBgContainer: tokens.inputBg, colorBorder: tokens.border },
+          Drawer: { colorBgElevated: tokens.elevated },
+          Tabs: {
+            itemColor: tokens.text,
+            itemHoverColor: tokens.text,
+            itemSelectedColor: tokens.accent,
+            inkBarColor: tokens.accent,
+            colorText: tokens.text,
+          },
+        },
+      }}
+    >
       <Routes>
 
         {/* AUTH */}
@@ -138,6 +224,14 @@ export default function App() {
         <Route path="/" element={<Navigate to="/login" />} />
 
       </Routes>
+    </ConfigProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppWithTheme />
     </ThemeProvider>
   )
 }

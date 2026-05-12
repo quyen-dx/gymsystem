@@ -15,8 +15,6 @@ import {
   UserRound,
   UsersRound,
 } from 'lucide-react'
-import { FaFacebook, FaInstagram } from 'react-icons/fa'
-import { SiZalo } from 'react-icons/si'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeProvider'
 import { useAuth } from '../../../hook/useAuth'
@@ -41,6 +39,12 @@ const accountLinks: FooterLink[] = [
   { label: 'Lịch sử gói tập', to: '/dashboard/member/orders', icon: ShoppingBag },
   { label: 'Thông báo', to: '/dashboard/member/notifications', icon: Bell },
 ]
+
+const socialLogos = {
+  facebook: '/facebook.png',
+  zalo: '/zalo.png',
+  instagram: '/instagram.png',
+}
 
 const isRouteActive = (pathname: string, item: FooterLink, isActive: boolean) => {
   if (item.end) return pathname === item.to || isActive
@@ -74,12 +78,13 @@ function MemberFooter() {
                 : 'text-[#edebe6]'
               : dark
                 ? 'text-zinc-300 hover:text-white'
-                : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]',
+            : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]',
           ].join(' ')
         }
+        style={{ color: 'var(--theme-text)' }}
       >
         {Icon ? (
-          <Icon className={['h-4 w-4 shrink-0 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-[rgba(237,235,230,0.5)] group-hover:text-[#edebe6]'].join(' ')} />
+          <Icon className={['h-4 w-4 shrink-0 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-[rgba(237,235,230,0.5)] group-hover:text-[#edebe6]'].join(' ')} style={{ color: 'var(--theme-muted)' }} />
         ) : null}
         <span>{item.label}</span>
       </NavLink>
@@ -96,6 +101,7 @@ function MemberFooter() {
             ? 'border-zinc-800 bg-zinc-950 text-white'
             : 'border-[#5a5a5a] bg-[#3e3e3e] text-[#edebe6]',
         ].join(' ')}
+        style={{ background: 'var(--theme-card)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
       >
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-4 py-8 sm:px-6 sm:gap-8 md:px-8 md:py-10 lg:grid-cols-4 lg:gap-10 lg:py-12">
           {/* Cột 1 - Logo */}
@@ -105,11 +111,14 @@ function MemberFooter() {
               onClick={() => navigate('/dashboard/member')}
               className="flex items-center gap-3 text-left"
             >
-              <span className={['flex h-11 w-11 items-center justify-center rounded-lg text-sm font-black', dark ? 'bg-[#484848] text-[#edebe6]' : 'bg-[#484848] text-[#edebe6]'].join(' ')}>
+              <span
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-sm font-black"
+                style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)' }}
+              >
                 GS
               </span>
               <span>
-                <span className="block text-lg font-bold leading-tight">GymSystem</span>
+                <span className="block text-lg font-bold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymSystem</span>
                 <span className={['block text-sm', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
                   Train smarter every day
                 </span>
@@ -181,33 +190,43 @@ function MemberFooter() {
                   aria-label="Facebook"
                   target="_blank"
                   rel="noreferrer"
-                  className={['flex h-9 w-9 items-center justify-center rounded-lg transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-[#484848] hover:text-[#edebe6]' : 'bg-[#484848] text-[rgba(237,235,230,0.65)] hover:bg-[#525252] hover:text-[#edebe6]'].join(' ')}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-transparent transition-transform duration-150 hover:scale-110"
+                  style={{
+                    color: '#1877f2',
+                  }}
                 >
-                  <FaFacebook className="h-4 w-4" />
+                  <img src={socialLogos.facebook} alt="" className="h-7 w-7 object-contain" />
                 </a>
                 <a
                   href="https://zalo.me"
                   aria-label="Zalo"
                   target="_blank"
                   rel="noreferrer"
-                  className={['flex h-9 w-9 items-center justify-center rounded-lg transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-[#484848] hover:text-[#edebe6]' : 'bg-[#484848] text-[rgba(237,235,230,0.65)] hover:bg-[#525252] hover:text-[#edebe6]'].join(' ')}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-transparent transition-transform duration-150 hover:scale-110"
+                  style={{
+                    color: '#0068ff',
+                  }}
                 >
-                  <SiZalo className="h-6 w-6" />
+                  <img src={socialLogos.zalo} alt="" className="h-8 w-8 object-contain" />
                 </a>
                 <a
                   href="https://instagram.com"
                   aria-label="Instagram"
                   target="_blank"
                   rel="noreferrer"
-                  className={['flex h-9 w-9 items-center justify-center rounded-lg transition-colors', dark ? 'bg-zinc-900 text-zinc-300 hover:bg-[#484848] hover:text-[#edebe6]' : 'bg-[#484848] text-[rgba(237,235,230,0.65)] hover:bg-[#525252] hover:text-[#edebe6]'].join(' ')}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-transparent transition-transform duration-150 hover:scale-110"
+                  style={{
+                    color: '#e4405f',
+                  }}
                 >
-                  <FaInstagram className="h-4 w-4" />
+                  <img src={socialLogos.instagram} alt="" className="h-7 w-7 object-contain" />
                 </a>
               </div>
               <div className="mt-4 space-y-2 lg:hidden">
                 <a
                   href="#"
                   className={['flex items-center gap-3 rounded-lg px-3 py-2 transition-colors', dark ? 'bg-zinc-900 hover:bg-zinc-800' : 'bg-[#484848] hover:bg-[#525252]'].join(' ')}
+                  style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
                 >
                   <Smartphone className={['h-5 w-5', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
                   <span>
@@ -220,6 +239,7 @@ function MemberFooter() {
                 <a
                   href="#"
                   className={['flex items-center gap-3 rounded-lg px-3 py-2 transition-colors', dark ? 'bg-zinc-900 hover:bg-zinc-800' : 'bg-[#484848] hover:bg-[#525252]'].join(' ')}
+                  style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
                 >
                   <PlayCircle className={['h-5 w-5', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
                   <span>
@@ -237,9 +257,14 @@ function MemberFooter() {
                   rel="noopener noreferrer"
                   download
                   className={[
-                    'group flex w-fit min-w-[170px] items-center gap-3 rounded-xl px-3 py-2 no-underline shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e05a30]',
+                    'group flex w-fit min-w-[170px] items-center gap-3 rounded-xl px-3 py-2 no-underline shadow-sm transition-opacity duration-200 hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e05a30]',
                     'bg-[#e05a30] text-white shadow-[0_10px_24px_rgba(224,90,48,0.22)] hover:bg-[#c94d26]',
                   ].join(' ')}
+                  style={{
+                    background: 'var(--theme-accent)',
+                    borderColor: 'var(--theme-accent)',
+                    color: 'var(--theme-button-text)',
+                  }}
                 >
                   <MonitorDown className="h-5 w-5 shrink-0" />
                   <span className="text-sm font-semibold leading-5">Tải xuống Windows</span>
@@ -249,7 +274,10 @@ function MemberFooter() {
           </div>
         </div>
 
-        <div className={['border-t px-4 py-4 sm:px-6 md:px-8', dark ? 'border-zinc-800' : 'border-[#5a5a5a]'].join(' ')}>
+        <div
+          className={['border-t px-4 py-4 sm:px-6 md:px-8', dark ? 'border-zinc-800' : 'border-[#5a5a5a]'].join(' ')}
+          style={{ borderColor: 'var(--theme-border)' }}
+        >
           <p className={['mx-auto max-w-7xl text-sm', dark ? 'text-zinc-500' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
             Copyright © {new Date().getFullYear()} GymSystem. All rights reserved.
           </p>

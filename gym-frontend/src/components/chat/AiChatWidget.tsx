@@ -2,6 +2,7 @@ import { CloseOutlined, DeleteOutlined, EditOutlined, ExpandAltOutlined, MoreOut
 import { Avatar, Badge, Button, Drawer, Dropdown, Input, Modal, Segmented, Select, Space, Spin, Tooltip, Typography } from 'antd'
 import type { MouseEvent as ReactMouseEvent, ReactNode, TouchEvent as ReactTouchEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hook/useAuth'
 import { useDraggable } from '../../hooks/useDraggable'
@@ -16,7 +17,7 @@ const AI_AVATAR_IMAGE = 'https://vcdn1-giaitri.vnecdn.net/2023/04/28/doraemon4-1
 
 const AI_MODE_OPTIONS: { label: string; value: AiMode }[] = [
     { label: 'Gym', value: 'gym' },
-    { label: 'Tất cả', value: 'general' },
+    { label: 'Khác', value: 'general' },
 ]
 
 const getSourceDomain = (url: string) => {
@@ -91,7 +92,7 @@ const renderInlineMarkdown = (text: string, color: string): ReactNode[] => {
                     href={markdownLink[2]}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ color: '#1677ff', textDecoration: 'underline', overflowWrap: 'anywhere' }}
+                    style={{ color: 'var(--theme-accent)', textDecoration: 'underline', overflowWrap: 'anywhere' }}
                 >
                     {markdownLink[1]}
                 </a>
@@ -106,7 +107,7 @@ const renderInlineMarkdown = (text: string, color: string): ReactNode[] => {
                         href={href}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: '#1677ff', textDecoration: 'underline', overflowWrap: 'anywhere' }}
+                        style={{ color: 'var(--theme-accent)', textDecoration: 'underline', overflowWrap: 'anywhere' }}
                     >
                         {href}
                     </a>
@@ -210,8 +211,8 @@ const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean) => {
                             alignItems: 'center',
                             padding: '9px 10px',
                             borderRadius: 8,
-                            border: dark ? '1px solid rgba(255,255,255,0.12)' : '1px solid #5a5a5a',
-                            background: dark ? 'rgba(255,255,255,0.06)' : '#484848',
+                            border: '1px solid var(--theme-border)',
+                            background: 'var(--theme-card)',
                             color: 'inherit',
                             textDecoration: 'none',
                         }}
@@ -219,7 +220,7 @@ const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean) => {
                         <Avatar
                             size={32}
                             src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`}
-                            style={{ background: dark ? 'rgba(255,255,255,0.12)' : '#525252' }}
+                            style={{ background: 'var(--theme-elevated)' }}
                         >
                             {domain.charAt(0).toUpperCase()}
                         </Avatar>
@@ -325,7 +326,7 @@ const DoraemonMiniAvatar = () => (
 )
 
 export default function AiChatWidget() {
-    const { dark } = useTheme()
+    const { dark, tokens } = useTheme()
     const { user } = useAuth()
     const [visible, setVisible] = useState(false)
     const [expanded, setExpanded] = useState(false)
@@ -739,20 +740,20 @@ export default function AiChatWidget() {
     } = useDraggable(defaultChatPosition, mascotButtonWidth)
     const panelWidth = compactChat ? 'min(350px, calc(100vw - 24px))' : expanded ? 760 : 560
     const panelHeight = compactChat ? 'min(560px, calc(100vh - 140px))' : expanded ? 760 : 560
-    const panelBackground = dark ? 'rgba(17,19,24,0.86)' : 'rgba(72,72,72,0.76)'
-    const panelBandBackground = dark ? 'rgba(13,17,25,0.70)' : 'rgba(62,62,62,0.68)'
+    const panelBackground = 'color-mix(in srgb, var(--theme-card) 75%, transparent)'
+    const panelBandBackground = 'color-mix(in srgb, var(--theme-bg) 60%, transparent)'
     const panelTint = dark
         ? 'linear-gradient(135deg, rgba(10,10,15,0.82), rgba(20,22,30,0.64))'
         : 'linear-gradient(135deg, rgba(46,46,46,0.58), rgba(72,72,72,0.46))'
     const panelImageFilter = dark
         ? 'blur(12px) brightness(0.82) saturate(1.2) contrast(1.45)'
         : 'blur(12px) brightness(0.78) saturate(1.08) contrast(1.24)'
-    const panelText = dark ? '#f3f3f3' : '#edebe6'
-    const panelMutedText = dark ? '#d8d8d8' : 'rgba(237,235,230,0.55)'
-    const panelBorder = dark ? '1px solid rgba(255,255,255,0.10)' : '1px solid #5a5a5a'
-    const assistantBubbleBackground = dark ? 'rgba(31,34,43,0.96)' : '#525252'
-    const inputBackground = dark ? 'rgba(255,255,255,0.07)' : '#525252'
-    const inputBorder = dark ? 'rgba(255,255,255,0.16)' : '#5a5a5a'
+    const panelText = tokens.text
+    const panelMutedText = tokens.muted
+    const panelBorder = '1px solid var(--theme-accent-border)'
+    const assistantBubbleBackground = tokens.elevated
+    const inputBackground = 'color-mix(in srgb, var(--theme-elevated) 80%, transparent)'
+    const inputBorder = 'var(--theme-accent-border)'
     const mascotCursor = 'pointer'
     const panelAlignRight = draggableChatPosition.x > viewport.width / 2
 
@@ -773,7 +774,7 @@ export default function AiChatWidget() {
                     icon={<PlusOutlined />}
                     block
                     onClick={createNewChat}
-                    style={{ background: '#b6462f', borderColor: '#b6462f' }}
+                    style={{ background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)' }}
                 >
                     Cuộc trò chuyện mới
                 </Button>
@@ -853,7 +854,9 @@ export default function AiChatWidget() {
         </>
     )
 
-    return (
+    if (typeof document === 'undefined') return null
+
+    return createPortal(
         <>
             <style>{`
                 .doraemon-chat-trigger {
@@ -982,10 +985,16 @@ export default function AiChatWidget() {
             <div
                 className="ai-chat-anchor"
                 style={{
+                    position: 'fixed',
                     left: draggableChatPosition.x,
                     top: draggableChatPosition.y,
+                    zIndex: 9999,
                     width: mascotButtonWidth,
                     height: mascotButtonHeight,
+                    maxHeight: '80vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    margin: 0,
                     touchAction: 'none',
                 }}
             >
@@ -1026,8 +1035,9 @@ export default function AiChatWidget() {
                     maxHeight: compactChat ? 'calc(100vh - 140px)' : 'calc(100vh - 48px)',
                     zIndex: 11010,
                     // Chat panel must float above the member header/menu.
-                    borderRadius: compactChat ? 20 : 28,
+                    borderRadius: 16,
                     background: panelBackground,
+                    color: 'var(--theme-text)',
                     border: panelBorder,
                     boxShadow: visible
                         ? '0 28px 100px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.08)'
@@ -1037,10 +1047,12 @@ export default function AiChatWidget() {
                     visibility: visible ? 'visible' : 'hidden',
                     transition: 'all 220ms ease',
                     overflow: 'hidden',
+                    position: 'absolute',
+                    isolation: 'isolate',
                     display: 'flex',
                     flexDirection: 'column',
-                    backdropFilter: 'blur(18px)',
-                    WebkitBackdropFilter: 'blur(18px)',
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)',
                     cursor: 'default',
                     userSelect: 'text',
                     WebkitUserSelect: 'text',
@@ -1087,8 +1099,10 @@ export default function AiChatWidget() {
                         justifyContent: 'space-between',
                         gap: 12,
                         padding: mobileChat ? '12px 14px' : '16px 18px',
-                        background: 'linear-gradient(135deg, #b6462f, #e8722a)',
-                        color: '#edebe6',
+                        background: 'color-mix(in srgb, var(--theme-accent) 90%, transparent)',
+                        backdropFilter: 'blur(10px)',
+                        WebkitBackdropFilter: 'blur(10px)',
+                        color: 'var(--theme-text)',
                         flexShrink: 0,
                         cursor: 'grab',
                         userSelect: 'none',
@@ -1096,11 +1110,11 @@ export default function AiChatWidget() {
                         touchAction: 'none',
                     }}>
                         <div style={{ minWidth: 0 }}>
-                            <Typography.Title level={5} style={{ margin: 0, color: '#edebe6', fontSize: mobileChat ? 14 : 16 }}>
+                            <Typography.Title level={5} style={{ margin: 0, color: 'var(--theme-text)', fontSize: mobileChat ? 14 : 16 }}>
                                 Gì cũng biết! Tò mò hỏi Doraemon
                             </Typography.Title>
                             {!mobileChat && (
-                                <Typography.Text style={{ color: '#ffe0d6', fontSize: 12 }}>
+                                <Typography.Text style={{ color: 'var(--theme-muted)', fontSize: 12 }}>
                                     Chồn đến từ thế kỉ 22
                                 </Typography.Text>
                             )}
@@ -1109,13 +1123,13 @@ export default function AiChatWidget() {
                             size={mobileChat ? 2 : 8}
                             style={{ flexShrink: 0 }}
                         >
-                            <Button size="small" type="text" icon={<PlusOutlined />} style={{ color: '#edebe6' }} onClick={createNewChat} />
+                            <Button size="small" type="text" icon={<PlusOutlined />} style={{ color: 'var(--theme-text)' }} onClick={createNewChat} />
                             {/* FIX: Nút "Phiên" chỉ hiện trên mobile/tablet, mở drawer với z-index cao */}
                             {compactChat && (
                                 <Button
                                     size="small"
                                     type="text"
-                                    style={{ color: '#edebe6', fontWeight: 600 }}
+                                    style={{ color: 'var(--theme-text)', fontWeight: 600 }}
                                     onClick={(e) => {
                                         e.stopPropagation()
                                         setSessionDrawerOpen(true)
@@ -1129,11 +1143,11 @@ export default function AiChatWidget() {
                                     size="small"
                                     type="text"
                                     icon={<ExpandAltOutlined />}
-                                    style={{ color: '#edebe6' }}
+                                    style={{ color: 'var(--theme-text)' }}
                                     onClick={() => setExpanded(!expanded)}
                                 />
                             )}
-                            <Button size="small" type="text" icon={<CloseOutlined />} style={{ color: '#edebe6' }} onClick={closeWidget} />
+                            <Button size="small" type="text" icon={<CloseOutlined />} style={{ color: 'var(--theme-text)' }} onClick={closeWidget} />
                         </Space>
                     </div>
 
@@ -1145,7 +1159,9 @@ export default function AiChatWidget() {
                                 width: 220,
                                 minWidth: 220,
                                 borderRight: panelBorder,
-                                background: panelBandBackground,
+                                 background: panelBandBackground,
+                                 backdropFilter: 'blur(12px)',
+                                 WebkitBackdropFilter: 'blur(12px)',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 overflow: 'hidden',
@@ -1272,7 +1288,9 @@ export default function AiChatWidget() {
                                     flex: 1,
                                     overflowY: 'auto',
                                     padding: mobileChat ? 10 : 16,
-                                    background: panelBandBackground,
+                                     background: panelBandBackground,
+                                     backdropFilter: 'blur(12px)',
+                                     WebkitBackdropFilter: 'blur(12px)',
                                     cursor: 'text',
                                     pointerEvents: 'auto',
                                     userSelect: 'text',
@@ -1288,8 +1306,8 @@ export default function AiChatWidget() {
                                 ) : (
                                     activeMessages.map((message) => {
                                         const isUser = message.role === 'user'
-                                        const bubbleBg = isUser ? '#b6462f' : assistantBubbleBackground
-                                        const bubbleColor = isUser ? '#edebe6' : panelText
+                                        const bubbleBg = isUser ? 'var(--theme-accent)' : assistantBubbleBackground
+                                        const bubbleColor = isUser ? 'var(--theme-button-text)' : panelText
                                         const toolPayload = !isUser && message.role === 'assistant'
                                             ? parseAiToolPayload(message.content)
                                             : null
@@ -1352,7 +1370,7 @@ export default function AiChatWidget() {
                                                                             alignItems: 'center',
                                                                             padding: 10,
                                                                             borderRadius: 14,
-                                                                            background: dark ? 'rgba(255,255,255,0.06)' : '#484848',
+                                                                            background: 'var(--theme-card)',
                                                                             color: bubbleColor,
                                                                             textDecoration: 'none',
                                                                         }}
@@ -1363,7 +1381,7 @@ export default function AiChatWidget() {
                                                                             <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
                                                                                 {item.name}
                                                                             </Typography.Text>
-                                                                            <Typography.Text style={{ color: '#b6462f' }}>
+                                                                                <Typography.Text style={{ color: 'var(--theme-accent)' }}>
                                                                                 {Number(item.price).toLocaleString('vi-VN')}đ
                                                                             </Typography.Text>
                                                                             {item.selectedVariant && (
@@ -1385,7 +1403,7 @@ export default function AiChatWidget() {
                                                                         style={{
                                                                             padding: '7px 10px',
                                                                             borderRadius: 999,
-                                                                            background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(224,90,48,0.15)',
+                                                                            background: 'var(--theme-elevated)',
                                                                             color: bubbleColor,
                                                                             textDecoration: 'none',
                                                                             fontSize: 13,
@@ -1408,7 +1426,7 @@ export default function AiChatWidget() {
                                                                             alignItems: 'center',
                                                                             padding: 10,
                                                                             borderRadius: 14,
-                                                                            background: dark ? 'rgba(255,255,255,0.06)' : '#484848',
+                                                                            background: 'var(--theme-card)',
                                                                         }}
                                                                     >
                                                                         <Avatar src={item.avatar || undefined} size={44}>
@@ -1452,7 +1470,9 @@ export default function AiChatWidget() {
                             <div style={{
                                 borderTop: panelBorder,
                                 padding: mobileChat ? '10px 12px' : '14px 16px',
-                                background: panelBackground,
+                                 background: panelBackground,
+                                 backdropFilter: 'blur(12px)',
+                                 WebkitBackdropFilter: 'blur(12px)',
                                 flexShrink: 0,
                             }}>
                                 {errorInfo && (
@@ -1467,12 +1487,12 @@ export default function AiChatWidget() {
                                         gap: 10,
                                         flexWrap: 'wrap',
                                     }}>
-                                        <Typography.Text style={{ color: '#a8071a', fontSize: 13 }}>{errorInfo.message}</Typography.Text>
+                                        <Typography.Text style={{ color: 'var(--theme-text)', fontSize: 13 }}>{errorInfo.message}</Typography.Text>
                                         <Button
                                             size="small"
                                             disabled={retryCountdown > 0}
                                             onClick={handleRetry}
-                                            style={{ background: '#b6462f', borderColor: '#b6462f', color: '#edebe6' }}
+                                            style={{ background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)', color: 'var(--theme-text)' }}
                                         >
                                             {retryCountdown > 0 ? `Thử lại sau ${retryCountdown}s` : 'Thử lại'}
                                         </Button>
@@ -1490,8 +1510,10 @@ export default function AiChatWidget() {
                                     style={{
                                         borderRadius: 14,
                                         marginBottom: 10,
-                                        background: inputBackground,
-                                        borderColor: inputBorder,
+                                         background: inputBackground,
+                                        border: `1px solid ${inputBorder}`,
+                                        backdropFilter: 'blur(8px)',
+                                        WebkitBackdropFilter: 'blur(8px)',
                                         color: panelText,
                                         fontSize: mobileChat ? 14 : 15,
                                     }}
@@ -1522,7 +1544,7 @@ export default function AiChatWidget() {
                                             size={mobileChat ? 'small' : 'middle'}
                                             onClick={() => handleSend()}
                                             loading={loading}
-                                            style={{ background: '#b6462f', borderColor: '#b6462f', color: '#edebe6' }}
+                                            style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)', border: 'none' }}
                                         >
                                             Gửi
                                         </Button>
@@ -1558,13 +1580,14 @@ export default function AiChatWidget() {
                 styles={{
                     body: {
                         padding: 0,
-                        background: dark ? '#14161d' : '#484848',
+                        background: 'var(--theme-card)',
+                        color: 'var(--theme-text)',
                         display: 'flex',
                         flexDirection: 'column',
                     },
                     header: {
-                        background: dark ? '#14161d' : '#484848',
-                        borderBottom: dark ? '1px solid rgba(255,255,255,0.10)' : '1px solid #5a5a5a',
+                        background: 'var(--theme-card)',
+                        borderBottom: '1px solid var(--theme-border)',
                     },
                     wrapper: {
                         zIndex: 11500,
@@ -1573,7 +1596,8 @@ export default function AiChatWidget() {
             >
                 {renderSessionList()}
             </Drawer>
-        </>
+        </>,
+        document.body,
     )
 }
 

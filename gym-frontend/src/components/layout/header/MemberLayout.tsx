@@ -20,7 +20,6 @@ import {
 } from 'antd'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useTheme } from '../../../context/ThemeProvider'
 import { useCart } from '../../../context/useCart'
 import { useWallet } from '../../../context/WalletProvider'
 import { useAuth } from '../../../hook/useAuth'
@@ -64,8 +63,6 @@ export default function MemberLayout({
   const { wallet } = useWallet()
   const navigate = useNavigate()
   const location = useLocation()
-  const { dark } = useTheme()
-
   const navItems = [
     { key: '/dashboard/member', label: 'Trang chủ', icon: <HomeOutlined /> },
     { key: '/dashboard/member/store', label: 'Cửa hàng', icon: <ShopOutlined /> },
@@ -112,8 +109,9 @@ export default function MemberLayout({
       <Header
         className="member-shell-header"
         style={{
-          background: dark ? '#141414' : '#3e3e3e',
-          borderBottom: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a',
+          background: 'var(--theme-card)',
+          borderBottom: '1px solid var(--theme-border)',
+          color: 'var(--theme-text)',
         }}
       >
         <div
@@ -125,8 +123,24 @@ export default function MemberLayout({
             if (event.key === 'Enter') goTo('/dashboard/member')
           }}
         >
-          <div className="member-shell-logo-mark">GS</div>
-          <div className="member-shell-brand">GymSystem</div>
+          <div
+            className="member-shell-logo-mark"
+            style={{
+              background: 'var(--theme-accent)',
+              color: 'var(--theme-button-text)',
+              borderRadius: 8,
+              width: 32,
+              height: 32,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 700,
+              fontSize: 14,
+            }}
+          >
+            GS
+          </div>
+          <div className="member-shell-brand" style={{ color: 'var(--theme-accent)' }}>GymSystem</div>
         </div>
 
         <Menu
@@ -147,9 +161,9 @@ export default function MemberLayout({
         <div className="member-shell-desktop-actions">
           <div
             className="member-shell-wallet-pill"
-            style={{ background: dark ? '#262626' : '#484848' }}
+            style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
           >
-            <Text style={{ fontSize: 12, color: dark ? '#aaa' : 'rgba(237,235,230,0.5)' }}>Ví:</Text>
+            <Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>Ví:</Text>
             <Text strong style={{ fontSize: 14 }}>
               {walletText}
             </Text>
@@ -186,7 +200,7 @@ export default function MemberLayout({
             onClick={openProfileModal}
           >
             <Avatar src={avatarUrl} />
-            <Text strong style={{ color: '#edebe6' }}>
+            <Text strong style={{ color: 'var(--theme-text)' }}>
               {user?.name}
             </Text>
           </div>
@@ -207,7 +221,8 @@ export default function MemberLayout({
       <Content
         className="member-shell-content"
         style={{
-          background: dark ? '#0f0f0f' : '#3e3e3e',
+          background: 'var(--theme-bg)',
+          color: 'var(--theme-text)',
         }}
       >
         {children}
@@ -225,13 +240,13 @@ export default function MemberLayout({
         <div className="flex items-center gap-3 p-4">
           <img className="h-10 w-10 rounded-full object-cover" src={avatarUrl} alt={user?.name || 'Avatar'} />
           <div className="min-w-0 flex-1">
-            <p className="m-0 truncate text-sm font-medium text-[#edebe6]">{user?.name}</p>
+            <p className="m-0 truncate text-sm font-medium text-[#edebe6]" style={{ color: 'var(--theme-text)' }}>{user?.name}</p>
             <p className="m-0 truncate text-xs text-[rgba(237,235,230,0.5)]">{user?.role || 'Member'}</p>
           </div>
           <button
             onClick={openProfileModal}
             className="whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs text-gray-300 transition-colors"
-            style={{ borderColor: '#5a5a5a', backgroundColor: '#484848' }}
+            style={{ borderColor: 'var(--theme-border)', backgroundColor: 'var(--theme-card)', color: 'var(--theme-text)' }}
             type="button"
           >
             Tài khoản

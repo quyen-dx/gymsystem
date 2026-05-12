@@ -210,7 +210,7 @@ export default function MemberStorePage() {
                   product.image ? (
                     <img src={product.image} className="h-[200px] w-full object-cover" alt={product.name} />
                   ) : (
-                    <div className="h-[200px] flex items-center justify-center text-gray-400" style={{ backgroundColor: '#3e3e3e' }}>
+                    <div className="h-[200px] flex items-center justify-center text-gray-400" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-muted)' }}>
                       No image
                     </div>
                   )
@@ -221,21 +221,21 @@ export default function MemberStorePage() {
                 {product.rating && product.rating > 0 ? (
                   <div className="flex items-center gap-2 mb-1">
                     <Rate disabled allowHalf value={product.rating} style={{ fontSize: 14 }} />
-                    <span className="text-[#b6462f] text-sm font-medium">
+                    <span className="text-[var(--theme-accent)] text-sm font-medium">
                       {product.rating.toFixed(1)}
                     </span>
-                    <span className="text-gray-400 text-xs">
+                    <span className="text-gray-400 text-xs" style={{ color: 'var(--theme-muted)' }}>
                       ({product.reviewCount || 0})
                     </span>
                   </div>
                 ) : (
-                  <div className="text-gray-400 text-xs mb-1">
+                  <div className="text-gray-400 text-xs mb-1" style={{ color: 'var(--theme-muted)' }}>
                     Chưa có đánh giá
                   </div>
                 )}
 
                 <div className="flex justify-between items-center">
-                  <span className="text-[#b6462f] font-bold text-lg">
+                  <span className="text-[var(--theme-accent)] font-bold text-lg">
                     {product.price?.toLocaleString('vi-VN')}đ
                   </span>
                   <Tag color={product.stock && product.stock > 0 ? 'green' : 'red'}>
@@ -272,7 +272,7 @@ export default function MemberStorePage() {
             type="primary"
             loading={submittingReview}
             onClick={handleSubmitShopReview}
-            className="w-fit !bg-[#b6462f] border-none"
+            className="w-fit !bg-[var(--theme-accent)] border-none"
           >
             Gửi đánh giá shop
           </Button>
@@ -345,10 +345,10 @@ export default function MemberStorePage() {
               alt="banner"
             />
             <div className="absolute inset-0 bg-black/50" />
-            <div className="absolute top-1/2 left-8 max-[640px]:left-4 -translate-y-1/2 text-white pr-4">
+            <div className="absolute top-1/2 left-8 max-[640px]:left-4 -translate-y-1/2 text-white pr-4" style={{ color: 'var(--theme-text)' }}>
               <h1 className="text-3xl max-[640px]:text-2xl font-extrabold">Gym Store</h1>
               <p className="mt-2 opacity-90">Dụng cụ tập luyện chính hãng - Giá tốt mỗi ngày</p>
-              <Button type="primary" size="large" className="mt-4 !bg-[#b6462f] border-none max-[640px]:hidden">
+              <Button type="primary" size="large" className="mt-4 !bg-[var(--theme-accent)] border-none max-[640px]:hidden">
                 Mua ngay
               </Button>
             </div>
@@ -386,7 +386,7 @@ export default function MemberStorePage() {
                         product.image ? (
                           <img src={product.image} className="h-[200px] w-full object-cover" alt={product.name} />
                         ) : (
-                          <div className="h-[200px] flex items-center justify-center text-gray-400" style={{ backgroundColor: '#3e3e3e' }}>
+                          <div className="h-[200px] flex items-center justify-center text-gray-400" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-muted)' }}>
                             No image
                           </div>
                         )
@@ -397,21 +397,21 @@ export default function MemberStorePage() {
                       {product.rating && product.rating > 0 ? (
                         <div className="flex items-center gap-2 mb-1">
                           <Rate disabled allowHalf value={product.rating} style={{ fontSize: 14 }} />
-                          <span className="text-[#b6462f] text-sm font-medium">
+                          <span className="text-[var(--theme-accent)] text-sm font-medium">
                             {product.rating.toFixed(1)}
                           </span>
-                          <span className="text-gray-400 text-xs">
+                          <span className="text-gray-400 text-xs" style={{ color: 'var(--theme-muted)' }}>
                             ({product.reviewCount || 0})
                           </span>
                         </div>
                       ) : (
-                        <div className="text-gray-400 text-xs mb-1">
+                        <div className="text-gray-400 text-xs mb-1" style={{ color: 'var(--theme-muted)' }}>
                           Chưa có đánh giá
                         </div>
                       )}
 
                       <div className="flex justify-between items-center">
-                        <span className="text-[#b6462f] font-bold text-lg">
+                        <span className="text-[var(--theme-accent)] font-bold text-lg">
                           {product.price?.toLocaleString('vi-VN')}đ
                         </span>
                         <Tag color={product.stock && product.stock > 0 ? 'green' : 'red'}>

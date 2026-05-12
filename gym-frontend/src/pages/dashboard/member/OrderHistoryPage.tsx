@@ -121,7 +121,7 @@ export default function OrderHistoryPage() {
                                                             style={{ objectFit: 'cover', borderRadius: 8 }}
                                                         />
                                                     ) : (
-                                                        <div style={{ width: 72, height: 72, borderRadius: 8, background: '#484848' }} />
+                                                        <div style={{ width: 72, height: 72, borderRadius: 8, background: 'var(--theme-card)' }} />
                                                     )}
                                                     <div>
                                                         <Text strong>{getOrderItemName(item)}</Text>

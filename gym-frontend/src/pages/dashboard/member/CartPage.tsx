@@ -19,7 +19,7 @@ export default function CartPage() {
   const { cart, setCart } = useCart()
   const navigate = useNavigate()
   const { dark } = useTheme()
-  const panelBg = dark ? 'rgba(23,23,23,0.92)' : '#484848'
+  const panelBg = 'var(--theme-card)'
   const borderColor = dark ? 'rgba(255,255,255,0.08)' : '#5a5a5a'
   const mutedText = dark ? '#bbb' : 'rgba(237,235,230,0.5)'
 
@@ -92,7 +92,7 @@ export default function CartPage() {
 
                     <div style={{ marginBottom: 8 }}>
                       Giá:{' '}
-                      <b style={{ color: '#b6462f' }}>
+                      <b style={{ color: 'var(--theme-accent)' }}>
                         {item.price.toLocaleString('vi-VN')}đ
                       </b>
                     </div>
@@ -120,7 +120,7 @@ export default function CartPage() {
 
                     <div style={{ marginBottom: 12 }}>
                       Thành tiền:{' '}
-                      <b style={{ color: '#b6462f' }}>
+                      <b style={{ color: 'var(--theme-accent)' }}>
                         {(item.price * item.quantity).toLocaleString('vi-VN')}đ
                       </b>
                     </div>
@@ -152,7 +152,7 @@ export default function CartPage() {
             >
               <div style={{ fontSize: 18, marginBottom: 16 }}>
                 Tổng cộng:{' '}
-                <b style={{ color: '#b6462f', fontSize: 24 }}>
+                <b style={{ color: 'var(--theme-accent)', fontSize: 24 }}>
                   {total.toLocaleString('vi-VN')}đ
                 </b>
               </div>
