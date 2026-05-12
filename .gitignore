@@ -1,7 +1,37 @@
+# dependencies
 node_modules/
+
+# frontend build
 dist/
 build/
 out/
-.env
 .vite/
+
+# electron build
+release/
+*.blockmap
+
+# installer files
+*.exe
+*.msi
+
+# upload/download folder
+download/
+
+# env
+.env
+.env.*
+
+# logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
