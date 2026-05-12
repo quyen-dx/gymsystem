@@ -4,7 +4,6 @@ import { authService } from '../../services/authService'
 import { Button, Form, Input, Typography, message, Divider } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { useTheme } from '../../context/ThemeProvider'
-import { SunOutlined, MoonOutlined } from '@ant-design/icons'
 const { Title, Text } = Typography
 
 const getDashboardPath = (role: string) => {
@@ -17,7 +16,7 @@ const getDashboardPath = (role: string) => {
 
 export default function RegisterPage() {
   const navigate = useNavigate()
-  const { dark, toggleTheme } = useTheme()
+  const { dark } = useTheme()
 
   const [step, setStep] = useState<'form' | 'otp'>('form')
   const [loading, setLoading] = useState(false)
@@ -115,13 +114,6 @@ export default function RegisterPage() {
             Đăng ký
           </Title>
         </div>
-        <div style={{ position: 'absolute', top: 16, right: 16 }}>
-          <Button
-            shape="circle"
-            onClick={toggleTheme}
-            icon={dark ? <SunOutlined /> : <MoonOutlined />}
-          />
-        </div>
         {/* FORM STEP 1 */}
         {step === 'form' && (
           <Form layout="vertical" form={form} onFinish={handleSendOtp}>
@@ -167,7 +159,7 @@ export default function RegisterPage() {
               style={{ color: dark ? '#ccc' : 'rgba(237,235,230,0.65)' }}
             >
               Đã có tài khoản?{' '}
-              <Link to="/login" className="!text-orange-500 font-semibold">
+              <Link to="/login" className="font-semibold" style={{ color: 'var(--theme-accent)' }}>
                 Đăng nhập
               </Link>
             </div>

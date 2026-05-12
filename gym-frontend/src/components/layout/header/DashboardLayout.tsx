@@ -60,7 +60,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navigate = useNavigate()
   const location = useLocation()
 
-  const { dark, toggleTheme } = useTheme()
+  const { dark } = useTheme()
 
   const items = roleMenus[user?.role as string] || []
 
@@ -85,17 +85,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           }}
         >
           GS DASHBOARD
-        </div>
-
-        {/* 🔥 THEME TOGGLE BUTTON */}
-        <div style={{ padding: '0 16px 10px' }}>
-          <Button
-            icon={<BulbOutlined />}
-            onClick={toggleTheme}
-            block
-          >
-            {dark ? 'Light mode' : 'Dark mode'}
-          </Button>
         </div>
 
         <Menu

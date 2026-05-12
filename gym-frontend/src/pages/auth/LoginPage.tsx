@@ -3,8 +3,6 @@ import {
   EyeTwoTone,
   FacebookFilled,
   GoogleOutlined,
-  MoonOutlined,
-  SunOutlined,
 } from '@ant-design/icons'
 import { Button, Divider, Form, Input, Typography, message } from 'antd'
 import { useState } from 'react'
@@ -27,7 +25,7 @@ export default function LoginPage() {
 
   const { login } = useAuth()
   const navigate = useNavigate()
-  const { dark, toggleTheme } = useTheme()
+  const { dark } = useTheme()
 
   const [loading, setLoading] = useState(false)
 
@@ -92,13 +90,6 @@ export default function LoginPage() {
         >
           Đăng nhập
         </Title>
-        <div style={{ position: 'absolute', top: 16, right: 16 }}>
-          <Button
-            shape="circle"
-            onClick={toggleTheme}
-            icon={dark ? <SunOutlined /> : <MoonOutlined />}
-          />
-        </div>
         {/* FORM */}
         <Form layout="vertical" onFinish={handleSubmit}>
 
@@ -136,7 +127,7 @@ export default function LoginPage() {
           </Button>
 
           <div className="text-right mt-2">
-          <Link to="/forgot-password" className="text-sm text-[#e05a30]">
+          <Link to="/forgot-password" className="text-sm" style={{ color: '#ffffff' }}>
               Quên mật khẩu?
             </Link>
           </div>
@@ -171,7 +162,7 @@ export default function LoginPage() {
             }`}
         >
           Chưa có tài khoản?{' '}
-          <Link to="/register" className="text-orange-500 font-semibold">
+          <Link to="/register" className="font-semibold" style={{ color: 'var(--theme-accent)' }}>
             Đăng ký
           </Link>
         </div>

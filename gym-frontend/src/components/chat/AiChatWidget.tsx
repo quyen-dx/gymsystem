@@ -67,6 +67,53 @@ const TYPING_INTERVAL_MS = 24
 const TYPING_BASE_CHARS = 2
 const TYPING_FAST_BACKLOG = 700
 const TYPING_MAX_CHARS = 7
+const DEFAULT_THEME_COMMAND_COLOR = '#e05a30'
+
+const normalizeCommandText = (value: string) => value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
+    .toLowerCase()
+
+const normalizeHexColor = (hex: string) => {
+    const value = hex.trim().toLowerCase()
+    if (/^#[0-9a-f]{6}$/.test(value)) return value
+    if (/^#[0-9a-f]{3}$/.test(value)) {
+        return `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`
+    }
+    return ''
+}
+
+const getThemeCommand = (text: string): { color: string; message: string } | null => {
+    const normalized = normalizeCommandText(text)
+    const isThemeIntent = /\b(doi|thay|set|chuyen|change|apply|ap dung|cap nhat)\b/.test(normalized)
+        && /\b(mau|theme|giao dien|web|accent|color)\b/.test(normalized)
+
+    if (!isThemeIntent) return null
+
+    const resetIntent = /\b(mac dinh|default|reset|khoi phuc)\b/.test(normalized)
+    const hex = normalizeHexColor(text.match(/#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b/)?.[0] || '')
+
+    if (hex) {
+        return {
+            color: hex,
+            message: `Đã đổi màu giao diện sang ${hex}. Màu này đã được lưu, lần sau mở lại web vẫn dùng màu đó.`,
+        }
+    }
+
+    if (resetIntent) {
+        return {
+            color: DEFAULT_THEME_COMMAND_COLOR,
+            message: `Đã khôi phục màu giao diện mặc định ${DEFAULT_THEME_COMMAND_COLOR}.`,
+        }
+    }
+
+    return {
+        color: '',
+        message: 'Bạn gửi thêm mã màu hex nhé, ví dụ: đổi màu web sang #16a34a.',
+    }
+}
 
 const parseAiToolPayload = (content: string): AiToolPayload | null => {
     try {
@@ -326,7 +373,7 @@ const DoraemonMiniAvatar = () => (
 )
 
 export default function AiChatWidget() {
-    const { dark, tokens } = useTheme()
+    const { dark, tokens, applyTheme } = useTheme()
     const { user } = useAuth()
     const [visible, setVisible] = useState(false)
     const [expanded, setExpanded] = useState(false)
@@ -653,6 +700,21 @@ export default function AiChatWidget() {
         addMessageToSession(userMessage)
         setLastQuery(trimmed)
         setQuery('')
+        const themeCommand = getThemeCommand(trimmed)
+        if (themeCommand) {
+            const assistantMessage: ChatMessage = {
+                id: `${Date.now()}-assistant`,
+                userId: user?._id ?? 'guest',
+                role: 'assistant',
+                content: themeCommand.message,
+                createdAt: new Date().toISOString(),
+            }
+            if (themeCommand.color) applyTheme(themeCommand.color)
+            addMessageToSession(assistantMessage)
+            setLoading(false)
+            setErrorInfo(null)
+            return
+        }
         setLoading(true)
         setErrorInfo(null)
         const assistantMessageId = `${Date.now()}-assistant`
@@ -768,17 +830,6 @@ export default function AiChatWidget() {
     // ─── Session list renderer (shared between sidebar & drawer) ──────────────
     const renderSessionList = () => (
         <>
-            <div style={{ padding: 14, borderBottom: panelBorder }}>
-                <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    block
-                    onClick={createNewChat}
-                    style={{ background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)' }}
-                >
-                    Cuộc trò chuyện mới
-                </Button>
-            </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
                 {sessions.map((session) => (
                     <div
@@ -988,7 +1039,7 @@ export default function AiChatWidget() {
                     position: 'fixed',
                     left: draggableChatPosition.x,
                     top: draggableChatPosition.y,
-                    zIndex: 9999,
+                    zIndex: 11000,
                     width: mascotButtonWidth,
                     height: mascotButtonHeight,
                     maxHeight: '80vh',
@@ -1123,7 +1174,6 @@ export default function AiChatWidget() {
                             size={mobileChat ? 2 : 8}
                             style={{ flexShrink: 0 }}
                         >
-                            <Button size="small" type="text" icon={<PlusOutlined />} style={{ color: 'var(--theme-text)' }} onClick={createNewChat} />
                             {/* FIX: Nút "Phiên" chỉ hiện trên mobile/tablet, mở drawer với z-index cao */}
                             {compactChat && (
                                 <Button
@@ -1166,8 +1216,24 @@ export default function AiChatWidget() {
                                 flexDirection: 'column',
                                 overflow: 'hidden',
                             }}>
-                                <div style={{ padding: '12px 14px', borderBottom: panelBorder }}>
+                                <div
+                                    style={{
+                                        padding: '12px 14px',
+                                        borderBottom: panelBorder,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: 8,
+                                    }}
+                                >
                                     <Typography.Text strong style={{ color: panelText }}>Phiên chat</Typography.Text>
+                                    <Button
+                                        size="small"
+                                        type="text"
+                                        icon={<PlusOutlined />}
+                                        style={{ color: panelText }}
+                                        onClick={createNewChat}
+                                    />
                                 </div>
                                 <div style={{ flex: 1, overflowY: 'auto' }}>
                                     {sessions.map((session) => (
@@ -1564,9 +1630,21 @@ export default function AiChatWidget() {
             <Drawer
                 className="ai-session-drawer"
                 title={
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <span>Phiên chat</span>
-                        <Badge count={sessions.length} color="#b6462f" />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Badge count={sessions.length} color="#b6462f" />
+                            <Button
+                                size="small"
+                                type="text"
+                                icon={<PlusOutlined />}
+                                style={{ color: 'var(--theme-text)' }}
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    createNewChat()
+                                }}
+                            />
+                        </div>
                     </div>
                 }
                 placement="left"

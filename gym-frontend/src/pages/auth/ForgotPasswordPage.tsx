@@ -1,4 +1,3 @@
-import { MoonOutlined, SunOutlined } from '@ant-design/icons'
 import { Button, Divider, Form, Input, Steps, Typography, message } from 'antd'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -11,7 +10,7 @@ type Step = 'identifier' | 'otp' | 'password'
 
 export default function ForgotPasswordPage() {
   const navigate = useNavigate()
-  const { dark, toggleTheme } = useTheme()
+  const { dark } = useTheme()
 
   const [step, setStep] = useState<Step>('identifier')
   const [loading, setLoading] = useState(false)
@@ -116,15 +115,6 @@ export default function ForgotPasswordPage() {
           color: textColor,
         }}
       >
-        {/* TOGGLE THEME */}
-        <div style={{ position: 'absolute', top: 16, right: 16 }}>
-          <Button
-            shape="circle"
-            onClick={toggleTheme}
-            icon={dark ? <SunOutlined /> : <MoonOutlined />}
-          />
-        </div>
-
         <Title level={3} style={{ textAlign: 'center', color: textColor }}>
           Khôi phục mật khẩu
         </Title>
@@ -228,7 +218,7 @@ export default function ForgotPasswordPage() {
         )}
 
         <div className="text-center mt-6 text-sm">
-          <Link to="/login" className="text-orange-500 font-semibold">
+          <Link to="/login" className="font-semibold" style={{ color: 'var(--theme-accent)' }}>
             Quay lại đăng nhập
           </Link>
         </div>
