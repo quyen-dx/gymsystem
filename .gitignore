@@ -1,4 +1,10 @@
-# Large binary files
+node_modules/
+dist/
+build/
+out/
+.env
+.vite/
+*.log
 download/
 *.exe
 *.dmg

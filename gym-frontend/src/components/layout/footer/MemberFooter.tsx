@@ -17,7 +17,6 @@ import {
 } from 'lucide-react'
 import { FaFacebook, FaInstagram } from 'react-icons/fa'
 import { SiZalo } from 'react-icons/si'
-import { useEffect, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeProvider'
 import { useAuth } from '../../../hook/useAuth'
@@ -29,12 +28,6 @@ type FooterLink = {
   match?: string[]
   end?: boolean
 }
-
-type DesktopInstallerManifest = {
-  url?: string
-}
-
-const DEFAULT_DESKTOP_INSTALLER_URL = '/download/GymSystem-latest-win-x64.exe'
 
 const serviceLinks: FooterLink[] = [
   { label: 'Gói tập', to: '/dashboard/member/health', icon: Dumbbell },
@@ -60,29 +53,6 @@ function MemberFooter() {
   const navigate = useNavigate()
   const { logout } = useAuth()
   const { dark } = useTheme()
-  const isWindows = typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
-  const [desktopInstallerUrl, setDesktopInstallerUrl] = useState<string>(DEFAULT_DESKTOP_INSTALLER_URL)
-
-  useEffect(() => {
-    let isMounted = true
-
-    fetch('/download/desktop-installer.json', { cache: 'no-store' })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((manifest: DesktopInstallerManifest | null) => {
-        if (isMounted && manifest?.url) {
-          setDesktopInstallerUrl(manifest.url)
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setDesktopInstallerUrl(DEFAULT_DESKTOP_INSTALLER_URL)
-        }
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
 
   const handleLogout = () => {
     logout()
@@ -262,32 +232,18 @@ function MemberFooter() {
               </div>
               <div className="mt-4 hidden lg:block">
                 <a
-                  href={desktopInstallerUrl}
+                  href="https://github.com/quyen-dx/gymsystem/releases/latest/download/GymSystem-1.0.11-win-x64.exe"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   download
                   className={[
-                    'group flex w-fit min-w-[170px] items-center gap-3 rounded-xl px-3 py-2 no-underline shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg',
-                    isWindows
-                      ? 'bg-[#e05a30] text-white shadow-[0_10px_24px_rgba(224,90,48,0.22)] hover:bg-[#c94d26]'
-                      : dark
-                        ? 'bg-zinc-900 text-zinc-100 hover:bg-zinc-800'
-                        : 'bg-[#484848] text-[#edebe6] hover:bg-[#525252]',
+                    'group flex w-fit min-w-[170px] items-center gap-3 rounded-xl px-3 py-2 no-underline shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e05a30]',
+                    'bg-[#e05a30] text-white shadow-[0_10px_24px_rgba(224,90,48,0.22)] hover:bg-[#c94d26]',
                   ].join(' ')}
                 >
                   <MonitorDown className="h-5 w-5 shrink-0" />
-                  <span>
-                    <span className={['block text-[10px] leading-3', isWindows ? 'text-white/80' : 'text-zinc-400'].join(' ')}>
-                      Tải xuống
-                    </span>
-                    <span className="block text-sm font-semibold leading-5">
-                      Windows
-                    </span>
-                  </span>
+                  <span className="text-sm font-semibold leading-5">Tải xuống Windows</span>
                 </a>
-                {!isWindows && (
-                  <p className="m-0 mt-2 text-xs text-[rgba(237,235,230,0.5)]">
-                    Hiện hỗ trợ Windows
-                  </p>
-                )}
               </div>
             </div>
           </div>
