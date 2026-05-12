@@ -34,6 +34,8 @@ type DesktopInstallerManifest = {
   url?: string
 }
 
+const DEFAULT_DESKTOP_INSTALLER_URL = '/download/GymSystem-latest-win-x64.exe'
+
 const serviceLinks: FooterLink[] = [
   { label: 'Gói tập', to: '/dashboard/member/health', icon: Dumbbell },
   { label: 'Danh sách PT', to: '/dashboard/member/booking', icon: UsersRound },
@@ -59,7 +61,7 @@ function MemberFooter() {
   const { logout } = useAuth()
   const { dark } = useTheme()
   const isWindows = typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
-  const [desktopInstallerUrl, setDesktopInstallerUrl] = useState<string>('')
+  const [desktopInstallerUrl, setDesktopInstallerUrl] = useState<string>(DEFAULT_DESKTOP_INSTALLER_URL)
 
   useEffect(() => {
     let isMounted = true
@@ -73,7 +75,7 @@ function MemberFooter() {
       })
       .catch(() => {
         if (isMounted) {
-          setDesktopInstallerUrl('')
+          setDesktopInstallerUrl(DEFAULT_DESKTOP_INSTALLER_URL)
         }
       })
 
@@ -260,11 +262,10 @@ function MemberFooter() {
               </div>
               <div className="mt-4 hidden lg:block">
                 <a
-                  href={desktopInstallerUrl || '#'}
-                  aria-disabled={!desktopInstallerUrl}
+                  href={desktopInstallerUrl}
+                  download
                   className={[
                     'group flex w-fit min-w-[170px] items-center gap-3 rounded-xl px-3 py-2 no-underline shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg',
-                    !desktopInstallerUrl ? 'pointer-events-none opacity-60' : '',
                     isWindows
                       ? 'bg-[#e05a30] text-white shadow-[0_10px_24px_rgba(224,90,48,0.22)] hover:bg-[#c94d26]'
                       : dark

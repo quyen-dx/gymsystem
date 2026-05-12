@@ -9,6 +9,7 @@ const buildNumberFile = path.join(buildDir, 'build-number.json')
 const iconPath = path.join(buildDir, 'icon.ico')
 const frontendDownloadDir = path.join(rootDir, 'gym-frontend', 'public', 'download')
 const frontendDownloadManifest = path.join(frontendDownloadDir, 'desktop-installer.json')
+const frontendStableInstallerName = 'GymSystem-latest-win-x64.exe'
 
 function readBuildNumber() {
   try {
@@ -34,7 +35,7 @@ function cleanFrontendDownloadDir() {
   fs.mkdirSync(frontendDownloadDir, { recursive: true })
 
   for (const fileName of fs.readdirSync(frontendDownloadDir)) {
-    if (/^GymSystem.*\.exe$/i.test(fileName) || fileName === 'desktop-installer.json') {
+    if (/^GymSystem.*\.exe$/i.test(fileName) || fileName === frontendStableInstallerName || fileName === 'desktop-installer.json') {
       fs.rmSync(path.join(frontendDownloadDir, fileName), { force: true })
     }
   }
@@ -54,14 +55,18 @@ function publishInstallerToFrontend(artifactPaths) {
 
   const fileName = path.basename(installerPath)
   const publicInstallerPath = path.join(frontendDownloadDir, fileName)
+  const publicStableInstallerPath = path.join(frontendDownloadDir, frontendStableInstallerName)
   const manifest = {
     version,
     fileName,
-    url: `/download/${encodeURIComponent(fileName)}`,
+    stableFileName: frontendStableInstallerName,
+    url: `/download/${encodeURIComponent(frontendStableInstallerName)}`,
+    versionedUrl: `/download/${encodeURIComponent(fileName)}`,
     updatedAt: new Date().toISOString(),
   }
 
   fs.copyFileSync(installerPath, publicInstallerPath)
+  fs.copyFileSync(installerPath, publicStableInstallerPath)
   fs.writeFileSync(frontendDownloadManifest, `${JSON.stringify(manifest, null, 2)}\n`)
 
   return manifest
