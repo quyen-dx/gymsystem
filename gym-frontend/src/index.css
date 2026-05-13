@@ -672,9 +672,45 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
   border-color: var(--theme-accent) !important;
 }
 
+.profile-modal-wrap .ant-modal-wrap,
+.profile-modal-wrap {
+  overflow: hidden !important;
+}
+
+.profile-modal .ant-modal-close {
+  align-items: center !important;
+  background: rgba(15, 23, 42, 0.72) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  border-radius: 999px !important;
+  color: #ffffff !important;
+  display: inline-flex !important;
+  height: 34px !important;
+  justify-content: center !important;
+  right: 12px !important;
+  top: 12px !important;
+  width: 34px !important;
+  z-index: 10 !important;
+}
+
+.profile-modal .ant-modal-close:hover,
+.profile-modal .ant-modal-close:focus-visible {
+  background: rgba(15, 23, 42, 0.92) !important;
+  color: #ffffff !important;
+}
+
+.profile-modal .ant-modal-close-x {
+  color: #ffffff !important;
+  font-size: 18px !important;
+  height: 34px !important;
+  line-height: 34px !important;
+  width: 34px !important;
+}
+
 .profile-modal-scroll {
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   padding-right: 2px;
+  touch-action: pan-y;
 }
 
 @media (max-width: 1023px) {
@@ -763,6 +799,7 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
   }
 
   .profile-modal-scroll {
+    height: 100%;
     min-height: 0;
     overflow-y: auto;
     padding-bottom: 8px;

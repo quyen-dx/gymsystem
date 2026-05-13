@@ -33,7 +33,7 @@ const profileModalClass =
   'max-w-[760px] max-[768px]:!m-0 max-[768px]:!w-[calc(100vw-16px)] max-[768px]:!max-w-none max-[768px]:!pb-0 [&_.ant-modal-content]:!overflow-hidden [&_.ant-modal-content]:!p-0 [&_.ant-modal-content]:!rounded-2xl [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-content]:!shadow-2xl [&_.ant-modal-close]:!right-3.5 [&_.ant-modal-close]:!top-3.5 [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
 
 const profileModalWrapClass =
-  '[&_.ant-modal-mask]:!bg-[var(--profile-mask)] [&_.ant-modal-mask]:backdrop-blur-[10px]'
+  'profile-modal-wrap [&_.ant-modal-mask]:!bg-[var(--profile-mask)] [&_.ant-modal-mask]:backdrop-blur-[10px]'
 
 const profileFormClass =
   '[&_.ant-form-item-label>label]:!text-xs [&_.ant-form-item-label>label]:!font-medium [&_.ant-form-item-label>label]:!uppercase [&_.ant-form-item-label>label]:!tracking-[0.06em] [&_.ant-form-item-label>label]:!text-[var(--theme-muted)] [&_.ant-input]:!min-h-[42px] [&_.ant-input]:!rounded-[12px] [&_.ant-input]:!border-[var(--profile-border)] [&_.ant-input]:!bg-[var(--profile-bg-container)] [&_.ant-input]:!text-[var(--profile-text)] [&_.ant-input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input-affix-wrapper]:!min-h-[42px] [&_.ant-input-affix-wrapper]:!rounded-[12px] [&_.ant-input-affix-wrapper]:!border-[var(--profile-border)] [&_.ant-input-affix-wrapper]:!bg-[var(--profile-bg-container)] [&_.ant-input-affix-wrapper_input]:!bg-transparent [&_.ant-input-affix-wrapper_input]:!text-[var(--profile-text)] [&_.ant-input-affix-wrapper_input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input:focus]:!border-[var(--profile-accent)] [&_.ant-input:focus]:!shadow-none [&_.ant-input-focused]:!border-[var(--profile-accent)] [&_.ant-input-focused]:!shadow-none [&_.ant-input-affix-wrapper-focused]:!border-[var(--profile-accent)] [&_.ant-input-affix-wrapper-focused]:!shadow-none [&_.ant-input[disabled]]:!cursor-not-allowed [&_.ant-input[disabled]]:!bg-[var(--theme-elevated)] [&_.ant-input[disabled]]:!text-[var(--theme-muted)] [&_.ant-input-disabled]:!cursor-not-allowed [&_.ant-input-disabled]:!bg-[var(--theme-elevated)] [&_.ant-input-disabled]:!text-[var(--theme-muted)]'
@@ -274,6 +274,7 @@ export default function AccountProfileModal({
   const [editAddress, setEditAddress] = useState<any>(null)
   const [accentColor, setAccentColor] = useState(savedAccentColor)
   const fileRef = useRef<HTMLInputElement>(null)
+  const profileScrollRef = useRef<HTMLDivElement>(null)
   const watchedEmail = Form.useWatch('email', form)
   const previewTheme = generateTheme(accentColor)
 
@@ -341,6 +342,19 @@ export default function AccountProfileModal({
     if (!open) return
 
     let frame = 0
+    let touchStartY = 0
+    const scrollY = window.scrollY
+    const previousBodyPosition = document.body.style.position
+    const previousBodyTop = document.body.style.top
+    const previousBodyWidth = document.body.style.width
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.width = '100%'
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
 
     const updateProfileViewport = () => {
       cancelAnimationFrame(frame)
@@ -354,11 +368,73 @@ export default function AccountProfileModal({
       })
     }
 
+    const handleTouchStart = (event: TouchEvent) => {
+      touchStartY = event.touches[0]?.clientY || 0
+    }
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const scrollNode = profileScrollRef.current
+      const target = event.target as Node | null
+
+      if (!scrollNode || !target || !scrollNode.contains(target)) {
+        const modalNode = document.querySelector('.profile-modal .ant-modal-content')
+        const currentY = event.touches[0]?.clientY || 0
+        const deltaY = currentY - touchStartY
+
+        if (scrollNode && target && modalNode?.contains(target)) {
+          scrollNode.scrollTop -= deltaY
+          touchStartY = currentY
+        }
+
+        event.preventDefault()
+        return
+      }
+
+      const currentY = event.touches[0]?.clientY || 0
+      const deltaY = currentY - touchStartY
+      const atTop = scrollNode.scrollTop <= 0
+      const atBottom = scrollNode.scrollTop + scrollNode.clientHeight >= scrollNode.scrollHeight - 1
+      const cannotScroll = scrollNode.scrollHeight <= scrollNode.clientHeight
+
+      if (cannotScroll || (atTop && deltaY > 0) || (atBottom && deltaY < 0)) {
+        event.preventDefault()
+      }
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      const scrollNode = profileScrollRef.current
+      const target = event.target as Node | null
+      const modalNode = document.querySelector('.profile-modal .ant-modal-content')
+
+      if (!scrollNode || !target) return
+
+      if (scrollNode.contains(target)) {
+        const atTop = scrollNode.scrollTop <= 0
+        const atBottom = scrollNode.scrollTop + scrollNode.clientHeight >= scrollNode.scrollHeight - 1
+
+        if ((atTop && event.deltaY < 0) || (atBottom && event.deltaY > 0)) {
+          event.preventDefault()
+        }
+        return
+      }
+
+      if (modalNode?.contains(target)) {
+        scrollNode.scrollTop += event.deltaY
+        event.preventDefault()
+        return
+      }
+
+      event.preventDefault()
+    }
+
     updateProfileViewport()
     window.visualViewport?.addEventListener('resize', updateProfileViewport)
     window.visualViewport?.addEventListener('scroll', updateProfileViewport)
     window.addEventListener('resize', updateProfileViewport)
     window.addEventListener('orientationchange', updateProfileViewport)
+    document.addEventListener('touchstart', handleTouchStart, { passive: true })
+    document.addEventListener('touchmove', handleTouchMove, { passive: false })
+    document.addEventListener('wheel', handleWheel, { passive: false })
 
     return () => {
       cancelAnimationFrame(frame)
@@ -366,6 +442,15 @@ export default function AccountProfileModal({
       window.visualViewport?.removeEventListener('scroll', updateProfileViewport)
       window.removeEventListener('resize', updateProfileViewport)
       window.removeEventListener('orientationchange', updateProfileViewport)
+      document.removeEventListener('touchstart', handleTouchStart)
+      document.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('wheel', handleWheel)
+      document.body.style.position = previousBodyPosition
+      document.body.style.top = previousBodyTop
+      document.body.style.width = previousBodyWidth
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+      window.scrollTo(0, scrollY)
       document.documentElement.style.removeProperty('--profile-visual-height')
       document.documentElement.style.removeProperty('--profile-visual-top')
     }
@@ -599,7 +684,7 @@ export default function AccountProfileModal({
       open={open}
       onCancel={handleClose}
       footer={null}
-      maskClosable={false}
+      maskClosable
       destroyOnClose
       width={isProfileDesktop ? 760 : isProfileMobile ? 'calc(100vw - 16px)' : 680}
       className={`profile-modal ${profileModalClass}`}
@@ -661,6 +746,7 @@ export default function AccountProfileModal({
           <MobileMenuGrid tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
           <div
+            ref={profileScrollRef}
             className="profile-modal-scroll min-h-0 flex-1 overflow-y-auto"
             style={{
               maxHeight: isProfileCompact ? undefined : '70vh',
