@@ -771,12 +771,12 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
 
 @media (max-width: 768px) {
   .profile-modal {
-    --profile-mobile-inset-bottom: max(8px, env(safe-area-inset-bottom, 0px));
-    --profile-mobile-height: calc(100svh - 16px - env(safe-area-inset-bottom, 0px));
+    --profile-mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --profile-mobile-height: calc(var(--profile-visual-height, 100svh) - var(--profile-visual-top, 8px) - 8px - var(--profile-mobile-safe-bottom));
     position: fixed !important;
-    bottom: var(--profile-mobile-inset-bottom) !important;
+    bottom: auto !important;
     left: 8px !important;
-    top: unset !important;
+    top: var(--profile-visual-top, 8px) !important;
     margin: 0 !important;
     max-width: calc(100vw - 16px) !important;
     width: calc(100vw - 16px) !important;
@@ -784,15 +784,15 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
 
   @supports (height: 100dvh) {
     .profile-modal {
-      --profile-mobile-height: calc(100dvh - 16px - env(safe-area-inset-bottom, 0px));
+      --profile-mobile-height: calc(var(--profile-visual-height, 100dvh) - var(--profile-visual-top, 8px) - 8px - var(--profile-mobile-safe-bottom));
     }
   }
 
   .profile-modal .ant-modal-content {
-    border-radius: 18px 18px 0 0 !important;
+    border-radius: 18px !important;
     height: var(--profile-mobile-height) !important;
     max-height: var(--profile-mobile-height) !important;
-    min-height: min(72svh, var(--profile-mobile-height));
+    min-height: 0;
   }
 
   .profile-cover {

@@ -337,6 +337,40 @@ export default function AccountProfileModal({
     }
   }, [open, savedAccentColor])
 
+  useEffect(() => {
+    if (!open) return
+
+    let frame = 0
+
+    const updateProfileViewport = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const viewport = window.visualViewport
+        const height = Math.floor(viewport?.height || window.innerHeight)
+        const top = Math.max(8, Math.floor(viewport?.offsetTop || 0) + 8)
+
+        document.documentElement.style.setProperty('--profile-visual-height', `${height}px`)
+        document.documentElement.style.setProperty('--profile-visual-top', `${top}px`)
+      })
+    }
+
+    updateProfileViewport()
+    window.visualViewport?.addEventListener('resize', updateProfileViewport)
+    window.visualViewport?.addEventListener('scroll', updateProfileViewport)
+    window.addEventListener('resize', updateProfileViewport)
+    window.addEventListener('orientationchange', updateProfileViewport)
+
+    return () => {
+      cancelAnimationFrame(frame)
+      window.visualViewport?.removeEventListener('resize', updateProfileViewport)
+      window.visualViewport?.removeEventListener('scroll', updateProfileViewport)
+      window.removeEventListener('resize', updateProfileViewport)
+      window.removeEventListener('orientationchange', updateProfileViewport)
+      document.documentElement.style.removeProperty('--profile-visual-height')
+      document.documentElement.style.removeProperty('--profile-visual-top')
+    }
+  }, [open])
+
   if (!user) return null
 
   const profileThemeStyle = {
