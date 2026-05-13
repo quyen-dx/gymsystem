@@ -2,6 +2,7 @@ import axios from 'axios'
 import api from './api'
 import { clearAuthSession, refreshAccessToken } from './api'
 import { API_URL } from '../config/env'
+import type { ConversationContext } from '../types/aichat/aichat'
 
 const aiCache = new Map<string, any>()
 const AI_CACHE_VERSION = 'tool-v7-web-source-cards'
@@ -21,22 +22,23 @@ type RequestAiAssistantStreamOptions = {
     onMeta?: (data: any) => void
     onFallback?: (data: any) => void
     signal?: AbortSignal
+    conversationContext?: ConversationContext
 }
 
-export const requestAiAssistant = async (query: string, mode: AiMode = 'gym') => {
+export const requestAiAssistant = async (query: string, mode: AiMode = 'gym', conversationContext?: ConversationContext) => {
     const trimmed = query.trim()
     if (!trimmed) {
         return { answer: '', pts: [], products: [], plans: [] }
     }
 
-    const cacheKey = `${AI_CACHE_VERSION}:${mode}:${trimmed.toLowerCase()}`
+    const cacheKey = `${AI_CACHE_VERSION}:${mode}:${trimmed.toLowerCase()}:${conversationContext?.lastIntent || ''}:${conversationContext?.lastSearchQuery || ''}`
 
     if (aiCache.has(cacheKey)) {
         return aiCache.get(cacheKey)
     }
 
     try {
-        const response = await api.post('/ai-assistant', { query: trimmed, mode })
+        const response = await api.post('/ai-assistant', { query: trimmed, mode, conversationContext })
         const payload = response.data
         aiCache.set(cacheKey, payload)
         return payload
@@ -99,7 +101,7 @@ export const requestAiAssistantStream = async (
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ query: trimmed, mode }),
+        body: JSON.stringify({ query: trimmed, mode, conversationContext: options.conversationContext }),
         signal: options.signal,
     })
 

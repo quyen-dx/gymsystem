@@ -124,7 +124,7 @@ const applyAccentVariablesFast = (hex: string) => {
   const safeAccent = new TinyColor(safeHex)
   const buttonText = safeAccent.isLight() ? '#0a0a0a' : '#ffffff'
   const accentHover = safeAccent.clone().darken(10).toHexString()
-  const accentMuted = safeAccent.clone().setAlpha(0.15).toRgbString()
+  const accentMuted = safeAccent.clone().setAlpha(0.12).toRgbString()
   const accentBorder = safeAccent.clone().setAlpha(0.3).toRgbString()
   const r = document.documentElement.style
 

@@ -28,6 +28,132 @@ const normalizePromptText = (value) => String(value || '')
     .replace(/Đ/g, 'd')
     .toLowerCase()
 
+const SYSTEM_THEME_PRESETS = [
+    { themeName: 'cyberpunk', color: '#ff00ff', keywords: ['cyberpunk', 'cyber punk'] },
+    { themeName: 'gym_dark', color: '#991b1b', keywords: ['dark gym', 'gym dark', 'gym toi', 'tone gym', 'mau gym', 'phong gym', 'gym'] },
+    { themeName: 'minimal_light', color: '#ffffff', keywords: ['minimal light', 'toi gian sang', 'trang toi gian', 'light minimal'] },
+    { themeName: 'ocean_blue', color: '#0ea5e9', keywords: ['ocean blue', 'bien', 'dai duong', 'xanh bien', 'xanh nuoc bien'] },
+    { themeName: 'sunset', color: '#f97316', keywords: ['sunset', 'hoang hon', 'chieu ta'] },
+    { themeName: 'neon', color: '#39ff14', keywords: ['neon', 'phat sang'] },
+    { themeName: 'pastel', color: '#f9a8d4', keywords: ['pastel', 'nhe nhang'] },
+    { themeName: 'red', color: '#ef4444', keywords: ['do', 'red'] },
+    { themeName: 'green', color: '#22c55e', keywords: ['xanh la', 'xanh luc', 'luc', 'green'] },
+    { themeName: 'cyan', color: '#06b6d4', keywords: ['xanh ngoc', 'cyan', 'aqua'] },
+    { themeName: 'blue', color: '#3b82f6', keywords: ['xanh duong', 'xanh', 'blue'] },
+    { themeName: 'purple', color: '#8b5cf6', keywords: ['tim', 'purple', 'violet'] },
+    { themeName: 'yellow', color: '#eab308', keywords: ['vang', 'yellow'] },
+    { themeName: 'orange', color: '#f97316', keywords: ['cam', 'orange'] },
+    { themeName: 'pink', color: '#ec4899', keywords: ['hong', 'pink'] },
+    { themeName: 'black', color: '#111827', keywords: ['dark mode', 'den', 'black', 'toi'] },
+    { themeName: 'white', color: '#ffffff', keywords: ['light mode', 'trang', 'white', 'sang'] },
+]
+
+const normalizeHexColor = (hex) => {
+    const value = String(hex || '').trim().toLowerCase()
+    if (/^#[0-9a-f]{6}$/.test(value)) return value
+    if (/^#[0-9a-f]{3}$/.test(value)) return `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`
+    return ''
+}
+
+const findSystemThemePreset = (normalized) => SYSTEM_THEME_PRESETS.find((preset) =>
+    preset.keywords.some((keyword) => new RegExp(`(^|\\W)${keyword.replace(/\s+/g, '\\s+')}(\\W|$)`).test(normalized)),
+)
+
+const getThemeDisplayName = (themeName) => ({
+    custom: 'màu bạn chọn',
+    default: 'màu mặc định',
+    red: 'tone đỏ',
+    green: 'tone xanh lục',
+    blue: 'tone xanh dương',
+    purple: 'tone tím',
+    yellow: 'tone vàng',
+    orange: 'tone cam',
+    pink: 'tone hồng',
+    black: 'dark mode',
+    white: 'light mode',
+    neon: 'tone neon',
+    cyberpunk: 'cyberpunk',
+    gym_dark: 'dark gym',
+    minimal_light: 'minimal light',
+    sunset: 'sunset',
+    ocean_blue: 'ocean blue',
+    pastel: 'pastel',
+    cyan: 'tone xanh ngọc',
+}[themeName] || String(themeName || '').replace(/_/g, ' '))
+
+const getSystemUiCommandResponse = (query, conversationContext = {}) => {
+    const normalized = normalizePromptText(query)
+    const preset = findSystemThemePreset(normalized)
+    const lastThemeIntent = conversationContext?.lastIntent === 'change_theme'
+        || conversationContext?.lastAction === 'change_theme'
+        || Boolean(conversationContext?.lastThemeAction)
+    const isShortFollowUp = normalized.split(/\s+/).filter(Boolean).length <= 4
+    const followUpPreset = lastThemeIntent && isShortFollowUp
+        ? preset
+            || (/\b(toi hon|dam hon|dark hon)\b/.test(normalized) ? { themeName: 'black', color: '#111827' } : null)
+            || (/\b(sang hon|nhat hon|light hon)\b/.test(normalized) ? { themeName: 'white', color: '#ffffff' } : null)
+            || (/\b(dep hon|ngau hon|noi hon|chat hon)\b/.test(normalized) ? { themeName: 'cyberpunk', color: '#ff00ff' } : null)
+        : null
+    const hasChangeVerb = /\b(doi|thay|set|chuyen|change|apply|ap dung|cap nhat|chon|lam)\b/.test(normalized)
+    const hasThemeTerm = /\b(mau|theme|giao dien|web|accent|color|tone|tong|nen|mode|ui|system|dark|light)\b/.test(normalized)
+    const isStandaloneTone = Boolean(preset)
+        && preset.themeName !== 'gym_dark'
+        && preset.keywords.some((keyword) => normalized.trim() === keyword)
+    const isThemeIntent = isStandaloneTone
+        || Boolean(followUpPreset)
+        || (hasChangeVerb && (hasThemeTerm || Boolean(preset)))
+        || (hasThemeTerm && Boolean(preset))
+
+    if (!isThemeIntent) return null
+
+    const resetIntent = /\b(mac dinh|default|reset|khoi phuc)\b/.test(normalized)
+    const hex = normalizeHexColor(String(query || '').match(/#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b/)?.[0] || '')
+    const resolved = hex
+        ? { themeName: 'custom', color: hex }
+        : resetIntent
+            ? { themeName: 'default', color: '#e05a30' }
+            : followUpPreset || preset || { themeName: 'gym_dark', color: '#991b1b' }
+
+    return JSON.stringify({
+        action: 'change_theme',
+        themeName: resolved.themeName,
+        color: resolved.color,
+        message: `Đã đổi giao diện sang ${getThemeDisplayName(resolved.themeName)}.`,
+    }, null, 2)
+}
+
+const buildConversationContextText = (conversationContext) => {
+    if (!conversationContext || typeof conversationContext !== 'object') return ''
+    const recentMessages = Array.isArray(conversationContext.recentMessages)
+        ? conversationContext.recentMessages
+            .slice(-8)
+            .filter((message) => message && typeof message.content === 'string')
+            .map((message) => `${message.role || 'user'}: ${message.content.slice(0, 700)}`)
+        : []
+
+    const facts = [
+        conversationContext.lastIntent ? `lastIntent: ${conversationContext.lastIntent}` : '',
+        conversationContext.lastAction ? `lastAction: ${conversationContext.lastAction}` : '',
+        conversationContext.lastSearchQuery ? `lastSearchQuery: ${conversationContext.lastSearchQuery}` : '',
+        conversationContext.lastProduct ? `lastProduct: ${conversationContext.lastProduct}` : '',
+        conversationContext.lastMode ? `lastMode: ${conversationContext.lastMode}` : '',
+        conversationContext.lastThemeAction?.themeName || conversationContext.lastThemeAction?.color
+            ? `lastThemeAction: ${conversationContext.lastThemeAction.themeName || ''} ${conversationContext.lastThemeAction.color || ''}`.trim()
+            : '',
+    ].filter(Boolean)
+
+    if (recentMessages.length === 0 && facts.length === 0) return ''
+
+    return `CONTEXT HỘI THOẠI GẦN ĐÂY:
+${facts.length ? `${facts.join('\n')}
+` : ''}${recentMessages.join('\n')}
+
+QUY TẮC CONTEXT:
+- Không xử lý message hiện tại như một câu hoàn toàn độc lập nếu nó là follow-up ngắn.
+- Nếu người dùng nói "loại rẻ hơn", "cái đầu tiên", "màu tối hơn", "đẹp hơn", hãy nối với lastIntent/lastSearchQuery/lastAction.
+- System/UI command vẫn ưu tiên cao nhất và không bị giới hạn bởi Gym mode.`
+}
+
 const isSummaryQuery = (query) => {
     const normalized = normalizePromptText(query)
     return /\b(tom tat|summary|summarize|rut gon|tong ket|noi dung chinh)\b/i.test(normalized)
@@ -148,12 +274,16 @@ Query: "${query}"`
 }
 
 export const generateAssistantResponse = async (query, pts, products, plans, mode = 'gym', options = {}) => {
+    const systemUiCommandResponse = getSystemUiCommandResponse(query, options.conversationContext)
+    if (systemUiCommandResponse) return systemUiCommandResponse
+
     if (!process.env.GEMINI_API_KEY) return GEMINI_FALLBACK_MESSAGE
 
     const normalizedMode = mode === 'general' ? 'general' : 'gym'
     const webContext = String(options.webContext || '').trim()
     const webSearchUsed = Boolean(options.webSearchUsed && webContext)
     const memoryContext = String(options.memoryContext || '').trim()
+    const conversationContextText = buildConversationContextText(options.conversationContext)
     const summaryRules = buildSummaryRules(query)
     const summaryMode = Boolean(summaryRules)
     const styleRules = `PHONG CÁCH BẮT BUỘC:
@@ -191,6 +321,9 @@ Quy tắc:
 ${styleRules}
 
 ${memoryContext ? `${memoryContext}
+` : ''}
+
+${conversationContextText ? `${conversationContextText}
 ` : ''}
 
 ${summaryRules ? `${summaryRules}
@@ -246,6 +379,9 @@ ${styleRules}
 ${memoryContext ? `${memoryContext}
 ` : ''}
 
+${conversationContextText ? `${conversationContextText}
+` : ''}
+
 Dữ liệu tìm được từ hệ thống:
 ${context}
 
@@ -287,6 +423,12 @@ export const generateAssistantResponseStream = async (
     mode = 'gym',
     options = {},
 ) => {
+    const systemUiCommandResponse = getSystemUiCommandResponse(query, options.conversationContext)
+    if (systemUiCommandResponse) {
+        await options.onChunk?.(systemUiCommandResponse)
+        return systemUiCommandResponse
+    }
+
     if (!process.env.GEMINI_API_KEY) {
         await options.onChunk?.(GEMINI_FALLBACK_MESSAGE)
         return GEMINI_FALLBACK_MESSAGE
@@ -297,6 +439,7 @@ export const generateAssistantResponseStream = async (
     const webContext = String(options.webContext || '').trim()
     const webSearchUsed = Boolean(options.webSearchUsed && webContext)
     const memoryContext = String(options.memoryContext || '').trim()
+    const conversationContextText = buildConversationContextText(options.conversationContext)
     const summaryRules = buildSummaryRules(query)
     const summaryMode = Boolean(summaryRules)
     const styleRules = `PHONG CÁCH BẮT BUỘC:
@@ -336,6 +479,9 @@ Quy tắc:
 ${styleRules}
 
 ${memoryContext ? `${memoryContext}
+` : ''}
+
+${conversationContextText ? `${conversationContextText}
 ` : ''}
 
 ${summaryRules ? `${summaryRules}
@@ -390,6 +536,9 @@ Phong cách trả lời:
 ${styleRules}
 
 ${memoryContext ? `${memoryContext}
+` : ''}
+
+${conversationContextText ? `${conversationContextText}
 ` : ''}
 
 Dữ liệu tìm được từ hệ thống:

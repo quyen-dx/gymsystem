@@ -145,7 +145,12 @@ export default function MemberDashboard() {
               'linear-gradient(rgba(128,128,128,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(128,128,128,0.08) 1px, transparent 1px)',
           }}
         >
-          <div className="absolute -right-36 -top-40 h-[420px] w-[420px] rounded-full bg-[rgba(224,90,48,0.06)] blur-xl" />
+          <div
+            className="absolute -right-36 -top-40 h-[420px] w-[420px] rounded-full blur-xl"
+            style={{
+              background: 'radial-gradient(circle, var(--theme-accent-muted) 0%, transparent 70%)',
+            }}
+          />
 
           <div className="relative z-[1] mx-auto w-full max-w-6xl">
             <div

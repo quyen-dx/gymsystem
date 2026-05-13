@@ -51,12 +51,20 @@ const addressEditModalClass =
   '[&_.ant-modal-content]:!rounded-3xl [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-header]:!bg-transparent [&_.ant-modal-title]:!text-[var(--profile-text)] [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
 
 const profileInputStyle = {
+  width: '100%',
+  maxWidth: '100%',
+  minWidth: 0,
+  boxSizing: 'border-box',
   background: 'var(--theme-input-bg)',
   borderColor: 'var(--theme-border-strong)',
   color: 'var(--theme-text)',
 } as CSSProperties
 
 const profileDisabledInputStyle = {
+  width: '100%',
+  maxWidth: '100%',
+  minWidth: 0,
+  boxSizing: 'border-box',
   background: 'var(--theme-elevated)',
   borderColor: 'var(--theme-border-strong)',
   color: 'var(--theme-muted)',
@@ -333,9 +341,23 @@ export default function AccountProfileModal({
       centered
       className={profileModalClass}
       wrapClassName={profileModalWrapClass}
-      style={profileThemeStyle}
+      style={{ ...profileThemeStyle, maxWidth: '100vw' }}
+      styles={{
+        body: {
+          overflowX: 'hidden',
+          padding: '0 16px',
+        },
+      }}
     >
-      <div style={{ ...profileThemeStyle, color: token.colorText }}>
+      <div
+        style={{
+          ...profileThemeStyle,
+          color: token.colorText,
+          overflowX: 'hidden',
+          width: '100%',
+          maxWidth: '100%',
+        }}
+      >
         <header
           className="grid grid-cols-[auto_1fr] items-center gap-[18px] px-6 pb-[18px] pt-6 max-[768px]:grid-cols-1 max-[768px]:justify-items-center max-[768px]:gap-3 max-[768px]:px-5 max-[768px]:pb-4 max-[768px]:pt-[26px] max-[768px]:text-center"
           style={{ backgroundColor: token.colorBgLayout }}
@@ -386,7 +408,12 @@ export default function AccountProfileModal({
 
         <div
           className="max-h-[min(70vh,620px)] overflow-y-auto px-6 pb-6 [scrollbar-width:thin] max-[768px]:max-h-[calc(100dvh-176px)] max-[768px]:px-4 max-[768px]:pb-5"
-          style={{ scrollbarColor: `${token.colorBorder} transparent` }}
+          style={{
+            scrollbarColor: `${token.colorBorder} transparent`,
+            overflowX: 'hidden',
+            width: '100%',
+            maxWidth: '100%',
+          }}
         >
           <Tabs
             className={profileTabsClass}
@@ -428,7 +455,16 @@ export default function AccountProfileModal({
                 </Form.Item>
 
                 <Form.Item label="Ngày sinh" name="dateOfBirth" className="col-span-full">
-                  <Input type="date" style={profileInputStyle} />
+                  <Input
+                    type="date"
+                    style={{
+                      ...profileInputStyle,
+                      width: '100%',
+                      maxWidth: '100%',
+                      boxSizing: 'border-box',
+                      minWidth: 0,
+                    }}
+                  />
                 </Form.Item>
               </div>
 

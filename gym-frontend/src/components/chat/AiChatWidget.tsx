@@ -3,11 +3,12 @@ import { Avatar, Badge, Button, Drawer, Dropdown, Input, Modal, Segmented, Selec
 import type { MouseEvent as ReactMouseEvent, ReactNode, TouchEvent as ReactTouchEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hook/useAuth'
 import { useDraggable } from '../../hooks/useDraggable'
 import { deleteAiChatSession, getAiChatHistory, renameAiChatSession, requestAiAssistant, requestAiAssistantStream, saveAiChatHistory, type AiMode } from '../../services/aiService'
-import type { AiToolPayload, ChatMessage, ChatSession, StoredChatState, WebSearchResult } from '../../types/aichat/aichat'
+import type { AiToolPayload, ChatMessage, ChatSession, ConversationContext, StoredChatState, WebSearchResult } from '../../types/aichat/aichat'
 
 const STORAGE_KEY_PREFIX = 'chat_history_'
 const MASCOT_WIDTH = 100
@@ -69,6 +70,15 @@ const TYPING_FAST_BACKLOG = 700
 const TYPING_MAX_CHARS = 7
 const DEFAULT_THEME_COMMAND_COLOR = '#e05a30'
 
+type AiActionPayload = {
+    action: string
+    color?: string
+    themeName?: string
+    message?: string
+    path?: string
+    url?: string
+}
+
 const normalizeCommandText = (value: string) => value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -85,10 +95,208 @@ const normalizeHexColor = (hex: string) => {
     return ''
 }
 
-const getThemeCommand = (text: string): { color: string; message: string } | null => {
+const THEME_COLOR_PRESETS = [
+    { themeName: 'cyberpunk', color: '#ff00ff', keywords: ['cyberpunk', 'cyber punk'] },
+    { themeName: 'gym_dark', color: '#991b1b', keywords: ['dark gym', 'gym dark', 'gym toi', 'tone gym', 'mau gym', 'phong gym', 'gym'] },
+    { themeName: 'minimal_light', color: '#ffffff', keywords: ['minimal light', 'toi gian sang', 'trang toi gian', 'light minimal'] },
+    { themeName: 'ocean_blue', color: '#0ea5e9', keywords: ['ocean blue', 'bien', 'dai duong', 'xanh bien', 'xanh nuoc bien'] },
+    { themeName: 'sunset', color: '#f97316', keywords: ['sunset', 'hoang hon', 'chieu ta'] },
+    { themeName: 'neon', color: '#39ff14', keywords: ['neon', 'phat sang'] },
+    { themeName: 'pastel', color: '#f9a8d4', keywords: ['pastel', 'nhe nhang'] },
+    { themeName: 'red', color: '#ef4444', keywords: ['do', 'red'] },
+    { themeName: 'green', color: '#22c55e', keywords: ['xanh la', 'xanh luc', 'luc', 'green'] },
+    { themeName: 'cyan', color: '#06b6d4', keywords: ['xanh ngoc', 'cyan', 'aqua'] },
+    { themeName: 'blue', color: '#3b82f6', keywords: ['xanh duong', 'xanh', 'blue'] },
+    { themeName: 'purple', color: '#8b5cf6', keywords: ['tim', 'purple', 'violet'] },
+    { themeName: 'yellow', color: '#eab308', keywords: ['vang', 'yellow'] },
+    { themeName: 'orange', color: '#f97316', keywords: ['cam', 'orange'] },
+    { themeName: 'pink', color: '#ec4899', keywords: ['hong', 'pink'] },
+    { themeName: 'black', color: '#111827', keywords: ['dark mode', 'den', 'black', 'toi'] },
+    { themeName: 'white', color: '#ffffff', keywords: ['light mode', 'trang', 'white', 'sang'] },
+] as const
+
+const findThemePreset = (normalized: string) => {
+    return THEME_COLOR_PRESETS.find((preset) =>
+        preset.keywords.some((keyword) => new RegExp(`(^|\\W)${keyword.replace(/\s+/g, '\\s+')}(\\W|$)`).test(normalized)),
+    )
+}
+
+const getThemeActionFromMessage = (content: string): { themeName?: string; color?: string } | null => {
+    try {
+        const parsed = JSON.parse(content)
+        if (parsed?.action === 'change_theme') return { themeName: parsed.themeName, color: parsed.color }
+    } catch { }
+    return null
+}
+
+const extractJsonObjectPayload = (content: unknown): Record<string, any> | null => {
+    if (content && typeof content === 'object' && !Array.isArray(content)) {
+        return content as Record<string, any>
+    }
+    if (typeof content !== 'string') return null
+
+    const text = content.trim()
+    if (!text) return null
+
+    const candidates = [
+        text,
+        text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim(),
+    ]
+    const firstBrace = text.indexOf('{')
+    const lastBrace = text.lastIndexOf('}')
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+        candidates.push(text.slice(firstBrace, lastBrace + 1))
+    }
+
+    for (const candidate of candidates) {
+        try {
+            const parsed = JSON.parse(candidate)
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+        } catch { }
+    }
+    return null
+}
+
+const parseAiActionPayload = (content: unknown): AiActionPayload | null => {
+    const parsed = extractJsonObjectPayload(content)
+    if (typeof parsed?.action === 'string') return parsed as AiActionPayload
+    return null
+}
+
+const getAiActionFallbackMessage = (action?: string) => {
+    const messages: Record<string, string> = {
+        change_theme: 'Đã đổi giao diện theo yêu cầu.',
+        open_modal: 'Mình đã mở phần bạn cần.',
+        navigate: 'Mình đã chuyển đến trang phù hợp.',
+        search_web: 'Mình đã tìm thông tin liên quan cho bạn.',
+    }
+    return action ? messages[action] || 'Mình đã thực hiện yêu cầu của bạn.' : 'Mình đã thực hiện yêu cầu của bạn.'
+}
+
+const getAiActionDisplayMessage = (
+    actionPayload: ReturnType<typeof parseAiActionPayload>,
+    currentContent = '',
+) => {
+    if (!actionPayload) return currentContent
+    const actionMessage = typeof actionPayload.message === 'string'
+        ? actionPayload.message
+        : ''
+    return actionMessage.trim() ? actionMessage : getAiActionFallbackMessage(actionPayload.action)
+}
+
+const getAiObjectDisplayMessage = (content: unknown) => {
+    const parsed = extractJsonObjectPayload(content)
+    if (!parsed) return null
+    const actionPayload = typeof parsed.action === 'string'
+        ? parsed as AiActionPayload
+        : null
+    if (actionPayload) return getAiActionDisplayMessage(actionPayload)
+
+    const naturalMessage = [parsed.message, parsed.text, parsed.answer, parsed.content]
+        .find((value) => typeof value === 'string' && value.trim())
+    return typeof naturalMessage === 'string'
+        ? naturalMessage
+        : 'Mình đã xử lý xong yêu cầu của bạn.'
+}
+
+const getSafeAssistantDisplayContent = (content: unknown, actionPayload: ReturnType<typeof parseAiActionPayload>) => {
+    if (actionPayload) return getAiActionDisplayMessage(actionPayload)
+    const objectMessage = getAiObjectDisplayMessage(content)
+    if (objectMessage) return objectMessage
+    return typeof content === 'string' ? content : ''
+}
+
+const splitAiAssistantResponse = (rawContent: unknown, currentContent = '') => {
+    const actionPayload = parseAiActionPayload(rawContent)
+    const chatContent = rawContent
+        ? getSafeAssistantDisplayContent(rawContent, actionPayload)
+        : currentContent
+
+    return {
+        actionPayload,
+        chatContent,
+    }
+}
+
+const extractAiResponseContent = (response: unknown, fallback = '') => {
+    if (typeof response === 'string') return response
+    if (!response || typeof response !== 'object') return fallback
+
+    const payload = response as Record<string, unknown>
+    const directContent = [payload.answer, payload.message, payload.text, payload.content]
+        .find((value) => typeof value === 'string' && value.trim())
+
+    if (typeof directContent === 'string') return directContent
+
+    const objectMessage = getAiObjectDisplayMessage(payload.answer ?? payload.message ?? payload.text ?? payload.content ?? payload)
+    return objectMessage || fallback
+}
+
+const normalizeChatContent = (content: unknown) => {
+    if (typeof content === 'string') return content
+    return getAiObjectDisplayMessage(content) || ''
+}
+
+const isPotentialJsonObjectResponse = (content: unknown) => {
+    if (content && typeof content === 'object') return true
+    if (typeof content !== 'string') return false
+    const text = content.trimStart().toLowerCase()
+    return text.startsWith('{') || text.startsWith('```json') || text.startsWith('```')
+}
+
+const getThemeDisplayName = (themeName: string) => {
+    const labels: Record<string, string> = {
+        custom: 'màu bạn chọn',
+        default: 'màu mặc định',
+        red: 'tone đỏ',
+        green: 'tone xanh lục',
+        blue: 'tone xanh dương',
+        purple: 'tone tím',
+        yellow: 'tone vàng',
+        orange: 'tone cam',
+        pink: 'tone hồng',
+        black: 'dark mode',
+        white: 'light mode',
+        neon: 'tone neon',
+        cyberpunk: 'cyberpunk',
+        gym_dark: 'dark gym',
+        minimal_light: 'minimal light',
+        sunset: 'sunset',
+        ocean_blue: 'ocean blue',
+        pastel: 'pastel',
+        cyan: 'tone xanh ngọc',
+    }
+    return labels[themeName] || themeName.replace(/_/g, ' ')
+}
+
+const buildThemeActionMessage = (themeName: string) => `Đã đổi giao diện sang ${getThemeDisplayName(themeName)}.`
+
+const isShortFollowUpText = (normalized: string) => normalized.split(/\s+/).filter(Boolean).length <= 4
+
+const resolveThemeFollowUp = (normalized: string, context?: ConversationContext) => {
+    if (context?.lastIntent !== 'change_theme' && context?.lastAction !== 'change_theme') return null
+    if (!isShortFollowUpText(normalized)) return null
+    const preset = findThemePreset(normalized)
+    if (preset) return preset
+    if (/\b(toi hon|dam hon|dark hon)\b/.test(normalized)) return { themeName: 'black', color: '#111827' }
+    if (/\b(sang hon|nhat hon|light hon)\b/.test(normalized)) return { themeName: 'white', color: '#ffffff' }
+    if (/\b(dep hon|ngau hon|noi hon|chat hon)\b/.test(normalized)) return { themeName: 'cyberpunk', color: '#ff00ff' }
+    return null
+}
+
+const getThemeCommand = (text: string, context?: ConversationContext): { color: string; message: string; themeName: string } | null => {
     const normalized = normalizeCommandText(text)
-    const isThemeIntent = /\b(doi|thay|set|chuyen|change|apply|ap dung|cap nhat)\b/.test(normalized)
-        && /\b(mau|theme|giao dien|web|accent|color)\b/.test(normalized)
+    const preset = findThemePreset(normalized)
+    const followUpPreset = resolveThemeFollowUp(normalized, context)
+    const hasChangeVerb = /\b(doi|thay|set|chuyen|change|apply|ap dung|cap nhat|chon|lam)\b/.test(normalized)
+    const hasThemeTerm = /\b(mau|theme|giao dien|web|accent|color|tone|tong|nen|mode|ui|system|dark|light)\b/.test(normalized)
+    const isStandaloneTone = preset
+        ? preset.themeName !== 'gym_dark' && preset.keywords.some((keyword) => normalized.trim() === keyword)
+        : false
+    const isThemeIntent = isStandaloneTone
+        || Boolean(followUpPreset)
+        || (hasChangeVerb && (hasThemeTerm || Boolean(preset)))
+        || (hasThemeTerm && Boolean(preset))
 
     if (!isThemeIntent) return null
 
@@ -97,35 +305,36 @@ const getThemeCommand = (text: string): { color: string; message: string } | nul
 
     if (hex) {
         return {
+            themeName: 'custom',
             color: hex,
-            message: `Đã đổi màu giao diện sang ${hex}. Màu này đã được lưu, lần sau mở lại web vẫn dùng màu đó.`,
+            message: buildThemeActionMessage('custom'),
         }
     }
 
     if (resetIntent) {
         return {
+            themeName: 'default',
             color: DEFAULT_THEME_COMMAND_COLOR,
-            message: `Đã khôi phục màu giao diện mặc định ${DEFAULT_THEME_COMMAND_COLOR}.`,
+            message: buildThemeActionMessage('default'),
         }
     }
 
+    const resolved = followUpPreset || preset || { themeName: 'gym_dark', color: '#991b1b' }
+
     return {
-        color: '',
-        message: 'Bạn gửi thêm mã màu hex nhé, ví dụ: đổi màu web sang #16a34a.',
+        themeName: resolved.themeName,
+        color: resolved.color,
+        message: buildThemeActionMessage(resolved.themeName),
     }
 }
 
-const parseAiToolPayload = (content: string): AiToolPayload | null => {
-    try {
-        const parsed = JSON.parse(content)
-        if (parsed?.type === 'product_list' && Array.isArray(parsed.items)) return parsed
-        if (parsed?.type === 'pt_list' && Array.isArray(parsed.items)) return parsed
-        if (parsed?.type === 'category_list' && Array.isArray(parsed.items)) return parsed
-        if (parsed?.type === 'empty' && typeof parsed.message === 'string') return parsed
-        return null
-    } catch {
-        return null
-    }
+const parseAiToolPayload = (content: unknown): AiToolPayload | null => {
+    const parsed = extractJsonObjectPayload(content)
+    if (parsed?.type === 'product_list' && Array.isArray(parsed.items)) return parsed as AiToolPayload
+    if (parsed?.type === 'pt_list' && Array.isArray(parsed.items)) return parsed as AiToolPayload
+    if (parsed?.type === 'category_list' && Array.isArray(parsed.items)) return parsed as AiToolPayload
+    if (parsed?.type === 'empty' && typeof parsed.message === 'string') return parsed as AiToolPayload
+    return null
 }
 
 const renderInlineMarkdown = (text: string, color: string): ReactNode[] => {
@@ -293,8 +502,11 @@ const loadChatState = (storageKey: string): StoredChatState => {
         const raw = localStorage.getItem(storageKey)
         if (!raw) return { sessions: [] }
         const parsed = JSON.parse(raw)
+        const sessions = Array.isArray(parsed.sessions)
+            ? normalizeChatSessions(parsed.sessions)
+            : []
         return {
-            sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+            sessions,
             activeSessionId: typeof parsed.activeSessionId === 'string' ? parsed.activeSessionId : undefined,
         }
     } catch {
@@ -315,10 +527,65 @@ const createSession = (): ChatSession => ({
     messages: [],
 })
 
+const normalizeChatMessage = (message: ChatMessage): ChatMessage => ({
+    ...message,
+    content: normalizeChatContent(message.content),
+})
+
+const normalizeChatSessions = (sessions: ChatSession[]) =>
+    sessions.map((session) => ({
+        ...session,
+        messages: Array.isArray(session.messages)
+            ? session.messages.map(normalizeChatMessage)
+            : [],
+    }))
+
 const getSessionTitle = (text: string) => {
     const trimmed = text.trim()
     if (!trimmed) return 'New Chat'
     return trimmed.length > 30 ? `${trimmed.slice(0, 30)}...` : trimmed
+}
+
+const getProductTopicFromText = (text: string) => {
+    const normalized = normalizeCommandText(text)
+    const match = normalized.match(/\b(whey|protein|creatine|ta|dumbbell|dumbell|may tap|giay gym|gang tay|glove|strap|day khang luc|tham tap)\b/)
+    return match?.[0]
+}
+
+const buildConversationContext = (messages: ChatMessage[], currentMode: AiMode): ConversationContext => {
+    const recentMessages = messages.slice(-12).map((message) => ({
+        role: message.role,
+        content: message.content,
+        createdAt: message.createdAt,
+        intent: message.intent,
+        action: message.action,
+    }))
+    const context: ConversationContext = {
+        recentMessages,
+        lastMode: currentMode,
+    }
+
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index]
+        const themeAction = getThemeActionFromMessage(message.content)
+        if (themeAction && !context.lastThemeAction) {
+            context.lastThemeAction = themeAction
+            context.lastIntent = 'change_theme'
+            context.lastAction = 'change_theme'
+        }
+        if (message.intent && !context.lastIntent) context.lastIntent = message.intent
+        if (message.action && !context.lastAction) context.lastAction = message.action
+        if (message.role === 'user' && !context.lastSearchQuery) {
+            const productTopic = getProductTopicFromText(message.content)
+            if (productTopic) {
+                context.lastSearchQuery = message.content
+                context.lastProduct = productTopic
+            }
+        }
+        if (context.lastIntent && context.lastSearchQuery && context.lastThemeAction) break
+    }
+
+    return context
 }
 
 const playDoraemonClickSound = () => {
@@ -375,6 +642,7 @@ const DoraemonMiniAvatar = () => (
 export default function AiChatWidget() {
     const { dark, tokens, applyTheme } = useTheme()
     const { user } = useAuth()
+    const navigate = useNavigate()
     const [visible, setVisible] = useState(false)
     const [expanded, setExpanded] = useState(false)
     const [sessions, setSessions] = useState<ChatSession[]>([])
@@ -430,11 +698,12 @@ export default function AiChatWidget() {
                 if (cancelled) return
                 hydratedServerHistoryRef.current = user._id
                 if (Array.isArray(data.sessions) && data.sessions.length > 0) {
-                    setSessions(data.sessions)
-                    setActiveSessionId(data.activeSessionId || data.sessions[0].sessionId)
+                    const normalizedSessions = normalizeChatSessions(data.sessions)
+                    setSessions(normalizedSessions)
+                    setActiveSessionId(data.activeSessionId || normalizedSessions[0].sessionId)
                     saveChatState(storageKey, {
-                        sessions: data.sessions,
-                        activeSessionId: data.activeSessionId || data.sessions[0].sessionId,
+                        sessions: normalizedSessions,
+                        activeSessionId: data.activeSessionId || normalizedSessions[0].sessionId,
                     })
                 }
             } catch {
@@ -489,15 +758,16 @@ export default function AiChatWidget() {
 
     const addMessageToSession = (message: ChatMessage) => {
         if (!activeSession) return
+        const safeMessage = normalizeChatMessage(message)
         setSessions((current) =>
             current.map((session) => {
                 if (session.sessionId !== activeSession.sessionId) return session
                 return {
                     ...session,
-                    title: session.title === 'New Chat' && message.role === 'user'
-                        ? getSessionTitle(message.content)
+                    title: session.title === 'New Chat' && safeMessage.role === 'user'
+                        ? getSessionTitle(safeMessage.content)
                         : session.title,
-                    messages: [...session.messages, message],
+                    messages: [...session.messages, safeMessage],
                 }
             })
         )
@@ -527,7 +797,7 @@ export default function AiChatWidget() {
         streamTextBufferRef.current = ''
         updateMessageInSession(messageId, (message) => ({
             ...message,
-            content: `${message.content}${remaining}`,
+            content: `${normalizeChatContent(message.content)}${remaining}`,
         }))
     }
 
@@ -574,7 +844,7 @@ export default function AiChatWidget() {
             streamTextBufferRef.current = streamTextBufferRef.current.slice(nextText.length)
             updateMessageInSession(targetId, (message) => ({
                 ...message,
-                content: `${message.content}${nextText}`,
+                content: `${normalizeChatContent(message.content)}${nextText}`,
             }))
         }, TYPING_INTERVAL_MS)
     }
@@ -681,6 +951,18 @@ export default function AiChatWidget() {
         setErrorInfo(null)
     }
 
+    const executeAiAction = (actionPayload: ReturnType<typeof parseAiActionPayload>) => {
+        if (!actionPayload) return
+        if (actionPayload.action === 'change_theme') {
+            const color = typeof actionPayload.color === 'string' ? normalizeHexColor(actionPayload.color) : ''
+            if (color) applyTheme(color)
+            return
+        }
+        if (actionPayload.action === 'navigate' && actionPayload.path) {
+            navigate(actionPayload.path)
+        }
+    }
+
     const handleRetry = async () => {
         if (!lastQuery) return
         setQuery(lastQuery)
@@ -700,13 +982,16 @@ export default function AiChatWidget() {
         addMessageToSession(userMessage)
         setLastQuery(trimmed)
         setQuery('')
-        const themeCommand = getThemeCommand(trimmed)
+        const conversationContext = buildConversationContext(activeMessages, mode)
+        const themeCommand = getThemeCommand(trimmed, conversationContext)
         if (themeCommand) {
             const assistantMessage: ChatMessage = {
                 id: `${Date.now()}-assistant`,
                 userId: user?._id ?? 'guest',
                 role: 'assistant',
                 content: themeCommand.message,
+                intent: 'change_theme',
+                action: 'change_theme',
                 createdAt: new Date().toISOString(),
             }
             if (themeCommand.color) applyTheme(themeCommand.color)
@@ -731,10 +1016,24 @@ export default function AiChatWidget() {
         addMessageToSession(assistantMessage)
         try {
             let usedFallback = false
+            let suppressActionStream: boolean | null = null
+            let suppressedActionText = ''
             const response = await requestAiAssistantStream(trimmed, mode, {
+                conversationContext,
                 onFirstChunk: () => setLoading(false),
                 onChunk: (chunk) => {
-                    console.log('[AI chat widget] enqueue chunk:', chunk)
+                    const actionCandidate = `${suppressedActionText}${chunk}`.trimStart()
+                    if (suppressActionStream === null) {
+                        if (!actionCandidate) {
+                            suppressedActionText += chunk
+                            return
+                        }
+                        suppressActionStream = isPotentialJsonObjectResponse(actionCandidate)
+                    }
+                    if (suppressActionStream) {
+                        suppressedActionText += chunk
+                        return
+                    }
                     enqueueStreamText(assistantMessageId, chunk)
                 },
                 onFallback: () => {
@@ -745,27 +1044,48 @@ export default function AiChatWidget() {
             if (usedFallback) {
                 flushStreamTextBuffer(assistantMessageId)
                 stopStreamTyping()
-                const fallbackResponse = await requestAiAssistant(trimmed, mode)
+                const fallbackResponse = await requestAiAssistant(trimmed, mode, conversationContext)
+                const fallbackContent = extractAiResponseContent(fallbackResponse)
+                const fallbackSplit = splitAiAssistantResponse(fallbackContent)
+                const fallbackAction = fallbackSplit.actionPayload
+                if (fallbackAction) executeAiAction(fallbackAction)
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
-                    content: fallbackResponse.answer || 'Mình không có câu trả lời cho câu hỏi này.',
+                    content: fallbackContent
+                        ? fallbackSplit.chatContent
+                        : 'Mình không có câu trả lời cho câu hỏi này.',
+                    intent: fallbackAction?.action,
+                    action: fallbackAction?.action,
                     webSearch: fallbackResponse.webSearch,
                 }))
                 return
             }
 
-            if (response.answer) {
+            const responseContent = extractAiResponseContent(response, suppressedActionText)
+            const splitResponse = splitAiAssistantResponse(responseContent, suppressedActionText)
+            const actionPayload = splitResponse.actionPayload
+            if (actionPayload) executeAiAction(actionPayload)
+
+            if (responseContent) {
                 await waitForStreamTypingDrain()
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
-                    content: message.content || response.answer,
+                    content: splitResponse.chatContent
+                        ? splitResponse.chatContent
+                        : message.content,
+                    intent: actionPayload?.action,
+                    action: actionPayload?.action,
                     webSearch: response.webSearch,
                 }))
             } else {
                 await waitForStreamTypingDrain()
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
-                    content: message.content || 'Mình không có câu trả lời cho câu hỏi này.',
+                    content: splitResponse.chatContent
+                        ? splitResponse.chatContent
+                        : message.content || 'Mình không có câu trả lời cho câu hỏi này.',
+                    intent: actionPayload?.action,
+                    action: actionPayload?.action,
                     webSearch: response.webSearch,
                 }))
             }
@@ -1372,19 +1692,30 @@ export default function AiChatWidget() {
                                 ) : (
                                     activeMessages.map((message) => {
                                         const isUser = message.role === 'user'
+                                        const messageContent = normalizeChatContent(message.content)
                                         const bubbleBg = isUser ? 'var(--theme-accent)' : assistantBubbleBackground
                                         const bubbleColor = isUser ? 'var(--theme-button-text)' : panelText
                                         const toolPayload = !isUser && message.role === 'assistant'
-                                            ? parseAiToolPayload(message.content)
+                                            ? parseAiToolPayload(messageContent)
+                                            : null
+                                        const actionPayload = !isUser && message.role === 'assistant'
+                                            ? parseAiActionPayload(messageContent)
                                             : null
                                         const sourceCards = !isUser
                                             ? (message.webSearch?.results?.length
                                                 ? message.webSearch.results
-                                                : extractSourceResultsFromText(message.content))
+                                                : extractSourceResultsFromText(messageContent))
                                             : []
-                                        const visibleContent = sourceCards.length > 0
-                                            ? stripWebSourceSection(message.content)
-                                            : message.content
+                                        const safeAssistantContent = !isUser
+                                            ? getSafeAssistantDisplayContent(messageContent, actionPayload)
+                                            : messageContent
+                                        const visibleContent = isUser
+                                            ? messageContent
+                                            : safeAssistantContent !== messageContent
+                                            ? safeAssistantContent
+                                            : sourceCards.length > 0
+                                            ? stripWebSourceSection(messageContent)
+                                            : safeAssistantContent
                                         return (
                                             <div
                                                 key={message.id}
@@ -1518,7 +1849,7 @@ export default function AiChatWidget() {
                                                                 ? renderMarkdownText(visibleContent, bubbleColor)
                                                                 : <Typography.Text style={{ color: panelMutedText }}>Đang trả lời...</Typography.Text>
                                                         )}
-                                                        {!toolPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark)}
+                                                        {!toolPayload && !actionPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark)}
                                                     </div>
                                                 </div>
                                             </div>

@@ -128,6 +128,7 @@ export default function MemberLayout({
             style={{
               background: 'var(--theme-accent)',
               color: 'var(--theme-button-text)',
+              boxShadow: '0 0 12px var(--theme-accent-muted), 0 0 4px var(--theme-accent)',
               borderRadius: 8,
               width: 32,
               height: 32,

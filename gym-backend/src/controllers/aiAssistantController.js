@@ -284,6 +284,55 @@ const updateAiMemoryAfterResponse = async (req, query, mode) => {
     }
 }
 
+const sanitizeConversationContext = (value) => {
+    const source = value && typeof value === 'object' ? value : {}
+    const recentMessages = Array.isArray(source.recentMessages)
+        ? source.recentMessages
+            .slice(-12)
+            .filter((message) => message && typeof message.content === 'string')
+            .map((message) => ({
+                role: ['user', 'assistant', 'system'].includes(message.role) ? message.role : 'user',
+                content: String(message.content).slice(0, 1200),
+                intent: typeof message.intent === 'string' ? message.intent : undefined,
+                action: typeof message.action === 'string' ? message.action : undefined,
+            }))
+        : []
+
+    return {
+        recentMessages,
+        lastIntent: typeof source.lastIntent === 'string' ? source.lastIntent : '',
+        lastAction: typeof source.lastAction === 'string' ? source.lastAction : '',
+        lastSearchQuery: typeof source.lastSearchQuery === 'string' ? source.lastSearchQuery.slice(0, 300) : '',
+        lastMode: typeof source.lastMode === 'string' ? source.lastMode : '',
+        lastProduct: typeof source.lastProduct === 'string' ? source.lastProduct : '',
+        lastThemeAction: source.lastThemeAction && typeof source.lastThemeAction === 'object'
+            ? {
+                themeName: typeof source.lastThemeAction.themeName === 'string' ? source.lastThemeAction.themeName : '',
+                color: typeof source.lastThemeAction.color === 'string' ? source.lastThemeAction.color : '',
+            }
+            : undefined,
+    }
+}
+
+const isShortContextFollowUp = (query) => getSearchTokens(query).length <= 5
+
+const buildEffectiveQuery = (query, conversationContext) => {
+    const normalized = normalizeSearchText(query)
+    if (!isShortContextFollowUp(query)) return query
+
+    if (
+        conversationContext.lastSearchQuery
+        && (
+            /\b(re hon|gia re|thap hon|mem hon|dat hon|cao cap hon|loai re|loai nao re|cai dau tien|cai thu nhat)\b/.test(normalized)
+            || /\b(loai|cai|mau|ban|option)\b/.test(normalized)
+        )
+    ) {
+        return `${conversationContext.lastSearchQuery} ${query}`
+    }
+
+    return query
+}
+
 const isUrlLookupIntent = (query) => {
     const normalized = normalizeSearchText(query)
     const tokens = getSearchTokens(query)
@@ -534,11 +583,13 @@ export const aiAssistant = async (req, res, next) => {
         }
 
         const normalizedQuery = query.trim()
+        const conversationContext = sanitizeConversationContext(req.body?.conversationContext)
+        const effectiveQuery = buildEffectiveQuery(normalizedQuery, conversationContext)
         const aiMode = mode === 'general' ? 'general' : 'gym'
         const memoryContext = buildAiMemoryContext(await getAiUserMemory(req.user?._id))
 
-        if (aiMode !== 'gym' && isShopeeLinkIntent(normalizedQuery)) {
-            const shopeeResponse = await resolveShopeeLinkResponse(normalizedQuery, aiMode)
+        if (aiMode !== 'gym' && isShopeeLinkIntent(effectiveQuery)) {
+            const shopeeResponse = await resolveShopeeLinkResponse(effectiveQuery, aiMode)
             await recordAuditLog({
                 req,
                 module: 'ai',
@@ -550,14 +601,14 @@ export const aiAssistant = async (req, res, next) => {
             return res.json(shopeeResponse)
         }
 
-        const toolIntent = detectToolIntent(normalizedQuery, aiMode)
+        const toolIntent = detectToolIntent(effectiveQuery, aiMode)
 
         if (toolIntent === 'product') {
-            const categoryRequested = normalizeSearchText(normalizedQuery).includes('danh muc') || normalizeSearchText(normalizedQuery).includes('category')
-            const strictGroup = detectStrictProductGroup(normalizedQuery)
-            const searchTerms = getProductSearchTerms(normalizedQuery)
-            const categoryTerms = getCategorySearchTerms(normalizedQuery)
-            const requestedWeight = extractRequestedWeight(normalizedQuery)
+            const categoryRequested = normalizeSearchText(effectiveQuery).includes('danh muc') || normalizeSearchText(effectiveQuery).includes('category')
+            const strictGroup = detectStrictProductGroup(effectiveQuery)
+            const searchTerms = getProductSearchTerms(effectiveQuery)
+            const categoryTerms = getCategorySearchTerms(effectiveQuery)
+            const requestedWeight = extractRequestedWeight(effectiveQuery)
             const effectiveSearchTerms = strictGroup ? strictGroup.terms : searchTerms
             const queryRegex = buildSearchRegex(effectiveSearchTerms)
             let usedFallback = false
@@ -642,7 +693,7 @@ export const aiAssistant = async (req, res, next) => {
                     module: 'ai',
                     action: 'create',
                     entity: req.user,
-                    details: `AI tool searchProducts strict group empty | keyword: ${searchTerms.join(', ') || normalizedQuery} | mode: ${aiMode}`,
+                    details: `AI tool searchProducts strict group empty | keyword: ${searchTerms.join(', ') || effectiveQuery} | mode: ${aiMode}`,
                 })
 
                 await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
@@ -687,7 +738,7 @@ export const aiAssistant = async (req, res, next) => {
                 module: 'ai',
                 action: 'create',
                 entity: req.user,
-                details: `AI tool searchProducts keyword: ${searchTerms.join(', ') || normalizedQuery} | mode: ${aiMode}`,
+                details: `AI tool searchProducts keyword: ${searchTerms.join(', ') || effectiveQuery} | mode: ${aiMode}`,
             })
 
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
@@ -704,8 +755,8 @@ export const aiAssistant = async (req, res, next) => {
         }
 
         if (toolIntent === 'pt') {
-            const goal = extractPtGoal(normalizedQuery)
-            const { availableFrom, availableTo } = extractDateRange(normalizedQuery)
+            const goal = extractPtGoal(effectiveQuery)
+            const { availableFrom, availableTo } = extractDateRange(effectiveQuery)
             const queryRegex = buildSearchRegex(goal ? [goal] : [])
             const ptResults = await User.find({
                 role: 'pt',
@@ -757,7 +808,7 @@ export const aiAssistant = async (req, res, next) => {
         }
 
         if (aiMode === 'general') {
-            const needsWebSearch = shouldSearchWeb(normalizedQuery)
+            const needsWebSearch = shouldSearchWeb(effectiveQuery)
             let webSearch = {
                 needed: needsWebSearch,
                 used: false,
@@ -769,7 +820,7 @@ export const aiAssistant = async (req, res, next) => {
                 try {
                     webSearch = {
                         needed: true,
-                        ...await searchWeb(normalizedQuery, { maxResults: 5 }),
+                        ...await searchWeb(effectiveQuery, { maxResults: 5 }),
                     }
                 } catch (error) {
                     console.error('Tavily web search error:', error)
@@ -800,7 +851,7 @@ export const aiAssistant = async (req, res, next) => {
             }
 
             const answer = await generateAssistantResponse(
-                normalizedQuery,
+                effectiveQuery,
                 [],
                 [],
                 [],
@@ -809,6 +860,7 @@ export const aiAssistant = async (req, res, next) => {
                     webContext: webSearch.context || '',
                     webSearchUsed: webSearch.used,
                     memoryContext,
+                    conversationContext,
                 },
             )
             logAiAnswerBeforeSend('general', answer)
@@ -838,8 +890,8 @@ export const aiAssistant = async (req, res, next) => {
             })
         }
 
-        const classification = await classifyQueryIntent(normalizedQuery)
-        const searchTerms = [classification.goal, ...(classification.keywords || []), normalizedQuery]
+        const classification = await classifyQueryIntent(effectiveQuery)
+        const searchTerms = [classification.goal, ...(classification.keywords || []), effectiveQuery]
         const queryRegex = buildSearchRegex(searchTerms)
 
         const ptFilter = {
@@ -891,10 +943,11 @@ export const aiAssistant = async (req, res, next) => {
         const pts = ptResults.map(mapPtResult)
         const products = productResults.map(mapProductResult)
         const plans = planResults.map(mapPlanResult)
-        const webSearch = await resolveGymFitnessWebSearch(normalizedQuery)
+        const webSearch = await resolveGymFitnessWebSearch(effectiveQuery)
 
-        const answer = await generateAssistantResponse(normalizedQuery, pts, products, plans, aiMode, {
+        const answer = await generateAssistantResponse(effectiveQuery, pts, products, plans, aiMode, {
             memoryContext,
+            conversationContext,
             webContext: webSearch.context || '',
             webSearchUsed: webSearch.used,
         })
@@ -937,6 +990,8 @@ export const aiAssistantStream = async (req, res, next) => {
         }
 
         const normalizedQuery = query.trim()
+        const conversationContext = sanitizeConversationContext(req.body?.conversationContext)
+        const effectiveQuery = buildEffectiveQuery(normalizedQuery, conversationContext)
         const aiMode = mode === 'general' ? 'general' : 'gym'
         const memoryContext = buildAiMemoryContext(await getAiUserMemory(req.user?._id))
 
@@ -946,8 +1001,8 @@ export const aiAssistantStream = async (req, res, next) => {
             console.log(`[AI Assistant stream] client closed connection | mode: ${aiMode}`)
         })
 
-        if (aiMode !== 'gym' && isShopeeLinkIntent(normalizedQuery)) {
-            const shopeeResponse = await resolveShopeeLinkResponse(normalizedQuery, aiMode)
+        if (aiMode !== 'gym' && isShopeeLinkIntent(effectiveQuery)) {
+            const shopeeResponse = await resolveShopeeLinkResponse(effectiveQuery, aiMode)
             writeSseEvent(res, 'meta', {
                 mode: aiMode,
                 webSearch: shopeeResponse.webSearch,
@@ -965,7 +1020,7 @@ export const aiAssistantStream = async (req, res, next) => {
             return res.end()
         }
 
-        const toolIntent = detectToolIntent(normalizedQuery, aiMode)
+        const toolIntent = detectToolIntent(effectiveQuery, aiMode)
 
         if (toolIntent) {
             writeSseEvent(res, 'fallback', {
@@ -992,7 +1047,7 @@ export const aiAssistantStream = async (req, res, next) => {
         }
 
         if (aiMode === 'general') {
-            const needsWebSearch = shouldSearchWeb(normalizedQuery)
+            const needsWebSearch = shouldSearchWeb(effectiveQuery)
             webSearch = {
                 needed: needsWebSearch,
                 used: false,
@@ -1004,7 +1059,7 @@ export const aiAssistantStream = async (req, res, next) => {
                 try {
                     webSearch = {
                         needed: true,
-                        ...await searchWeb(normalizedQuery, { maxResults: 5 }),
+                        ...await searchWeb(effectiveQuery, { maxResults: 5 }),
                     }
                 } catch (error) {
                     console.error('Tavily web search stream error:', error)
@@ -1038,7 +1093,7 @@ export const aiAssistantStream = async (req, res, next) => {
             }
 
             const answer = await generateAssistantResponseStream(
-                normalizedQuery,
+                effectiveQuery,
                 [],
                 [],
                 [],
@@ -1047,6 +1102,7 @@ export const aiAssistantStream = async (req, res, next) => {
                     webContext: webSearch.context || '',
                     webSearchUsed: webSearch.used,
                     memoryContext,
+                    conversationContext,
                     onChunk: (text) => writeSseEvent(res, 'chunk', { text }),
                 },
             )
@@ -1075,8 +1131,8 @@ export const aiAssistantStream = async (req, res, next) => {
             return res.end()
         }
 
-        const classification = await classifyQueryIntent(normalizedQuery)
-        const searchTerms = [classification.goal, ...(classification.keywords || []), normalizedQuery]
+        const classification = await classifyQueryIntent(effectiveQuery)
+        const searchTerms = [classification.goal, ...(classification.keywords || []), effectiveQuery]
         const queryRegex = buildSearchRegex(searchTerms)
         const priceSort = classification.budget === 'rẻ' ? { price: 1 } : classification.budget === 'cao cấp' ? { price: -1 } : { price: 1 }
 
@@ -1121,7 +1177,7 @@ export const aiAssistantStream = async (req, res, next) => {
         const pts = ptResults.map(mapPtResult)
         const products = productResults.map(mapProductResult)
         const plans = planResults.map(mapPlanResult)
-        const gymWebSearch = await resolveGymFitnessWebSearch(normalizedQuery)
+        const gymWebSearch = await resolveGymFitnessWebSearch(effectiveQuery)
 
         writeSseEvent(res, 'meta', {
             mode: aiMode,
@@ -1137,13 +1193,14 @@ export const aiAssistantStream = async (req, res, next) => {
         })
 
         const answer = await generateAssistantResponseStream(
-            normalizedQuery,
+            effectiveQuery,
             pts,
             products,
             plans,
             aiMode,
             {
                 memoryContext,
+                conversationContext,
                 webContext: gymWebSearch.context || '',
                 webSearchUsed: gymWebSearch.used,
                 onChunk: (text) => writeSseEvent(res, 'chunk', { text }),

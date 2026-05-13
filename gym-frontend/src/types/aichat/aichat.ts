@@ -5,6 +5,21 @@ export type ChatMessage = {
     content: string
     createdAt: string
     webSearch?: WebSearchPayload
+    intent?: string
+    action?: string
+}
+
+export type ConversationContext = {
+    recentMessages: Pick<ChatMessage, 'role' | 'content' | 'createdAt' | 'intent' | 'action'>[]
+    lastIntent?: string
+    lastAction?: string
+    lastThemeAction?: {
+        themeName?: string
+        color?: string
+    }
+    lastSearchQuery?: string
+    lastMode?: string
+    lastProduct?: string
 }
 
 export type WebSearchResult = {

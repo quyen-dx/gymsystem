@@ -76,6 +76,20 @@ select {
   font: inherit;
 }
 
+.ant-modal-content {
+  overflow-x: hidden !important;
+}
+
+.ant-modal-body {
+  overflow-x: hidden !important;
+}
+
+input[type="date"] {
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
 .member-shell-header {
   position: sticky;
   top: 0;

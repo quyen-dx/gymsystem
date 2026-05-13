@@ -50,8 +50,7 @@ const roleMenus: Record<string, any[]> = {
     { key: '/dashboard/seller/products', label: 'My Products', icon: <ShopOutlined /> },
     { key: '/dashboard/seller/orders', label: 'Đơn hàng', icon: <ShoppingCartOutlined /> },
   ],
-  member: [],
-  user: [],
+  member: []
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
