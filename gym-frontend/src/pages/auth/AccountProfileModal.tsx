@@ -1,5 +1,7 @@
 import {
   CameraOutlined,
+  BgColorsOutlined,
+  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   EnvironmentOutlined,
@@ -7,14 +9,15 @@ import {
   LogoutOutlined,
   PhoneOutlined,
   PlusOutlined,
+  RightOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
   StarFilled,
   StarOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { Avatar, Button, Checkbox, Empty, Form, Input, Modal, Space, Tabs, message, theme } from 'antd'
-import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, Modal, Space, message, theme } from 'antd'
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { generateTheme, PRESET_ACCENT_COLORS, useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../hook/useAuth'
@@ -27,22 +30,16 @@ const getUsernameFromEmail = (email?: string | null) => {
 }
 
 const profileModalClass =
-  'max-w-[560px] max-[768px]:!top-0 max-[768px]:!m-0 max-[768px]:!w-screen max-[768px]:!max-w-none max-[768px]:!pb-0 [&_.ant-modal-content]:!overflow-hidden [&_.ant-modal-content]:!p-0 [&_.ant-modal-content]:!rounded-3xl max-[768px]:[&_.ant-modal-content]:!min-h-dvh max-[768px]:[&_.ant-modal-content]:!rounded-none [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-content]:!shadow-2xl [&_.ant-modal-close]:!right-3.5 [&_.ant-modal-close]:!top-3.5 [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
+  'max-w-[500px] max-[768px]:!m-0 max-[768px]:!w-[calc(100vw-16px)] max-[768px]:!max-w-none max-[768px]:!pb-0 [&_.ant-modal-content]:!overflow-hidden [&_.ant-modal-content]:!p-0 [&_.ant-modal-content]:!rounded-2xl [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-content]:!shadow-2xl [&_.ant-modal-close]:!right-3.5 [&_.ant-modal-close]:!top-3.5 [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
 
 const profileModalWrapClass =
   '[&_.ant-modal-mask]:!bg-[var(--profile-mask)] [&_.ant-modal-mask]:backdrop-blur-[10px]'
 
-const profileTabsClass =
-  'sticky top-0 z-[2] bg-[var(--profile-bg-elevated)] pt-3 [&_.ant-tabs-nav]:!mb-[18px] [&_.ant-tabs-nav:before]:!border-b-[var(--profile-border)] [&_.ant-tabs-tab]:!rounded-full [&_.ant-tabs-tab]:!px-3 [&_.ant-tabs-tab]:!py-[9px] [&_.ant-tabs-tab]:!text-[var(--profile-text-secondary)] [&_.ant-tabs-tab]:!transition-colors [&_.ant-tabs-tab-active]:!bg-[var(--profile-accent-bg)] [&_.ant-tabs-tab.ant-tabs-tab-active_.ant-tabs-tab-btn]:!text-[var(--profile-accent)] [&_.ant-tabs-ink-bar]:!h-[3px] [&_.ant-tabs-ink-bar]:!rounded-full [&_.ant-tabs-ink-bar]:!bg-[var(--profile-accent)] max-[768px]:[&_.ant-tabs-nav-wrap]:overflow-x-auto max-[768px]:[&_.ant-tabs-nav-wrap]:[scrollbar-width:none] max-[768px]:[&_.ant-tabs-nav-wrap::-webkit-scrollbar]:hidden max-[768px]:[&_.ant-tabs-nav-list]:min-w-max'
-
 const profileFormClass =
-  '[&_.ant-form-item-label>label]:!font-semibold [&_.ant-form-item-label>label]:!text-[var(--profile-text)] [&_.ant-input]:!min-h-[42px] [&_.ant-input]:!rounded-[14px] [&_.ant-input]:!border-[var(--profile-border)] [&_.ant-input]:!bg-[var(--profile-bg-container)] [&_.ant-input]:!text-[var(--profile-text)] [&_.ant-input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input-affix-wrapper]:!min-h-[42px] [&_.ant-input-affix-wrapper]:!rounded-[14px] [&_.ant-input-affix-wrapper]:!border-[var(--profile-border)] [&_.ant-input-affix-wrapper]:!bg-[var(--profile-bg-container)] [&_.ant-input-affix-wrapper_input]:!bg-transparent [&_.ant-input-affix-wrapper_input]:!text-[var(--profile-text)] [&_.ant-input-affix-wrapper_input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input:focus]:!border-[var(--profile-accent)] [&_.ant-input:focus]:!shadow-none [&_.ant-input-focused]:!border-[var(--profile-accent)] [&_.ant-input-focused]:!shadow-none [&_.ant-input-affix-wrapper-focused]:!border-[var(--profile-accent)] [&_.ant-input-affix-wrapper-focused]:!shadow-none [&_.ant-input[disabled]]:!cursor-not-allowed [&_.ant-input[disabled]]:!bg-[var(--theme-elevated)] [&_.ant-input[disabled]]:!text-[var(--theme-muted)] [&_.ant-input-disabled]:!cursor-not-allowed [&_.ant-input-disabled]:!bg-[var(--theme-elevated)] [&_.ant-input-disabled]:!text-[var(--theme-muted)]'
+  '[&_.ant-form-item-label>label]:!text-xs [&_.ant-form-item-label>label]:!font-medium [&_.ant-form-item-label>label]:!uppercase [&_.ant-form-item-label>label]:!tracking-[0.06em] [&_.ant-form-item-label>label]:!text-[var(--theme-muted)] [&_.ant-input]:!min-h-[42px] [&_.ant-input]:!rounded-[12px] [&_.ant-input]:!border-[var(--profile-border)] [&_.ant-input]:!bg-[var(--profile-bg-container)] [&_.ant-input]:!text-[var(--profile-text)] [&_.ant-input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input-affix-wrapper]:!min-h-[42px] [&_.ant-input-affix-wrapper]:!rounded-[12px] [&_.ant-input-affix-wrapper]:!border-[var(--profile-border)] [&_.ant-input-affix-wrapper]:!bg-[var(--profile-bg-container)] [&_.ant-input-affix-wrapper_input]:!bg-transparent [&_.ant-input-affix-wrapper_input]:!text-[var(--profile-text)] [&_.ant-input-affix-wrapper_input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input:focus]:!border-[var(--profile-accent)] [&_.ant-input:focus]:!shadow-none [&_.ant-input-focused]:!border-[var(--profile-accent)] [&_.ant-input-focused]:!shadow-none [&_.ant-input-affix-wrapper-focused]:!border-[var(--profile-accent)] [&_.ant-input-affix-wrapper-focused]:!shadow-none [&_.ant-input[disabled]]:!cursor-not-allowed [&_.ant-input[disabled]]:!bg-[var(--theme-elevated)] [&_.ant-input[disabled]]:!text-[var(--theme-muted)] [&_.ant-input-disabled]:!cursor-not-allowed [&_.ant-input-disabled]:!bg-[var(--theme-elevated)] [&_.ant-input-disabled]:!text-[var(--theme-muted)]'
 
 const primaryButtonClass =
-  '!h-11 !rounded-full !border-0 !bg-[var(--profile-accent)] !font-extrabold !text-[var(--theme-button-text)] !shadow-none hover:!bg-[var(--profile-accent-hover)]'
-
-const outlineButtonClass =
-  '!min-h-[42px] !rounded-full !border-[var(--profile-border)] !bg-transparent !font-bold !text-[var(--profile-text)] hover:!border-[var(--profile-accent-border)] hover:!text-[var(--profile-accent)]'
+  '!h-11 !rounded-full !border-0 !bg-[var(--theme-accent)] !font-extrabold !text-[var(--theme-button-text)] !shadow-none hover:!bg-[var(--theme-accent-hover)]'
 
 const addressActionButtonClass =
   'grid h-7 w-7 cursor-pointer place-items-center rounded-[7px] border border-[var(--profile-border)] bg-transparent text-[var(--profile-text-secondary)] transition-colors hover:bg-[var(--profile-bg-container)] hover:text-[var(--profile-text)] max-[480px]:h-[26px] max-[480px]:w-[26px]'
@@ -71,6 +68,56 @@ const profileDisabledInputStyle = {
   opacity: 0.8,
 } as CSSProperties
 
+const profilePasswordInputStyle = {
+  ...profileInputStyle,
+  minHeight: 46,
+} as CSSProperties
+
+const sectionCardStyle = {
+  background: 'var(--theme-elevated)',
+  border: '1px solid var(--theme-border)',
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 12,
+} as CSSProperties
+
+const sectionHeaderStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  marginBottom: 16,
+  paddingBottom: 12,
+  borderBottom: '1px solid var(--theme-border)',
+} as CSSProperties
+
+const sectionIconStyle = {
+  width: 32,
+  height: 32,
+  borderRadius: 8,
+  background: 'var(--theme-accent-muted)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: 'var(--theme-accent)',
+  fontSize: 16,
+  flexShrink: 0,
+} as CSSProperties
+
+const actionItemStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  padding: '12px 16px',
+  background: 'var(--theme-elevated)',
+  border: '1px solid var(--theme-border)',
+  borderRadius: 10,
+  cursor: 'pointer',
+  marginBottom: 8,
+  transition: 'border-color 0.2s, background 0.2s',
+  width: '100%',
+  textAlign: 'left',
+} as CSSProperties
+
 export default function AccountProfileModal({
   open,
   onClose,
@@ -81,6 +128,7 @@ export default function AccountProfileModal({
   const { user, updateUser, logout } = useAuth()
   const { applyAccentFast, applyThemeFull, commitPending, accentColor: savedAccentColor } = useTheme()
   const { token } = theme.useToken()
+  const screens = Grid.useBreakpoint()
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [passwordForm] = Form.useForm()
@@ -97,6 +145,7 @@ export default function AccountProfileModal({
   const previewTheme = generateTheme(accentColor)
 
   const hasPassword = Boolean(user?.hasPassword || user?.password)
+  const contactText = user?.email || user?.phone || 'Chưa cập nhật email'
 
   const goToOrders = () => {
     handleClose()
@@ -318,7 +367,7 @@ export default function AccountProfileModal({
   }
 
   useEffect(() => {
-    if (open && activeTab === 'addresses') {
+    if (open && activeTab === 'address') {
       loadAddresses()
     }
   }, [open, activeTab])
@@ -329,6 +378,52 @@ export default function AccountProfileModal({
     }
   }, [])
 
+  const handleCopyContact = async () => {
+    if (!user?.email && !user?.phone) return
+    await navigator.clipboard?.writeText(user.email || user.phone || '')
+    message.success('Đã sao chép thông tin liên hệ')
+  }
+
+  const isProfileMobile = !screens.md
+  const tabs = [
+    { key: 'info', label: 'Thông tin', icon: <UserOutlined /> },
+    { key: 'address', label: 'Địa chỉ', icon: <EnvironmentOutlined /> },
+    { key: 'password', label: hasPassword ? 'Đổi mật khẩu' : 'Đặt mật khẩu', icon: <LockOutlined /> },
+    { key: 'theme', label: 'Giao diện', icon: <BgColorsOutlined /> },
+  ]
+
+  const renderSectionHeader = (icon: ReactNode, title: string, subtitle: string) => (
+    <div style={sectionHeaderStyle}>
+      <div style={sectionIconStyle}>{icon}</div>
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--theme-text)' }}>{title}</div>
+        <div style={{ fontSize: 12, color: 'var(--theme-muted)' }}>{subtitle}</div>
+      </div>
+    </div>
+  )
+
+  const renderActionItem = (
+    icon: ReactNode,
+    title: string,
+    description: string,
+    onClick: () => void,
+    disabled = false,
+  ) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{ ...actionItemStyle, opacity: disabled ? 0.65 : 1 }}
+    >
+      <div style={{ ...sectionIconStyle, width: 36, height: 36, fontSize: 16 }}>{icon}</div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--theme-text)' }}>{title}</div>
+        <div style={{ fontSize: 11, color: 'var(--theme-muted)', marginTop: 2 }}>{description}</div>
+      </div>
+      <RightOutlined style={{ color: 'var(--theme-muted)', fontSize: 12 }} />
+    </button>
+  )
+
   return (
     <Modal
       title={null}
@@ -337,17 +432,38 @@ export default function AccountProfileModal({
       footer={null}
       maskClosable={false}
       destroyOnClose
-      width={560}
-      centered
-      className={profileModalClass}
+      width={480}
+      className={`profile-modal ${profileModalClass}`}
       wrapClassName={profileModalWrapClass}
-      style={{ ...profileThemeStyle, maxWidth: '100vw' }}
-      styles={{
-        body: {
-          overflowX: 'hidden',
-          padding: '0 16px',
-        },
+      style={{
+        ...profileThemeStyle,
+        top: 20,
+        margin: isProfileMobile ? 0 : 'auto',
+        padding: 0,
+        maxWidth: '100vw',
       }}
+      styles={{
+        content: {
+          borderRadius: 16,
+          padding: 0,
+          height: isProfileMobile ? '86vh' : 'auto',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          border: '1px solid var(--theme-border)',
+        },
+        body: {
+          padding: 0,
+          height: '100%',
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        },
+        mask: {
+          backdropFilter: 'blur(4px)',
+        },
+      } as any}
     >
       <div
         style={{
@@ -356,44 +472,90 @@ export default function AccountProfileModal({
           overflowX: 'hidden',
           width: '100%',
           maxWidth: '100%',
+          height: isProfileMobile ? '100%' : 'auto',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         <header
-          className="grid grid-cols-[auto_1fr] items-center gap-[18px] px-6 pb-[18px] pt-6 max-[768px]:grid-cols-1 max-[768px]:justify-items-center max-[768px]:gap-3 max-[768px]:px-5 max-[768px]:pb-4 max-[768px]:pt-[26px] max-[768px]:text-center"
-          style={{ backgroundColor: token.colorBgLayout }}
+          className="profile-modal-header"
+          style={{
+            background: 'linear-gradient(135deg, var(--theme-card) 0%, color-mix(in srgb, var(--theme-accent) 15%, var(--theme-card)) 100%)',
+            flexShrink: 0,
+            padding: isProfileMobile ? '14px 20px 12px' : '18px 20px 14px',
+            textAlign: 'center',
+          }}
         >
-          <div className="cursor-pointer" onClick={() => fileRef.current?.click()}>
-            <div
-              className="group relative grid h-[100px] w-[100px] place-items-center rounded-full p-[3px] max-[768px]:h-[92px] max-[768px]:w-[92px]"
-              style={{ background: 'linear-gradient(135deg, var(--profile-accent), var(--profile-accent-bg))' }}
-            >
-              <Avatar
-                size={92}
-                src={
-                  avatarPreview ||
-                  user.avatar ||
-                  `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'U')}`
-                }
-                icon={<UserOutlined />}
-                className="!border-4 max-[768px]:!h-[84px] max-[768px]:!w-[84px]"
-                style={{ borderColor: token.colorBgLayout }}
-              />
-              <span className="absolute bottom-2 right-2.5 h-4 w-4 rounded-full border-[3px]" style={{ backgroundColor: token.colorSuccess, borderColor: token.colorBgLayout }} />
+          <div className="flex justify-center">
+            <div className="cursor-pointer" onClick={() => fileRef.current?.click()}>
               <div
-                className="absolute inset-[3px] grid place-items-center rounded-full text-[22px] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-                style={{ backgroundColor: token.colorBgLayout, color: token.colorText }}
+                className="group relative grid place-items-center rounded-full"
+                style={{
+                  width: 88,
+                  height: 88,
+                }}
               >
-                <CameraOutlined />
+                <Avatar
+                  size={80}
+                  src={
+                    avatarPreview ||
+                    user.avatar ||
+                    `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'U')}`
+                  }
+                  icon={<UserOutlined />}
+                  style={{
+                    border: '3px solid var(--theme-accent)',
+                    boxShadow: '0 0 16px var(--theme-accent-muted)',
+                  }}
+                />
+                <span className="absolute bottom-1 right-1.5 h-4 w-4 rounded-full border-[3px]" style={{ backgroundColor: token.colorSuccess, borderColor: token.colorBgLayout }} />
+                <div
+                  className="absolute inset-[3px] grid place-items-center rounded-full text-[22px] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                  style={{ backgroundColor: token.colorBgLayout, color: token.colorText }}
+                >
+                  <CameraOutlined />
+                </div>
               </div>
             </div>
           </div>
-          <div>
-            <h2 className="mb-2 mt-0 text-xl font-extrabold" style={{ color: token.colorText }}>Thông tin tài khoản</h2>
-            <div className="text-lg font-bold" style={{ color: token.colorText }}>{user.name}</div>
-            <div className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-[13px]" style={{ color: token.colorTextSecondary }}>
-              {user.email || user.phone || 'Chưa cập nhật email'}
+
+          <div style={{ marginTop: 8 }}>
+              <h2 className="mb-0 mt-0" style={{ color: 'var(--theme-text)', fontSize: 18, fontWeight: 700, lineHeight: 1.25 }}>
+                {user.name || 'Tài khoản GymSystem'}
+              </h2>
+              <button
+                type="button"
+                onClick={handleCopyContact}
+                className="mx-auto inline-flex max-w-full items-center gap-2"
+                style={{
+                  marginTop: 4,
+                  border: 0,
+                  background: 'transparent',
+                  color: 'var(--theme-muted)',
+                  fontSize: 12,
+                  padding: 0,
+                  cursor: 'pointer',
+                }}
+              >
+                <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{contactText}</span>
+                {(user.email || user.phone) && <CopyOutlined style={{ color: 'var(--theme-accent)' }} />}
+              </button>
+              <div
+                className="mx-auto w-fit rounded-full uppercase"
+                style={{
+                  marginTop: 6,
+                  background: 'transparent',
+                  border: '1px solid var(--theme-accent)',
+                  color: 'var(--theme-accent)',
+                  fontSize: 10,
+                  letterSpacing: '0.1em',
+                  padding: '2px 8px',
+                  fontWeight: 700,
+                }}
+              >
+                Member profile
+              </div>
             </div>
-          </div>
           <input
             ref={fileRef}
             type="file"
@@ -406,129 +568,143 @@ export default function AccountProfileModal({
           />
         </header>
 
-        <div
-          className="max-h-[min(70vh,620px)] overflow-y-auto px-6 pb-6 [scrollbar-width:thin] max-[768px]:max-h-[calc(100dvh-176px)] max-[768px]:px-4 max-[768px]:pb-5"
-          style={{
-            scrollbarColor: `${token.colorBorder} transparent`,
-            overflowX: 'hidden',
-            width: '100%',
-            maxWidth: '100%',
-          }}
-        >
-          <Tabs
-            className={profileTabsClass}
-            style={{ color: 'var(--theme-text)' }}
-            activeKey={activeTab}
-            onChange={setActiveTab}
-            items={[
-              { key: 'info', label: 'Thông tin' },
-              { key: 'addresses', label: 'Địa chỉ' },
-              { key: 'password', label: hasPassword ? 'Đổi mật khẩu' : 'Đặt mật khẩu' },
-              { key: 'appearance', label: 'Giao diện' },
-            ]}
-          />
-
-          {activeTab === 'info' && (
-            <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
-              <div className="grid grid-cols-2 gap-x-3.5 max-[768px]:grid-cols-1">
-                <Form.Item label="Tên tài khoản" name="name" rules={[{ required: true, message: 'Nhập tên' }]}>
-                  <Input placeholder="Tên của bạn" style={profileInputStyle} />
-                </Form.Item>
-
-                <Form.Item label="Số điện thoại" name="phone">
-                  <Input placeholder="Thêm số điện thoại" style={profileInputStyle} />
-                </Form.Item>
-
-                <Form.Item
-                  label="Email"
-                  name="email"
-                  rules={[
-                    { type: 'email', message: 'Email không hợp lệ' },
-                    { required: !user.email, message: 'Nhập email' },
-                  ]}
+        <div className="profile-modal-main flex min-h-0 flex-1 flex-col">
+          {/* Navigation */}
+          <div
+            className="profile-tabs-sticky profile-pill-tabs"
+            style={{
+              display: 'flex',
+              gap: 6,
+              padding: '12px 20px',
+              borderBottom: '1px solid var(--theme-border)',
+              overflowX: 'auto',
+              scrollbarWidth: 'none',
+              flexShrink: 0,
+            }}
+          >
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.key
+              return (
+                <div
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: isActive ? '6px 14px' : '6px 16px',
+                    borderRadius: 20,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    fontSize: 13,
+                    fontWeight: isActive ? 600 : 400,
+                    background: isActive ? 'var(--theme-accent)' : 'var(--theme-elevated)',
+                    color: isActive ? 'var(--theme-button-text)' : 'var(--theme-muted)',
+                    transition: 'all 0.2s',
+                    flexShrink: 0,
+                  }}
                 >
-                  <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder="Thêm email" style={user.email ? profileDisabledInputStyle : profileInputStyle} />
-                </Form.Item>
+                  {tab.icon}
+                  {tab.label}
+                </div>
+              )
+            })}
+          </div>
 
-                <Form.Item label="Username">
-                  <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} style={profileDisabledInputStyle} />
-                </Form.Item>
+          <div
+            className="profile-modal-scroll min-h-0 flex-1 overflow-y-auto"
+            style={{
+              maxHeight: isProfileMobile ? undefined : '70vh',
+              padding: '16px 20px',
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'var(--theme-border) transparent',
+              overflowX: 'hidden',
+              width: '100%',
+              maxWidth: '100%',
+            }}
+          >
+          {activeTab === 'info' && (
+            <div>
+              <div style={sectionCardStyle}>
+                {renderSectionHeader(<UserOutlined />, 'Thông tin tài khoản', 'Cập nhật hồ sơ cá nhân để sử dụng GymSystem thuận tiện hơn.')}
 
-                <Form.Item label="Ngày sinh" name="dateOfBirth" className="col-span-full">
-                  <Input
-                    type="date"
-                    style={{
-                      ...profileInputStyle,
-                      width: '100%',
-                      maxWidth: '100%',
-                      boxSizing: 'border-box',
-                      minWidth: 0,
-                    }}
-                  />
-                </Form.Item>
+                <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
+                    <Form.Item label="Tên tài khoản" name="name" rules={[{ required: true, message: 'Nhập tên' }]}>
+                      <Input prefix={<UserOutlined />} placeholder="Tên của bạn" style={profileInputStyle} />
+                    </Form.Item>
+
+                    <Form.Item label="Số điện thoại" name="phone">
+                      <Input prefix={<PhoneOutlined />} placeholder="Thêm số điện thoại" style={profileInputStyle} />
+                    </Form.Item>
+
+                    <Form.Item
+                      label="Email"
+                      name="email"
+                      rules={[
+                        { type: 'email', message: 'Email không hợp lệ' },
+                        { required: !user.email, message: 'Nhập email' },
+                      ]}
+                    >
+                      <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder="Thêm email" style={user.email ? profileDisabledInputStyle : profileInputStyle} />
+                    </Form.Item>
+
+                    <Form.Item label="Username">
+                      <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} style={profileDisabledInputStyle} />
+                    </Form.Item>
+
+                    <Form.Item label="Ngày sinh" name="dateOfBirth" className="col-span-full">
+                      <Input
+                        type="date"
+                        style={{
+                          ...profileInputStyle,
+                          width: '100%',
+                          maxWidth: '100%',
+                          boxSizing: 'border-box',
+                          minWidth: 0,
+                        }}
+                      />
+                    </Form.Item>
+                  </div>
+
+                  <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !mt-1 !h-12 !rounded-2xl !text-[15px]`}>
+                    Lưu thay đổi
+                  </Button>
+                </Form>
               </div>
 
-              <Button type="primary" htmlType="submit" block loading={loading} className={primaryButtonClass}>
-                Lưu thay đổi
-              </Button>
-
-              <div className="mt-3.5 grid grid-cols-2 gap-3 max-[768px]:grid-cols-1">
+              <div style={{ marginBottom: 12 }}>
                 {user.role !== 'seller' && (
-                  <Button
-                    block
-                    icon={<ShopOutlined />}
-                    loading={loading}
-                    onClick={handleEnableSeller}
-                    className={outlineButtonClass}
-                  >
-                    Bật chế độ bán hàng
-                  </Button>
+                  renderActionItem(<ShopOutlined />, 'Bật chế độ bán hàng', 'Mở kênh bán sản phẩm và quản lý shop.', handleEnableSeller, loading)
                 )}
 
-                <Button
-                  block
-                  icon={<ShoppingCartOutlined />}
-                  onClick={goToOrders}
-                  className={outlineButtonClass}
-                >
-                  Các đơn hàng
-                </Button>
+                {renderActionItem(<ShoppingCartOutlined />, 'Các đơn hàng', 'Theo dõi lịch sử mua hàng và trạng thái giao hàng.', goToOrders)}
+                {renderActionItem(<UserOutlined />, 'Xem kênh', 'Xem trang cá nhân và nội dung đã chia sẻ.', goToChannel)}
 
                 <Button
                   block
-                  icon={<UserOutlined />}
-                  onClick={goToChannel}
-                  className={outlineButtonClass}
+                  icon={<LogoutOutlined />}
+                  onClick={handleLogout}
+                  style={{
+                    marginTop: 8,
+                    height: 44,
+                    borderRadius: 10,
+                    background: 'transparent',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                    color: '#ef4444',
+                    fontWeight: 500,
+                    fontSize: 14,
+                  }}
                 >
-                  Xem kênh
+                  Đăng xuất
                 </Button>
               </div>
-
-              <Button
-                block
-                danger
-                icon={<LogoutOutlined />}
-                onClick={handleLogout}
-                style={{
-                  marginTop: 8,
-                  height: 40,
-                  borderRadius: 8,
-                  background: 'transparent',
-                  borderColor: '#e05a30',
-                  color: '#e05a30',
-                  fontWeight: 500,
-                }}
-              >
-                Đăng xuất
-              </Button>
-            </Form>
+            </div>
           )}
 
-          {activeTab === 'appearance' && (
-            <div
-              className="rounded-[18px] border p-4"
-              style={{ backgroundColor: token.colorBgContainer, borderColor: 'var(--theme-border-strong)' }}
-            >
+          {activeTab === 'theme' && (
+            <div style={sectionCardStyle}>
+              {renderSectionHeader(<BgColorsOutlined />, 'Giao diện', 'Tuỳ chỉnh màu sắc theo sở thích.')}
               <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
                 <div>
                   <div className="font-extrabold" style={{ color: token.colorText }}>Màu chủ đạo</div>
@@ -596,16 +772,13 @@ export default function AccountProfileModal({
             </div>
           )}
 
-          {activeTab === 'addresses' && (
+          {activeTab === 'address' && (
             <div
-              className={`rounded-[18px] border p-4 ${profileFormClass}`}
-              style={{ backgroundColor: token.colorBgContainer, borderColor: 'var(--theme-border-strong)' }}
+              className={profileFormClass}
+              style={sectionCardStyle}
             >
+              {renderSectionHeader(<EnvironmentOutlined />, 'Địa chỉ giao hàng', 'Thêm, sửa, xóa và đặt mặc định địa chỉ.')}
               <div className="flex items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
-                <div>
-                  <div className="font-extrabold" style={{ color: token.colorText }}>Địa chỉ giao hàng</div>
-                  <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>Thêm, sửa, xóa và đặt mặc định địa chỉ.</div>
-                </div>
                 <Button type="primary" icon={<PlusOutlined />} onClick={openCreateAddress} loading={loading} className="!rounded-lg !border-0 !bg-[var(--profile-accent)] !font-bold !text-[var(--theme-button-text)] hover:!bg-[var(--profile-accent-hover)]">
                   Thêm địa chỉ
                 </Button>
@@ -733,47 +906,49 @@ export default function AccountProfileModal({
           )}
 
           {activeTab === 'password' && !hasPassword && (
-            <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
-              <div
-                className="mb-4 rounded-xl border p-3 text-[13px]"
-                style={{ backgroundColor: 'var(--profile-accent-bg)', borderColor: 'var(--profile-accent-border)', color: token.colorText }}
-              >
-                Tài khoản chưa có mật khẩu riêng. Đặt mật khẩu để đăng nhập bằng số điện thoại/email.
-              </div>
+            <div style={sectionCardStyle}>
+              {renderSectionHeader(<LockOutlined />, 'Đặt mật khẩu', 'Tạo mật khẩu riêng để đăng nhập bằng số điện thoại hoặc email.')}
 
-              <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu' }]}>
-                <Input.Password placeholder="Tối thiểu 6 ký tự" style={profileInputStyle} />
-              </Form.Item>
+              <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
+                <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu' }]}>
+                  <Input.Password placeholder="Tối thiểu 6 ký tự" style={profilePasswordInputStyle} />
+                </Form.Item>
 
-              <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
-                <Input.Password placeholder="Nhập lại mật khẩu" style={profileInputStyle} />
-              </Form.Item>
+                <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
+                  <Input.Password placeholder="Nhập lại mật khẩu" style={profilePasswordInputStyle} />
+                </Form.Item>
 
-              <Button type="primary" htmlType="submit" block loading={loading} className={primaryButtonClass}>
-                Đặt mật khẩu
-              </Button>
-            </Form>
+                <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
+                  Đặt mật khẩu
+                </Button>
+              </Form>
+            </div>
           )}
 
           {activeTab === 'password' && hasPassword && (
-            <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
-              <Form.Item label="Mật khẩu hiện tại" name="currentPassword" rules={[{ required: true, message: 'Nhập mật khẩu hiện tại' }]}>
-                <Input.Password style={profileInputStyle} />
-              </Form.Item>
+            <div style={sectionCardStyle}>
+              {renderSectionHeader(<LockOutlined />, 'Đổi mật khẩu', 'Cập nhật mật khẩu định kỳ để bảo vệ tài khoản.')}
 
-              <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu mới' }]}>
-                <Input.Password placeholder="Tối thiểu 6 ký tự" style={profileInputStyle} />
-              </Form.Item>
+              <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
+                <Form.Item label="Mật khẩu hiện tại" name="currentPassword" rules={[{ required: true, message: 'Nhập mật khẩu hiện tại' }]}>
+                  <Input.Password placeholder="Nhập mật khẩu hiện tại" style={profilePasswordInputStyle} />
+                </Form.Item>
 
-              <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
-                <Input.Password placeholder="Nhập lại mật khẩu mới" style={profileInputStyle} />
-              </Form.Item>
+                <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu mới' }]}>
+                  <Input.Password placeholder="Tối thiểu 6 ký tự" style={profilePasswordInputStyle} />
+                </Form.Item>
 
-              <Button type="primary" htmlType="submit" block loading={loading} className={primaryButtonClass}>
-                Đổi mật khẩu
-              </Button>
-            </Form>
+                <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
+                  <Input.Password placeholder="Nhập lại mật khẩu mới" style={profilePasswordInputStyle} />
+                </Form.Item>
+
+                <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
+                  Đổi mật khẩu
+                </Button>
+              </Form>
+            </div>
           )}
+        </div>
         </div>
       </div>
     </Modal>

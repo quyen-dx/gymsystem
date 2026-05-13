@@ -505,3 +505,56 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
   background: var(--theme-accent-hover) !important;
   border-color: var(--theme-accent-hover) !important;
 }
+
+.profile-tabs-sticky {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+
+.profile-pill-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.profile-modal-scroll {
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+@media (max-width: 768px) {
+  .profile-modal {
+    position: fixed !important;
+    bottom: 8px !important;
+    left: 8px !important;
+    top: unset !important;
+    margin: 0 !important;
+    max-width: calc(100vw - 16px) !important;
+    width: calc(100vw - 16px) !important;
+  }
+
+  .profile-modal .ant-modal-content {
+    border-radius: 18px 18px 0 0 !important;
+    height: 86vh;
+    min-height: 72vh;
+  }
+
+  .profile-modal .ant-modal-body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .profile-modal-header {
+    flex-shrink: 0;
+  }
+
+  .profile-modal-main {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .profile-modal-scroll {
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 8px;
+  }
+}
