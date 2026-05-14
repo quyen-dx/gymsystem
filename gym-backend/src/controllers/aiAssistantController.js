@@ -23,6 +23,7 @@ import {
     shouldSearchWeb,
 } from '../services/webSearchService.js'
 import AppError from '../utils/appError.js'
+import { runGymAiAction } from '../ai/services/aiService.js'
 
 const MAX_CHAT_SESSIONS = 20
 const CHAT_RETENTION_DAYS = 30
@@ -588,6 +589,30 @@ export const aiAssistant = async (req, res, next) => {
         const aiMode = mode === 'general' ? 'general' : 'gym'
         const memoryContext = buildAiMemoryContext(await getAiUserMemory(req.user?._id))
 
+        if (aiMode === 'gym') {
+            const actionResponse = await runGymAiAction({
+                query: effectiveQuery,
+                user: req.user,
+                conversationContext,
+            })
+
+            await recordAuditLog({
+                req,
+                module: 'ai',
+                action: 'create',
+                entity: req.user,
+                details: `AI Gym Action query: ${normalizedQuery} | tool: ${actionResponse.tool || 'none'}`,
+            })
+
+            await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
+            return res.json({
+                ...actionResponse,
+                pts: actionResponse.data?.pts || [],
+                products: actionResponse.data?.products || [],
+                plans: [],
+            })
+        }
+
         if (aiMode !== 'gym' && isShopeeLinkIntent(effectiveQuery)) {
             const shopeeResponse = await resolveShopeeLinkResponse(effectiveQuery, aiMode)
             await recordAuditLog({
@@ -1000,6 +1025,45 @@ export const aiAssistantStream = async (req, res, next) => {
         req.on('close', () => {
             console.log(`[AI Assistant stream] client closed connection | mode: ${aiMode}`)
         })
+
+        if (aiMode === 'gym') {
+            writeSseEvent(res, 'meta', {
+                mode: aiMode,
+                aiAction: true,
+                toolCalling: true,
+                status: 'calling_tool',
+            })
+
+            const actionResponse = await runGymAiAction({
+                query: effectiveQuery,
+                user: req.user,
+                conversationContext,
+            })
+
+            writeSseEvent(res, 'meta', {
+                mode: aiMode,
+                aiAction: Boolean(actionResponse.aiAction),
+                tool: actionResponse.tool || null,
+                status: 'tool_complete',
+            })
+            writeSseEvent(res, 'chunk', { text: actionResponse.answer })
+            writeSseEvent(res, 'done', {
+                ...actionResponse,
+                pts: actionResponse.data?.pts || [],
+                products: actionResponse.data?.products || [],
+                plans: [],
+            })
+
+            await recordAuditLog({
+                req,
+                module: 'ai',
+                action: 'create',
+                entity: req.user,
+                details: `AI Gym Action stream query: ${normalizedQuery} | tool: ${actionResponse.tool || 'none'}`,
+            })
+            await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
+            return res.end()
+        }
 
         if (aiMode !== 'gym' && isShopeeLinkIntent(effectiveQuery)) {
             const shopeeResponse = await resolveShopeeLinkResponse(effectiveQuery, aiMode)

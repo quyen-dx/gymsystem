@@ -649,6 +649,8 @@ export default function AiChatWidget() {
     const [activeSessionId, setActiveSessionId] = useState<string>('')
     const [query, setQuery] = useState('')
     const [loading, setLoading] = useState(false)
+    const [aiActionLoading, setAiActionLoading] = useState(false)
+    const [activeAiTool, setActiveAiTool] = useState('')
     const [errorInfo, setErrorInfo] = useState<{ code: number; message: string } | null>(null)
     const [retryCountdown, setRetryCountdown] = useState(0)
     const [lastQuery, setLastQuery] = useState('')
@@ -1001,6 +1003,8 @@ export default function AiChatWidget() {
             return
         }
         setLoading(true)
+        setAiActionLoading(mode === 'gym')
+        setActiveAiTool('')
         setErrorInfo(null)
         const assistantMessageId = `${Date.now()}-assistant`
         const assistantMessage: ChatMessage = {
@@ -1020,6 +1024,12 @@ export default function AiChatWidget() {
             let suppressedActionText = ''
             const response = await requestAiAssistantStream(trimmed, mode, {
                 conversationContext,
+                onMeta: (data) => {
+                    if (data?.aiAction || data?.toolCalling) {
+                        setAiActionLoading(data.status !== 'tool_complete')
+                        setActiveAiTool(data.tool || '')
+                    }
+                },
                 onFirstChunk: () => setLoading(false),
                 onChunk: (chunk) => {
                     const actionCandidate = `${suppressedActionText}${chunk}`.trimStart()
@@ -1049,6 +1059,7 @@ export default function AiChatWidget() {
                 const fallbackSplit = splitAiAssistantResponse(fallbackContent)
                 const fallbackAction = fallbackSplit.actionPayload
                 if (fallbackAction) executeAiAction(fallbackAction)
+                setAiActionLoading(false)
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
                     content: fallbackContent
@@ -1068,6 +1079,7 @@ export default function AiChatWidget() {
 
             if (responseContent) {
                 await waitForStreamTypingDrain()
+                setAiActionLoading(false)
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
                     content: splitResponse.chatContent
@@ -1079,6 +1091,7 @@ export default function AiChatWidget() {
                 }))
             } else {
                 await waitForStreamTypingDrain()
+                setAiActionLoading(false)
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
                     content: splitResponse.chatContent
@@ -1090,6 +1103,7 @@ export default function AiChatWidget() {
                 }))
             }
         } catch (error: any) {
+            setAiActionLoading(false)
             const errMsg = error?.userMessage || 'Có lỗi khi gọi AI. Vui lòng thử lại.'
             if (error?.code === 429) setRetryCountdown(4)
             setErrorInfo({ code: error?.code || 500, message: errMsg })
@@ -1102,6 +1116,7 @@ export default function AiChatWidget() {
             }))
         } finally {
             setLoading(false)
+            setAiActionLoading(false)
         }
     }
 
@@ -1151,25 +1166,28 @@ export default function AiChatWidget() {
     const renderSessionList = () => (
         <>
             <div style={{ flex: 1, overflowY: 'auto' }}>
-                {sessions.map((session) => (
-                    <div
-                        key={session.sessionId}
-                        className="ai-chat-session-item"
-                        onClick={() => selectSession(session.sessionId)}
-                        style={{
-                            padding: '12px 14px',
-                            cursor: 'pointer',
-                            borderLeft: session.sessionId === activeSession?.sessionId
-                                ? '4px solid #b6462f'
-                                : '4px solid transparent',
-                            borderBottom: dark
-                                ? '1px solid rgba(255,255,255,0.08)'
-                                : '1px solid #5a5a5a',
-                            background: session.sessionId === activeSession?.sessionId
-                                ? (dark ? 'rgba(182,70,47,0.18)' : 'rgba(224,90,48,0.15)')
-                                : 'transparent',
-                        }}
-                    >
+                {sessions.map((session) => {
+                    const isActive = session.sessionId === activeSession?.sessionId
+                    return (
+                        <div
+                            key={session.sessionId}
+                            className="ai-chat-session-item"
+                            onClick={() => selectSession(session.sessionId)}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'var(--theme-accent-muted)'
+                            }}
+                            onMouseLeave={(e) => {
+                                if (!isActive) e.currentTarget.style.background = 'transparent'
+                            }}
+                            style={{
+                                padding: '12px 14px',
+                                cursor: 'pointer',
+                                background: isActive ? 'var(--theme-accent-muted)' : 'transparent',
+                                borderLeft: isActive ? '3px solid var(--theme-accent)' : '3px solid transparent',
+                                borderRadius: 8,
+                                transition: 'background 0.15s',
+                            }}
+                        >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                             {editingSessionId === session.sessionId ? (
                                 <Input
@@ -1186,10 +1204,10 @@ export default function AiChatWidget() {
                             ) : (
                                 <>
                                     <div style={{ minWidth: 0, flex: 1 }}>
-                                        <Typography.Text strong style={{ color: panelText, display: 'block' }}>
+                                        <Typography.Text strong style={{ color: isActive ? 'var(--theme-accent)' : 'var(--theme-text)', display: 'block' }}>
                                             {session.title}
                                         </Typography.Text>
-                                        <Typography.Text style={{ fontSize: 12, color: panelMutedText }}>
+                                        <Typography.Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>
                                             {new Date(session.createdAt).toLocaleString('vi-VN')}
                                         </Typography.Text>
                                     </div>
@@ -1219,8 +1237,9 @@ export default function AiChatWidget() {
                                 </>
                             )}
                         </div>
-                    </div>
-                ))}
+                        </div>
+                    )
+                })}
             </div>
         </>
     )
@@ -1349,6 +1368,22 @@ export default function AiChatWidget() {
                     color: ${dark ? 'rgba(255,255,255,0.48)' : 'rgba(237,235,230,0.35)'};
                 }
 
+                .ai-chat-panel .ant-segmented {
+                    background: var(--theme-elevated) !important;
+                    border: 1px solid var(--theme-border) !important;
+                }
+                .ai-chat-panel .ant-segmented-item {
+                    color: var(--theme-muted) !important;
+                }
+                .ai-chat-panel .ant-segmented-item-selected {
+                    background: var(--theme-accent) !important;
+                    color: var(--theme-button-text) !important;
+                    border: none !important;
+                }
+                .ai-chat-panel .ant-segmented-thumb {
+                    background: var(--theme-accent) !important;
+                }
+
             `}</style>
 
             {visible && <div className="ai-chat-overlay" onClick={closeWidget} />}
@@ -1470,10 +1505,10 @@ export default function AiChatWidget() {
                         justifyContent: 'space-between',
                         gap: 12,
                         padding: mobileChat ? '12px 14px' : '16px 18px',
-                        background: 'color-mix(in srgb, var(--theme-accent) 90%, transparent)',
+                        background: 'var(--theme-accent)',
                         backdropFilter: 'blur(10px)',
                         WebkitBackdropFilter: 'blur(10px)',
-                        color: 'var(--theme-text)',
+                        color: 'var(--theme-button-text)',
                         flexShrink: 0,
                         cursor: 'grab',
                         userSelect: 'none',
@@ -1481,11 +1516,37 @@ export default function AiChatWidget() {
                         touchAction: 'none',
                     }}>
                         <div style={{ minWidth: 0 }}>
-                            <Typography.Title level={5} style={{ margin: 0, color: 'var(--theme-text)', fontSize: mobileChat ? 14 : 16 }}>
+                            <Typography.Title level={5} style={{ margin: 0, color: 'var(--theme-button-text)', fontSize: mobileChat ? 14 : 16 }}>
                                 Gì cũng biết! Tò mò hỏi Doraemon
                             </Typography.Title>
+                            {mode === 'gym' && (
+                                <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                                    <span style={{
+                                        background: 'var(--theme-accent-muted)',
+                                        color: 'var(--theme-button-text)',
+                                        border: '1px solid var(--theme-accent-border)',
+                                        borderRadius: 999,
+                                        padding: '2px 8px',
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                    }}>
+                                        Gym Assistant
+                                    </span>
+                                    <span style={{
+                                        background: 'var(--theme-accent-muted)',
+                                        color: 'var(--theme-button-text)',
+                                        border: '1px solid var(--theme-accent-border)',
+                                        borderRadius: 999,
+                                        padding: '2px 8px',
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                    }}>
+                                        AI Action
+                                    </span>
+                                </div>
+                            )}
                             {!mobileChat && (
-                                <Typography.Text style={{ color: 'var(--theme-muted)', fontSize: 12 }}>
+                                <Typography.Text style={{ color: 'var(--theme-button-text)', fontSize: 12 }}>
                                     Chồn đến từ thế kỉ 22
                                 </Typography.Text>
                             )}
@@ -1499,7 +1560,7 @@ export default function AiChatWidget() {
                                 <Button
                                     size="small"
                                     type="text"
-                                    style={{ color: 'var(--theme-text)', fontWeight: 600 }}
+                                    style={{ color: 'var(--theme-button-text)', fontWeight: 600 }}
                                     onClick={(e) => {
                                         e.stopPropagation()
                                         setSessionDrawerOpen(true)
@@ -1513,11 +1574,11 @@ export default function AiChatWidget() {
                                     size="small"
                                     type="text"
                                     icon={<ExpandAltOutlined />}
-                                    style={{ color: 'var(--theme-text)' }}
+                                    style={{ color: 'var(--theme-button-text)' }}
                                     onClick={() => setExpanded(!expanded)}
                                 />
                             )}
-                            <Button size="small" type="text" icon={<CloseOutlined />} style={{ color: 'var(--theme-text)' }} onClick={closeWidget} />
+                            <Button size="small" type="text" icon={<CloseOutlined />} style={{ color: 'var(--theme-button-text)' }} onClick={closeWidget} />
                         </Space>
                     </div>
 
@@ -1551,27 +1612,38 @@ export default function AiChatWidget() {
                                         size="small"
                                         type="text"
                                         icon={<PlusOutlined />}
-                                        style={{ color: panelText }}
+                                        style={{
+                                            color: 'var(--theme-accent)',
+                                            background: 'var(--theme-accent-muted)',
+                                            border: '1px solid var(--theme-accent-border)',
+                                            borderRadius: 6,
+                                        }}
                                         onClick={createNewChat}
                                     />
                                 </div>
                                 <div style={{ flex: 1, overflowY: 'auto' }}>
-                                    {sessions.map((session) => (
-                                        <div
-                                            key={session.sessionId}
-                                            className="ai-chat-session-item"
-                                            onClick={() => selectSession(session.sessionId)}
-                                            style={{
-                                                padding: '12px 14px',
-                                                cursor: 'pointer',
-                                                borderLeft: session.sessionId === activeSession?.sessionId
-                                                    ? '3px solid #b6462f'
-                                                    : '3px solid transparent',
-                                                background: session.sessionId === activeSession?.sessionId
-                                                    ? (dark ? 'rgba(182,70,47,0.15)' : 'rgba(182,70,47,0.08)')
-                                                    : 'transparent',
-                                            }}
-                                        >
+                                    {sessions.map((session) => {
+                                        const isActive = session.sessionId === activeSession?.sessionId
+                                        return (
+                                            <div
+                                                key={session.sessionId}
+                                                className="ai-chat-session-item"
+                                                onClick={() => selectSession(session.sessionId)}
+                                                onMouseEnter={(e) => {
+                                                    e.currentTarget.style.background = 'var(--theme-accent-muted)'
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    if (!isActive) e.currentTarget.style.background = 'transparent'
+                                                }}
+                                                style={{
+                                                    padding: '12px 14px',
+                                                    cursor: 'pointer',
+                                                    background: isActive ? 'var(--theme-accent-muted)' : 'transparent',
+                                                    borderLeft: isActive ? '3px solid var(--theme-accent)' : '3px solid transparent',
+                                                    borderRadius: 8,
+                                                    transition: 'background 0.15s',
+                                                }}
+                                            >
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                                                 {editingSessionId === session.sessionId ? (
                                                     <Input
@@ -1586,7 +1658,7 @@ export default function AiChatWidget() {
                                                     />
                                                 ) : (
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
-                                                        <Typography.Text strong style={{ color: panelText, flex: 1, fontSize: 13 }}>
+                                                        <Typography.Text strong style={{ color: isActive ? 'var(--theme-accent)' : 'var(--theme-text)', flex: 1, fontSize: 13 }}>
                                                             {session.title}
                                                         </Typography.Text>
                                                         <Dropdown
@@ -1616,11 +1688,12 @@ export default function AiChatWidget() {
                                                     </div>
                                                 )}
                                             </div>
-                                            <Typography.Text style={{ fontSize: 11, color: panelMutedText }}>
+                                            <Typography.Text style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
                                                 {new Date(session.createdAt).toLocaleString('vi-VN')}
                                             </Typography.Text>
-                                        </div>
-                                    ))}
+                                            </div>
+                                        )
+                                    })}
                                 </div>
                             </div>
                         )}
@@ -1859,6 +1932,13 @@ export default function AiChatWidget() {
                                 {loading && (
                                     <div style={{ textAlign: 'center', marginTop: 14 }}>
                                         <Spin />
+                                        {aiActionLoading && (
+                                            <div style={{ marginTop: 8 }}>
+                                                <Typography.Text style={{ color: 'var(--theme-muted)', fontSize: 12 }}>
+                                                    AI Action đang gọi dữ liệu GymSystem{activeAiTool ? `: ${activeAiTool}` : ''}
+                                                </Typography.Text>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -1964,12 +2044,17 @@ export default function AiChatWidget() {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <span>Phiên chat</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <Badge count={sessions.length} color="#b6462f" />
+                            <Badge count={sessions.length} color="var(--theme-accent)" />
                             <Button
                                 size="small"
                                 type="text"
                                 icon={<PlusOutlined />}
-                                style={{ color: 'var(--theme-text)' }}
+                                style={{
+                                    color: 'var(--theme-accent)',
+                                    background: 'var(--theme-accent-muted)',
+                                    border: '1px solid var(--theme-accent-border)',
+                                    borderRadius: 6,
+                                }}
                                 onClick={(event) => {
                                     event.stopPropagation()
                                     createNewChat()
