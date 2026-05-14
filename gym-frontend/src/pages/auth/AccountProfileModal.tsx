@@ -700,11 +700,18 @@ export default function AccountProfileModal({
         content: {
           borderRadius: 16,
           padding: 0,
-          height: isProfileCompact && !isProfileMobile ? '82vh' : undefined,
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           border: '1px solid var(--theme-border)',
+          height: isProfileMobile
+            ? 'calc(var(--profile-visual-height, 92vh) - 16px)'
+            : isProfileCompact
+            ? '82vh'
+            : 'auto',
+          maxHeight: isProfileMobile
+            ? 'calc(var(--profile-visual-height, 92vh) - 16px)'
+            : '90vh',
         },
         body: {
           padding: 0,
@@ -749,13 +756,17 @@ export default function AccountProfileModal({
             ref={profileScrollRef}
             className="profile-modal-scroll min-h-0 flex-1 overflow-y-auto"
             style={{
-              maxHeight: isProfileCompact ? undefined : '70vh',
+              maxHeight: isProfileCompact ? 'calc(var(--profile-visual-height, 100vh) - 320px)' : '70vh',
+              minHeight: 120,
               padding: isProfileMobile ? '14px 14px 16px' : '16px 20px',
               scrollbarWidth: 'thin',
               scrollbarColor: 'var(--theme-border) transparent',
               overflowX: 'hidden',
+              overflowY: 'auto',
               width: '100%',
               maxWidth: '100%',
+              WebkitOverflowScrolling: 'touch',
+              flex: 1,
             }}
           >
           <TabContent activeTab={activeTab}>

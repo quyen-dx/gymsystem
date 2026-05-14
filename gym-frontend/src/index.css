@@ -713,6 +713,25 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
   touch-action: pan-y;
 }
 
+.profile-modal-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Đảm bảo modal-main flex đúng */
+.profile-modal-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Scroll area chiếm hết space còn lại */
+.profile-modal-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
 @media (max-width: 1023px) {
   .profile-modal .ant-modal-content {
     height: 82vh;
