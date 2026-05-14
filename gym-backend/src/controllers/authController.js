@@ -457,8 +457,18 @@ export const updateProfile = async (req, res) => {
       updateData.dateOfBirth = parsedDate
     }
 
-    if (req.file) {
+    if (req.files?.avatar?.[0]) {
+      updateData.avatar = req.files.avatar[0].path
+    } else if (req.file) {
       updateData.avatar = req.file.path
+    }
+
+    if (req.files?.coverImage?.[0]) {
+      updateData.coverImage = req.files.coverImage[0].path
+    }
+
+    if (req.body.removeCoverImage === 'true') {
+      updateData.coverImage = null
     }
 
     const user = await User.findByIdAndUpdate(req.user._id, updateData, {

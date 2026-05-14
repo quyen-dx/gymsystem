@@ -59,6 +59,7 @@ export default function MemberLayout({
   const { user } = useAuth()
   const [accountOpen, setAccountOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [hovered, setHovered] = useState(false)
   const { cartCount } = useCart()
   const { wallet } = useWallet()
   const navigate = useNavigate()
@@ -96,6 +97,10 @@ export default function MemberLayout({
   }
 
   const lockMemberInteractions = shouldLockMemberInteractions(location.pathname)
+  const navbarIconButtonStyle = {
+    color: 'var(--theme-text)',
+    transition: 'color 0.18s',
+  }
 
   useEffect(() => {
     document.body.classList.toggle('member-interaction-lock', lockMemberInteractions)
@@ -183,6 +188,9 @@ export default function MemberLayout({
               type="text"
               icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
               onClick={() => goTo('/dashboard/member/cart')}
+              style={navbarIconButtonStyle}
+              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
             />
           </Badge>
 
@@ -199,6 +207,23 @@ export default function MemberLayout({
           <div
             className="member-shell-user"
             onClick={openProfileModal}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '4px 10px',
+              borderRadius: 20,
+              cursor: 'pointer',
+              transition: 'background 0.18s',
+              background: hovered
+                ? 'var(--theme-accent-muted)'
+                : 'transparent',
+              border: `1px solid ${hovered
+                ? 'var(--theme-accent-border)'
+                : 'transparent'}`,
+            }}
           >
             <Avatar src={avatarUrl} />
             <Text strong style={{ color: 'var(--theme-text)' }}>
@@ -213,9 +238,19 @@ export default function MemberLayout({
               type="text"
               icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
               onClick={() => goTo('/dashboard/member/cart')}
+              style={navbarIconButtonStyle}
+              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
             />
           </Badge>
-          <Button type="text" icon={<MenuOutlined />} onClick={() => setMenuOpen(true)} />
+          <Button
+            type="text"
+            icon={<MenuOutlined />}
+            onClick={() => setMenuOpen(true)}
+            style={navbarIconButtonStyle}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
+          />
         </div>
       </Header>
 

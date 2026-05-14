@@ -16,6 +16,7 @@ export interface User {
   shopId?: string | null
   shop_id?: string | null
   avatar?: string
+  coverImage?: string | null
   isActive: boolean
   isVerified: boolean
   hasPassword?: boolean

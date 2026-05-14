@@ -2,6 +2,8 @@
 
 :root {
   color-scheme: dark;
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sat: env(safe-area-inset-top, 0px);
   --gs-bg: #171717;
   --gs-bg-elevated: #202020;
   --gs-bg-soft: #262626;
@@ -482,12 +484,29 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
 .ant-menu-item-selected .ant-menu-title-content,
 .ant-menu-item-selected a,
 .ant-menu-horizontal .ant-menu-item-selected {
-  color: var(--theme-text) !important;
+  color: var(--theme-accent) !important;
 }
 
 .ant-menu-item,
 .ant-menu-item .ant-menu-title-content {
   color: var(--theme-text) !important;
+}
+
+.ant-menu-horizontal .ant-menu-item:hover,
+.ant-menu-horizontal .ant-menu-item-active {
+  color: var(--theme-accent) !important;
+  background: var(--theme-accent-muted) !important;
+  border-radius: 8px;
+}
+
+.ant-menu-horizontal .ant-menu-item:hover .ant-menu-title-content,
+.ant-menu-horizontal .ant-menu-item-active .ant-menu-title-content,
+.ant-menu-horizontal .ant-menu-item-selected .ant-menu-title-content {
+  color: var(--theme-accent) !important;
+}
+
+.ant-menu-horizontal .ant-menu-item::after {
+  border-bottom-color: var(--theme-accent) !important;
 }
 
 .ant-btn-primary {
@@ -664,6 +683,10 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
 
 .profile-mobile-grid { display: none; }
 
+.profile-mobile-menu-toggle {
+  display: none !important;
+}
+
 .profile-tab-content {
   animation: profile-tab-fade 0.18s ease;
 }
@@ -732,6 +755,21 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
   min-height: 0;
 }
 
+.profile-modal-scroll {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+@supports (-webkit-touch-callout: none) {
+  .profile-modal .ant-modal-content {
+    max-height: calc(
+      var(--profile-visual-height, 92vh)
+      - env(safe-area-inset-top, 0px)
+      - env(safe-area-inset-bottom, 20px)
+      - 16px
+    ) !important;
+  }
+}
+
 @media (max-width: 1023px) {
   .profile-modal .ant-modal-content {
     height: 82vh;
@@ -790,6 +828,10 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
     gap: 8px;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     padding: 12px 16px;
+  }
+
+  .profile-mobile-menu-toggle {
+    display: flex !important;
   }
 
   .profile-grid-tab {

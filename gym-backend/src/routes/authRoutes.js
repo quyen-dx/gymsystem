@@ -94,7 +94,10 @@ router.post('/forgot-password/reset', resetPassword)
 
 router.get('/me', protect, getMe)
 router.get('/has-password', protect, hasPassword)
-router.put('/update-profile', protect, upload.single('avatar'), updateProfile)
+router.put('/update-profile', protect, upload.fields([
+  { name: 'avatar', maxCount: 1 },
+  { name: 'coverImage', maxCount: 1 },
+]), updateProfile)
 router.put('/change-password', protect, changePassword)
 router.post('/add-password', protect, setPassword)
 router.put('/set-password', protect, setPassword)

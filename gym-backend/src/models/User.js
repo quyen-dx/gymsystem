@@ -100,6 +100,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    coverImage: {
+      type: String,
+      default: '',
+    },
     isActive: {
       type: Boolean,
       default: true,

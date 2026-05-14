@@ -126,25 +126,120 @@ type ProfileTabItem = {
   icon: ReactNode
 }
 
+const DEFAULT_COVER = 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&q=80'
+
 const ProfileHeader = ({
   user,
   avatarPreview,
   fileRef,
+  coverPreview,
+  coverRef,
   contactText,
   onCopyContact,
   onAvatarChange,
+  onCoverChange,
+  onCoverRemove,
   isMobile,
 }: {
   user: any
   avatarPreview: string | null
   fileRef: React.RefObject<HTMLInputElement | null>
+  coverPreview: string | null
+  coverRef: React.RefObject<HTMLInputElement | null>
   contactText: string
   onCopyContact: () => void
   onAvatarChange: (url: string) => void
+  onCoverChange: (url: string) => void
+  onCoverRemove: () => void
   isMobile: boolean
-}) => (
-  <header className="profile-modal-header">
-    <div className="profile-cover" />
+}) => {
+  const coverSrc = coverPreview !== null && coverPreview !== ''
+    ? coverPreview
+    : coverPreview === ''
+    ? null
+    : user?.coverImage || DEFAULT_COVER
+
+  return (
+    <header className="profile-modal-header">
+    <div
+      className="profile-cover"
+      style={{
+        backgroundImage: coverSrc ? `url(${coverSrc})` : 'none',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        position: 'relative',
+        cursor: 'pointer',
+      }}
+      onClick={() => coverRef.current?.click()}
+    >
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.5) 100%)',
+      }} />
+
+      <div
+        style={{
+          position: 'absolute',
+          top: 8, right: 40,
+          display: 'flex',
+          gap: 6,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={() => coverRef.current?.click()}
+          style={{
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: 8,
+            color: '#fff',
+            padding: '4px 10px',
+            fontSize: 12,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <CameraOutlined /> Đổi ảnh nền
+        </button>
+
+        {(coverPreview || user?.coverImage) && coverPreview !== '' && (
+          <button
+            type="button"
+            onClick={() => onCoverRemove()}
+            style={{
+              background: 'rgba(239,68,68,0.6)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(239,68,68,0.4)',
+              borderRadius: 8,
+              color: '#fff',
+              padding: '4px 10px',
+              fontSize: 12,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <DeleteOutlined /> Xóa
+          </button>
+        )}
+      </div>
+
+      <input
+        ref={coverRef}
+        type="file"
+        hidden
+        accept="image/*"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) onCoverChange(URL.createObjectURL(file))
+        }}
+      />
+    </div>
     <div className="profile-header-content">
       <div className="profile-avatar-wrap cursor-pointer" onClick={() => fileRef.current?.click()}>
         <Avatar
@@ -169,7 +264,6 @@ const ProfileHeader = ({
           <span>{contactText}</span>
           {(user.email || user.phone) && <CopyOutlined />}
         </button>
-        <div className="profile-header-badge">Member profile</div>
       </div>
     </div>
     <input
@@ -182,8 +276,9 @@ const ProfileHeader = ({
         if (file) onAvatarChange(URL.createObjectURL(file))
       }}
     />
-  </header>
-)
+    </header>
+  )
+}
 
 const SidebarTabs = ({
   tabs,
@@ -216,27 +311,65 @@ const MobileMenuGrid = ({
   tabs,
   activeTab,
   onChange,
+  mobileMenuOpen,
+  onToggle,
 }: {
   tabs: ProfileTabItem[]
   activeTab: ProfileTabKey
   onChange: (tab: ProfileTabKey) => void
+  mobileMenuOpen: boolean
+  onToggle: () => void
 }) => (
-  <div className="profile-mobile-grid">
-    {tabs.map((tab) => {
-      const isActive = activeTab === tab.key
-      return (
-        <button
-          key={tab.key}
-          type="button"
-          className={`profile-grid-tab${isActive ? ' active' : ''}`}
-          onClick={() => onChange(tab.key)}
-        >
-          <span>{tab.icon}</span>
-          <strong>{tab.label}</strong>
-        </button>
-      )
-    })}
-  </div>
+  <>
+    <div className="profile-mobile-menu-toggle" style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '8px 16px',
+      borderBottom: mobileMenuOpen ? '1px solid var(--theme-border)' : 'none',
+    }}>
+      <span style={{ fontSize: 13, color: 'var(--theme-muted)', fontWeight: 500 }}>
+        {tabs.find(t => t.key === activeTab)?.label}
+      </span>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          background: 'var(--theme-elevated)',
+          border: '1px solid var(--theme-border)',
+          borderRadius: 8,
+          padding: '4px 10px',
+          color: 'var(--theme-text)',
+          cursor: 'pointer',
+          fontSize: 16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+        }}
+      >
+        {mobileMenuOpen ? '✕' : '☰'}
+      </button>
+    </div>
+
+    {mobileMenuOpen && (
+      <div className="profile-mobile-grid">
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.key
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              className={`profile-grid-tab${isActive ? ' active' : ''}`}
+              onClick={() => onChange(tab.key)}
+            >
+              <span>{tab.icon}</span>
+              <strong>{tab.label}</strong>
+            </button>
+          )
+        })}
+      </div>
+    )}
+  </>
 )
 
 const TabContent = ({
@@ -268,12 +401,16 @@ export default function AccountProfileModal({
   const [addressForm] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [coverPreview, setCoverPreview] = useState<string | null>(null)
+  const [coverRemoved, setCoverRemoved] = useState(false)
   const [activeTab, setActiveTab] = useState<ProfileTabKey>('profile')
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(true)
   const [addresses, setAddresses] = useState<any[]>([])
   const [addressModalOpen, setAddressModalOpen] = useState(false)
   const [editAddress, setEditAddress] = useState<any>(null)
   const [accentColor, setAccentColor] = useState(savedAccentColor)
   const fileRef = useRef<HTMLInputElement>(null)
+  const coverRef = useRef<HTMLInputElement>(null)
   const profileScrollRef = useRef<HTMLDivElement>(null)
   const watchedEmail = Form.useWatch('email', form)
   const previewTheme = generateTheme(accentColor)
@@ -325,6 +462,8 @@ export default function AccountProfileModal({
       dateOfBirth: user.dateOfBirth ? user.dateOfBirth.slice(0, 10) : '',
     })
     setAvatarPreview(null)
+    setCoverPreview(null)
+    setCoverRemoved(false)
     setActiveTab('profile')
     passwordForm.resetFields()
     addressForm.resetFields()
@@ -360,8 +499,14 @@ export default function AccountProfileModal({
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
         const viewport = window.visualViewport
-        const height = Math.floor(viewport?.height || window.innerHeight)
-        const top = Math.max(8, Math.floor(viewport?.offsetTop || 0) + 8)
+        const vvHeight = viewport?.height || window.innerHeight
+        const vvTop = viewport?.offsetTop || 0
+        const safeBottom = parseInt(
+          getComputedStyle(document.documentElement)
+            .getPropertyValue('--sab') || '0'
+        ) || 0
+        const height = Math.floor(vvHeight) - safeBottom
+        const top = Math.max(8, Math.floor(vvTop) + 8)
 
         document.documentElement.style.setProperty('--profile-visual-height', `${height}px`)
         document.documentElement.style.setProperty('--profile-visual-top', `${top}px`)
@@ -483,6 +628,12 @@ export default function AccountProfileModal({
       if (values.dateOfBirth) formData.append('dateOfBirth', values.dateOfBirth)
       if (fileRef.current?.files?.[0]) {
         formData.append('avatar', fileRef.current.files[0])
+      }
+      if (coverRef.current?.files?.[0]) {
+        formData.append('coverImage', coverRef.current.files[0])
+      }
+      if (coverRemoved) {
+        formData.append('removeCoverImage', 'true')
       }
       const { data } = await authService.updateProfile(formData)
       updateUser(data.user)
@@ -639,6 +790,10 @@ export default function AccountProfileModal({
   const isProfileMobile = !screens.md
   const isProfileDesktop = Boolean(screens.lg)
   const isProfileCompact = !isProfileDesktop
+  const responsiveSectionCardStyle = {
+    ...sectionCardStyle,
+    marginBottom: isProfileMobile ? 16 : 12,
+  } as CSSProperties
   const tabs: ProfileTabItem[] = [
     { key: 'profile', label: 'Thông tin', icon: <UserOutlined /> },
     { key: 'address', label: 'Địa chỉ', icon: <EnvironmentOutlined /> },
@@ -742,23 +897,44 @@ export default function AccountProfileModal({
           user={user}
           avatarPreview={avatarPreview}
           fileRef={fileRef}
+          coverPreview={coverPreview}
+          coverRef={coverRef}
           contactText={contactText}
           onCopyContact={handleCopyContact}
           onAvatarChange={setAvatarPreview}
+          onCoverChange={(url) => {
+            setCoverPreview(url)
+            setCoverRemoved(false)
+          }}
+          onCoverRemove={() => {
+            setCoverPreview('')
+            setCoverRemoved(true)
+            if (coverRef.current) coverRef.current.value = ''
+          }}
           isMobile={isProfileCompact}
         />
 
         <div className="profile-modal-main min-h-0 flex-1">
           <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-          <MobileMenuGrid tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+          <MobileMenuGrid
+            tabs={tabs}
+            activeTab={activeTab}
+            onChange={(tab) => {
+              setActiveTab(tab)
+              setMobileMenuOpen(false)
+            }}
+            mobileMenuOpen={mobileMenuOpen}
+            onToggle={() => setMobileMenuOpen(prev => !prev)}
+          />
 
           <div
             ref={profileScrollRef}
             className="profile-modal-scroll min-h-0 flex-1 overflow-y-auto"
             style={{
-              maxHeight: isProfileCompact ? 'calc(var(--profile-visual-height, 100vh) - 320px)' : '70vh',
+              maxHeight: isProfileCompact ? 'calc(var(--profile-visual-height, 100svh) - 320px - env(safe-area-inset-bottom, 20px))' : '70vh',
               minHeight: 120,
-              padding: isProfileMobile ? '14px 14px 16px' : '16px 20px',
+              padding: isProfileMobile ? '16px 16px 0' : '16px 20px',
+              paddingBottom: isProfileMobile ? 'calc(24px + env(safe-area-inset-bottom, 16px))' : '16px',
               scrollbarWidth: 'thin',
               scrollbarColor: 'var(--theme-border) transparent',
               overflowX: 'hidden',
@@ -772,7 +948,7 @@ export default function AccountProfileModal({
           <TabContent activeTab={activeTab}>
           {activeTab === 'profile' && (
             <div>
-              <div style={sectionCardStyle}>
+              <div style={responsiveSectionCardStyle}>
                 {renderSectionHeader(<UserOutlined />, 'Thông tin tài khoản', 'Cập nhật hồ sơ cá nhân để sử dụng GymSystem thuận tiện hơn.')}
 
                 <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
@@ -850,7 +1026,7 @@ export default function AccountProfileModal({
           )}
 
           {activeTab === 'appearance' && (
-            <div style={sectionCardStyle}>
+            <div style={responsiveSectionCardStyle}>
               {renderSectionHeader(<BgColorsOutlined />, 'Giao diện', 'Tuỳ chỉnh màu sắc theo sở thích.')}
               <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
                 <div>
@@ -922,7 +1098,7 @@ export default function AccountProfileModal({
           {activeTab === 'address' && (
             <div
               className={profileFormClass}
-              style={sectionCardStyle}
+              style={responsiveSectionCardStyle}
             >
               {renderSectionHeader(<EnvironmentOutlined />, 'Địa chỉ giao hàng', 'Thêm, sửa, xóa và đặt mặc định địa chỉ.')}
               <div className="flex items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
@@ -1053,7 +1229,7 @@ export default function AccountProfileModal({
           )}
 
           {activeTab === 'password' && !hasPassword && (
-            <div style={sectionCardStyle}>
+            <div style={responsiveSectionCardStyle}>
               {renderSectionHeader(<LockOutlined />, 'Đặt mật khẩu', 'Tạo mật khẩu riêng để đăng nhập bằng số điện thoại hoặc email.')}
 
               <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
@@ -1073,7 +1249,7 @@ export default function AccountProfileModal({
           )}
 
           {activeTab === 'password' && hasPassword && (
-            <div style={sectionCardStyle}>
+            <div style={responsiveSectionCardStyle}>
               {renderSectionHeader(<LockOutlined />, 'Đổi mật khẩu', 'Cập nhật mật khẩu định kỳ để bảo vệ tài khoản.')}
 
               <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
