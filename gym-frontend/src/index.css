@@ -480,33 +480,51 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
   }
 }
 
+/* Tắt gạch chân tất cả menu item horizontal */
+.ant-menu-horizontal .ant-menu-item::after,
+.ant-menu-horizontal .ant-menu-submenu::after {
+  border-bottom: none !important;
+  display: none !important;
+}
+
+/* Chỉ item ACTIVE mới có style nổi bật */
+.ant-menu-horizontal .ant-menu-item-selected {
+  background: var(--theme-accent-muted) !important;
+  border-radius: 8px !important;
+  color: var(--theme-accent) !important;
+}
+
+.ant-menu-horizontal .ant-menu-item-selected::after {
+  display: none !important;
+}
+
+/* Hover item */
+.ant-menu-horizontal .ant-menu-item:hover {
+  background: var(--theme-accent-muted) !important;
+  border-radius: 8px !important;
+  color: var(--theme-accent) !important;
+}
+
+/* Item thường không active */
+.ant-menu-horizontal .ant-menu-item:not(.ant-menu-item-selected) {
+  background: transparent !important;
+  color: var(--theme-text) !important;
+}
+
+/* Tắt border bottom của cả Menu container */
+.ant-menu-horizontal {
+  border-bottom: none !important;
+}
+
 .ant-menu-item-selected,
 .ant-menu-item-selected .ant-menu-title-content,
-.ant-menu-item-selected a,
-.ant-menu-horizontal .ant-menu-item-selected {
+.ant-menu-item-selected a {
   color: var(--theme-accent) !important;
 }
 
 .ant-menu-item,
 .ant-menu-item .ant-menu-title-content {
   color: var(--theme-text) !important;
-}
-
-.ant-menu-horizontal .ant-menu-item:hover,
-.ant-menu-horizontal .ant-menu-item-active {
-  color: var(--theme-accent) !important;
-  background: var(--theme-accent-muted) !important;
-  border-radius: 8px;
-}
-
-.ant-menu-horizontal .ant-menu-item:hover .ant-menu-title-content,
-.ant-menu-horizontal .ant-menu-item-active .ant-menu-title-content,
-.ant-menu-horizontal .ant-menu-item-selected .ant-menu-title-content {
-  color: var(--theme-accent) !important;
-}
-
-.ant-menu-horizontal .ant-menu-item::after {
-  border-bottom-color: var(--theme-accent) !important;
 }
 
 .ant-btn-primary {

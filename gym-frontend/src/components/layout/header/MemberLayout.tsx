@@ -159,6 +159,7 @@ export default function MemberLayout({
             flex: 1,
             justifyContent: 'center',
             border: 'none',
+            borderBottom: 'none',
             background: 'transparent',
             minWidth: 0,
           }}

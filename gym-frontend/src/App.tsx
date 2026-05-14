@@ -134,6 +134,7 @@ function AppWithTheme() {
             darkItemColor: tokens.text,
             darkItemBg: tokens.card,
             darkItemHoverBg: tokens.elevated,
+            activeBarHeight: 0,
             activeBarBorderWidth: 0,
           },
           Card: { colorBgContainer: tokens.card },
