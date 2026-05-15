@@ -252,7 +252,7 @@ function MemberFooter() {
               </div>
               <div className="mt-4 hidden lg:block">
                 <a
-                  href="https://github.com/quyen-dx/gympro/releases/latest/download/GymPro-1.0.11-win-x64.exe"
+                  href="https://github.com/quyen-dx/gymsystem/releases/latest/download/GymSystem-1.0.11-win-x64.exe"
                   target="_blank"
                   rel="noopener noreferrer"
                   download
