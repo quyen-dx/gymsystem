@@ -83,7 +83,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             color: 'var(--theme-text)',
           }}
         >
-          GS DASHBOARD
+          GP DASHBOARD
         </div>
 
         <Menu

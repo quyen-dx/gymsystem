@@ -1,7 +1,8 @@
-import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import cors from 'cors'
 import express from 'express'
 import session from 'express-session'
+import { getClientUrls } from './src/config/appUrls.js'
 import connectDB from './src/config/db.js'
 import passport from './src/config/passport.js'
 import { getMyProducts } from './src/controllers/productController.js'
@@ -11,6 +12,7 @@ import aiRoutes from './src/routes/aiRoutes.js'
 import auditLogRoutes from './src/routes/auditLogRoutes.js'
 import authRoutes from './src/routes/authRoutes.js'
 import channelRoutes from './src/routes/channelRoutes.js'
+import membershipRoutes from './src/routes/membershipRoutes.js'
 import orderRoutes from './src/routes/orderRoutes.js'
 import paymentRoutes from './src/routes/paymentRoutes.js'
 import planRoutes from './src/routes/planRoutes.js'
@@ -19,7 +21,6 @@ import sellerRoutes from './src/routes/sellerRoutes.js'
 import shopRoutes from './src/routes/shopRoutes.js'
 import shortRoutes from './src/routes/shortRoutes.js'
 import walletRoutes from './src/routes/walletRoutes.js'
-import { getClientUrls } from './src/config/appUrls.js'
 
 const app = express()
 
@@ -60,12 +61,13 @@ app.use('/api/payments', paymentRoutes)
 app.use('/api/payment', paymentRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/seller', sellerRoutes)
+app.use('/api/memberships', membershipRoutes)
 app.use('/api/ai-assistant', aiRoutes)
 app.use('/api/shorts', shortRoutes)
 app.use('/api/channels', channelRoutes)
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'OK', message: 'GymSystem API is running' })
+  res.json({ status: 'OK', message: 'GymPro API is running' })
 })
 
 app.use((req, res) => {

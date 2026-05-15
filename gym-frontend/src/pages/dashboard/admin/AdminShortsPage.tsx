@@ -105,7 +105,7 @@ export default function AdminShortsPage() {
       title: 'Người đăng',
       render: (_, video) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Avatar src={video.userId?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.userId?.name || 'GS')}`} />
+          <Avatar src={video.userId?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.userId?.name || 'GP')}`} />
           <div>
             <div>{video.userId?.name || 'Không rõ'}</div>
             <Text type="secondary" style={{ fontSize: 12 }}>{video.userId?.email}</Text>

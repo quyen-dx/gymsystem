@@ -237,7 +237,7 @@ const streamGeminiText = async (prompt, {
 export const classifyQueryIntent = async (query) => {
     if (!process.env.GEMINI_API_KEY) return buildDefaultClassification()
 
-    const prompt = `Bạn là bộ phận phân tích truy vấn tìm kiếm GymSystem.
+    const prompt = `Bạn là bộ phận phân tích truy vấn tìm kiếm GymPro.
 Trả về DUY NHẤT 1 object JSON với các trường sau:
 {
   "type": "pt" | "product" | "plan" | "mixed",
@@ -287,7 +287,7 @@ export const generateAssistantResponse = async (query, pts, products, plans, mod
     const summaryRules = buildSummaryRules(query)
     const summaryMode = Boolean(summaryRules)
     const styleRules = `PHONG CÁCH BẮT BUỘC:
-- Bạn là trợ lý AI của GymSystem, thân thiện kiểu Doraemon nhưng vẫn chuyên nghiệp.
+- Bạn là trợ lý AI của GymPro, thân thiện kiểu Doraemon nhưng vẫn chuyên nghiệp.
 - Không trả lời cụt ngủn. Với câu hỏi đơn giản, trả lời câu chính rồi thêm 1 câu cảm xúc nhẹ nếu phù hợp.
 - Không lan man; ưu tiên 1 câu chính và 1 câu bổ sung nhẹ.
 - Tự nhiên như người thật, không robot, không roleplay quá đà.
@@ -296,11 +296,11 @@ export const generateAssistantResponse = async (query, pts, products, plans, mod
 - Không bịa sản phẩm, PT, giá, số điện thoại hoặc email.`
 
     if (normalizedMode === 'gym' && isGreetingQuery(query)) {
-        return 'Chào bạn, mình là Doraemon AI của GymSystem đây! Hôm nay bạn muốn hỏi về tập luyện, dinh dưỡng hay cần mình hỗ trợ gì khác nào?'
+        return 'Chào bạn, mình là Doraemon AI của GymPro đây! Hôm nay bạn muốn hỏi về tập luyện, dinh dưỡng hay cần mình hỗ trợ gì khác nào?'
     }
 
     if (normalizedMode === 'general') {
-        const prompt = `Bạn là trợ lý AI đa năng của GymSystem.
+        const prompt = `Bạn là trợ lý AI đa năng của GymPro.
 
 Quy tắc:
 - Trả lời trực tiếp vào câu hỏi.
@@ -345,7 +345,7 @@ Câu hỏi: "${query}"`
     }
 
     if (!isGymRelatedQuery(query)) {
-        return 'Ở chế độ Gym, mình chỉ trả lời dựa trên dữ liệu hệ thống GymSystem hiện tại như PT, sản phẩm, gói tập, tập luyện, dinh dưỡng và sức khỏe. Bạn có thể chuyển sang chế độ Tất cả để hỏi nội dung ngoài hệ thống.'
+        return 'Ở chế độ Gym, mình chỉ trả lời dựa trên dữ liệu hệ thống GymPro hiện tại như PT, sản phẩm, gói tập, tập luyện, dinh dưỡng và sức khỏe. Bạn có thể chuyển sang chế độ Tất cả để hỏi nội dung ngoài hệ thống.'
     }
 
     const buildSummary = (items, label, fields) => {
@@ -362,7 +362,7 @@ Câu hỏi: "${query}"`
         buildSummary(plans, 'Gói tập gợi ý', ['name', 'durationDays', 'price']),
     ].join('\n')
 
-    const prompt = `Bạn là một Huấn luyện viên cá nhân (PT) nhiệt tình, thân thiện và chuyên nghiệp cho GymSystem.
+    const prompt = `Bạn là một Huấn luyện viên cá nhân (PT) nhiệt tình, thân thiện và chuyên nghiệp cho GymPro.
 
 Phong cách trả lời:
 - Sử dụng giọng nói khích lệ, gần gũi nhưng vẫn chuyên nghiệp.
@@ -370,7 +370,7 @@ Phong cách trả lời:
 - Luôn gợi ý hành động tiếp theo rõ ràng và hữu ích.
 - Trả lời bằng tiếng Việt, dễ hiểu, không quá máy móc.
 - Không dừng giữa câu và không cắt ngang câu trả lời.
-- Chỉ sử dụng dữ liệu hệ thống GymSystem bên dưới, không tự lấy hoặc bịa dữ liệu ngoài hệ thống.
+- Chỉ sử dụng dữ liệu hệ thống GymPro bên dưới, không tự lấy hoặc bịa dữ liệu ngoài hệ thống.
 - Nếu có "Context web fitness", chỉ dùng nó như nguồn tham khảo chuyên môn về tập luyện, dinh dưỡng, thể hình và khoa học vận động.
 - Nếu dữ liệu bên dưới không đủ để trả lời, nói rõ hiện hệ thống chưa có dữ liệu phù hợp và gợi ý người dùng hỏi về PT, sản phẩm hoặc gói tập hiện có.
 
@@ -443,7 +443,7 @@ export const generateAssistantResponseStream = async (
     const summaryRules = buildSummaryRules(query)
     const summaryMode = Boolean(summaryRules)
     const styleRules = `PHONG CÁCH BẮT BUỘC:
-- Bạn là trợ lý AI của GymSystem, thân thiện kiểu Doraemon nhưng vẫn chuyên nghiệp.
+- Bạn là trợ lý AI của GymPro, thân thiện kiểu Doraemon nhưng vẫn chuyên nghiệp.
 - Không trả lời cụt ngủn. Với câu hỏi đơn giản, trả lời câu chính rồi thêm 1 câu cảm xúc nhẹ nếu phù hợp.
 - Không lan man; ưu tiên 1 câu chính và 1 câu bổ sung nhẹ.
 - Tự nhiên như người thật, không robot, không roleplay quá đà.
@@ -452,13 +452,13 @@ export const generateAssistantResponseStream = async (
 - Không bịa sản phẩm, PT, giá, số điện thoại hoặc email.`
 
     if (normalizedMode === 'gym' && isGreetingQuery(query)) {
-        const greeting = 'Chào bạn, mình là Doraemon AI của GymSystem đây! Hôm nay bạn muốn hỏi về tập luyện, dinh dưỡng hay cần mình hỗ trợ gì khác nào?'
+        const greeting = 'Chào bạn, mình là Doraemon AI của GymPro đây! Hôm nay bạn muốn hỏi về tập luyện, dinh dưỡng hay cần mình hỗ trợ gì khác nào?'
         await onChunk?.(greeting)
         return greeting
     }
 
     if (normalizedMode === 'general') {
-        const prompt = `Bạn là trợ lý AI đa năng của GymSystem.
+        const prompt = `Bạn là trợ lý AI đa năng của GymPro.
 
 Quy tắc:
 - Trả lời trực tiếp vào câu hỏi.
@@ -502,7 +502,7 @@ Câu hỏi: "${query}"`
     }
 
     if (!isGymRelatedQuery(query)) {
-        const message = 'Ở chế độ Gym, mình chỉ trả lời dựa trên dữ liệu hệ thống GymSystem hiện tại như PT, sản phẩm, gói tập, tập luyện, dinh dưỡng và sức khỏe. Bạn có thể chuyển sang chế độ Tất cả để hỏi nội dung ngoài hệ thống.'
+        const message = 'Ở chế độ Gym, mình chỉ trả lời dựa trên dữ liệu hệ thống GymPro hiện tại như PT, sản phẩm, gói tập, tập luyện, dinh dưỡng và sức khỏe. Bạn có thể chuyển sang chế độ Tất cả để hỏi nội dung ngoài hệ thống.'
         await onChunk?.(message)
         return message
     }
@@ -521,7 +521,7 @@ Câu hỏi: "${query}"`
         buildSummary(plans, 'Gói tập gợi ý', ['name', 'durationDays', 'price']),
     ].join('\n')
 
-    const prompt = `Bạn là một Huấn luyện viên cá nhân (PT) nhiệt tình, thân thiện và chuyên nghiệp cho GymSystem.
+    const prompt = `Bạn là một Huấn luyện viên cá nhân (PT) nhiệt tình, thân thiện và chuyên nghiệp cho GymPro.
 
 Phong cách trả lời:
 - Sử dụng giọng nói khích lệ, gần gũi nhưng vẫn chuyên nghiệp.
@@ -529,7 +529,7 @@ Phong cách trả lời:
 - Luôn gợi ý hành động tiếp theo rõ ràng và hữu ích.
 - Trả lời bằng tiếng Việt, dễ hiểu, không quá máy móc.
 - Không dừng giữa câu và không cắt ngang câu trả lời.
-- Chỉ sử dụng dữ liệu hệ thống GymSystem bên dưới, không tự lấy hoặc bịa dữ liệu ngoài hệ thống.
+- Chỉ sử dụng dữ liệu hệ thống GymPro bên dưới, không tự lấy hoặc bịa dữ liệu ngoài hệ thống.
 - Nếu có "Context web fitness", chỉ dùng nó như nguồn tham khảo chuyên môn về tập luyện, dinh dưỡng, thể hình và khoa học vận động.
 - Nếu dữ liệu bên dưới không đủ để trả lời, nói rõ hiện hệ thống chưa có dữ liệu phù hợp và gợi ý người dùng hỏi về PT, sản phẩm hoặc gói tập hiện có.
 

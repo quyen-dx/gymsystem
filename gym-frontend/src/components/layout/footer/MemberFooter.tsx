@@ -78,7 +78,7 @@ function MemberFooter() {
                 : 'text-[#edebe6]'
               : dark
                 ? 'text-zinc-300 hover:text-white'
-            : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]',
+                : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]',
           ].join(' ')
         }
         style={{ color: 'var(--theme-text)' }}
@@ -115,10 +115,10 @@ function MemberFooter() {
                 className="flex h-11 w-11 items-center justify-center rounded-lg text-sm font-black"
                 style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)' }}
               >
-                GS
+                GP
               </span>
               <span>
-                <span className="block text-lg font-bold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymSystem</span>
+                <span className="block text-lg font-bold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymPro</span>
                 <span className={['block text-sm', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
                   Train smarter every day
                 </span>
@@ -178,11 +178,11 @@ function MemberFooter() {
                 <span>1900 6868</span>
               </a>
               <a
-                href="mailto:support@gymsystem.vn"
+                href="mailto:support@gympro.vn"
                 className={['flex items-center gap-2 transition-colors', dark ? 'hover:text-white' : 'hover:text-[#edebe6]'].join(' ')}
               >
                 <Mail className={['h-4 w-4', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
-                <span>support@gymsystem.vn</span>
+                <span>support@gympro.vn</span>
               </a>
               <div className="flex items-center gap-3 pt-2">
                 <a
@@ -252,7 +252,7 @@ function MemberFooter() {
               </div>
               <div className="mt-4 hidden lg:block">
                 <a
-                  href="https://github.com/quyen-dx/gymsystem/releases/latest/download/GymSystem-1.0.11-win-x64.exe"
+                  href="https://github.com/quyen-dx/gympro/releases/latest/download/GymPro-1.0.11-win-x64.exe"
                   target="_blank"
                   rel="noopener noreferrer"
                   download
@@ -279,7 +279,7 @@ function MemberFooter() {
           style={{ borderColor: 'var(--theme-border)' }}
         >
           <p className={['mx-auto max-w-7xl text-sm', dark ? 'text-zinc-500' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-            Copyright © {new Date().getFullYear()} GymSystem. All rights reserved.
+            Copyright © {new Date().getFullYear()} GymPro. All rights reserved.
           </p>
         </div>
       </footer>

@@ -21,12 +21,12 @@ export default function ChannelHeader({
         <div className="flex items-end gap-5 max-[640px]:items-center">
           <Avatar
             size={112}
-            src={profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name || 'GS')}`}
+            src={profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name || 'GP')}`}
             className="!border-4 !border-[var(--gs-bg-elevated)] shadow-2xl max-[640px]:!h-20 max-[640px]:!w-20"
           />
           <div className="min-w-0 flex-1 pb-2">
             <h1 className="m-0 truncate text-3xl font-black text-[var(--gs-text)] max-[640px]:text-xl">
-              {profile.name || 'GymSystem Channel'}
+              {profile.name || 'GymPro Channel'}
             </h1>
             <p className="m-0 mt-1 truncate text-sm text-[var(--gs-text-muted)]">
               @{profile.email?.split('@')[0] || profile._id.slice(-8)}
@@ -35,7 +35,7 @@ export default function ChannelHeader({
         </div>
 
         <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--gs-text-muted)]">
-          {profile.bio || 'Kênh Shorts cá nhân trên GymSystem.'}
+          {profile.bio || 'Kênh Shorts cá nhân trên GymPro.'}
         </p>
 
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">

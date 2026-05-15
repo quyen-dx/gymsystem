@@ -23,12 +23,12 @@ export const sendOtpEmail = async ({ toEmail, otp, purpose }) => {
     purpose === 'register' ? 'xác minh đăng ký tài khoản' : 'xác minh quên mật khẩu'
 
   const info = await transporter.sendMail({
-    from: `"GymSystem" <${process.env.EMAIL_USER || 'no-reply@gymsystem.local'}>`,
+    from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
     to: toEmail,
-    subject: `Mã OTP ${purposeText} - GymSystem`,
+    subject: `Mã OTP ${purposeText} - GymPro`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px;">
-        <p style="font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b7280; margin: 0 0 12px;">GymSystem</p>
+        <p style="font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b7280; margin: 0 0 12px;">GymPro</p>
         <h1 style="font-size: 24px; margin: 0 0 12px; color: #111827;">Mã OTP của bạn</h1>
         <p style="color: #374151; line-height: 1.7; margin: 0 0 20px;">
           Bạn đang thực hiện thao tác <strong>${purposeText}</strong>. Vui lòng nhập mã OTP bên dưới để tiếp tục.
@@ -52,12 +52,12 @@ export const sendOtpEmail = async ({ toEmail, otp, purpose }) => {
 
 export const sendShopDeletionEmail = async ({ toEmail, shopName, reason }) => {
   const info = await transporter.sendMail({
-    from: `"GymSystem" <${process.env.EMAIL_USER || 'no-reply@gymsystem.local'}>`,
+    from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
     to: toEmail,
-    subject: `Thông báo ngừng hợp tác - GymSystem`,
+    subject: `Thông báo ngừng hợp tác - GymPro`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px;">
-        <p style="font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b7280; margin: 0 0 12px;">GymSystem</p>
+        <p style="font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b7280; margin: 0 0 12px;">GymPro</p>
         <h1 style="font-size: 24px; margin: 0 0 12px; color: #111827;">Thông báo ngừng hợp tác</h1>
         <p style="color: #374151; line-height: 1.7; margin: 0 0 20px;">
           Chào bạn, chúng tôi rất tiếc phải thông báo rằng cửa hàng <strong>${shopName}</strong> của bạn đã bị gỡ khỏi hệ thống.

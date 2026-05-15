@@ -259,7 +259,7 @@ const ProfileHeader = ({
       </div>
 
       <div className="profile-header-meta">
-        <h2>{user.name || 'Tài khoản GymSystem'}</h2>
+        <h2>{user.name || 'Tài khoản GymPro'}</h2>
         <button type="button" onClick={onCopyContact}>
           <span>{contactText}</span>
           {(user.email || user.phone) && <CopyOutlined />}
@@ -949,7 +949,7 @@ export default function AccountProfileModal({
           {activeTab === 'profile' && (
             <div>
               <div style={responsiveSectionCardStyle}>
-                {renderSectionHeader(<UserOutlined />, 'Thông tin tài khoản', 'Cập nhật hồ sơ cá nhân để sử dụng GymSystem thuận tiện hơn.')}
+                {renderSectionHeader(<UserOutlined />, 'Thông tin tài khoản', 'Cập nhật hồ sơ cá nhân để sử dụng GymPro thuận tiện hơn.')}
 
                 <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">

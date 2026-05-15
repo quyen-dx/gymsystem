@@ -3,8 +3,8 @@
 ### Bước 1 — Clone repo về
 
 ```bash
-git clone https://github.com/quyen-dx/gymsystem.git
-cd gymsystem
+git clone https://github.com/quyen-dx/gympro.git
+cd gympro
 ```
 
 ### Bước 2 — Tạo nhánh theo chức năng mình làm(luôn ở nhánh của chính mình đéo sang nhánh khác)

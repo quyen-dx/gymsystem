@@ -38,14 +38,14 @@ const version = `1.0.${buildNumber}`
 const buildMetadata = {
   buildNumber,
   version,
-  artifactName: `GymSystem-${version}-win-x64.exe`,
+  artifactName: `GymPro-${version}-win-x64.exe`,
   updatedAt: new Date().toISOString(),
 }
 
 writeBuildMetadata()
 fs.rmSync(distDir, { recursive: true, force: true })
 
-process.env.GYMSYSTEM_BUILD_VERSION = version
+process.env.GymPro_BUILD_VERSION = version
 
 build({
   projectDir: rootDir,
@@ -77,3 +77,4 @@ build({
     console.error(error)
     process.exit(1)
   })
+

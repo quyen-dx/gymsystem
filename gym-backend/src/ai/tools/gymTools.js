@@ -1,9 +1,10 @@
 import mongoose from 'mongoose'
 import Booking from '../../models/Booking.js'
 import Membership from '../../models/Membership.js'
+import Plan from '../../models/Plan.js'
 import Product from '../../models/Product.js'
 import User from '../../models/User.js'
-import Plan from '../../models/Plan.js'
+import { createMembership as createMembershipService } from '../../services/membershipService.js'
 
 const toObjectId = (value, fieldName) => {
   if (!mongoose.Types.ObjectId.isValid(value)) {
@@ -56,6 +57,18 @@ export const gymToolDeclarations = [
     parametersJsonSchema: {
       type: 'object',
       properties: {},
+    },
+  },
+  {
+    name: 'createMembership',
+    description: 'Đăng ký hoặc gia hạn gói tập cho user hiện tại bằng planId cụ thể.',
+    parametersJsonSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'MongoDB id của user hiện tại' },
+        planId: { type: 'string', description: 'MongoDB id của gói tập muốn đăng ký' },
+      },
+      required: ['userId', 'planId'],
     },
   },
   {
@@ -149,6 +162,10 @@ export const getMembershipInfo = async ({ userId }) => {
   }
 }
 
+export const createMembership = async ({ userId, planId }) => {
+  return createMembershipService({ userId, planId })
+}
+
 export const getUpcomingBookings = async ({ userId }) => {
   const memberId = toObjectId(userId, 'userId')
   const today = new Date()
@@ -187,12 +204,12 @@ export const getAvailablePTs = async ({ specialization = '' } = {}) => {
     isActive: true,
     ...(keyword
       ? {
-          $or: [
-            { name: queryRegex },
-            { bio: queryRegex },
-            { specialties: queryRegex },
-          ],
-        }
+        $or: [
+          { name: queryRegex },
+          { bio: queryRegex },
+          { specialties: queryRegex },
+        ],
+      }
       : {}),
   }
 
@@ -318,6 +335,7 @@ export const createBookingRequest = async ({ userId, ptId, date, slot, note = ''
 export const gymTools = {
   getAvailablePlans,
   getMembershipInfo,
+  createMembership,
   getUpcomingBookings,
   getAvailablePTs,
   getRecommendedProducts,

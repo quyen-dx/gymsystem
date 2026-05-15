@@ -11,7 +11,7 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
     cloudinary,
     params: {
-        folder: 'gymsystem/avatars',
+        folder: 'gympro/avatars',
         allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
         transformation: [{ width: 400, height: 400, crop: 'fill' }],
     },

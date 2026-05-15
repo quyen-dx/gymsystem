@@ -1,5 +1,5 @@
 // export const sendOtpSms = async ({ phone, otp }) => {
-//   const message = `[GymSystem] Ma OTP cua ban la ${otp}. Hieu luc 5 phut.`
+//   const message = `[GymPro] Ma OTP cua ban la ${otp}. Hieu luc 5 phut.`
 
 //   const toNumber = phone.startsWith('+84')
 //     ? '0' + phone.slice(3)
@@ -33,7 +33,7 @@
 //   return true
 // }
 export const sendOtpSms = async ({ phone, otp }) => {
-  const message = `[GymSystem] Ma OTP cua ban la ${otp}. Hieu luc 5 phut.`
+  const message = `[GymPro] Ma OTP cua ban la ${otp}. Hieu luc 5 phut.`
 
   const toNumber = phone.startsWith('+84')
     ? '0' + phone.slice(3)

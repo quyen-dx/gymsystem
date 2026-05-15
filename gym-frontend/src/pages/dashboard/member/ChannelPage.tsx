@@ -129,7 +129,7 @@ export default function ChannelPage() {
   const shareProfile = async () => {
     const url = `${window.location.origin}/channel/${userId}`
     if (navigator.share) {
-      await navigator.share({ title: channel?.profile.name || 'GymSystem Channel', url }).catch(() => undefined)
+      await navigator.share({ title: channel?.profile.name || 'GymPro Channel', url }).catch(() => undefined)
       return
     }
     await navigator.clipboard.writeText(url)

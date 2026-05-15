@@ -21,16 +21,18 @@ const getFunctionCalls = (response) => {
     .filter(Boolean) || []
 }
 
-const buildGymSystemPrompt = ({ user, conversationContext }) => `
-Bạn là Gym Assistant của GymSystem.
+const buildGymProPrompt = ({ user, conversationContext }) => `
+Bạn là Gym Assistant của GymPro.
 
 Luật Gym Mode:
 - Chỉ trả lời các nội dung liên quan gym, gói tập, PT, booking, sản phẩm shop, dinh dưỡng và tập luyện.
 - Khi user hỏi về các gói tập (plans), bảng giá (pricing), hoặc danh sách membership đang có, BẮT BUỘC dùng tool getAvailablePlans.
 - Khi user hỏi về gói tập hiện tại của chính họ (remaining days, my plan), dùng getMembershipInfo.
+- Khi user muốn đăng ký gói mới, mua membership hoặc gia hạn gói, gọi createMembership với planId rõ ràng.
 - KHÔNG ĐƯỢC trả lời "Tôi chỉ có thể kiểm tra thông tin gói tập hiện tại của bạn" khi user hỏi về danh sách gói tập chung. Hãy gọi getAvailablePlans.
 - Khi câu hỏi cần dữ liệu thật, bắt buộc dùng tool. Không bịa dữ liệu.
 - Không đọc hoặc suy đoán dữ liệu của user khác.
+- Chỉ thao tác membership của user hiện tại. Không tự tạo dữ liệu giả.
 - Nếu thiếu thông tin để tạo booking, hỏi lại ngắn gọn phần còn thiếu.
 - Nếu user muốn đặt lịch nhưng chưa chọn PT cụ thể, hãy gọi getAvailablePTs trước rồi gợi ý PT.
 - Ngày hiện tại: ${new Date().toISOString().slice(0, 10)}.
@@ -50,7 +52,7 @@ const buildFallbackGymAnswer = (message) => ({
 
 const callGeminiWithTools = async ({ query, user, conversationContext }) => {
   const client = createGeminiClient()
-  const systemPrompt = buildGymSystemPrompt({ user, conversationContext })
+  const systemPrompt = buildGymProPrompt({ user, conversationContext })
   const contents = [
     {
       role: 'user',
@@ -71,7 +73,7 @@ const callGeminiWithTools = async ({ query, user, conversationContext }) => {
 
 const finishWithToolResult = async ({ query, user, conversationContext, functionCall, toolResult }) => {
   const client = createGeminiClient()
-  const systemPrompt = buildGymSystemPrompt({ user, conversationContext })
+  const systemPrompt = buildGymProPrompt({ user, conversationContext })
 
   const response = await client.models.generateContent({
     model: 'gemini-2.5-flash',
@@ -114,7 +116,7 @@ export const runGymAiAction = async ({ query, user, conversationContext }) => {
   if (functionCalls.length === 0) {
     const answer = getResponseText(firstResponse)
     return {
-      answer: answer || 'Ở Gym Mode, mình chỉ trả lời dựa trên dữ liệu GymSystem. Bạn hãy hỏi về gói tập, PT, lịch tập hoặc sản phẩm gym nhé.',
+      answer: answer || 'Ở Gym Mode, mình chỉ trả lời dựa trên dữ liệu GymPro. Bạn hãy hỏi về gói tập, PT, lịch tập hoặc sản phẩm gym nhé.',
       mode: 'gym',
       tool: null,
       data: null,
@@ -136,7 +138,7 @@ export const runGymAiAction = async ({ query, user, conversationContext }) => {
   })
 
   return {
-    answer: answer || 'Mình đã xử lý yêu cầu bằng dữ liệu thật từ GymSystem.',
+    answer: answer || 'Mình đã xử lý yêu cầu bằng dữ liệu thật từ GymPro.',
     mode: 'gym',
     tool: functionCall.name,
     data: toolResult,

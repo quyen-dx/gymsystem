@@ -144,9 +144,9 @@ export default function MemberLayout({
               fontSize: 14,
             }}
           >
-            GS
+            GP
           </div>
-          <div className="member-shell-brand" style={{ color: 'var(--theme-accent)' }}>GymSystem</div>
+          <div className="member-shell-brand" style={{ color: 'var(--theme-accent)' }}>GymPro</div>
         </div>
 
         <Menu
@@ -268,7 +268,7 @@ export default function MemberLayout({
       {!hideFooter && <MemberFooter />}
 
       <Drawer
-        title="GymSystem"
+        title="GymPro"
         placement="right"
         open={menuOpen}
         onClose={() => setMenuOpen(false)}

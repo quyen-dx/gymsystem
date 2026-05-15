@@ -178,11 +178,11 @@ function ShortsVideoCard({
           <button
             className="group/avatar grid rounded-full outline-none transition-transform duration-200 hover:scale-105 focus-visible:ring-2 focus-visible:ring-white/80"
             type="button"
-            aria-label={`Mở kênh ${video.userId?.name || 'GymSystem'}`}
+            aria-label={`Mở kênh ${video.userId?.name || 'GymPro'}`}
           >
             <Avatar
               size={42}
-              src={video.userId?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.userId?.name || 'GS')}`}
+              src={video.userId?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.userId?.name || 'GP')}`}
               className="cursor-pointer ring-2 ring-white/20 transition group-hover/avatar:ring-white/60"
             />
           </button>
@@ -190,7 +190,7 @@ function ShortsVideoCard({
             className="min-w-0 cursor-pointer truncate border-0 bg-transparent p-0 text-left font-extrabold text-white [text-shadow:0_2px_12px_rgba(0,0,0,0.6)] transition hover:underline hover:decoration-white/70 hover:underline-offset-4"
             type="button"
           >
-            @{video.userId?.name || 'GymSystem'}
+            @{video.userId?.name || 'GymPro'}
           </button>
         </div>
         {video.caption && <div className="whitespace-pre-wrap break-words text-[15px] leading-[1.4] text-white/95 [text-shadow:0_2px_12px_rgba(0,0,0,0.65)] max-[640px]:text-sm">{video.caption}</div>}

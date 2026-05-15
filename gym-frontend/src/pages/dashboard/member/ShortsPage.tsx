@@ -365,7 +365,7 @@ export default function ShortsPage() {
     const shareUrl = `${window.location.origin}/shorts?video=${video._id}`
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'GymSystem Shorts', text: video.caption, url: shareUrl })
+        await navigator.share({ title: 'GymPro Shorts', text: video.caption, url: shareUrl })
       } else {
         await navigator.clipboard.writeText(shareUrl)
         api.success('Đã copy liên kết')

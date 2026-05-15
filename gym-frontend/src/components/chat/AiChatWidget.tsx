@@ -1935,7 +1935,7 @@ export default function AiChatWidget() {
                                         {aiActionLoading && (
                                             <div style={{ marginTop: 8 }}>
                                                 <Typography.Text style={{ color: 'var(--theme-muted)', fontSize: 12 }}>
-                                                    AI Action đang gọi dữ liệu GymSystem{activeAiTool ? `: ${activeAiTool}` : ''}
+                                                    AI Action đang gọi dữ liệu GymPro{activeAiTool ? `: ${activeAiTool}` : ''}
                                                 </Typography.Text>
                                             </div>
                                         )}

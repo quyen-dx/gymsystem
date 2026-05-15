@@ -1,8 +1,8 @@
 {
-  "name": "gymsystem-desktop",
+  "name": "gympro-desktop",
   "version": "1.0.0",
-  "description": "GymSystem desktop app",
-  "author": "GymSystem",
+  "description": "GymPro desktop app",
+  "author": "GymPro",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -14,8 +14,8 @@
     "electron-builder": "^26.8.1"
   },
   "build": {
-    "appId": "com.gymsystem.app",
-    "productName": "GymSystem",
+    "appId": "com.gympro.app",
+    "productName": "GymPro",
     "directories": {
       "output": "dist"
     },
@@ -35,7 +35,7 @@
         }
       ],
       "icon": "build/icon.ico",
-      "artifactName": "GymSystem-${version}-${os}-${arch}.${ext}"
+      "artifactName": "GymPro-${version}-${os}-${arch}.${ext}"
     },
     "nsis": {
       "installerIcon": "build/icon.ico",
@@ -45,7 +45,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "GymSystem"
+      "shortcutName": "GymPro"
     }
   }
 }

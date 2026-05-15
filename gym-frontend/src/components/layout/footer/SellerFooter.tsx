@@ -131,7 +131,7 @@ function SellerFooter() {
                 <Store className="h-6 w-6" />
               </span>
               <div>
-                <p className="text-lg font-extrabold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymSystem Seller</p>
+                <p className="text-lg font-extrabold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymPro Seller</p>
                 <p className={['text-sm', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
                   Bán hàng dễ hơn mỗi ngày
                 </p>
@@ -139,7 +139,7 @@ function SellerFooter() {
             </div>
             <p className={['mt-5 text-sm leading-6', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
               Nền tảng giúp Seller tiếp cận hội viên, quản lý sản phẩm và vận hành đơn hàng
-              trong cùng một hệ sinh thái GymSystem.
+              trong cùng một hệ sinh thái GymPro.
             </p>
           </div>
 
@@ -202,7 +202,7 @@ function SellerFooter() {
         style={{ borderColor: 'var(--theme-border)' }}
       >
         <div className={['flex w-full flex-col gap-2 text-sm md:flex-row md:items-center md:justify-between', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-          <p>Copyright © {currentYear} GymSystem Seller. All rights reserved.</p>
+          <p>Copyright © {currentYear} GymPro Seller. All rights reserved.</p>
           <p className={['flex items-center gap-2 font-semibold', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
             <BadgeCheck className="h-4 w-4" style={{ color: 'var(--theme-accent)' }} />
             Nền tảng hợp tác uy tín

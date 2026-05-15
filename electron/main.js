@@ -3,7 +3,7 @@ const path = require('path')
 
 const isDev = !app.isPackaged
 const devUrl = process.env.ELECTRON_DEV_SERVER_URL || 'http://localhost:5173'
-const productionUrl = 'https://gymsystem.pages.dev/'
+const productionUrl = 'https://GymPro.pages.dev/'
 
 function getIconPath() {
   return path.join(__dirname, '..', 'build', 'icon.ico')
@@ -16,7 +16,7 @@ function createMainWindow() {
     minWidth: 1200,
     minHeight: 700,
     center: true,
-    title: 'GymSystem',
+    title: 'GymPro',
     autoHideMenuBar: true,
     backgroundColor: '#0f0f0f',
     icon: getIconPath(),
@@ -71,3 +71,4 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
