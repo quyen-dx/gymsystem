@@ -10,17 +10,13 @@ cd gympro
 ### Bước 2 — Tạo nhánh theo chức năng mình làm(luôn ở nhánh của chính mình đéo sang nhánh khác)
 
 ```bash
-git checkout -b feature/ten-chuc-nang
+git checkout -b tencuamay
 ```
 
 **Ví dụ**
 
-- Làm **member** → `git checkout -b feature/member`
-- Làm **check-in** → `git checkout -b feature/checkin`
-- Làm **PT** → `git checkout -b feature/pt`
-- Làm **đặt lịch** → `git checkout -b feature/booking`
-- Làm **Lộ trình & Theo dõi sức khoẻ** → `git checkout -b feature/workout`
-- Làm **dashboard** → `git checkout -b feature/dashboard`
+-vd: `git checkout -b quyen
+
 
 <aside>
 
@@ -48,8 +44,8 @@ git pull origin main
 
 ```bash
 git add .
-git commit -m "đặt theo chức năng "
-git push origin ten-chuc-nang
+git commit -m "đặt theo ten cua minh"
+git push origin ten-cua-minh
 ```
 
 ### Bước 5 —- mỗi lần code xong  báo tên chức năng cho main 🚀  Trên Zalo
@@ -60,7 +56,7 @@ git push origin ten-chuc-nang
 - ✔ Luôn đứng ở nhánh của mình:
     
     ```bash
-    git checkout feature/ten-chuc-nang
+    git checkout tencuamay
     ```
     
 
