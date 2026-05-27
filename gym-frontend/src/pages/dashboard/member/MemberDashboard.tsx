@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button, theme } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
-import { useAuth } from '../../../hook/useAuth'
+import { useAuth } from '../../../hooks/useAuth'
 
 const stats = [
   { value: '500+', label: 'Thành viên' },

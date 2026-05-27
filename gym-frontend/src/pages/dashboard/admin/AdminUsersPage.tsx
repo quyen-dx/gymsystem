@@ -22,7 +22,7 @@ import {
 } from 'antd'
 import { useEffect, useState } from 'react'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
-import { useAuth } from '../../../hook/useAuth'
+import { useAuth } from '../../../hooks/useAuth'
 import api from '../../../services/api'
 import type { AdminUser } from '../../../types/admin/user'
 import AdminHistoryButton from './AdminHistoryButton'

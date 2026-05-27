@@ -2,7 +2,7 @@ import { ConfigProvider, theme } from 'antd'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import MemberLayout from './components/layout/header/MemberLayout'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
-import { useAuth } from './hook/useAuth'
+import { useAuth } from './hooks/useAuth'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import LoginPage from './pages/auth/LoginPage'
 import OauthSuccessPage from './pages/auth/OauthSuccessPage'
@@ -12,12 +12,10 @@ import AdminMembersPage from './pages/dashboard/admin/AdminMembersPage'
 import AdminPlansPage from './pages/dashboard/admin/AdminPlansPage'
 import AdminReports from './pages/dashboard/admin/AdminReports'
 import AdminShopPage from './pages/dashboard/admin/AdminShopPage'
-import AdminShortsPage from './pages/dashboard/admin/AdminShortsPage'
 import AdminTrainersPage from './pages/dashboard/admin/AdminTrainersPage'
 import AdminUsersPage from './pages/dashboard/admin/AdminUsersPage'
 import BookingPage from './pages/dashboard/member/BookingPage'
 import CartPage from './pages/dashboard/member/CartPage'
-import ChannelPage from './pages/dashboard/member/ChannelPage'
 import CheckoutPage from './pages/dashboard/member/CheckoutPage'
 import DepositPage from './pages/dashboard/member/DepositPage'
 import HealthPage from './pages/dashboard/member/HealthPage'
@@ -26,7 +24,6 @@ import MemberStorePage from './pages/dashboard/member/MemberStorePage'
 import OrderHistoryPage from './pages/dashboard/member/OrderHistoryPage'
 import OrderTrackingPage from './pages/dashboard/member/OrderTrackingPage'
 import ProductDetailPage from './pages/dashboard/member/ProductDetailPage'
-import ShortsPage from './pages/dashboard/member/ShortsPage'
 import TransferPage from './pages/dashboard/member/TransferPage'
 import WalletPage from './pages/dashboard/member/WalletPage'
 import WorkoutPage from './pages/dashboard/member/WorkoutPage'
@@ -190,7 +187,6 @@ function AppWithTheme() {
         <Route path="/dashboard/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
         <Route path="/dashboard/admin/members" element={<PrivateRoute><AdminMembersPage /></PrivateRoute>} />
         <Route path="/dashboard/admin/pts" element={<PrivateRoute><AdminTrainersPage /></PrivateRoute>} />
-        <Route path="/dashboard/admin/shorts" element={<PrivateRoute><AdminShortsPage /></PrivateRoute>} />
         <Route path="/dashboard/admin/reports" element={<PrivateRoute><AdminReports /></PrivateRoute>} />
         {/* SELLER */}
         <Route path="/dashboard/seller/products" element={<PrivateRoute><SellerProductsPage /></PrivateRoute>} />
@@ -212,15 +208,13 @@ function AppWithTheme() {
         <Route path="/dashboard/member/orders" element={<PrivateRoute><OrderHistoryPage /></PrivateRoute>} />
         <Route path="/dashboard/member/track/:id" element={<PrivateRoute><OrderTrackingPage /></PrivateRoute>} />
         <Route path="/dashboard/member/store" element={<PrivateRoute><MemberStorePage /></PrivateRoute>} />
-        <Route path="/dashboard/member/shop/:shopId" element={<PrivateRoute><MemberStorePage /></PrivateRoute>} />
+        <Route path="/dashboard/member/store/:storeId" element={<PrivateRoute><MemberStorePage /></PrivateRoute>} />
         <Route path="/dashboard/member/cart" element={<PrivateRoute><CartPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/store/:id" element={<PrivateRoute><ProductDetailPage /></PrivateRoute>} />
+        <Route path="/dashboard/member/product/:id" element={<PrivateRoute><ProductDetailPage /></PrivateRoute>} />
         <Route path="/dashboard/member/booking" element={<PrivateRoute><BookingPage /></PrivateRoute>} />
         <Route path="/dashboard/member/health" element={<PrivateRoute><HealthPage /></PrivateRoute>} />
         <Route path="/dashboard/member/workout" element={<PrivateRoute><WorkoutPage /></PrivateRoute>} />
         <Route path="/dashboard/member/checkin" element={<PrivateRoute><MemberCheckinPage /></PrivateRoute>} />
-        <Route path="/shorts" element={<PrivateRoute><MemberLayout hideFooter><ShortsPage /></MemberLayout></PrivateRoute>} />
-        <Route path="/channel/:userId" element={<PrivateRoute><MemberLayout><ChannelPage /></MemberLayout></PrivateRoute>} />
         {/* DEFAULT */}
         <Route path="/" element={<Navigate to="/login" />} />
 

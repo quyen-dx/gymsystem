@@ -1,16 +1,17 @@
-import { ArrowLeftOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, ShopOutlined } from '@ant-design/icons'
 import { Avatar, Button, Card, Col, Divider, Empty, Input, InputNumber, Rate, Row, Select, Space, Spin, Tabs, Tag, message } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import SellerFooter from '../../../components/layout/footer/SellerFooter'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
-import { useAuth } from '../../../hook/useAuth'
-import { getProductCategories, getProducts, getShopProducts } from '../../../services/productService'
-import { addShopReview, getShop } from '../../../services/shopService'
+import { useAuth } from '../../../hooks/useAuth'
+import { getProductCategories, getShopProducts } from '../../../services/productService'
+import { addShopReview, getShop, getShops } from '../../../services/shopService'
 import type { MemberProduct, ProductShop } from '../../../types/member/product'
 
 export default function MemberStorePage() {
-  const { shopId } = useParams()
+  const { storeId } = useParams()
+  const [shops, setShops] = useState<ProductShop[]>([])
   const [products, setProducts] = useState<MemberProduct[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -29,6 +30,16 @@ export default function MemberStorePage() {
   const { user } = useAuth()
 
   useEffect(() => {
+    if (storeId) return
+    setLoading(true)
+    getShops()
+      .then((res) => setShops(res.data.shops || res.data || []))
+      .catch(() => message.error('Không thể tải danh sách cửa hàng'))
+      .finally(() => setLoading(false))
+  }, [storeId])
+
+  useEffect(() => {
+    if (!storeId) return
     setLoading(true)
     const params = {
       category,
@@ -37,31 +48,40 @@ export default function MemberStorePage() {
       minPrice: minPrice ?? undefined,
       maxPrice: priceMode === 'range' ? maxPrice ?? undefined : undefined,
     }
-    const request = shopId ? getShopProducts(shopId, params) : getProducts(params)
-    request
+    getShopProducts(storeId, params)
       .then((res) => setProducts(res.data.products || res.data))
       .catch(() => message.error('Không thể tải sản phẩm'))
       .finally(() => setLoading(false))
-  }, [shopId, category, sortPrice, minPrice, maxPrice, priceMode])
+  }, [storeId, category, sortPrice, minPrice, maxPrice, priceMode])
 
   useEffect(() => {
-    const params = shopId ? { shopId } : undefined
-    getProductCategories(params)
+    if (!storeId) {
+      setCategoryOptions([])
+      return
+    }
+    getProductCategories({ shopId: storeId })
       .then((res) => setCategoryOptions(res.data.categories || []))
       .catch(() => setCategoryOptions([]))
-  }, [shopId])
+  }, [storeId])
 
   useEffect(() => {
     setCategory(undefined)
+    setSearch('')
+    setSortPrice(undefined)
+    setPriceMode('range')
+    setMinPrice(null)
+    setMaxPrice(null)
     setActiveTab('products')
-    if (!shopId) {
+    if (!storeId) {
       setShopDetail(null)
+      setProducts([])
       return
     }
-    getShop(shopId)
+    getShop(storeId)
       .then((res) => setShopDetail(res.data.shop))
       .catch(() => message.error('Không thể tải thông tin shop'))
-  }, [shopId])
+  }, [storeId])
+
   const containerStyle: React.CSSProperties = {
     maxWidth: 1280,
     margin: '0 auto',
@@ -169,10 +189,10 @@ export default function MemberStorePage() {
   )
 
   const handleSubmitShopReview = async () => {
-    if (!shopId) return
+    if (!storeId) return
     setSubmittingReview(true)
     try {
-      const res = await addShopReview(shopId, reviewForm)
+      const res = await addShopReview(storeId, reviewForm)
       setShopDetail(res.data.shop)
       setReviewForm({ rating: 5, comment: '' })
       message.success('Đã gửi đánh giá shop')
@@ -204,7 +224,7 @@ export default function MemberStorePage() {
             <Col xs={24} sm={12} md={8} lg={6} key={product._id}>
               <Card
                 hoverable
-                onClick={() => navigate(`/dashboard/member/store/${product._id}`)}
+                onClick={() => navigate(`/dashboard/member/product/${product._id}`)}
                 className="rounded-xl overflow-hidden"
                 cover={
                   product.image ? (
@@ -300,140 +320,139 @@ export default function MemberStorePage() {
     </div>
   )
 
+  const storeList = (
+    <>
+      <div className="relative left-1/2 mb-8 h-[240px] w-screen -translate-x-1/2 overflow-hidden max-[640px]:h-[180px]">
+        <img
+          src="https://images.unsplash.com/photo-1558611848-73f7eb4001a1?q=80&w=1600"
+          className="w-full h-full object-cover"
+          alt="banner"
+        />
+        <div className="absolute inset-0 bg-black/50" />
+        <div className="absolute top-1/2 left-8 max-[640px]:left-4 -translate-y-1/2 text-white pr-4" style={{ color: 'var(--theme-text)' }}>
+          <h1 className="text-3xl max-[640px]:text-2xl font-extrabold">Cửa hàng hợp tác</h1>
+          <p className="mt-2 opacity-90">Khám phá các thương hiệu và shop đối tác của GymPro</p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-center my-10"><Spin size="large" /></div>
+      ) : shops.length === 0 ? (
+        <Empty description="Chưa có cửa hàng hợp tác" />
+      ) : (
+        <Row gutter={[16, 16]}>
+          {shops.map((shop) => {
+            const owner = shop.user_id
+            const name = shop.name || owner?.name || 'Cửa hàng'
+            const avatar = shop.avatar || owner?.avatar
+
+            return (
+              <Col xs={24} sm={12} lg={6} key={shop._id}>
+                <Card
+                  hoverable
+                  className="h-full rounded-xl overflow-hidden"
+                  bodyStyle={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+                >
+                  <div className="mb-4 flex items-center gap-3">
+                    <Avatar size={64} src={avatar} icon={<ShopOutlined />}>
+                      {name.charAt(0)}
+                    </Avatar>
+                    <div className="min-w-0">
+                      <div className="truncate text-lg font-bold">{name}</div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Rate disabled allowHalf value={shop.rating || 0} style={{ fontSize: 13 }} />
+                        <span className="text-xs text-[var(--gs-text-muted)]">
+                          {shop.reviewCount || 0}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="mb-5 line-clamp-3 min-h-[60px] text-sm text-[var(--gs-text-muted)]">
+                    {shop.description || `Xem các sản phẩm đang bán tại ${name}.`}
+                  </p>
+                  <Button
+                    type="primary"
+                    className="mt-auto !bg-[var(--theme-accent)] border-none"
+                    onClick={() => navigate(`/dashboard/member/store/${shop._id}`)}
+                  >
+                    Xem cửa hàng
+                  </Button>
+                </Card>
+              </Col>
+            )
+          })}
+        </Row>
+      )}
+    </>
+  )
+
+  const storeDetail = (
+    <>
+      <div className="mb-6 rounded-2xl border border-[var(--gs-border)] bg-[var(--gs-panel)] p-5 max-[640px]:p-4">
+        <div className="mb-5">
+          <Button
+            type="text"
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate('/dashboard/member/store')}
+            className="!px-0"
+          >
+            Quay lại cửa hàng
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-5 max-[640px]:items-start max-[640px]:gap-4">
+          <Avatar size={80} src={shopAvatar} className="shrink-0">
+            {shopName.charAt(0)}
+          </Avatar>
+
+          <div className="min-w-0 flex-1">
+            <h1 className="m-0 text-3xl font-bold leading-tight max-[640px]:text-2xl">{shopName}</h1>
+            <div className="mt-1 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--theme-accent)]">
+              Sản phẩm nổi bật
+            </div>
+            <button
+              type="button"
+              onClick={handleHeaderRatingClick}
+              className="mt-3 flex flex-wrap items-center gap-2 text-left"
+              style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}
+            >
+              <Rate disabled allowHalf value={shopRating} style={{ fontSize: 14 }} />
+              <span className="text-sm text-[var(--gs-text-muted)]">
+                {shopRating.toFixed(1)} ({shopReviewCount} đánh giá shop)
+              </span>
+            </button>
+
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--gs-text-muted)]">
+              {shopDescription || `Tất cả sản phẩm của ${shopName}`}
+            </p>
+            {(shopAddress?.street || shopAddress?.district || shopAddress?.city) && (
+              <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
+                {shopAddress.street}{shopAddress.ward ? `, ${shopAddress.ward}` : ''}{shopAddress.district ? `, ${shopAddress.district}` : ''}{shopAddress.city ? `, ${shopAddress.city}` : ''}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={[
+          { key: 'products', label: 'Sản phẩm', children: productPanel },
+          { key: 'reviews', label: `Đánh giá Shop (${shopRating.toFixed(1)})`, children: reviewPanel },
+        ]}
+      />
+    </>
+  )
+
   return (
     <>
-    <MemberLayout hideFooter>
-      <div className="member-page" style={containerStyle}>
-        {shopId ? (
-          <div className="mb-8 rounded-2xl border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
-            <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/dashboard/member/store')} className="mb-4">
-              Quay lại cửa hàng
-            </Button>
-            <div className="flex items-center gap-4 max-[640px]:items-start max-[640px]:flex-col">
-              <Avatar size={72} src={shopAvatar}>
-                {shopName.charAt(0)}
-              </Avatar>
-              <div>
-                <h1 className="text-2xl font-bold">{shopName}</h1>
-                <button
-                  type="button"
-                  onClick={handleHeaderRatingClick}
-                  className="mt-1 flex items-center gap-2 text-left"
-                  style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}
-                >
-                  <Rate disabled allowHalf value={shopRating} style={{ fontSize: 14 }} />
-                  <span className="text-sm text-[var(--gs-text-muted)]">
-                    {shopRating.toFixed(1)} ({shopReviewCount} đánh giá shop)
-                  </span>
-                </button>
-                <p className="mt-1 text-sm text-[var(--gs-text-muted)]">
-                  {shopDescription || `Tất cả sản phẩm của ${shopName}`}
-                </p>
-                {(shopAddress?.street || shopAddress?.district || shopAddress?.city) && (
-                  <p className="mt-1 text-sm text-[var(--gs-text-muted)]">
-                    {shopAddress.street}{shopAddress.ward ? `, ${shopAddress.ward}` : ''}{shopAddress.district ? `, ${shopAddress.district}` : ''}{shopAddress.city ? `, ${shopAddress.city}` : ''}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="relative left-1/2 mb-8 h-[300px] w-screen -translate-x-1/2 overflow-hidden max-[640px]:h-[180px]">
-            <img
-              src="https://images.unsplash.com/photo-1558611848-73f7eb4001a1?q=80&w=1600"
-              className="w-full h-full object-cover"
-              alt="banner"
-            />
-            <div className="absolute inset-0 bg-black/50" />
-            <div className="absolute top-1/2 left-8 max-[640px]:left-4 -translate-y-1/2 text-white pr-4" style={{ color: 'var(--theme-text)' }}>
-              <h1 className="text-3xl max-[640px]:text-2xl font-extrabold">Gym Store</h1>
-              <p className="mt-2 opacity-90">Dụng cụ tập luyện chính hãng - Giá tốt mỗi ngày</p>
-              <Button type="primary" size="large" className="mt-4 !bg-[var(--theme-accent)] border-none max-[640px]:hidden">
-                Mua ngay
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {shopId && (
-          <Tabs
-            activeKey={activeTab}
-            onChange={setActiveTab}
-            items={[
-              { key: 'products', label: 'Sản phẩm', children: productPanel },
-              { key: 'reviews', label: `Đánh giá Shop (${shopRating.toFixed(1)})`, children: reviewPanel },
-            ]}
-          />
-        )}
-
-        {!shopId && (
-          <>
-            {priceFilterControls}
-
-            {loading ? (
-              <div className="text-center my-10"><Spin size="large" /></div>
-            ) : filtered.length === 0 ? (
-              <Empty description="Không có sản phẩm" />
-            ) : (
-              <Row gutter={[16, 16]}>
-                {filtered.map((product) => (
-                  <Col xs={24} sm={12} md={8} lg={6} key={product._id}>
-                    <Card
-                      hoverable
-                      onClick={() => navigate(`/dashboard/member/store/${product._id}`)}
-                      className="rounded-xl overflow-hidden"
-                      cover={
-                        product.image ? (
-                          <img src={product.image} className="h-[200px] w-full object-cover" alt={product.name} />
-                        ) : (
-                          <div className="h-[200px] flex items-center justify-center text-gray-400" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-muted)' }}>
-                            No image
-                          </div>
-                        )
-                      }
-                    >
-                      <div className="font-bold text-base mb-1">{product.name}</div>
-
-                      {product.rating && product.rating > 0 ? (
-                        <div className="flex items-center gap-2 mb-1">
-                          <Rate disabled allowHalf value={product.rating} style={{ fontSize: 14 }} />
-                          <span className="text-[var(--theme-accent)] text-sm font-medium">
-                            {product.rating.toFixed(1)}
-                          </span>
-                          <span className="text-gray-400 text-xs" style={{ color: 'var(--theme-muted)' }}>
-                            ({product.reviewCount || 0})
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="text-gray-400 text-xs mb-1" style={{ color: 'var(--theme-muted)' }}>
-                          Chưa có đánh giá
-                        </div>
-                      )}
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-[var(--theme-accent)] font-bold text-lg">
-                          {product.price?.toLocaleString('vi-VN')}đ
-                        </span>
-                        <Tag color={product.stock && product.stock > 0 ? 'green' : 'red'}>
-                          {product.stock && product.stock > 0 ? `Còn ${product.stock}` : 'Hết hàng'}
-                        </Tag>
-                      </div>
-
-                      {product.category && (
-                        <Tag className="mt-2 rounded-md font-medium" color="orange">
-                          {product.category}
-                        </Tag>
-                      )}
-                    </Card>
-                  </Col>
-                ))}
-              </Row>
-            )}
-          </>
-        )}
-      </div>
-    </MemberLayout>
-    <SellerFooter />
+      <MemberLayout hideFooter>
+        <div className="member-page" style={containerStyle}>
+          {storeId ? storeDetail : storeList}
+        </div>
+      </MemberLayout>
+      <SellerFooter />
     </>
   )
 }

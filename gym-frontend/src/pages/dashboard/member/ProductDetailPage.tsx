@@ -10,7 +10,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useTheme } from '../../../context/ThemeProvider'
 import { useCart } from '../../../context/useCart'
-import { useAuth } from '../../../hook/useAuth'
+import { useAuth } from '../../../hooks/useAuth'
 import { addReview, getProductById } from '../../../services/productService'
 import type { MemberProduct } from '../../../types/member/product'
 
@@ -384,9 +384,9 @@ export default function ProductDetailPage() {
               src={shopAvatar}
               icon={<UserOutlined />}
               style={{ background: 'var(--theme-accent)' }}
-              onClick={() => shopId && navigate(`/dashboard/member/shop/${shopId}`)}
+              onClick={() => shopId && navigate(`/dashboard/member/store/${shopId}`)}
             />
-            <div onClick={() => shopId && navigate(`/dashboard/member/shop/${shopId}`)}>
+            <div onClick={() => shopId && navigate(`/dashboard/member/store/${shopId}`)}>
               <div style={{ fontWeight: 700, fontSize: 16 }}>{shopName}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                 <Rate disabled allowHalf value={shopRating} style={{ fontSize: 13 }} />
@@ -577,7 +577,7 @@ export default function ProductDetailPage() {
               {related.map((p) => (
                 <Col xs={12} sm={8} md={6} lg={4} key={p._id}>
                   <div
-                    onClick={() => { navigate(`/dashboard/member/store/${p._id}`); window.scrollTo(0, 0) }}
+                    onClick={() => { navigate(`/dashboard/member/product/${p._id}`); window.scrollTo(0, 0) }}
                     style={{ cursor: 'pointer' }}
                   >
                     <img

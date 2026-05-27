@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { API_URL } from '../../config/env'
 import { useTheme } from '../../context/ThemeProvider'
-import { useAuth } from '../../hook/useAuth'
+import { useAuth } from '../../hooks/useAuth'
 
 const { Title } = Typography
 

@@ -4,7 +4,6 @@ import {
   CalendarOutlined,
   DashboardOutlined,
   LogoutOutlined,
-  PlaySquareOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
   TeamOutlined,
@@ -21,7 +20,7 @@ import {
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeProvider'
-import { useAuth } from '../../../hook/useAuth'
+import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
 
 const { Sider, Content } = Layout
@@ -35,7 +34,6 @@ const roleMenus: Record<string, any[]> = {
     { key: '/dashboard/admin/shop', label: 'Shop', icon: <BulbOutlined /> },
     { key: '/dashboard/admin/members', label: 'Members', icon: <TeamOutlined /> },
     { key: '/dashboard/admin/pts', label: 'Trainers (PT)', icon: <UserOutlined /> },
-    { key: '/dashboard/admin/shorts', label: 'Shorts', icon: <PlaySquareOutlined /> },
     { key: '/dashboard/admin/reports', label: 'Reports', icon: <BarChartOutlined /> },
   ],
   staff: [

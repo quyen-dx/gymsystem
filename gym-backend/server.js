@@ -11,7 +11,6 @@ import addressRoutes from './src/routes/addressRoutes.js'
 import aiRoutes from './src/routes/aiRoutes.js'
 import auditLogRoutes from './src/routes/auditLogRoutes.js'
 import authRoutes from './src/routes/authRoutes.js'
-import channelRoutes from './src/routes/channelRoutes.js'
 import membershipRoutes from './src/routes/membershipRoutes.js'
 import orderRoutes from './src/routes/orderRoutes.js'
 import paymentRoutes from './src/routes/paymentRoutes.js'
@@ -19,7 +18,6 @@ import planRoutes from './src/routes/planRoutes.js'
 import productRoutes from './src/routes/productRoutes.js'
 import sellerRoutes from './src/routes/sellerRoutes.js'
 import shopRoutes from './src/routes/shopRoutes.js'
-import shortRoutes from './src/routes/shortRoutes.js'
 import walletRoutes from './src/routes/walletRoutes.js'
 
 const app = express()
@@ -63,8 +61,6 @@ app.use('/api/orders', orderRoutes)
 app.use('/api/seller', sellerRoutes)
 app.use('/api/memberships', membershipRoutes)
 app.use('/api/ai-assistant', aiRoutes)
-app.use('/api/shorts', shortRoutes)
-app.use('/api/channels', channelRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', message: 'GymPro API is running' })

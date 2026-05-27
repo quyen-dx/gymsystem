@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { useAuth } from '../hook/useAuth'
+import { useAuth } from '../hooks/useAuth'
 import { getWallet } from '../services/walletService'
 
 interface WalletContextType {

@@ -20,7 +20,7 @@ import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, Modal, Space, messa
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { generateTheme, PRESET_ACCENT_COLORS, useTheme } from '../../context/ThemeContext'
-import { useAuth } from '../../hook/useAuth'
+import { useAuth } from '../../hooks/useAuth'
 import { createAddress, deleteAddress, getAddresses, setDefaultAddress, updateAddress } from '../../services/addressService'
 import { authService } from '../../services/authService'
 
@@ -421,12 +421,6 @@ export default function AccountProfileModal({
   const goToOrders = () => {
     handleClose()
     navigate('/dashboard/member/orders')
-  }
-
-  const goToChannel = () => {
-    if (!user?._id) return
-    handleClose()
-    navigate(`/channel/${user._id}`)
   }
 
   const handlePresetSelect = (hex: string) => {
@@ -1002,8 +996,6 @@ export default function AccountProfileModal({
                 )}
 
                 {renderActionItem(<ShoppingCartOutlined />, 'Các đơn hàng', 'Theo dõi lịch sử mua hàng và trạng thái giao hàng.', goToOrders)}
-                {renderActionItem(<UserOutlined />, 'Xem kênh', 'Xem trang cá nhân và nội dung đã chia sẻ.', goToChannel)}
-
                 <Button
                   block
                   icon={<LogoutOutlined />}

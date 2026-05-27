@@ -5,7 +5,6 @@ import {
   HeartOutlined,
   HomeOutlined,
   MenuOutlined,
-  PlaySquareOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
 } from '@ant-design/icons'
@@ -22,7 +21,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useCart } from '../../../context/useCart'
 import { useWallet } from '../../../context/WalletProvider'
-import { useAuth } from '../../../hook/useAuth'
+import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
 import AiChatWidget from '../../chat/AiChatWidget'
 import MemberFooter from '../footer/MemberFooter'
@@ -39,14 +38,12 @@ const MEMBER_INTERACTION_LOCK_ROUTES = [
   '/dashboard/member/cart',
   '/dashboard/member/workout',
   '/dashboard/member/checkin',
-  '/shorts',
 ]
 
 const shouldLockMemberInteractions = (pathname: string) => (
   MEMBER_INTERACTION_LOCK_ROUTES.includes(pathname) ||
   pathname.startsWith('/dashboard/member/track/') ||
-  pathname.startsWith('/dashboard/member/store') ||
-  pathname.startsWith('/dashboard/member/shop/')
+  pathname.startsWith('/dashboard/member/store')
 )
 
 export default function MemberLayout({
@@ -67,7 +64,6 @@ export default function MemberLayout({
   const navItems = [
     { key: '/dashboard/member', label: 'Trang chủ', icon: <HomeOutlined /> },
     { key: '/dashboard/member/store', label: 'Cửa hàng', icon: <ShopOutlined /> },
-    { key: '/shorts', label: 'Shorts', icon: <PlaySquareOutlined /> },
     { key: '/dashboard/member/booking', label: 'Đặt lịch PT', icon: <CalendarOutlined /> },
     { key: '/dashboard/member/health', label: 'Sức khoẻ', icon: <HeartOutlined /> },
     { key: '/dashboard/member/workout', label: 'Lộ trình', icon: <FundOutlined /> },
@@ -195,16 +191,6 @@ export default function MemberLayout({
             />
           </Badge>
 
-          {location.pathname === '/shorts' && (
-            <Button
-              type="primary"
-              icon={<PlaySquareOutlined />}
-              onClick={() => navigate('/shorts?upload=1')}
-            >
-              Tải video short
-            </Button>
-          )}
-
           <div
             className="member-shell-user"
             onClick={openProfileModal}
@@ -308,17 +294,10 @@ export default function MemberLayout({
           style={{ borderInlineEnd: 0 }}
         />
 
-        <div className="member-shell-drawer-actions">
-          {location.pathname === '/shorts' && (
-            <Button block type="primary" icon={<PlaySquareOutlined />} onClick={() => goTo('/shorts?upload=1')}>
-              Tải video short
-            </Button>
-          )}
-        </div>
       </Drawer>
 
       <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
-      {location.pathname !== '/shorts' && !accountOpen && !menuOpen && <AiChatWidget />}
+      {!accountOpen && !menuOpen && <AiChatWidget />}
     </Layout>
   )
 }
