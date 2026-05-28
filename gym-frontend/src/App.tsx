@@ -9,9 +9,9 @@ import OauthSuccessPage from './pages/auth/OauthSuccessPage'
 import RegisterPage from './pages/auth/Registerpage'
 import AdminDashboard from './pages/dashboard/admin/AdminDashboard'
 import AdminMembersPage from './pages/dashboard/admin/AdminMembersPage'
+import AdminPartnershipRequestsPage from './pages/dashboard/admin/AdminPartnershipRequestsPage'
 import AdminPlansPage from './pages/dashboard/admin/AdminPlansPage'
 import AdminReports from './pages/dashboard/admin/AdminReports'
-import AdminShopPage from './pages/dashboard/admin/AdminShopPage'
 import AdminTrainersPage from './pages/dashboard/admin/AdminTrainersPage'
 import AdminUsersPage from './pages/dashboard/admin/AdminUsersPage'
 import BookingPage from './pages/dashboard/member/BookingPage'
@@ -33,6 +33,7 @@ import SellerOrdersPage from './pages/dashboard/seller/SellerOrdersPage'
 import SellerProductsPage from './pages/dashboard/seller/SellerProductsPage'
 import StaffCheckinPage from './pages/dashboard/staff/StaffCheckinPage'
 import StaffMemberPage from './pages/dashboard/staff/StaffMemberPage'
+import PartnershipPage from './pages/public/PartnershipPage'
 
 {/* ADMIN */ }
 
@@ -177,13 +178,15 @@ function AppWithTheme() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/oauth-success" element={<OauthSuccessPage />} />
+        <Route path="/hop-tac" element={<PartnershipPage />} />
 
 
 
         {/* ADMIN */}
         <Route path="/dashboard/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
         <Route path="/dashboard/admin/plans" element={<PrivateRoute><AdminPlansPage /></PrivateRoute>} />
-        <Route path="/dashboard/admin/shop" element={<PrivateRoute><AdminShopPage /></PrivateRoute>} />
+        <Route path="/dashboard/admin/partnerships" element={<PrivateRoute><AdminPartnershipRequestsPage /></PrivateRoute>} />
+        <Route path="/dashboard/admin/shop" element={<Navigate to="/dashboard/admin/partnerships" />} />
         <Route path="/dashboard/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
         <Route path="/dashboard/admin/members" element={<PrivateRoute><AdminMembersPage /></PrivateRoute>} />
         <Route path="/dashboard/admin/pts" element={<PrivateRoute><AdminTrainersPage /></PrivateRoute>} />

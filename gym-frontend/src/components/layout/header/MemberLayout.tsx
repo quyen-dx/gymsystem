@@ -15,6 +15,7 @@ import {
   Drawer,
   Layout,
   Menu,
+  Skeleton,
   Typography,
 } from 'antd'
 import { useEffect, useState } from 'react'
@@ -23,6 +24,8 @@ import { useCart } from '../../../context/useCart'
 import { useWallet } from '../../../context/WalletProvider'
 import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
+import { getShops } from '../../../services/shopService'
+import type { ProductShop } from '../../../types/member/product'
 import AiChatWidget from '../../chat/AiChatWidget'
 import MemberFooter from '../footer/MemberFooter'
 
@@ -57,6 +60,10 @@ export default function MemberLayout({
   const [accountOpen, setAccountOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [hovered, setHovered] = useState(false)
+  const [storeDropdownOpen, setStoreDropdownOpen] = useState(false)
+  const [storeDropdownLoading, setStoreDropdownLoading] = useState(false)
+  const [storeDropdownFetched, setStoreDropdownFetched] = useState(false)
+  const [storeDropdownShops, setStoreDropdownShops] = useState<ProductShop[]>([])
   const { cartCount } = useCart()
   const { wallet } = useWallet()
   const navigate = useNavigate()
@@ -80,6 +87,24 @@ export default function MemberLayout({
   const goTo = (path: string) => {
     navigate(path)
     setMenuOpen(false)
+    setStoreDropdownOpen(false)
+  }
+
+  const loadStoreDropdown = () => {
+    if (storeDropdownFetched || storeDropdownLoading) return
+    setStoreDropdownLoading(true)
+    getShops()
+      .then((res) => setStoreDropdownShops(res.data.shops || res.data || []))
+      .catch(() => setStoreDropdownShops([]))
+      .finally(() => {
+        setStoreDropdownFetched(true)
+        setStoreDropdownLoading(false)
+      })
+  }
+
+  const handleStoreMouseEnter = () => {
+    setStoreDropdownOpen(true)
+    loadStoreDropdown()
   }
 
   const walletText = wallet ? `${wallet.balance.toLocaleString('vi-VN')}đ` : '0đ'
@@ -145,21 +170,91 @@ export default function MemberLayout({
           <div className="member-shell-brand" style={{ color: 'var(--theme-accent)' }}>GymPro</div>
         </div>
 
-        <Menu
-          className="member-shell-desktop-nav"
-          mode="horizontal"
-          selectedKeys={[selectedKey]}
-          items={navItems}
-          onClick={(event) => goTo(event.key)}
-          style={{
-            flex: 1,
-            justifyContent: 'center',
-            border: 'none',
-            borderBottom: 'none',
-            background: 'transparent',
-            minWidth: 0,
-          }}
-        />
+        <nav className="member-shell-desktop-nav" aria-label="Member navigation">
+          {navItems.map((item) => {
+            const active = selectedKey === item.key
+            const isStore = item.key === '/dashboard/member/store'
+            const showStoreDropdown = isStore && storeDropdownOpen && (storeDropdownLoading || storeDropdownShops.length > 0)
+
+            if (isStore) {
+              return (
+                <div
+                  key={item.key}
+                  className="member-store-nav-wrapper"
+                  onMouseEnter={handleStoreMouseEnter}
+                  onMouseLeave={() => setStoreDropdownOpen(false)}
+                >
+                  <button
+                    type="button"
+                    className={`member-shell-nav-item${active ? ' is-active' : ''}`}
+                    onClick={() => goTo(item.key)}
+                  >
+                    {item.icon}
+                    <span>{item.label}</span>
+                  </button>
+
+                  {showStoreDropdown && (
+                    <div className="member-store-dropdown">
+                      {storeDropdownLoading ? (
+                        <div className="member-store-dropdown-loading">
+                          {[0, 1, 2].map((index) => (
+                            <div key={index} className="member-store-dropdown-skeleton">
+                              <Skeleton.Avatar active size={28} />
+                              <Skeleton.Input active size="small" style={{ width: 132 }} />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="member-store-dropdown-list">
+                            {storeDropdownShops.map((shop) => {
+                              const owner = shop.user_id
+                              const name = shop.name || owner?.name || 'Cửa hàng'
+                              const avatar = shop.avatar || owner?.avatar
+
+                              return (
+                                <button
+                                  key={shop._id}
+                                  type="button"
+                                  className="member-store-dropdown-item"
+                                  onClick={() => goTo(`/dashboard/member/store/${shop._id}`)}
+                                >
+                                  <Avatar size={28} src={avatar} icon={<ShopOutlined />}>
+                                    {name.charAt(0)}
+                                  </Avatar>
+                                  <span>{name}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                          <button
+                            type="button"
+                            className="member-store-dropdown-all"
+                            onClick={() => goTo('/dashboard/member/store')}
+                          >
+                            Xem tất cả cửa hàng →
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            return (
+              <button
+                key={item.key}
+                type="button"
+                className={`member-shell-nav-item${active ? ' is-active' : ''}`}
+                onClick={() => goTo(item.key)}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </nav>
 
         <div className="member-shell-desktop-actions">
           <div

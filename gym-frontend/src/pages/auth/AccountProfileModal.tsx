@@ -10,7 +10,6 @@ import {
   PhoneOutlined,
   PlusOutlined,
   RightOutlined,
-  ShopOutlined,
   ShoppingCartOutlined,
   StarFilled,
   StarOutlined,
@@ -658,21 +657,6 @@ export default function AccountProfileModal({
     }
   }
 
-  const handleEnableSeller = async () => {
-    setLoading(true)
-    try {
-      const { data } = await authService.enableSellerMode()
-      updateUser(data.user)
-      message.success('Đã bật chế độ bán hàng')
-      handleClose()
-      window.location.href = '/dashboard/seller/products'
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'Bật bán hàng thất bại')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const loadAddresses = async () => {
     if (!user) return
     try {
@@ -991,10 +975,6 @@ export default function AccountProfileModal({
               </div>
 
               <div style={{ marginBottom: 12 }}>
-                {user.role !== 'seller' && (
-                  renderActionItem(<ShopOutlined />, 'Bật chế độ bán hàng', 'Mở kênh bán sản phẩm và quản lý shop.', handleEnableSeller, loading)
-                )}
-
                 {renderActionItem(<ShoppingCartOutlined />, 'Các đơn hàng', 'Theo dõi lịch sử mua hàng và trạng thái giao hàng.', goToOrders)}
                 <Button
                   block

@@ -1,11 +1,12 @@
 import { ArrowLeftOutlined, ShopOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Col, Divider, Empty, Input, InputNumber, Rate, Row, Select, Space, Spin, Tabs, Tag, message } from 'antd'
+import { Avatar, Button, Card, Col, Divider, Empty, Input, InputNumber, Modal, Rate, Row, Select, Space, Spin, Tabs, Tag, message } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import PartnershipRequestForm from '../../../components/partnership/PartnershipRequestForm'
 import SellerFooter from '../../../components/layout/footer/SellerFooter'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useAuth } from '../../../hooks/useAuth'
-import { getProductCategories, getShopProducts } from '../../../services/productService'
+import { getShopProducts } from '../../../services/productService'
 import { addShopReview, getShop, getShops } from '../../../services/shopService'
 import type { MemberProduct, ProductShop } from '../../../types/member/product'
 
@@ -13,18 +14,23 @@ export default function MemberStorePage() {
   const { storeId } = useParams()
   const [shops, setShops] = useState<ProductShop[]>([])
   const [products, setProducts] = useState<MemberProduct[]>([])
+  const [featuredProductsByShop, setFeaturedProductsByShop] = useState<Record<string, MemberProduct[]>>({})
+  const [featuredProductCountsByShop, setFeaturedProductCountsByShop] = useState<Record<string, number>>({})
+  const [featuredProductsLoading, setFeaturedProductsLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState<string>()
-  const [sortPrice, setSortPrice] = useState<string>()
+  const [category, setCategory] = useState('')
+  const [sortPrice, setSortPrice] = useState('')
   const [minPrice, setMinPrice] = useState<number | null>(null)
   const [maxPrice, setMaxPrice] = useState<number | null>(null)
   const [priceMode, setPriceMode] = useState<'range' | 'above'>('range')
   const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([])
+  const [categoryLoading, setCategoryLoading] = useState(false)
   const [shopDetail, setShopDetail] = useState<any>(null)
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' })
   const [submittingReview, setSubmittingReview] = useState(false)
   const [activeTab, setActiveTab] = useState('products')
+  const [partnershipModalOpen, setPartnershipModalOpen] = useState(false)
   const reviewInputRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -39,12 +45,48 @@ export default function MemberStorePage() {
   }, [storeId])
 
   useEffect(() => {
+    if (storeId || shops.length === 0) {
+      setFeaturedProductsByShop({})
+      setFeaturedProductCountsByShop({})
+      setFeaturedProductsLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setFeaturedProductsLoading(true)
+
+    Promise.all(
+      shops.map((shop) =>
+        getShopProducts(shop._id, { limit: 4 })
+          .then((res) => {
+            const products = res.data.products || res.data || []
+            const total = typeof res.data.total === 'number' ? res.data.total : products.length
+            return [shop._id, products, total] as const
+          })
+          .catch(() => [shop._id, [], 0] as const)
+      )
+    )
+      .then((entries) => {
+        if (cancelled) return
+        setFeaturedProductsByShop(Object.fromEntries(entries.map(([shopId, products]) => [shopId, products])))
+        setFeaturedProductCountsByShop(Object.fromEntries(entries.map(([shopId, , total]) => [shopId, total])))
+      })
+      .finally(() => {
+        if (!cancelled) setFeaturedProductsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [storeId, shops])
+
+  useEffect(() => {
     if (!storeId) return
     setLoading(true)
     const params = {
-      category,
+      category: category || undefined,
       limit: 100,
-      sortPrice,
+      sortPrice: sortPrice || undefined,
       minPrice: minPrice ?? undefined,
       maxPrice: priceMode === 'range' ? maxPrice ?? undefined : undefined,
     }
@@ -57,17 +99,48 @@ export default function MemberStorePage() {
   useEffect(() => {
     if (!storeId) {
       setCategoryOptions([])
+      setCategoryLoading(false)
       return
     }
-    getProductCategories({ shopId: storeId })
-      .then((res) => setCategoryOptions(res.data.categories || []))
-      .catch(() => setCategoryOptions([]))
+    let cancelled = false
+    setCategoryOptions([])
+    setCategoryLoading(true)
+
+    getShopProducts(storeId, { limit: 100 })
+      .then((res) => {
+        if (cancelled) return
+        const shopProducts: MemberProduct[] = res.data.products || res.data || []
+        const categoryMap = new Map<string, string>()
+
+        shopProducts.forEach((product) => {
+          const raw = String(product.category || '').trim()
+          const key = normalizeCategory(raw)
+          if (!raw || !key || categoryMap.has(key)) return
+          categoryMap.set(key, raw)
+        })
+
+        setCategoryOptions(
+          [...categoryMap.entries()]
+            .map(([value, label]) => ({ label, value }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setCategoryOptions([])
+      })
+      .finally(() => {
+        if (!cancelled) setCategoryLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [storeId])
 
   useEffect(() => {
-    setCategory(undefined)
+    setCategory('')
     setSearch('')
-    setSortPrice(undefined)
+    setSortPrice('')
     setPriceMode('range')
     setMinPrice(null)
     setMaxPrice(null)
@@ -110,9 +183,29 @@ export default function MemberStorePage() {
     (p.name?.toLowerCase().includes(search.toLowerCase()) ||
       p.category?.toLowerCase().includes(search.toLowerCase()))
   )
+  const categorySelectOptions = categoryOptions.length > 0
+    ? [{ label: 'Tất cả sản phẩm', value: '' }, ...categoryOptions]
+    : []
+  const categoryPlaceholder = categoryLoading
+    ? 'Đang tải...'
+    : categoryOptions.length === 0
+      ? 'Không có danh mục'
+      : 'Tất cả sản phẩm'
+  const getProductImage = (product: MemberProduct) => product.image || product.images?.[0] || ''
+  const formatProductPrice = (price?: number) =>
+    typeof price === 'number' && Number.isFinite(price)
+      ? `${price.toLocaleString('vi-VN')}đ`
+      : 'Liên hệ'
+  const featuredShopSections = shops
+    .map((shop) => ({
+      shop,
+      products: featuredProductsByShop[shop._id] || [],
+    }))
+    .filter((section) => section.products.length > 0)
 
   const resetPriceFilters = () => {
-    setSortPrice(undefined)
+    setCategory('')
+    setSortPrice('')
     setPriceMode('range')
     setMinPrice(null)
     setMaxPrice(null)
@@ -128,20 +221,19 @@ export default function MemberStorePage() {
           onChange={(e) => setSearch(e.target.value)}
         />
         <Select
-          allowClear
-          placeholder="Lọc danh mục"
+          disabled={categoryLoading || categoryOptions.length === 0}
+          placeholder={categoryPlaceholder}
           style={{ flex: '0 1 220px', minWidth: 170 }}
           value={category}
-          onChange={setCategory}
-          options={categoryOptions}
+          onChange={(value) => setCategory(value || '')}
+          options={categorySelectOptions}
         />
         <Select
-          allowClear
-          placeholder="Sắp xếp giá"
           style={{ flex: '0 1 180px', minWidth: 160 }}
           value={sortPrice}
-          onChange={setSortPrice}
+          onChange={(value) => setSortPrice(value || '')}
           options={[
+            { label: 'Tất cả giá', value: '' },
             { label: 'Giá thấp tới cao', value: 'asc' },
             { label: 'Giá cao xuống thấp', value: 'desc' },
           ]}
@@ -322,17 +414,20 @@ export default function MemberStorePage() {
 
   const storeList = (
     <>
-      <div className="relative left-1/2 mb-8 h-[240px] w-screen -translate-x-1/2 overflow-hidden max-[640px]:h-[180px]">
-        <img
-          src="https://images.unsplash.com/photo-1558611848-73f7eb4001a1?q=80&w=1600"
-          className="w-full h-full object-cover"
-          alt="banner"
-        />
-        <div className="absolute inset-0 bg-black/50" />
-        <div className="absolute top-1/2 left-8 max-[640px]:left-4 -translate-y-1/2 text-white pr-4" style={{ color: 'var(--theme-text)' }}>
-          <h1 className="text-3xl max-[640px]:text-2xl font-extrabold">Cửa hàng hợp tác</h1>
-          <p className="mt-2 opacity-90">Khám phá các thương hiệu và shop đối tác của GymPro</p>
+      <div className="mb-12 mt-4 flex items-center justify-between gap-5 py-4 max-[760px]:items-start max-[760px]:flex-col max-[640px]:mb-8 max-[640px]:mt-0 max-[640px]:gap-4 max-[640px]:py-2">
+        <div className="flex min-w-0 items-center gap-5 max-[640px]:gap-4">
+          <div className="h-14 w-1.5 rounded-full bg-[var(--theme-accent)] max-[640px]:h-9 max-[640px]:w-1" />
+          <h1 className="m-0 text-5xl font-medium leading-tight text-[var(--theme-text)] max-[1024px]:text-4xl max-[640px]:text-2xl">
+            THƯƠNG HIỆU GYMPRO ĐANG HỢP TÁC
+          </h1>
         </div>
+        <Button
+          ghost
+          onClick={() => setPartnershipModalOpen(true)}
+          className="shrink-0 !border-[var(--theme-accent)] !text-[var(--theme-accent)] hover:!bg-[var(--theme-accent-muted)]"
+        >
+          Đăng ký hợp tác
+        </Button>
       </div>
 
       {loading ? (
@@ -340,49 +435,127 @@ export default function MemberStorePage() {
       ) : shops.length === 0 ? (
         <Empty description="Chưa có cửa hàng hợp tác" />
       ) : (
-        <Row gutter={[16, 16]}>
-          {shops.map((shop) => {
-            const owner = shop.user_id
-            const name = shop.name || owner?.name || 'Cửa hàng'
-            const avatar = shop.avatar || owner?.avatar
+        <>
+          <Row gutter={[16, 16]}>
+            {shops.map((shop) => {
+              const owner = shop.user_id
+              const name = shop.name || owner?.name || 'Cửa hàng'
+              const avatar = shop.avatar || owner?.avatar
+              const productCount = featuredProductCountsByShop[shop._id] ?? 0
+              const openStore = () => navigate(`/dashboard/member/store/${shop._id}`)
 
-            return (
-              <Col xs={24} sm={12} lg={6} key={shop._id}>
-                <Card
-                  hoverable
-                  className="h-full rounded-xl overflow-hidden"
-                  bodyStyle={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-                >
-                  <div className="mb-4 flex items-center gap-3">
-                    <Avatar size={64} src={avatar} icon={<ShopOutlined />}>
+              return (
+                <Col xs={12} lg={6} key={shop._id}>
+                  <Card
+                    hoverable
+                    tabIndex={0}
+                    role="link"
+                    onClick={openStore}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        openStore()
+                      }
+                    }}
+                    className="relative h-full cursor-pointer overflow-hidden rounded-xl transition-all duration-150 hover:!-translate-y-[3px] hover:!border-[var(--theme-accent-border)]"
+                    bodyStyle={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: 24 }}
+                  >
+                    <div className="absolute left-0 top-0 h-1 w-full bg-[var(--theme-accent)]" />
+                    <div className="absolute right-3 top-3 rounded-full bg-[var(--theme-accent-muted)] px-2 py-1 text-[11px] font-medium leading-none text-[var(--theme-accent)]">
+                      {productCount} SP
+                    </div>
+                    <Avatar size={72} src={avatar} icon={<ShopOutlined />} className="mb-4 shrink-0">
                       {name.charAt(0)}
                     </Avatar>
-                    <div className="min-w-0">
-                      <div className="truncate text-lg font-bold">{name}</div>
-                      <div className="mt-1 flex items-center gap-2">
-                        <Rate disabled allowHalf value={shop.rating || 0} style={{ fontSize: 13 }} />
-                        <span className="text-xs text-[var(--gs-text-muted)]">
-                          {shop.reviewCount || 0}
-                        </span>
-                      </div>
+                    <div className="mb-2 w-full truncate text-lg font-medium">{name}</div>
+                    <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+                      <Rate disabled allowHalf value={shop.rating || 0} style={{ fontSize: 13 }} />
+                      <span className="text-xs text-[var(--gs-text-muted)]">
+                        {shop.reviewCount || 0} đánh giá
+                      </span>
                     </div>
-                  </div>
-                  <p className="mb-5 line-clamp-3 min-h-[60px] text-sm text-[var(--gs-text-muted)]">
-                    {shop.description || `Xem các sản phẩm đang bán tại ${name}.`}
-                  </p>
-                  <Button
-                    type="primary"
-                    className="mt-auto !bg-[var(--theme-accent)] border-none"
-                    onClick={() => navigate(`/dashboard/member/store/${shop._id}`)}
+                  </Card>
+                </Col>
+              )
+            })}
+          </Row>
+
+          {!featuredProductsLoading && featuredShopSections.length > 0 && (
+            <div className="mt-14">
+              {featuredShopSections.map(({ shop, products }) => {
+                const owner = shop.user_id
+                const name = shop.name || owner?.name || 'Cửa hàng'
+
+                return (
+                  <section
+                    key={shop._id}
+                    className="mb-12"
                   >
-                    Xem cửa hàng
-                  </Button>
-                </Card>
-              </Col>
-            )
-          })}
-        </Row>
+                    <div className="mb-4 flex items-center gap-4 border-b border-[var(--gs-border)] pb-4">
+                      <div className="h-8 w-1 rounded-full bg-[var(--theme-accent)]" />
+                      <h2 className="m-0 min-w-0 flex-1 truncate text-2xl font-medium text-[var(--theme-text)] max-[640px]:text-lg">
+                        {name}
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/dashboard/member/store/${shop._id}`)}
+                        className="shrink-0 border-0 bg-transparent p-0 text-sm font-medium text-[var(--theme-accent)] transition-opacity hover:opacity-80"
+                      >
+                        Xem tất cả →
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-4 max-[640px]:gap-2">
+                      {products.slice(0, 4).map((product) => {
+                        const image = getProductImage(product)
+
+                        return (
+                          <button
+                            key={product._id}
+                            type="button"
+                            onClick={() => navigate(`/dashboard/member/product/${product._id}`)}
+                            className="group overflow-hidden rounded-[10px] border border-[var(--gs-border)] bg-[var(--theme-card)] p-0 text-left transition-all hover:border-[var(--theme-accent-border)] hover:-translate-y-0.5"
+                          >
+                            {image ? (
+                              <img
+                                src={image}
+                                alt={product.name}
+                                className="aspect-square w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex aspect-square w-full items-center justify-center bg-[var(--theme-bg)] text-xs text-[var(--theme-muted)]">
+                                No image
+                              </div>
+                            )}
+                            <div className="p-3 max-[640px]:p-2">
+                              <div className="line-clamp-2 min-h-[40px] text-sm font-medium leading-5 text-[var(--theme-text)] group-hover:text-[var(--theme-accent)] max-[640px]:text-xs max-[640px]:leading-4">
+                                {product.name}
+                              </div>
+                              <div className="mt-2 text-sm font-semibold text-[var(--theme-accent)] max-[640px]:text-xs">
+                                {formatProductPrice(product.price)}
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
+
+      <Modal
+        title="Đăng ký hợp tác thương hiệu"
+        open={partnershipModalOpen}
+        onCancel={() => setPartnershipModalOpen(false)}
+        footer={null}
+        width={640}
+      >
+        <PartnershipRequestForm compact onSuccess={() => setPartnershipModalOpen(false)} />
+      </Modal>
     </>
   )
 

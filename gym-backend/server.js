@@ -13,6 +13,7 @@ import auditLogRoutes from './src/routes/auditLogRoutes.js'
 import authRoutes from './src/routes/authRoutes.js'
 import membershipRoutes from './src/routes/membershipRoutes.js'
 import orderRoutes from './src/routes/orderRoutes.js'
+import partnershipRequestRoutes from './src/routes/partnershipRequestRoutes.js'
 import paymentRoutes from './src/routes/paymentRoutes.js'
 import planRoutes from './src/routes/planRoutes.js'
 import productRoutes from './src/routes/productRoutes.js'
@@ -60,6 +61,7 @@ app.use('/api/payment', paymentRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/seller', sellerRoutes)
 app.use('/api/memberships', membershipRoutes)
+app.use('/api/partnership-requests', partnershipRequestRoutes)
 app.use('/api/ai-assistant', aiRoutes)
 
 app.get('/api/health', (_req, res) => {
