@@ -152,7 +152,7 @@ export default function CheckoutPage() {
       await refreshWallet()
       setCart([])
       message.success('Thanh toán thành công. Đơn hàng đã được tạo.')
-      navigate('/dashboard/member/orders')
+      navigate('/orders')
     } catch (error: any) {
       const originalMessage = error?.response?.data?.message || ''
       let errorMessage = 'Không thể thanh toán. Vui lòng thử lại.'
@@ -342,7 +342,7 @@ export default function CheckoutPage() {
                   Thanh toán ngay
                 </Button>
                 <Button type="default" size="large" block style={{ flex: '1 1 140px' }}
-                  onClick={() => navigate('/dashboard/member/wallet/deposit')}>
+                  onClick={() => navigate('/wallet/deposit')}>
                   Nạp tiền vào ví
                 </Button>
               </div>

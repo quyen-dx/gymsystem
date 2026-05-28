@@ -4,11 +4,11 @@ import { useAuth } from '../../hooks/useAuth'
 import { authService } from '../../services/authService'
 
 const getDashboardPath = (role?: string) => {
-  if (role === 'admin') return '/dashboard/admin'
-  if (role === 'seller') return '/dashboard/seller/products'
-  if (role === 'staff') return '/dashboard/staff'
-  if (role === 'pt') return '/dashboard/pt'
-  return '/dashboard/member'
+  if (role === 'admin') return '/admin'
+  if (role === 'seller') return '/seller/products'
+  if (role === 'staff') return '/staff'
+  if (role === 'pt') return '/pt'
+  return '/'
 }
 
 export default function OauthSuccessPage() {

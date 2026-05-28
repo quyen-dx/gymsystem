@@ -2,9 +2,9 @@ import { ArrowLeftOutlined, ShopOutlined } from '@ant-design/icons'
 import { Avatar, Button, Card, Col, Divider, Empty, Input, InputNumber, Modal, Rate, Row, Select, Space, Spin, Tabs, Tag, message } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import PartnershipRequestForm from '../../../components/partnership/PartnershipRequestForm'
 import SellerFooter from '../../../components/layout/footer/SellerFooter'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
+import PartnershipRequestForm from '../../../components/partnership/PartnershipRequestForm'
 import { useAuth } from '../../../hooks/useAuth'
 import { getShopProducts } from '../../../services/productService'
 import { addShopReview, getShop, getShops } from '../../../services/shopService'
@@ -316,7 +316,7 @@ export default function MemberStorePage() {
             <Col xs={24} sm={12} md={8} lg={6} key={product._id}>
               <Card
                 hoverable
-                onClick={() => navigate(`/dashboard/member/product/${product._id}`)}
+                onClick={() => navigate(`/product/${product._id}`)}
                 className="rounded-xl overflow-hidden"
                 cover={
                   product.image ? (
@@ -442,7 +442,7 @@ export default function MemberStorePage() {
               const name = shop.name || owner?.name || 'Cửa hàng'
               const avatar = shop.avatar || owner?.avatar
               const productCount = featuredProductCountsByShop[shop._id] ?? 0
-              const openStore = () => navigate(`/dashboard/member/store/${shop._id}`)
+              const openStore = () => navigate(`/store/${shop._id}`)
 
               return (
                 <Col xs={12} lg={6} key={shop._id}>
@@ -498,7 +498,7 @@ export default function MemberStorePage() {
                       </h2>
                       <button
                         type="button"
-                        onClick={() => navigate(`/dashboard/member/store/${shop._id}`)}
+                        onClick={() => navigate(`/store/${shop._id}`)}
                         className="shrink-0 border-0 bg-transparent p-0 text-sm font-medium text-[var(--theme-accent)] transition-opacity hover:opacity-80"
                       >
                         Xem tất cả →
@@ -513,7 +513,7 @@ export default function MemberStorePage() {
                           <button
                             key={product._id}
                             type="button"
-                            onClick={() => navigate(`/dashboard/member/product/${product._id}`)}
+                            onClick={() => navigate(`/product/${product._id}`)}
                             className="group overflow-hidden rounded-[10px] border border-[var(--gs-border)] bg-[var(--theme-card)] p-0 text-left transition-all hover:border-[var(--theme-accent-border)] hover:-translate-y-0.5"
                           >
                             {image ? (
@@ -566,7 +566,7 @@ export default function MemberStorePage() {
           <Button
             type="text"
             icon={<ArrowLeftOutlined />}
-            onClick={() => navigate('/dashboard/member/store')}
+            onClick={() => navigate('/store')}
             className="!px-0"
           >
             Quay lại cửa hàng

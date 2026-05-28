@@ -28,16 +28,16 @@ type FooterLink = {
 }
 
 const serviceLinks: FooterLink[] = [
-  { label: 'Gói tập', to: '/dashboard/member/health', icon: Dumbbell },
-  { label: 'Danh sách PT', to: '/dashboard/member/booking', icon: UsersRound },
-  { label: 'Lớp tập nhóm', to: '/dashboard/member/workout', icon: CalendarDays },
-  { label: 'Cửa hàng', to: '/dashboard/member/store', icon: Store },
+  { label: 'Gói tập', to: '/health', icon: Dumbbell },
+  { label: 'Danh sách PT', to: '/booking', icon: UsersRound },
+  { label: 'Lớp tập nhóm', to: '/workout', icon: CalendarDays },
+  { label: 'Cửa hàng', to: '/store', icon: Store },
 ]
 
 const accountLinks: FooterLink[] = [
-  { label: 'Thông tin cá nhân', to: '/dashboard/member/profile', icon: UserRound },
-  { label: 'Lịch sử gói tập', to: '/dashboard/member/orders', icon: ShoppingBag },
-  { label: 'Thông báo', to: '/dashboard/member/notifications', icon: Bell },
+  { label: 'Thông tin cá nhân', to: '/profile', icon: UserRound },
+  { label: 'Lịch sử gói tập', to: '/orders', icon: ShoppingBag },
+  { label: 'Thông báo', to: '/notifications', icon: Bell },
 ]
 
 const socialLogos = {
@@ -108,7 +108,7 @@ function MemberFooter() {
           <div className="col-span-2 lg:col-span-1">
             <button
               type="button"
-              onClick={() => navigate('/dashboard/member')}
+              onClick={() => navigate('/')}
               className="flex items-center gap-3 text-left"
             >
               <span

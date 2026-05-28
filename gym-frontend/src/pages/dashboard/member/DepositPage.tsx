@@ -99,7 +99,7 @@ export default function DepositPage() {
                                     <Button type="primary" htmlType="submit" loading={loading}>
                                         Tạo QR
                                     </Button>
-                                    <Button onClick={() => navigate('/dashboard/member/wallet')}>
+                                    <Button onClick={() => navigate('/wallet')}>
                                         Ví của tui
                                     </Button>
                                 </Space>

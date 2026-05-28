@@ -1,17 +1,17 @@
+import { ArrowLeftOutlined } from '@ant-design/icons'
+import { Button, Divider, Form, Input, Typography, message } from 'antd'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { authService } from '../../services/authService'
-import { Button, Form, Input, Typography, message, Divider } from 'antd'
-import { ArrowLeftOutlined } from '@ant-design/icons'
 import { useTheme } from '../../context/ThemeProvider'
+import { authService } from '../../services/authService'
 const { Title, Text } = Typography
 
 const getDashboardPath = (role: string) => {
-  if (role === 'admin') return '/dashboard/admin'
-  if (role === 'seller') return '/dashboard/seller/products'
-  if (role === 'staff') return '/dashboard/staff'
-  if (role === 'pt') return '/dashboard/pt'
-  return '/dashboard/member'
+  if (role === 'admin') return '/admin'
+  if (role === 'seller') return '/seller/products'
+  if (role === 'staff') return '/staff'
+  if (role === 'pt') return '/pt'
+  return '/'
 }
 
 export default function RegisterPage() {

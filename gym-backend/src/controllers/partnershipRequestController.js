@@ -1,6 +1,7 @@
 import PartnershipRequest from '../models/PartnershipRequest.js'
 import Shop from '../models/Shop.js'
 import User from '../models/User.js'
+import { recordAuditLog } from '../services/auditLogService.js'
 import { sendPartnershipRequestEmail } from '../services/emailService.js'
 import AppError from '../utils/appError.js'
 
@@ -127,6 +128,14 @@ export const approvePartnershipRequest = async (req, res, next) => {
     request.shop_id = shop._id
     await request.save()
     await request.populate('shop_id', 'name')
+
+    await recordAuditLog({
+      req,
+      module: 'shops',
+      action: 'create',
+      entity: { _id: shop._id, name: shop.name },
+      details: `Duyệt yêu cầu hợp tác từ "${request.brand_name}" — đã tạo shop "${shop.name}"`,
+    })
 
     res.json({ message: 'Đã duyệt yêu cầu và tạo shop', request, shop })
   } catch (err) {

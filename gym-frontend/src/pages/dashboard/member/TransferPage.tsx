@@ -17,7 +17,7 @@ export default function TransferPage() {
                 amount: Number(values.amount),
             })
             message.success('Chuyển tiền thành công')
-            navigate('/dashboard/member/wallet')
+            navigate('/wallet')
         } catch (error: any) {
             console.error(error)
             const errorMessage = error?.response?.data?.message || 'Chuyển tiền thất bại. Vui lòng thử lại.'

@@ -263,13 +263,13 @@ export default function SellerProductsPage() {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8">
+      <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Seller</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)]">Sản phẩm của shop</h1>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Sản phẩm của shop</h1>
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">Tổng: {products.length} sản phẩm</p>
       </div>
 
-      <div className="mb-6 rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
+      <div className="mb-6 rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
         <h2 className="mb-4 text-xl font-semibold">Thông tin shop</h2>
         <Form layout="vertical" form={shopForm} onFinish={handleSaveShop}>
           <div className="grid gap-4 md:grid-cols-2">
@@ -308,19 +308,18 @@ export default function SellerProductsPage() {
         </Form>
       </div>
 
-      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, gap: 12 }}>
+      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+        <div className="dashboard-filter-bar">
           <Space wrap>
             <Input.Search
               placeholder="Tìm sản phẩm, danh mục..."
               allowClear
-              style={{ width: 320 }}
               onChange={(e) => setSearch(e.target.value)}
             />
             <Select
               allowClear
               placeholder="Lọc danh mục"
-              style={{ minWidth: 220 }}
+              style={{ minWidth: 180 }}
               value={categoryFilter}
               onChange={setCategoryFilter}
               options={existingCategories.map((category) => ({ label: category, value: category }))}
@@ -331,13 +330,15 @@ export default function SellerProductsPage() {
           </Button>
         </div>
 
-        <Table
-          dataSource={filtered}
-          columns={columns}
-          rowKey="_id"
-          loading={loading}
-          pagination={{ pageSize: 10 }}
-        />
+        <div className="member-scroll-x">
+          <Table
+            dataSource={filtered}
+            columns={columns}
+            rowKey="_id"
+            loading={loading}
+            pagination={{ pageSize: 10 }}
+          />
+        </div>
       </div>
 
       <Modal

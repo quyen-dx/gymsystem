@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { Button, theme } from 'antd'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useAuth } from '../../../hooks/useAuth'
@@ -17,28 +17,28 @@ const services = [
     title: 'QR Check-in',
     desc: 'Vào phòng tập nhanh qua mã QR',
     color: '#e05a30',
-    path: '/dashboard/member/checkin',
+    path: '/checkin',
   },
   {
     icon: '◴',
     title: 'Đặt lịch PT',
     desc: 'Chọn khung giờ cùng huấn luyện viên',
     color: '#3d9dd0',
-    path: '/dashboard/member/booking',
+    path: '/booking',
   },
   {
     icon: '↗',
     title: 'Lộ trình cá nhân',
     desc: 'Theo sát giáo án và tiến độ tập',
     color: '#5cb85c',
-    path: '/dashboard/member/workout',
+    path: '/workout',
   },
   {
     icon: '♡',
     title: 'Theo dõi sức khoẻ',
     desc: 'Quản lý chỉ số và mục tiêu cơ thể',
     color: '#e6a317',
-    path: '/dashboard/member/health',
+    path: '/health',
   },
   {
     icon: '◎',
@@ -193,7 +193,7 @@ export default function MemberDashboard() {
                   borderColor: 'var(--theme-accent)',
                   color: 'var(--theme-button-text)',
                 }}
-                onClick={() => navigate('/dashboard/member/booking')}
+                onClick={() => navigate('/booking')}
               >
                 Đặt lịch tập ngay
               </Button>
@@ -205,7 +205,7 @@ export default function MemberDashboard() {
                   borderColor: 'var(--theme-accent)',
                   color: 'var(--theme-accent)',
                 }}
-                onClick={() => navigate('/dashboard/member/checkin')}
+                onClick={() => navigate('/checkin')}
               >
                 Check-in ngay
               </Button>
@@ -236,11 +236,10 @@ export default function MemberDashboard() {
             {services.map((service) => (
               <button
                 type="button"
-                className={`min-h-[168px] rounded-lg border p-[18px] text-left transition duration-200 md:min-h-[178px] md:p-[22px] ${
-                  service.path
+                className={`min-h-[168px] rounded-lg border p-[18px] text-left transition duration-200 md:min-h-[178px] md:p-[22px] ${service.path
                     ? 'cursor-pointer hover:-translate-y-0.5'
                     : 'cursor-default'
-                }`}
+                  }`}
                 key={service.title}
                 onClick={() => service.path && navigate(service.path)}
                 disabled={!service.path}
@@ -299,7 +298,7 @@ export default function MemberDashboard() {
               size="large"
               className="!h-[46px] !rounded-full !px-5 !font-extrabold !shadow-none min-[421px]:!px-6"
               style={{ backgroundColor: 'var(--theme-accent)', borderColor: 'var(--theme-accent)', color: 'var(--theme-button-text)' }}
-              onClick={() => navigate('/dashboard/member/booking')}
+              onClick={() => navigate('/booking')}
             >
               Đặt lịch PT ngay
             </Button>
@@ -307,7 +306,7 @@ export default function MemberDashboard() {
               size="large"
               className="!h-[46px] !rounded-full !bg-transparent !px-5 !font-extrabold !shadow-none min-[421px]:!px-6"
               style={{ borderColor: token.colorBorder, color: token.colorText }}
-              onClick={() => navigate('/dashboard/member/health')}
+              onClick={() => navigate('/health')}
             >
               Xem sức khoẻ
             </Button>

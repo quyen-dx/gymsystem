@@ -346,9 +346,9 @@ export default function AdminPartnershipRequestsPage() {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,var(--theme-accent-muted),rgba(255,255,255,0.02))] p-8">
+      <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,var(--theme-accent-muted),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Admin</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)]">Partnerships</h1>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Partnerships</h1>
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">{subtitleText}</p>
       </div>
 
@@ -360,15 +360,14 @@ export default function AdminPartnershipRequestsPage() {
             key: 'requests',
             label: 'Yêu cầu hợp tác',
             children: (
-              <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
-                <div className="mb-4 flex justify-between gap-3">
-                  <Space>
-                    <Input.Search
-                      allowClear
-                      placeholder="Tìm thương hiệu, lĩnh vực, liên hệ..."
-                      style={{ maxWidth: 360 }}
-                      onChange={(event) => setRequestSearch(event.target.value)}
-                    />
+              <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+                <div className="dashboard-filter-bar">
+                  <Input.Search
+                    allowClear
+                    placeholder="Tìm thương hiệu, lĩnh vực, liên hệ..."
+                    onChange={(event) => setRequestSearch(event.target.value)}
+                  />
+                  <Space wrap>
                     <Select
                       allowClear
                       placeholder="Tất cả trạng thái"
@@ -391,17 +390,19 @@ export default function AdminPartnershipRequestsPage() {
                     />
                   </Space>
                 </div>
-                <Table
-                  rowKey="_id"
-                  loading={requestsLoading}
-                  dataSource={filteredRequests}
-                  columns={requestColumns}
-                  pagination={{ pageSize: 10 }}
-                  onRow={(record) => ({
-                    onClick: () => setSelectedRequest(record),
-                    style: { cursor: 'pointer' },
-                  })}
-                />
+                <div className="member-scroll-x">
+                  <Table
+                    rowKey="_id"
+                    loading={requestsLoading}
+                    dataSource={filteredRequests}
+                    columns={requestColumns}
+                    pagination={{ pageSize: 10 }}
+                    onRow={(record) => ({
+                      onClick: () => setSelectedRequest(record),
+                      style: { cursor: 'pointer' },
+                    })}
+                  />
+                </div>
               </div>
             ),
           },
@@ -409,13 +410,12 @@ export default function AdminPartnershipRequestsPage() {
             key: 'shops',
             label: 'Quản lý Thương hiệu',
             children: (
-              <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, gap: 12 }}>
-                  <Space>
+              <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+                <div className="dashboard-filter-bar">
+                  <Space wrap>
                     <Input.Search
                       placeholder="Tìm thương hiệu, chủ sở hữu..."
                       allowClear
-                      style={{ maxWidth: 320 }}
                       onChange={(e) => setShopSearch(e.target.value)}
                     />
                     <Select
@@ -427,17 +427,17 @@ export default function AdminPartnershipRequestsPage() {
                       options={categoryOptions}
                     />
                   </Space>
-                  <Space>
-                    <AdminHistoryButton module="shops" title="thương hiệu" />
-                  </Space>
+                  <AdminHistoryButton module="shops" title="thương hiệu" />
                 </div>
-                <Table
-                  dataSource={filteredShops}
-                  columns={shopColumns}
-                  rowKey="_id"
-                  loading={shopsLoading}
-                  pagination={{ pageSize: 10 }}
-                />
+                <div className="member-scroll-x">
+                  <Table
+                    dataSource={filteredShops}
+                    columns={shopColumns}
+                    rowKey="_id"
+                    loading={shopsLoading}
+                    pagination={{ pageSize: 10 }}
+                  />
+                </div>
               </div>
             ),
           },

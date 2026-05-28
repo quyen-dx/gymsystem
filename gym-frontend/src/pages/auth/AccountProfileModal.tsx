@@ -1,6 +1,6 @@
 import {
-  CameraOutlined,
   BgColorsOutlined,
+  CameraOutlined,
   CopyOutlined,
   DeleteOutlined,
   EditOutlined,
@@ -15,7 +15,7 @@ import {
   StarOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, Modal, Space, message, theme } from 'antd'
+import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, message, Modal, Space, theme } from 'antd'
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { generateTheme, PRESET_ACCENT_COLORS, useTheme } from '../../context/ThemeContext'
@@ -155,64 +155,43 @@ const ProfileHeader = ({
   const coverSrc = coverPreview !== null && coverPreview !== ''
     ? coverPreview
     : coverPreview === ''
-    ? null
-    : user?.coverImage || DEFAULT_COVER
+      ? null
+      : user?.coverImage || DEFAULT_COVER
 
   return (
     <header className="profile-modal-header">
-    <div
-      className="profile-cover"
-      style={{
-        backgroundImage: coverSrc ? `url(${coverSrc})` : 'none',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        position: 'relative',
-        cursor: 'pointer',
-      }}
-      onClick={() => coverRef.current?.click()}
-    >
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.5) 100%)',
-      }} />
-
       <div
+        className="profile-cover"
         style={{
-          position: 'absolute',
-          top: 8, right: 40,
-          display: 'flex',
-          gap: 6,
+          backgroundImage: coverSrc ? `url(${coverSrc})` : 'none',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          position: 'relative',
+          cursor: 'pointer',
         }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={() => coverRef.current?.click()}
       >
-        <button
-          type="button"
-          onClick={() => coverRef.current?.click()}
-          style={{
-            background: 'rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,255,255,0.2)',
-            borderRadius: 8,
-            color: '#fff',
-            padding: '4px 10px',
-            fontSize: 12,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          <CameraOutlined /> Đổi ảnh nền
-        </button>
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.5) 100%)',
+        }} />
 
-        {(coverPreview || user?.coverImage) && coverPreview !== '' && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 8, right: 40,
+            display: 'flex',
+            gap: 6,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
-            onClick={() => onCoverRemove()}
+            onClick={() => coverRef.current?.click()}
             style={{
-              background: 'rgba(239,68,68,0.6)',
+              background: 'rgba(0,0,0,0.5)',
               backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(239,68,68,0.4)',
+              border: '1px solid rgba(255,255,255,0.2)',
               borderRadius: 8,
               color: '#fff',
               padding: '4px 10px',
@@ -223,58 +202,79 @@ const ProfileHeader = ({
               gap: 4,
             }}
           >
-            <DeleteOutlined /> Xóa
+            <CameraOutlined /> Đổi ảnh nền
           </button>
-        )}
-      </div>
 
+          {(coverPreview || user?.coverImage) && coverPreview !== '' && (
+            <button
+              type="button"
+              onClick={() => onCoverRemove()}
+              style={{
+                background: 'rgba(239,68,68,0.6)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(239,68,68,0.4)',
+                borderRadius: 8,
+                color: '#fff',
+                padding: '4px 10px',
+                fontSize: 12,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <DeleteOutlined /> Xóa
+            </button>
+          )}
+        </div>
+
+        <input
+          ref={coverRef}
+          type="file"
+          hidden
+          accept="image/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) onCoverChange(URL.createObjectURL(file))
+          }}
+        />
+      </div>
+      <div className="profile-header-content">
+        <div className="profile-avatar-wrap cursor-pointer" onClick={() => fileRef.current?.click()}>
+          <Avatar
+            size={isMobile ? 78 : 88}
+            src={
+              avatarPreview ||
+              user.avatar ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'U')}`
+            }
+            icon={<UserOutlined />}
+            className="profile-avatar-image"
+          />
+          <span className="profile-avatar-status" />
+          <div className="profile-avatar-camera">
+            <CameraOutlined />
+          </div>
+        </div>
+
+        <div className="profile-header-meta">
+          <h2>{user.name || 'Tài khoản GymPro'}</h2>
+          <button type="button" onClick={onCopyContact}>
+            <span>{contactText}</span>
+            {(user.email || user.phone) && <CopyOutlined />}
+          </button>
+        </div>
+      </div>
       <input
-        ref={coverRef}
+        ref={fileRef}
         type="file"
         hidden
         accept="image/*"
-        onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) onCoverChange(URL.createObjectURL(file))
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) onAvatarChange(URL.createObjectURL(file))
         }}
       />
-    </div>
-    <div className="profile-header-content">
-      <div className="profile-avatar-wrap cursor-pointer" onClick={() => fileRef.current?.click()}>
-        <Avatar
-          size={isMobile ? 78 : 88}
-          src={
-            avatarPreview ||
-            user.avatar ||
-            `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'U')}`
-          }
-          icon={<UserOutlined />}
-          className="profile-avatar-image"
-        />
-        <span className="profile-avatar-status" />
-        <div className="profile-avatar-camera">
-          <CameraOutlined />
-        </div>
-      </div>
-
-      <div className="profile-header-meta">
-        <h2>{user.name || 'Tài khoản GymPro'}</h2>
-        <button type="button" onClick={onCopyContact}>
-          <span>{contactText}</span>
-          {(user.email || user.phone) && <CopyOutlined />}
-        </button>
-      </div>
-    </div>
-    <input
-      ref={fileRef}
-      type="file"
-      hidden
-      accept="image/*"
-      onChange={(event) => {
-        const file = event.target.files?.[0]
-        if (file) onAvatarChange(URL.createObjectURL(file))
-      }}
-    />
     </header>
   )
 }
@@ -419,7 +419,7 @@ export default function AccountProfileModal({
 
   const goToOrders = () => {
     handleClose()
-    navigate('/dashboard/member/orders')
+    navigate('/orders')
   }
 
   const handlePresetSelect = (hex: string) => {
@@ -840,8 +840,8 @@ export default function AccountProfileModal({
           height: isProfileMobile
             ? 'calc(var(--profile-visual-height, 92vh) - 16px)'
             : isProfileCompact
-            ? '82vh'
-            : 'auto',
+              ? '82vh'
+              : 'auto',
           maxHeight: isProfileMobile
             ? 'calc(var(--profile-visual-height, 92vh) - 16px)'
             : '90vh',
@@ -923,328 +923,328 @@ export default function AccountProfileModal({
               flex: 1,
             }}
           >
-          <TabContent activeTab={activeTab}>
-          {activeTab === 'profile' && (
-            <div>
-              <div style={responsiveSectionCardStyle}>
-                {renderSectionHeader(<UserOutlined />, 'Thông tin tài khoản', 'Cập nhật hồ sơ cá nhân để sử dụng GymPro thuận tiện hơn.')}
-
-                <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                    <Form.Item label="Tên tài khoản" name="name" rules={[{ required: true, message: 'Nhập tên' }]}>
-                      <Input prefix={<UserOutlined />} placeholder="Tên của bạn" style={profileInputStyle} />
-                    </Form.Item>
-
-                    <Form.Item label="Số điện thoại" name="phone">
-                      <Input prefix={<PhoneOutlined />} placeholder="Thêm số điện thoại" style={profileInputStyle} />
-                    </Form.Item>
-
-                    <Form.Item
-                      label="Email"
-                      name="email"
-                      rules={[
-                        { type: 'email', message: 'Email không hợp lệ' },
-                        { required: !user.email, message: 'Nhập email' },
-                      ]}
-                    >
-                      <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder="Thêm email" style={user.email ? profileDisabledInputStyle : profileInputStyle} />
-                    </Form.Item>
-
-                    <Form.Item label="Username">
-                      <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} style={profileDisabledInputStyle} />
-                    </Form.Item>
-
-                    <Form.Item label="Ngày sinh" name="dateOfBirth" className="col-span-full">
-                      <Input
-                        type="date"
-                        style={{
-                          ...profileInputStyle,
-                          width: '100%',
-                          maxWidth: '100%',
-                          boxSizing: 'border-box',
-                          minWidth: 0,
-                        }}
-                      />
-                    </Form.Item>
-                  </div>
-
-                  <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !mt-1 !h-12 !rounded-2xl !text-[15px]`}>
-                    Lưu thay đổi
-                  </Button>
-                </Form>
-              </div>
-
-              <div style={{ marginBottom: 12 }}>
-                {renderActionItem(<ShoppingCartOutlined />, 'Các đơn hàng', 'Theo dõi lịch sử mua hàng và trạng thái giao hàng.', goToOrders)}
-                <Button
-                  block
-                  icon={<LogoutOutlined />}
-                  onClick={handleLogout}
-                  style={{
-                    marginTop: 8,
-                    height: 44,
-                    borderRadius: 10,
-                    background: 'transparent',
-                    border: '1px solid rgba(239,68,68,0.3)',
-                    color: '#ef4444',
-                    fontWeight: 500,
-                    fontSize: 14,
-                  }}
-                >
-                  Đăng xuất
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'appearance' && (
-            <div style={responsiveSectionCardStyle}>
-              {renderSectionHeader(<BgColorsOutlined />, 'Giao diện', 'Tuỳ chỉnh màu sắc theo sở thích.')}
-              <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
+            <TabContent activeTab={activeTab}>
+              {activeTab === 'profile' && (
                 <div>
-                  <div className="font-extrabold" style={{ color: token.colorText }}>Màu chủ đạo</div>
-                  <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                    Tuỳ chỉnh màu sắc theo sở thích
+                  <div style={responsiveSectionCardStyle}>
+                    {renderSectionHeader(<UserOutlined />, 'Thông tin tài khoản', 'Cập nhật hồ sơ cá nhân để sử dụng GymPro thuận tiện hơn.')}
+
+                    <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
+                        <Form.Item label="Tên tài khoản" name="name" rules={[{ required: true, message: 'Nhập tên' }]}>
+                          <Input prefix={<UserOutlined />} placeholder="Tên của bạn" style={profileInputStyle} />
+                        </Form.Item>
+
+                        <Form.Item label="Số điện thoại" name="phone">
+                          <Input prefix={<PhoneOutlined />} placeholder="Thêm số điện thoại" style={profileInputStyle} />
+                        </Form.Item>
+
+                        <Form.Item
+                          label="Email"
+                          name="email"
+                          rules={[
+                            { type: 'email', message: 'Email không hợp lệ' },
+                            { required: !user.email, message: 'Nhập email' },
+                          ]}
+                        >
+                          <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder="Thêm email" style={user.email ? profileDisabledInputStyle : profileInputStyle} />
+                        </Form.Item>
+
+                        <Form.Item label="Username">
+                          <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} style={profileDisabledInputStyle} />
+                        </Form.Item>
+
+                        <Form.Item label="Ngày sinh" name="dateOfBirth" className="col-span-full">
+                          <Input
+                            type="date"
+                            style={{
+                              ...profileInputStyle,
+                              width: '100%',
+                              maxWidth: '100%',
+                              boxSizing: 'border-box',
+                              minWidth: 0,
+                            }}
+                          />
+                        </Form.Item>
+                      </div>
+
+                      <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !mt-1 !h-12 !rounded-2xl !text-[15px]`}>
+                        Lưu thay đổi
+                      </Button>
+                    </Form>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {[
-                    { label: 'Nền', color: previewTheme.bg },
-                    { label: 'Card', color: previewTheme.card },
-                    { label: 'Text', color: previewTheme.text },
-                  ].map((item) => (
-                    <span
-                      key={item.label}
-                      className="h-8 w-8 rounded-lg border"
-                      title={item.label}
-                      style={{ backgroundColor: item.color, borderColor: 'var(--theme-border-strong)' }}
-                    />
-                  ))}
-                </div>
-              </div>
 
-              <div className="mt-5 flex items-center gap-3 max-[560px]:flex-wrap">
-                <div
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ position: 'relative', zIndex: 9999 }}
-                >
-                  <input
-                    type="color"
-                    value={accentColor}
-                    onChange={(event) => {
-                      const hex = event.target.value
-                      handleAccentPreview(hex)
-                    }}
-                    onBlur={(event) => handleAccentCommit(event.target.value)}
-                    onMouseUp={(event) => handleAccentCommit(event.currentTarget.value)}
-                    onPointerUp={(event) => handleAccentCommit(event.currentTarget.value)}
-                    onTouchEnd={(event) => handleAccentCommit(event.currentTarget.value)}
-                    className="h-11 w-16 cursor-pointer rounded-xl border bg-transparent p-1"
-                    style={{ borderColor: 'var(--theme-border-strong)' }}
-                    aria-label="Chọn màu chủ đạo"
-                  />
-                </div>
-                <div className="font-semibold" style={{ color: token.colorText }}>{accentColor.toUpperCase()}</div>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                {PRESET_ACCENT_COLORS.map((item) => (
-                  <button
-                    key={item.color}
-                    type="button"
-                    onClick={() => handlePresetSelect(item.color)}
-                    className="h-8 w-8 cursor-pointer rounded-full border transition-transform duration-150 hover:scale-110"
-                    style={{
-                      backgroundColor: item.color,
-                      borderColor: accentColor === item.color ? '#ffffff' : token.colorBorder,
-                    }}
-                    aria-label={`Chọn màu ${item.label}`}
-                    title={item.label}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'address' && (
-            <div
-              className={profileFormClass}
-              style={responsiveSectionCardStyle}
-            >
-              {renderSectionHeader(<EnvironmentOutlined />, 'Địa chỉ giao hàng', 'Thêm, sửa, xóa và đặt mặc định địa chỉ.')}
-              <div className="flex items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
-                <Button type="primary" icon={<PlusOutlined />} onClick={openCreateAddress} loading={loading} className="!rounded-lg !border-0 !bg-[var(--profile-accent)] !font-bold !text-[var(--theme-button-text)] hover:!bg-[var(--profile-accent-hover)]">
-                  Thêm địa chỉ
-                </Button>
-              </div>
-
-              <div className="mt-4">
-                {addresses.length === 0 ? (
-                  <Empty description="Chưa có địa chỉ giao hàng" />
-                ) : addresses.map((address) => {
-                  const fullAddress = [
-                    address.street,
-                    address.ward,
-                    address.district,
-                    address.city,
-                  ].filter(Boolean).join(', ')
-
-                  return (
-                    <div
-                      className="mb-2.5 flex items-start gap-3 rounded-xl border p-[14px_16px] max-[480px]:gap-2.5 max-[480px]:p-3"
-                      key={address._id}
+                  <div style={{ marginBottom: 12 }}>
+                    {renderActionItem(<ShoppingCartOutlined />, 'Các đơn hàng', 'Theo dõi lịch sử mua hàng và trạng thái giao hàng.', goToOrders)}
+                    <Button
+                      block
+                      icon={<LogoutOutlined />}
+                      onClick={handleLogout}
                       style={{
-                        backgroundColor: token.colorBgElevated,
-                        borderColor: address.isDefault ? 'var(--profile-accent-border)' : 'var(--theme-border-strong)',
+                        marginTop: 8,
+                        height: 44,
+                        borderRadius: 10,
+                        background: 'transparent',
+                        border: '1px solid rgba(239,68,68,0.3)',
+                        color: '#ef4444',
+                        fontWeight: 500,
+                        fontSize: 14,
                       }}
                     >
-                      <div className="grid h-9 w-9 flex-none place-items-center rounded-[9px]" style={{ backgroundColor: token.colorBgContainer, color: 'var(--profile-accent)' }}>
-                        <EnvironmentOutlined />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-extrabold" style={{ color: token.colorText }}>{address.fullName}</span>
-                          {address.isDefault && (
-                            <span
-                              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
-                              style={{
-                                backgroundColor: 'var(--profile-accent-bg)',
-                                borderColor: 'var(--profile-accent-border)',
-                                color: 'var(--profile-accent)',
-                              }}
-                            >
-                              <StarFilled />
-                              Mặc định
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-[7px] inline-flex items-center gap-1.5 text-[13px]" style={{ color: token.colorTextSecondary }}>
-                          <PhoneOutlined />
-                          <span>{address.phone}</span>
-                        </div>
-                        <div className="mt-1.5 text-xs leading-[1.45]" style={{ color: token.colorTextSecondary }}>{fullAddress}</div>
-                      </div>
-                      <div className="ml-auto flex items-center gap-1.5 max-[480px]:flex-col max-[480px]:gap-1">
-                        {!address.isDefault && (
-                          <button
-                            className={addressActionButtonClass}
-                            type="button"
-                            title="Đặt mặc định"
-                            onClick={() => handleSetDefault(address._id)}
-                          >
-                            <StarOutlined />
-                          </button>
-                        )}
-                        <button
-                          className={addressActionButtonClass}
-                          type="button"
-                          title="Sửa địa chỉ"
-                          onClick={() => openEditAddress(address)}
-                        >
-                          <EditOutlined />
-                        </button>
-                        <button
-                          className={`${addressActionButtonClass} hover:!border-[var(--profile-accent-border)] hover:!bg-[var(--profile-accent-bg)] hover:!text-[var(--profile-accent)]`}
-                          type="button"
-                          title="Xóa địa chỉ"
-                          onClick={() => handleDeleteAddress(address._id)}
-                        >
-                          <DeleteOutlined />
-                        </button>
+                      Đăng xuất
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'appearance' && (
+                <div style={responsiveSectionCardStyle}>
+                  {renderSectionHeader(<BgColorsOutlined />, 'Giao diện', 'Tuỳ chỉnh màu sắc theo sở thích.')}
+                  <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
+                    <div>
+                      <div className="font-extrabold" style={{ color: token.colorText }}>Màu chủ đạo</div>
+                      <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
+                        Tuỳ chỉnh màu sắc theo sở thích
                       </div>
                     </div>
-                  )
-                })}
-              </div>
+                    <div className="flex items-center gap-2">
+                      {[
+                        { label: 'Nền', color: previewTheme.bg },
+                        { label: 'Card', color: previewTheme.card },
+                        { label: 'Text', color: previewTheme.text },
+                      ].map((item) => (
+                        <span
+                          key={item.label}
+                          className="h-8 w-8 rounded-lg border"
+                          title={item.label}
+                          style={{ backgroundColor: item.color, borderColor: 'var(--theme-border-strong)' }}
+                        />
+                      ))}
+                    </div>
+                  </div>
 
-              <Modal
-                title={editAddress ? 'Sửa địa chỉ' : 'Thêm địa chỉ'}
-                open={addressModalOpen}
-                onCancel={() => setAddressModalOpen(false)}
-                footer={null}
-                destroyOnClose
-                className={addressEditModalClass}
-                style={profileThemeStyle}
-              >
-                <Form form={addressForm} layout="vertical" onFinish={handleSaveAddress} initialValues={{ isDefault: false }} className={profileFormClass}>
-                  <Form.Item name="fullName" label="Tên người nhận" rules={[{ required: true, message: 'Vui lòng nhập tên người nhận' }]}>
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="phone" label="Số điện thoại" rules={[{ required: true, message: 'Vui lòng nhập số điện thoại' }, { pattern: /^0\d{9,10}$/, message: 'Số điện thoại không hợp lệ' }]}>
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="street" label="Địa chỉ cụ thể" rules={[{ required: true, message: 'Vui lòng nhập địa chỉ cụ thể' }]}>
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="ward" label="Phường / xã">
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="district" label="Quận / huyện" rules={[{ required: true, message: 'Vui lòng nhập quận/huyện' }]}>
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="city" label="Tỉnh / thành phố" rules={[{ required: true, message: 'Vui lòng nhập tỉnh/thành phố' }]}>
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="isDefault" valuePropName="checked">
-                    <Checkbox>Đặt mặc định</Checkbox>
-                  </Form.Item>
-                  <Form.Item>
-                    <Space>
-                      <Button type="primary" htmlType="submit" loading={loading}>Lưu</Button>
-                      <Button onClick={() => setAddressModalOpen(false)}>Hủy</Button>
-                    </Space>
-                  </Form.Item>
-                </Form>
-              </Modal>
-            </div>
-          )}
+                  <div className="mt-5 flex items-center gap-3 max-[560px]:flex-wrap">
+                    <div
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ position: 'relative', zIndex: 9999 }}
+                    >
+                      <input
+                        type="color"
+                        value={accentColor}
+                        onChange={(event) => {
+                          const hex = event.target.value
+                          handleAccentPreview(hex)
+                        }}
+                        onBlur={(event) => handleAccentCommit(event.target.value)}
+                        onMouseUp={(event) => handleAccentCommit(event.currentTarget.value)}
+                        onPointerUp={(event) => handleAccentCommit(event.currentTarget.value)}
+                        onTouchEnd={(event) => handleAccentCommit(event.currentTarget.value)}
+                        className="h-11 w-16 cursor-pointer rounded-xl border bg-transparent p-1"
+                        style={{ borderColor: 'var(--theme-border-strong)' }}
+                        aria-label="Chọn màu chủ đạo"
+                      />
+                    </div>
+                    <div className="font-semibold" style={{ color: token.colorText }}>{accentColor.toUpperCase()}</div>
+                  </div>
 
-          {activeTab === 'password' && !hasPassword && (
-            <div style={responsiveSectionCardStyle}>
-              {renderSectionHeader(<LockOutlined />, 'Đặt mật khẩu', 'Tạo mật khẩu riêng để đăng nhập bằng số điện thoại hoặc email.')}
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {PRESET_ACCENT_COLORS.map((item) => (
+                      <button
+                        key={item.color}
+                        type="button"
+                        onClick={() => handlePresetSelect(item.color)}
+                        className="h-8 w-8 cursor-pointer rounded-full border transition-transform duration-150 hover:scale-110"
+                        style={{
+                          backgroundColor: item.color,
+                          borderColor: accentColor === item.color ? '#ffffff' : token.colorBorder,
+                        }}
+                        aria-label={`Chọn màu ${item.label}`}
+                        title={item.label}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
 
-              <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
-                <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu' }]}>
-                  <Input.Password placeholder="Tối thiểu 6 ký tự" style={profilePasswordInputStyle} />
-                </Form.Item>
+              {activeTab === 'address' && (
+                <div
+                  className={profileFormClass}
+                  style={responsiveSectionCardStyle}
+                >
+                  {renderSectionHeader(<EnvironmentOutlined />, 'Địa chỉ giao hàng', 'Thêm, sửa, xóa và đặt mặc định địa chỉ.')}
+                  <div className="flex items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
+                    <Button type="primary" icon={<PlusOutlined />} onClick={openCreateAddress} loading={loading} className="!rounded-lg !border-0 !bg-[var(--profile-accent)] !font-bold !text-[var(--theme-button-text)] hover:!bg-[var(--profile-accent-hover)]">
+                      Thêm địa chỉ
+                    </Button>
+                  </div>
 
-                <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
-                  <Input.Password placeholder="Nhập lại mật khẩu" style={profilePasswordInputStyle} />
-                </Form.Item>
+                  <div className="mt-4">
+                    {addresses.length === 0 ? (
+                      <Empty description="Chưa có địa chỉ giao hàng" />
+                    ) : addresses.map((address) => {
+                      const fullAddress = [
+                        address.street,
+                        address.ward,
+                        address.district,
+                        address.city,
+                      ].filter(Boolean).join(', ')
 
-                <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                  Đặt mật khẩu
-                </Button>
-              </Form>
-            </div>
-          )}
+                      return (
+                        <div
+                          className="mb-2.5 flex items-start gap-3 rounded-xl border p-[14px_16px] max-[480px]:gap-2.5 max-[480px]:p-3"
+                          key={address._id}
+                          style={{
+                            backgroundColor: token.colorBgElevated,
+                            borderColor: address.isDefault ? 'var(--profile-accent-border)' : 'var(--theme-border-strong)',
+                          }}
+                        >
+                          <div className="grid h-9 w-9 flex-none place-items-center rounded-[9px]" style={{ backgroundColor: token.colorBgContainer, color: 'var(--profile-accent)' }}>
+                            <EnvironmentOutlined />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-extrabold" style={{ color: token.colorText }}>{address.fullName}</span>
+                              {address.isDefault && (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                                  style={{
+                                    backgroundColor: 'var(--profile-accent-bg)',
+                                    borderColor: 'var(--profile-accent-border)',
+                                    color: 'var(--profile-accent)',
+                                  }}
+                                >
+                                  <StarFilled />
+                                  Mặc định
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-[7px] inline-flex items-center gap-1.5 text-[13px]" style={{ color: token.colorTextSecondary }}>
+                              <PhoneOutlined />
+                              <span>{address.phone}</span>
+                            </div>
+                            <div className="mt-1.5 text-xs leading-[1.45]" style={{ color: token.colorTextSecondary }}>{fullAddress}</div>
+                          </div>
+                          <div className="ml-auto flex items-center gap-1.5 max-[480px]:flex-col max-[480px]:gap-1">
+                            {!address.isDefault && (
+                              <button
+                                className={addressActionButtonClass}
+                                type="button"
+                                title="Đặt mặc định"
+                                onClick={() => handleSetDefault(address._id)}
+                              >
+                                <StarOutlined />
+                              </button>
+                            )}
+                            <button
+                              className={addressActionButtonClass}
+                              type="button"
+                              title="Sửa địa chỉ"
+                              onClick={() => openEditAddress(address)}
+                            >
+                              <EditOutlined />
+                            </button>
+                            <button
+                              className={`${addressActionButtonClass} hover:!border-[var(--profile-accent-border)] hover:!bg-[var(--profile-accent-bg)] hover:!text-[var(--profile-accent)]`}
+                              type="button"
+                              title="Xóa địa chỉ"
+                              onClick={() => handleDeleteAddress(address._id)}
+                            >
+                              <DeleteOutlined />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
 
-          {activeTab === 'password' && hasPassword && (
-            <div style={responsiveSectionCardStyle}>
-              {renderSectionHeader(<LockOutlined />, 'Đổi mật khẩu', 'Cập nhật mật khẩu định kỳ để bảo vệ tài khoản.')}
+                  <Modal
+                    title={editAddress ? 'Sửa địa chỉ' : 'Thêm địa chỉ'}
+                    open={addressModalOpen}
+                    onCancel={() => setAddressModalOpen(false)}
+                    footer={null}
+                    destroyOnClose
+                    className={addressEditModalClass}
+                    style={profileThemeStyle}
+                  >
+                    <Form form={addressForm} layout="vertical" onFinish={handleSaveAddress} initialValues={{ isDefault: false }} className={profileFormClass}>
+                      <Form.Item name="fullName" label="Tên người nhận" rules={[{ required: true, message: 'Vui lòng nhập tên người nhận' }]}>
+                        <Input style={profileInputStyle} />
+                      </Form.Item>
+                      <Form.Item name="phone" label="Số điện thoại" rules={[{ required: true, message: 'Vui lòng nhập số điện thoại' }, { pattern: /^0\d{9,10}$/, message: 'Số điện thoại không hợp lệ' }]}>
+                        <Input style={profileInputStyle} />
+                      </Form.Item>
+                      <Form.Item name="street" label="Địa chỉ cụ thể" rules={[{ required: true, message: 'Vui lòng nhập địa chỉ cụ thể' }]}>
+                        <Input style={profileInputStyle} />
+                      </Form.Item>
+                      <Form.Item name="ward" label="Phường / xã">
+                        <Input style={profileInputStyle} />
+                      </Form.Item>
+                      <Form.Item name="district" label="Quận / huyện" rules={[{ required: true, message: 'Vui lòng nhập quận/huyện' }]}>
+                        <Input style={profileInputStyle} />
+                      </Form.Item>
+                      <Form.Item name="city" label="Tỉnh / thành phố" rules={[{ required: true, message: 'Vui lòng nhập tỉnh/thành phố' }]}>
+                        <Input style={profileInputStyle} />
+                      </Form.Item>
+                      <Form.Item name="isDefault" valuePropName="checked">
+                        <Checkbox>Đặt mặc định</Checkbox>
+                      </Form.Item>
+                      <Form.Item>
+                        <Space>
+                          <Button type="primary" htmlType="submit" loading={loading}>Lưu</Button>
+                          <Button onClick={() => setAddressModalOpen(false)}>Hủy</Button>
+                        </Space>
+                      </Form.Item>
+                    </Form>
+                  </Modal>
+                </div>
+              )}
 
-              <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
-                <Form.Item label="Mật khẩu hiện tại" name="currentPassword" rules={[{ required: true, message: 'Nhập mật khẩu hiện tại' }]}>
-                  <Input.Password placeholder="Nhập mật khẩu hiện tại" style={profilePasswordInputStyle} />
-                </Form.Item>
+              {activeTab === 'password' && !hasPassword && (
+                <div style={responsiveSectionCardStyle}>
+                  {renderSectionHeader(<LockOutlined />, 'Đặt mật khẩu', 'Tạo mật khẩu riêng để đăng nhập bằng số điện thoại hoặc email.')}
 
-                <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu mới' }]}>
-                  <Input.Password placeholder="Tối thiểu 6 ký tự" style={profilePasswordInputStyle} />
-                </Form.Item>
+                  <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
+                    <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu' }]}>
+                      <Input.Password placeholder="Tối thiểu 6 ký tự" style={profilePasswordInputStyle} />
+                    </Form.Item>
 
-                <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
-                  <Input.Password placeholder="Nhập lại mật khẩu mới" style={profilePasswordInputStyle} />
-                </Form.Item>
+                    <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
+                      <Input.Password placeholder="Nhập lại mật khẩu" style={profilePasswordInputStyle} />
+                    </Form.Item>
 
-                <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                  Đổi mật khẩu
-                </Button>
-              </Form>
-            </div>
-          )}
-          </TabContent>
-        </div>
+                    <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
+                      Đặt mật khẩu
+                    </Button>
+                  </Form>
+                </div>
+              )}
+
+              {activeTab === 'password' && hasPassword && (
+                <div style={responsiveSectionCardStyle}>
+                  {renderSectionHeader(<LockOutlined />, 'Đổi mật khẩu', 'Cập nhật mật khẩu định kỳ để bảo vệ tài khoản.')}
+
+                  <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
+                    <Form.Item label="Mật khẩu hiện tại" name="currentPassword" rules={[{ required: true, message: 'Nhập mật khẩu hiện tại' }]}>
+                      <Input.Password placeholder="Nhập mật khẩu hiện tại" style={profilePasswordInputStyle} />
+                    </Form.Item>
+
+                    <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu mới' }]}>
+                      <Input.Password placeholder="Tối thiểu 6 ký tự" style={profilePasswordInputStyle} />
+                    </Form.Item>
+
+                    <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
+                      <Input.Password placeholder="Nhập lại mật khẩu mới" style={profilePasswordInputStyle} />
+                    </Form.Item>
+
+                    <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
+                      Đổi mật khẩu
+                    </Button>
+                  </Form>
+                </div>
+              )}
+            </TabContent>
+          </div>
         </div>
       </div>
     </Modal>

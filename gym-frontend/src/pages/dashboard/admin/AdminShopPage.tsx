@@ -164,32 +164,31 @@ export default function AdminProductsPage() {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8">
+      <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Admin</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)]">Quản lý Shop</h1>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý Shop</h1>
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">Tổng: {shops.length} shop</p>
       </div>
 
-      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, gap: 12 }}>
+      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+        <div className="dashboard-filter-bar">
           <Input.Search
             placeholder="Tìm shop, chủ sở hữu..."
             allowClear
-            style={{ maxWidth: 320 }}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <Space>
-            <AdminHistoryButton module="shops" title="shop" />
-          </Space>
+          <AdminHistoryButton module="shops" title="shop" />
         </div>
 
-        <Table
-          dataSource={filtered}
-          columns={columns}
-          rowKey="_id"
-          loading={loading}
-          pagination={{ pageSize: 10 }}
-        />
+        <div className="member-scroll-x">
+          <Table
+            dataSource={filtered}
+            columns={columns}
+            rowKey="_id"
+            loading={loading}
+            pagination={{ pageSize: 10 }}
+          />
+        </div>
       </div>
 
       {/* Products Modal */}

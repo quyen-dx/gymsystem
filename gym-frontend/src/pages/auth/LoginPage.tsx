@@ -14,11 +14,11 @@ import { useAuth } from '../../hooks/useAuth'
 const { Title } = Typography
 
 const getDashboardPath = (role: string) => {
-  if (role === 'admin') return '/dashboard/admin'
-  if (role === 'seller') return '/dashboard/seller/products'
-  if (role === 'staff') return '/dashboard/staff'
-  if (role === 'pt') return '/dashboard/pt'
-  return '/dashboard/member'
+  if (role === 'admin') return '/admin'
+  if (role === 'seller') return '/seller/products'
+  if (role === 'staff') return '/staff'
+  if (role === 'pt') return '/pt'
+  return '/'
 }
 
 export default function LoginPage() {
@@ -127,7 +127,7 @@ export default function LoginPage() {
           </Button>
 
           <div className="text-right mt-2">
-          <Link to="/forgot-password" className="text-sm" style={{ color: '#ffffff' }}>
+            <Link to="/forgot-password" className="text-sm" style={{ color: '#ffffff' }}>
               Quên mật khẩu?
             </Link>
           </div>

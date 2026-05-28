@@ -84,7 +84,7 @@ export default function OrderHistoryPage() {
                                     }
                                     extra={
                                         <Space>
-                                            <Link to={`/dashboard/member/track/${order._id}`}>
+                                            <Link to={`/track/${order._id}`}>
                                                 <Button type="link">Theo dõi</Button>
                                             </Link>
                                             <Popconfirm

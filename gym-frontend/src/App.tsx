@@ -181,46 +181,45 @@ function AppWithTheme() {
         <Route path="/hop-tac" element={<PartnershipPage />} />
 
 
-
         {/* ADMIN */}
-        <Route path="/dashboard/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
-        <Route path="/dashboard/admin/plans" element={<PrivateRoute><AdminPlansPage /></PrivateRoute>} />
-        <Route path="/dashboard/admin/partnerships" element={<PrivateRoute><AdminPartnershipRequestsPage /></PrivateRoute>} />
-        <Route path="/dashboard/admin/shop" element={<Navigate to="/dashboard/admin/partnerships" />} />
-        <Route path="/dashboard/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
-        <Route path="/dashboard/admin/members" element={<PrivateRoute><AdminMembersPage /></PrivateRoute>} />
-        <Route path="/dashboard/admin/pts" element={<PrivateRoute><AdminTrainersPage /></PrivateRoute>} />
-        <Route path="/dashboard/admin/reports" element={<PrivateRoute><AdminReports /></PrivateRoute>} />
+        <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
+        <Route path="/admin/plans" element={<PrivateRoute><AdminPlansPage /></PrivateRoute>} />
+        <Route path="/admin/partnerships" element={<PrivateRoute><AdminPartnershipRequestsPage /></PrivateRoute>} />
+        <Route path="/admin/shop" element={<Navigate to="/admin/partnerships" />} />
+        <Route path="/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
+        <Route path="/admin/members" element={<PrivateRoute><AdminMembersPage /></PrivateRoute>} />
+        <Route path="/admin/pts" element={<PrivateRoute><AdminTrainersPage /></PrivateRoute>} />
+        <Route path="/admin/reports" element={<PrivateRoute><AdminReports /></PrivateRoute>} />
         {/* SELLER */}
-        <Route path="/dashboard/seller/products" element={<PrivateRoute><SellerProductsPage /></PrivateRoute>} />
-        <Route path="/dashboard/seller/orders" element={<PrivateRoute><SellerOrdersPage /></PrivateRoute>} />
+        <Route path="/seller" element={<Navigate to="/seller/products" />} />
+        <Route path="/seller/products" element={<PrivateRoute><SellerProductsPage /></PrivateRoute>} />
+        <Route path="/seller/orders" element={<PrivateRoute><SellerOrdersPage /></PrivateRoute>} />
         {/* STAFF */}
-        <Route path="/dashboard/staff/checkin" element={<PrivateRoute><StaffCheckinPage /></PrivateRoute>} />
-        <Route path="/dashboard/staff/members" element={<PrivateRoute><StaffMemberPage /></PrivateRoute>} />
+        <Route path="/staff" element={<Navigate to="/staff/checkin" />} />
+        <Route path="/staff/checkin" element={<PrivateRoute><StaffCheckinPage /></PrivateRoute>} />
+        <Route path="/staff/members" element={<PrivateRoute><StaffMemberPage /></PrivateRoute>} />
 
         {/* PT */}
-        <Route path="/dashboard/pt/schedule" element={<PrivateRoute><PTSchedulePage /></PrivateRoute>} />
-        <Route path="/dashboard/pt/student" element={<PrivateRoute><PTStudentPage /></PrivateRoute>} />
+        <Route path="/pt" element={<Navigate to="/pt/schedule" />} />
+        <Route path="/pt/schedule" element={<PrivateRoute><PTSchedulePage /></PrivateRoute>} />
+        <Route path="/pt/student" element={<PrivateRoute><PTStudentPage /></PrivateRoute>} />
 
         {/* MEMBER */}
-        <Route path="/dashboard/member" element={<PrivateRoute><MemberDashboard /></PrivateRoute>} />
-        <Route path="/dashboard/member/wallet" element={<PrivateRoute><WalletPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/wallet/deposit" element={<PrivateRoute><DepositPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/transfer" element={<PrivateRoute><TransferPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/checkout" element={<PrivateRoute><CheckoutPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/orders" element={<PrivateRoute><OrderHistoryPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/track/:id" element={<PrivateRoute><OrderTrackingPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/store" element={<PrivateRoute><MemberStorePage /></PrivateRoute>} />
-        <Route path="/dashboard/member/store/:storeId" element={<PrivateRoute><MemberStorePage /></PrivateRoute>} />
-        <Route path="/dashboard/member/cart" element={<PrivateRoute><CartPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/product/:id" element={<PrivateRoute><ProductDetailPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/booking" element={<PrivateRoute><BookingPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/health" element={<PrivateRoute><HealthPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/workout" element={<PrivateRoute><WorkoutPage /></PrivateRoute>} />
-        <Route path="/dashboard/member/checkin" element={<PrivateRoute><MemberCheckinPage /></PrivateRoute>} />
-        {/* DEFAULT */}
-        <Route path="/" element={<Navigate to="/login" />} />
-
+        <Route path="/" element={<PrivateRoute><MemberDashboard /></PrivateRoute>} />
+        <Route path="/wallet" element={<PrivateRoute><WalletPage /></PrivateRoute>} />
+        <Route path="/wallet/deposit" element={<PrivateRoute><DepositPage /></PrivateRoute>} />
+        <Route path="/transfer" element={<PrivateRoute><TransferPage /></PrivateRoute>} />
+        <Route path="/checkout" element={<PrivateRoute><CheckoutPage /></PrivateRoute>} />
+        <Route path="/orders" element={<PrivateRoute><OrderHistoryPage /></PrivateRoute>} />
+        <Route path="/track/:id" element={<PrivateRoute><OrderTrackingPage /></PrivateRoute>} />
+        <Route path="/store" element={<PrivateRoute><MemberStorePage /></PrivateRoute>} />
+        <Route path="/store/:storeId" element={<PrivateRoute><MemberStorePage /></PrivateRoute>} />
+        <Route path="/cart" element={<PrivateRoute><CartPage /></PrivateRoute>} />
+        <Route path="/product/:id" element={<PrivateRoute><ProductDetailPage /></PrivateRoute>} />
+        <Route path="/booking" element={<PrivateRoute><BookingPage /></PrivateRoute>} />
+        <Route path="/health" element={<PrivateRoute><HealthPage /></PrivateRoute>} />
+        <Route path="/workout" element={<PrivateRoute><WorkoutPage /></PrivateRoute>} />
+        <Route path="/checkin" element={<PrivateRoute><MemberCheckinPage /></PrivateRoute>} />
       </Routes>
     </ConfigProvider>
   )

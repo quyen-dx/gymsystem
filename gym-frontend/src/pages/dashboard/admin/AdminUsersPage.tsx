@@ -282,27 +282,27 @@ export default function AdminUsersPage() {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8">
+      <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Admin</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)]">Quản lý người dùng</h1>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý người dùng</h1>
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
           Tổng: {users.length} tài khoản
         </p>
       </div>
 
-      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+        <div className="dashboard-filter-bar">
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', flex: 1 }}>
             <Input.Search
               placeholder="Tìm theo tên, email, số điện thoại..."
               allowClear
-              style={{ maxWidth: 320 }}
+              className="dashboard-search-input"
               onChange={(e) => setSearch(e.target.value)}
             />
             <Select
               placeholder="Lọc theo role"
               allowClear
-              style={{ width: 160 }}
+              style={{ minWidth: 160 }}
               onChange={(val) => setRoleFilter(val || '')}
               options={[
                 { label: 'Admin', value: 'admin' },
@@ -316,14 +316,16 @@ export default function AdminUsersPage() {
           <AdminHistoryButton module="users" title="người dùng" />
         </div>
 
-        <Table
-          dataSource={filtered}
-          columns={columns}
-          rowKey="_id"
-          loading={loading}
-          pagination={{ pageSize: 10 }}
-          scroll={{ x: 900 }}
-        />
+        <div className="member-scroll-x">
+          <Table
+            dataSource={filtered}
+            columns={columns}
+            rowKey="_id"
+            loading={loading}
+            pagination={{ pageSize: 10 }}
+            scroll={{ x: 900 }}
+          />
+        </div>
       </div>
 
       {/* MODAL ĐỔI ROLE */}

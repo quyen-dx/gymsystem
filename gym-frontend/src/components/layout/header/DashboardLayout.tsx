@@ -3,6 +3,7 @@ import {
   CalendarOutlined,
   DashboardOutlined,
   LogoutOutlined,
+  MenuOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
   TeamOutlined,
@@ -12,6 +13,7 @@ import {
   Avatar,
   Button,
   Divider,
+  Drawer,
   Layout,
   Menu,
   Typography,
@@ -30,6 +32,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, logout } = useAuth()
   const [accountOpen, setAccountOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -45,11 +48,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const roleMenus: Record<string, any[]> = {
     admin: [
-      { key: '/dashboard/admin', label: 'Overview', icon: <DashboardOutlined /> },
-      { key: '/dashboard/admin/users', label: 'Users', icon: <UserOutlined /> },
-      { key: '/dashboard/admin/plans', label: 'Plans', icon: <CalendarOutlined /> },
+      { key: '/admin', label: 'Overview', icon: <DashboardOutlined /> },
+      { key: '/admin/users', label: 'Users', icon: <UserOutlined /> },
+      { key: '/admin/plans', label: 'Plans', icon: <CalendarOutlined /> },
       {
-        key: '/dashboard/admin/partnerships',
+        key: '/admin/partnerships',
         label: (
           <span style={{ position: 'relative', display: 'inline-block', paddingRight: 22 }}>
             <span>Partnerships</span>
@@ -80,113 +83,149 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         icon: <TeamOutlined />,
       },
 
-      { key: '/dashboard/admin/members', label: 'Members', icon: <TeamOutlined /> },
-      { key: '/dashboard/admin/pts', label: 'Trainers (PT)', icon: <UserOutlined /> },
-      { key: '/dashboard/admin/reports', label: 'Reports', icon: <BarChartOutlined /> },
+      { key: '/admin/members', label: 'Members', icon: <TeamOutlined /> },
+      { key: '/admin/pts', label: 'Trainers (PT)', icon: <UserOutlined /> },
+      { key: '/admin/reports', label: 'Reports', icon: <BarChartOutlined /> },
     ],
     staff: [
-      { key: '/dashboard/staff/checkin', label: 'Check-in', icon: <DashboardOutlined /> },
-      { key: '/dashboard/staff/members', label: 'Members', icon: <TeamOutlined /> },
+      { key: '/staff/checkin', label: 'Check-in', icon: <DashboardOutlined /> },
+      { key: '/staff/members', label: 'Members', icon: <TeamOutlined /> },
     ],
     pt: [
-      { key: '/dashboard/pt/schedule', label: 'Schedule', icon: <CalendarOutlined /> },
-      { key: '/dashboard/pt/student', label: 'Students', icon: <TeamOutlined /> },
+      { key: '/pt/schedule', label: 'Schedule', icon: <CalendarOutlined /> },
+      { key: '/pt/student', label: 'Students', icon: <TeamOutlined /> },
     ],
     seller: [
-      { key: '/dashboard/seller/products', label: 'My Products', icon: <ShopOutlined /> },
-      { key: '/dashboard/seller/orders', label: 'Đơn hàng', icon: <ShoppingCartOutlined /> },
+      { key: '/seller/products', label: 'My Products', icon: <ShopOutlined /> },
+      { key: '/seller/orders', label: 'Đơn hàng', icon: <ShoppingCartOutlined /> },
     ],
     member: []
   }
 
   const items = roleMenus[user?.role as string] || []
 
+  const closeSidebar = () => setSidebarOpen(false)
+
+  const handleNavigate = (key: string) => {
+    navigate(key)
+    closeSidebar()
+  }
+
+  const sidebarContent = (
+    <>
+      <div
+        style={{
+          padding: 20,
+          fontWeight: 700,
+          fontSize: 16,
+          letterSpacing: 2,
+          color: 'var(--theme-text)',
+        }}
+      >
+        GP DASHBOARD
+      </div>
+
+      <Menu
+        theme={dark ? 'dark' : 'light'}
+        mode="inline"
+        selectedKeys={[location.pathname]}
+        items={items.map((i) => ({
+          key: i.key,
+          icon: i.icon,
+          label: i.label,
+          onClick: () => handleNavigate(i.key),
+        }))}
+      />
+
+      <Divider />
+
+      <div style={{ padding: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 12,
+            cursor: 'pointer',
+          }}
+          onClick={() => { setAccountOpen(true); closeSidebar() }}
+        >
+          <Avatar
+            size={44}
+            src={
+              user?.avatar ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
+            }
+          />
+
+          <div>
+            <div style={{ fontWeight: 600, color: 'var(--theme-text)' }}>
+              {user?.name}
+            </div>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {user?.role}
+            </Text>
+          </div>
+        </div>
+
+        <Button icon={<LogoutOutlined />} danger block onClick={logout}>
+          Đăng xuất
+        </Button>
+      </div>
+    </>
+  )
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
 
-      {/* SIDEBAR */}
+      {/* DESKTOP SIDEBAR */}
       <Sider
+        className="dashboard-desktop-sider"
         width={260}
         theme={dark ? 'dark' : 'light'}
         style={{ background: 'var(--theme-card)', color: 'var(--theme-text)' }}
       >
+        {sidebarContent}
+      </Sider>
 
-        {/* LOGO */}
-        <div
-          style={{
-            padding: 20,
-            fontWeight: 700,
-            fontSize: 16,
-            letterSpacing: 2,
-            color: 'var(--theme-text)',
-          }}
-        >
+      {/* MOBILE HEADER + DRAWER */}
+      <div className="dashboard-mobile-header">
+        <Button
+          type="text"
+          icon={<MenuOutlined style={{ fontSize: 20, color: 'var(--theme-text)' }} />}
+          onClick={() => setSidebarOpen(true)}
+        />
+        <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: 2, color: 'var(--theme-text)' }}>
           GP DASHBOARD
         </div>
-
-        <Menu
-          theme={dark ? 'dark' : 'light'}
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          items={items.map((i) => ({
-            key: i.key,
-            icon: i.icon,
-            label: i.label,
-            onClick: () => navigate(i.key),
-          }))}
+        <Avatar
+          size={32}
+          src={
+            user?.avatar ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
+          }
+          style={{ cursor: 'pointer' }}
+          onClick={() => setAccountOpen(true)}
         />
+      </div>
 
-        <Divider />
-
-        {/* USER CARD */}
-        <div style={{ padding: 16 }}>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              marginBottom: 12,
-              cursor: 'pointer',
-            }}
-            onClick={() => setAccountOpen(true)}
-          >
-            <Avatar
-              size={44}
-              src={
-                user?.avatar ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
-              }
-            />
-
-            <div>
-              <div style={{ fontWeight: 600, color: 'var(--theme-text)' }}>
-                {user?.name}
-              </div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {user?.role}
-              </Text>
-            </div>
-          </div>
-
-          <Button
-            icon={<LogoutOutlined />}
-            danger
-            block
-            onClick={logout}
-          >
-            Đăng xuất
-          </Button>
-
-        </div>
-
-      </Sider>
+      <Drawer
+        className="dashboard-mobile-drawer"
+        title={null}
+        placement="left"
+        open={sidebarOpen}
+        onClose={closeSidebar}
+        width={280}
+        styles={{ body: { padding: 0, background: 'var(--theme-card)' } }}
+      >
+        {sidebarContent}
+      </Drawer>
 
       {/* CONTENT */}
       <Layout>
         <Content
+          className="dashboard-content"
           style={{
-            padding: 24,
             background: 'var(--theme-bg)',
             color: 'var(--theme-text)',
           }}

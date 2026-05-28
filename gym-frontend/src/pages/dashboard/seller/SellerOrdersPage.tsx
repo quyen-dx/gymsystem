@@ -109,9 +109,9 @@ export default function SellerOrdersPage() {
 
     return (
         <DashboardLayout>
-            <div className="p-4">
-                <Card>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div className="p-4 max-[640px]:p-0">
+                <Card className="max-[640px]:border-0 max-[640px]:bg-transparent">
+                    <div className="dashboard-filter-bar">
                         <Title level={4} style={{ margin: 0 }}>Đơn hàng bán</Title>
                         <Select
                             allowClear
@@ -119,10 +119,12 @@ export default function SellerOrdersPage() {
                             options={statusOptions}
                             value={statusFilter}
                             onChange={setStatusFilter}
-                            style={{ minWidth: 220 }}
+                            style={{ minWidth: 180 }}
                         />
                     </div>
-                    <Table rowKey="_id" dataSource={filteredOrders} columns={columns} pagination={{ pageSize: 8 }} />
+                    <div className="member-scroll-x">
+                        <Table rowKey="_id" dataSource={filteredOrders} columns={columns} pagination={{ pageSize: 8 }} scroll={{ x: 900 }} />
+                    </div>
                 </Card>
             </div>
         </DashboardLayout>

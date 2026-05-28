@@ -44,10 +44,10 @@ export default function WalletPage() {
                                 {wallet ? wallet.balance.toLocaleString('vi-VN') : '...'} VND
                             </Text>
                             <Space>
-                                <Link to="/dashboard/member/wallet/deposit">
+                                <Link to="/wallet/deposit">
                                     <Button type="primary">Nạp tiền</Button>
                                 </Link>
-                                <Link to="/dashboard/member/transfer">
+                                <Link to="/transfer">
                                     <Button>Chuyển tiền</Button>
                                 </Link>
                             </Space>

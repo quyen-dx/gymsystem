@@ -192,24 +192,23 @@ export default function AdminPlansPage() {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8">
+      <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Admin</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)]">Quản lý gói tập</h1>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý gói tập</h1>
       </div>
 
-      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, gap: 12 }}>
+      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+        <div className="dashboard-filter-bar">
           <Input.Search
             placeholder="Tìm kiếm gói tập..."
             allowClear
-            style={{ maxWidth: 320 }}
             onSearch={(val) => {
               setSearch(val)
               setPage(1)
               fetchPlans(1, val)
             }}
           />
-          <Space>
+          <Space wrap>
             <AdminHistoryButton module="plans" title="gói tập" />
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               Tạo gói tập
@@ -217,21 +216,23 @@ export default function AdminPlansPage() {
           </Space>
         </div>
 
-        <Table
-          dataSource={plans}
-          columns={columns}
-          rowKey="_id"
-          loading={loading}
-          pagination={{
-            total,
-            current: page,
-            pageSize: 10,
-            onChange: (p) => {
-              setPage(p)
-              fetchPlans(p, search)
-            },
-          }}
-        />
+        <div className="member-scroll-x">
+          <Table
+            dataSource={plans}
+            columns={columns}
+            rowKey="_id"
+            loading={loading}
+            pagination={{
+              total,
+              current: page,
+              pageSize: 10,
+              onChange: (p) => {
+                setPage(p)
+                fetchPlans(p, search)
+              },
+            }}
+          />
+        </div>
       </div>
 
       <Modal

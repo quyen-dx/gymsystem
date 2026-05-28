@@ -32,21 +32,21 @@ import MemberFooter from '../footer/MemberFooter'
 const { Header, Content } = Layout
 const { Text } = Typography
 const MEMBER_INTERACTION_LOCK_ROUTES = [
-  '/dashboard/member',
-  '/dashboard/member/wallet',
-  '/dashboard/member/wallet/deposit',
-  '/dashboard/member/transfer',
-  '/dashboard/member/checkout',
-  '/dashboard/member/orders',
-  '/dashboard/member/cart',
-  '/dashboard/member/workout',
-  '/dashboard/member/checkin',
+  '/',
+  '/wallet',
+  '/wallet/deposit',
+  '/transfer',
+  '/checkout',
+  '/orders',
+  '/cart',
+  '/workout',
+  '/checkin',
 ]
 
 const shouldLockMemberInteractions = (pathname: string) => (
   MEMBER_INTERACTION_LOCK_ROUTES.includes(pathname) ||
-  pathname.startsWith('/dashboard/member/track/') ||
-  pathname.startsWith('/dashboard/member/store')
+  pathname.startsWith('/track/') ||
+  pathname.startsWith('/store')
 )
 
 export default function MemberLayout({
@@ -69,12 +69,12 @@ export default function MemberLayout({
   const navigate = useNavigate()
   const location = useLocation()
   const navItems = [
-    { key: '/dashboard/member', label: 'Trang chủ', icon: <HomeOutlined /> },
-    { key: '/dashboard/member/store', label: 'Cửa hàng', icon: <ShopOutlined /> },
-    { key: '/dashboard/member/booking', label: 'Đặt lịch PT', icon: <CalendarOutlined /> },
-    { key: '/dashboard/member/health', label: 'Sức khoẻ', icon: <HeartOutlined /> },
-    { key: '/dashboard/member/workout', label: 'Lộ trình', icon: <FundOutlined /> },
-    { key: '/dashboard/member/checkin', label: 'Checkin', icon: <CreditCardOutlined /> },
+    { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
+    { key: '/store', label: 'Cửa hàng', icon: <ShopOutlined /> },
+    { key: '/booking', label: 'Đặt lịch PT', icon: <CalendarOutlined /> },
+    { key: '/health', label: 'Sức khoẻ', icon: <HeartOutlined /> },
+    { key: '/workout', label: 'Lộ trình', icon: <FundOutlined /> },
+    { key: '/checkin', label: 'Checkin', icon: <CreditCardOutlined /> },
   ]
 
   const selectedKey =
@@ -82,7 +82,7 @@ export default function MemberLayout({
       .map((item) => item.key)
       .sort((a, b) => b.length - a.length)
       .find((key) => location.pathname === key || location.pathname.startsWith(`${key}/`)) ||
-    '/dashboard/member'
+    '/'
 
   const goTo = (path: string) => {
     navigate(path)
@@ -142,11 +142,11 @@ export default function MemberLayout({
       >
         <div
           className="member-shell-logo"
-          onClick={() => goTo('/dashboard/member')}
+          onClick={() => goTo('/')}
           role="button"
           tabIndex={0}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') goTo('/dashboard/member')
+            if (event.key === 'Enter') goTo('/')
           }}
         >
           <div
@@ -173,7 +173,7 @@ export default function MemberLayout({
         <nav className="member-shell-desktop-nav" aria-label="Member navigation">
           {navItems.map((item) => {
             const active = selectedKey === item.key
-            const isStore = item.key === '/dashboard/member/store'
+            const isStore = item.key === '/store'
             const showStoreDropdown = isStore && storeDropdownOpen && (storeDropdownLoading || storeDropdownShops.length > 0)
 
             if (isStore) {
@@ -217,7 +217,7 @@ export default function MemberLayout({
                                   key={shop._id}
                                   type="button"
                                   className="member-store-dropdown-item"
-                                  onClick={() => goTo(`/dashboard/member/store/${shop._id}`)}
+                                  onClick={() => goTo(`/store/${shop._id}`)}
                                 >
                                   <Avatar size={28} src={avatar} icon={<ShopOutlined />}>
                                     {name.charAt(0)}
@@ -227,13 +227,6 @@ export default function MemberLayout({
                               )
                             })}
                           </div>
-                          <button
-                            type="button"
-                            className="member-store-dropdown-all"
-                            onClick={() => goTo('/dashboard/member/store')}
-                          >
-                            Xem tất cả cửa hàng →
-                          </button>
                         </>
                       )}
                     </div>
@@ -268,7 +261,7 @@ export default function MemberLayout({
             <Button
               type="link"
               size="small"
-              onClick={() => goTo('/dashboard/member/wallet')}
+              onClick={() => goTo('/wallet')}
               style={{ padding: 0, height: 'auto', fontSize: 12, marginLeft: 4 }}
             >
               Nạp tiền
@@ -279,7 +272,7 @@ export default function MemberLayout({
             <Button
               type="text"
               icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
-              onClick={() => goTo('/dashboard/member/cart')}
+              onClick={() => goTo('/cart')}
               style={navbarIconButtonStyle}
               onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
               onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
@@ -319,7 +312,7 @@ export default function MemberLayout({
             <Button
               type="text"
               icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
-              onClick={() => goTo('/dashboard/member/cart')}
+              onClick={() => goTo('/cart')}
               style={navbarIconButtonStyle}
               onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
               onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
@@ -346,7 +339,7 @@ export default function MemberLayout({
         {children}
       </Content>
 
-      {!hideFooter && <MemberFooter />}
+      { !hideFooter && <MemberFooter /> }
 
       <Drawer
         title="GymPro"
@@ -376,7 +369,7 @@ export default function MemberLayout({
           <Text strong style={{ fontSize: 18 }}>
             {walletText}
           </Text>
-          <Button type="primary" block onClick={() => goTo('/dashboard/member/wallet')}>
+          <Button type="primary" block onClick={() => goTo('/wallet')}>
             Nạp / xem ví
           </Button>
         </div>
@@ -392,7 +385,7 @@ export default function MemberLayout({
       </Drawer>
 
       <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
-      {!accountOpen && !menuOpen && <AiChatWidget />}
-    </Layout>
+  { !accountOpen && !menuOpen && <AiChatWidget /> }
+    </Layout >
   )
 }

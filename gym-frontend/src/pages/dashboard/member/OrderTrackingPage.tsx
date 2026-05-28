@@ -56,7 +56,7 @@ export default function OrderTrackingPage() {
                     ) : (
                         <div>Không tìm thấy thông tin vận chuyển</div>
                     )}
-                    <Button style={{ marginTop: 16 }} onClick={() => navigate('/dashboard/member/orders')}>
+                    <Button style={{ marginTop: 16 }} onClick={() => navigate('/orders')}>
                         Quay lại danh sách đơn hàng
                     </Button>
                 </Card>

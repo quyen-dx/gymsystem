@@ -48,7 +48,7 @@ export default function CartPage() {
   )
 
   const handleCheckout = () => {
-    navigate('/dashboard/member/checkout')
+    navigate('/checkout')
   }
 
   return (

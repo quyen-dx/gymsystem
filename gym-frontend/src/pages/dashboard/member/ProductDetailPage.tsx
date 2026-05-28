@@ -148,7 +148,7 @@ export default function ProductDetailPage() {
   if (!product) return (
     <MemberLayout>
       <div style={{ textAlign: 'center', padding: 80 }}>
-        <Button onClick={() => navigate('/dashboard/member/store')}>Quay lại cửa hàng</Button>
+        <Button onClick={() => navigate('/store')}>Quay lại cửa hàng</Button>
       </div>
     </MemberLayout>
   )
@@ -217,7 +217,7 @@ export default function ProductDetailPage() {
         <Button
           icon={<ArrowLeftOutlined />}
           type="text"
-          onClick={() => navigate('/dashboard/member/store')}
+          onClick={() => navigate('/store')}
           style={{ marginBottom: 16 }}
         >
           Quay lại cửa hàng
@@ -359,7 +359,7 @@ export default function ProductDetailPage() {
                 </Button>
                 <Button
                   size="large"
-                  onClick={() => navigate('/dashboard/member/cart')}
+                  onClick={() => navigate('/cart')}
                   style={{ flex: '1 1 180px' }}
                 >
                   Xem giỏ hàng
@@ -384,9 +384,9 @@ export default function ProductDetailPage() {
               src={shopAvatar}
               icon={<UserOutlined />}
               style={{ background: 'var(--theme-accent)' }}
-              onClick={() => shopId && navigate(`/dashboard/member/store/${shopId}`)}
+              onClick={() => shopId && navigate(`/store/${shopId}`)}
             />
-            <div onClick={() => shopId && navigate(`/dashboard/member/store/${shopId}`)}>
+            <div onClick={() => shopId && navigate(`/store/${shopId}`)}>
               <div style={{ fontWeight: 700, fontSize: 16 }}>{shopName}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                 <Rate disabled allowHalf value={shopRating} style={{ fontSize: 13 }} />
@@ -577,7 +577,7 @@ export default function ProductDetailPage() {
               {related.map((p) => (
                 <Col xs={12} sm={8} md={6} lg={4} key={p._id}>
                   <div
-                    onClick={() => { navigate(`/dashboard/member/product/${p._id}`); window.scrollTo(0, 0) }}
+                    onClick={() => { navigate(`/product/${p._id}`); window.scrollTo(0, 0) }}
                     style={{ cursor: 'pointer' }}
                   >
                     <img

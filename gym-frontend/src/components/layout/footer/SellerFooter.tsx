@@ -36,10 +36,10 @@ const commitments: Commitment[] = [
 ]
 
 const sellerLinks: FooterLink[] = [
-  { label: 'Quản lý sản phẩm', href: '/dashboard/seller/products', icon: Package },
-  { label: 'Đơn hàng', href: '/dashboard/seller/orders', icon: ClipboardList },
-  { label: 'Doanh thu', href: '/dashboard/seller/revenue', icon: BarChart3 },
-  { label: 'Chính sách bán hàng', href: '/dashboard/seller/policy', icon: ScrollText },
+  { label: 'Quản lý sản phẩm', href: '/seller/products', icon: Package },
+  { label: 'Đơn hàng', href: '/seller/orders', icon: ClipboardList },
+  { label: 'Doanh thu', href: '/seller/revenue', icon: BarChart3 },
+  { label: 'Chính sách bán hàng', href: '/seller/policy', icon: ScrollText },
 ]
 
 const supportLinks: FooterLink[] = [

@@ -76,7 +76,8 @@ export default function AdminHistoryButton({
         open={open}
         onCancel={() => setOpen(false)}
         footer={null}
-        width={920}
+        width={1100}
+        style={{ maxWidth: 'calc(100vw - 32px)' }}
         destroyOnClose
       >
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>

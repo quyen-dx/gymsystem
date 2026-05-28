@@ -51,15 +51,15 @@ export default function AdminDashboard() {
 
   return (
     <DashboardLayout>
-      <section className="mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8">
+      <section className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Admin overview</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)]">Daily operations</h1>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Daily operations</h1>
         <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--gs-text-muted)]">
           Tổng quan người dùng và gói tập trong hệ thống.
         </p>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {statCards.map((stat) => (
           <article
             key={stat.label}
