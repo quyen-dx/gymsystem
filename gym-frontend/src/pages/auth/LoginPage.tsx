@@ -14,10 +14,10 @@ import { useAuth } from '../../hooks/useAuth'
 const { Title } = Typography
 
 const getDashboardPath = (role: string) => {
-  if (role === 'admin') return '/admin'
-  if (role === 'seller') return '/seller/products'
-  if (role === 'staff') return '/staff'
-  if (role === 'pt') return '/pt'
+  if (role === 'admin') return '/'
+  if (role === 'seller') return '/'
+  if (role === 'staff') return '/'
+  if (role === 'pt') return '/'
   return '/'
 }
 

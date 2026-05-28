@@ -1,6 +1,7 @@
 import {
   CalendarOutlined,
   CreditCardOutlined,
+  DashboardOutlined,
   FundOutlined,
   HeartOutlined,
   HomeOutlined,
@@ -232,7 +233,7 @@ export default function MemberLayout({
                     </div>
                   )}
                 </div>
-              )gi
+              )
             }
 
             return (
@@ -248,6 +249,21 @@ export default function MemberLayout({
             )
           })}
         </nav>
+
+        {(user?.role === 'admin' || user?.role === 'pt' || user?.role === 'staff' || user?.role === 'seller') && (
+          <button
+            type="button"
+            className="member-shell-nav-item"
+            onClick={() => {
+              const target = user?.role === 'pt' ? '/pt/schedule' : user?.role === 'staff' ? '/staff/checkin' : user?.role === 'seller' ? '/seller/products' : '/admin'
+              goTo(target)
+            }}
+            style={{ marginLeft: 8 }}
+          >
+            <DashboardOutlined />
+            <span>Quản lý {user?.role === 'admin' ? 'Admin' : user?.role === 'pt' ? 'PT' : user?.role === 'staff' ? 'Staff' : 'Shop'}</span>
+          </button>
+        )}
 
         <div className="member-shell-desktop-actions">
           <div
@@ -381,6 +397,25 @@ export default function MemberLayout({
           onClick={(event) => goTo(event.key)}
           style={{ borderInlineEnd: 0 }}
         />
+
+        {(user?.role === 'admin' || user?.role === 'pt' || user?.role === 'staff' || user?.role === 'seller') && (
+          <>
+            <div style={{ padding: '8px 16px 0' }}>
+              <div style={{ height: 1, background: 'var(--theme-border)' }} />
+            </div>
+            <Menu
+              mode="inline"
+              selectedKeys={[]}
+              items={[{
+                key: user?.role === 'pt' ? '/pt/schedule' : user?.role === 'staff' ? '/staff/checkin' : user?.role === 'seller' ? '/seller/products' : '/admin',
+                label: `Quản lý ${user?.role === 'admin' ? 'Admin' : user?.role === 'pt' ? 'PT' : user?.role === 'staff' ? 'Staff' : 'Shop'}`,
+                icon: <DashboardOutlined />,
+              }]}
+              onClick={(event) => goTo(event.key)}
+              style={{ borderInlineEnd: 0 }}
+            />
+          </>
+        )}
 
       </Drawer>
 

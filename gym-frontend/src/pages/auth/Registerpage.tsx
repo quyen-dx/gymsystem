@@ -8,7 +8,7 @@ const { Title, Text } = Typography
 
 const getDashboardPath = (role: string) => {
   if (role === 'admin') return '/admin'
-  if (role === 'seller') return '/seller/products'
+  if (role === 'seller') return '/seller'
   if (role === 'staff') return '/staff'
   if (role === 'pt') return '/pt'
   return '/'

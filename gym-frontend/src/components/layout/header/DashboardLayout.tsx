@@ -2,6 +2,7 @@ import {
   BarChartOutlined,
   CalendarOutlined,
   DashboardOutlined,
+  HomeOutlined,
   LogoutOutlined,
   MenuOutlined,
   ShopOutlined,
@@ -48,6 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const roleMenus: Record<string, any[]> = {
     admin: [
+      { key: '/', label: 'Trang web', icon: <HomeOutlined /> },
       { key: '/admin', label: 'Overview', icon: <DashboardOutlined /> },
       { key: '/admin/users', label: 'Users', icon: <UserOutlined /> },
       { key: '/admin/plans', label: 'Plans', icon: <CalendarOutlined /> },
@@ -88,14 +90,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { key: '/admin/reports', label: 'Reports', icon: <BarChartOutlined /> },
     ],
     staff: [
+      { key: '/', label: 'Trang web', icon: <HomeOutlined /> },
       { key: '/staff/checkin', label: 'Check-in', icon: <DashboardOutlined /> },
       { key: '/staff/members', label: 'Members', icon: <TeamOutlined /> },
     ],
     pt: [
+      { key: '/', label: 'Trang web', icon: <HomeOutlined /> },
       { key: '/pt/schedule', label: 'Schedule', icon: <CalendarOutlined /> },
       { key: '/pt/student', label: 'Students', icon: <TeamOutlined /> },
     ],
     seller: [
+      { key: '/', label: 'Trang web', icon: <HomeOutlined /> },
       { key: '/seller/products', label: 'My Products', icon: <ShopOutlined /> },
       { key: '/seller/orders', label: 'Đơn hàng', icon: <ShoppingCartOutlined /> },
     ],
@@ -111,20 +116,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     closeSidebar()
   }
 
-  const sidebarContent = (
-    <>
-      <div
-        style={{
-          padding: 20,
-          fontWeight: 700,
-          fontSize: 16,
-          letterSpacing: 2,
-          color: 'var(--theme-text)',
-        }}
-      >
-        GP DASHBOARD
-      </div>
+  const sidebarBranding = (
+    <div
+      style={{
+        padding: 20,
+        fontWeight: 700,
+        fontSize: 16,
+        letterSpacing: 2,
+        color: 'var(--theme-text)',
+      }}
+    >
+      GP DASHBOARD
+    </div>
+  )
 
+  const sidebarMenu = (
+    <>
       <Menu
         theme={dark ? 'dark' : 'light'}
         mode="inline"
@@ -176,7 +183,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout className="dashboard-layout-root" style={{ minHeight: '100vh' }}>
 
       {/* DESKTOP SIDEBAR */}
       <Sider
@@ -185,44 +192,69 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         theme={dark ? 'dark' : 'light'}
         style={{ background: 'var(--theme-card)', color: 'var(--theme-text)' }}
       >
-        {sidebarContent}
+        {sidebarBranding}
+        {sidebarMenu}
       </Sider>
 
-      {/* MOBILE HEADER + DRAWER */}
-      <div className="dashboard-mobile-header">
-        <Button
-          type="text"
-          icon={<MenuOutlined style={{ fontSize: 20, color: 'var(--theme-text)' }} />}
-          onClick={() => setSidebarOpen(true)}
-        />
-        <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: 2, color: 'var(--theme-text)' }}>
-          GP DASHBOARD
+      {/* MAIN: mobile header + content stacked vertically */}
+      <Layout className="dashboard-inner">
+        {/* MOBILE HEADER + DRAWER */}
+        <div className="dashboard-mobile-header">
+          <Button
+            type="text"
+            icon={<MenuOutlined style={{ fontSize: 20, color: 'var(--theme-text)' }} />}
+            onClick={() => setSidebarOpen(true)}
+          />
+          <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: 2, color: 'var(--theme-text)' }}>
+            GYM PRO
+          </div>
+          <Avatar
+            size={32}
+            src={
+              user?.avatar ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
+            }
+            style={{ cursor: 'pointer' }}
+            onClick={() => setAccountOpen(true)}
+          />
         </div>
-        <Avatar
-          size={32}
-          src={
-            user?.avatar ||
-            `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
-          }
-          style={{ cursor: 'pointer' }}
-          onClick={() => setAccountOpen(true)}
-        />
-      </div>
 
-      <Drawer
-        className="dashboard-mobile-drawer"
-        title={null}
-        placement="left"
-        open={sidebarOpen}
-        onClose={closeSidebar}
-        width={280}
-        styles={{ body: { padding: 0, background: 'var(--theme-card)' } }}
-      >
-        {sidebarContent}
-      </Drawer>
+        <Drawer
+          className="dashboard-mobile-drawer"
+          title={null}
+          placement="left"
+          open={sidebarOpen}
+          onClose={closeSidebar}
+          width={280}
+          closable={false}
+          maskClosable={true}
+          styles={{ body: { padding: 0, background: 'var(--theme-card)' } }}
+        >
+          <div className="dashboard-drawer-close">
+            <span className="drawer-brand">GYM PRO</span>
+            <button
+              type="button"
+              onClick={closeSidebar}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 18,
+                color: 'var(--theme-text)',
+                padding: '4px 8px',
+                lineHeight: 1,
+              }}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="dashboard-drawer-scroll">
+            {sidebarMenu}
+          </div>
+        </Drawer>
 
-      {/* CONTENT */}
-      <Layout>
+        {/* CONTENT */}
         <Content
           className="dashboard-content"
           style={{

@@ -650,7 +650,9 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
   display: none;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 0 12px;
+  height: 56px;
+  min-height: 56px;
   background: var(--theme-card);
   border-bottom: 1px solid var(--theme-border);
   position: sticky;
@@ -660,29 +662,55 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
 
 .dashboard-mobile-drawer .ant-drawer-body {
   padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-drawer-close {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.dashboard-drawer-close .drawer-brand {
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: var(--theme-text);
+}
+
+.dashboard-drawer-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .dashboard-content {
   padding: 24px;
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 767px) {
   .dashboard-desktop-sider {
     display: none !important;
   }
 
+  .dashboard-inner {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
   .dashboard-mobile-header {
     display: flex;
+    width: 100%;
   }
 
   .dashboard-content {
     padding: 16px !important;
-  }
-}
-
-@media (max-width: 640px) {
-  .dashboard-content {
-    padding: 12px !important;
+    width: 100% !important;
+    margin-left: 0 !important;
   }
 }
 
@@ -704,7 +732,7 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
   flex-wrap: wrap;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .dashboard-filter-bar {
     flex-direction: column;
     align-items: stretch;
@@ -724,13 +752,17 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
   padding: 32px;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .dashboard-hero {
     padding: 20px !important;
   }
 
   .dashboard-hero h1 {
     font-size: 24px !important;
+  }
+
+  .dashboard-hero p {
+    font-size: 13px !important;
   }
 }
 
