@@ -145,13 +145,19 @@ function StripeCardForm({
             className="w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-2.5 text-sm text-[var(--theme-text)] placeholder:text-[var(--theme-placeholder)] outline-none transition-colors focus:border-[var(--theme-accent)]"
           />
           {vndAmount ? (
-            <p className="text-sm font-medium text-[var(--theme-text)]">
-              {t('deposit.card.usd_to_vnd', {
-                usd: formatUSD(usdAmount),
-                vnd: formatVND(vndAmount),
-                rate: Math.round(exchangeRate || 0).toLocaleString('vi-VN'),
-              })}
-            </p>
+            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm text-[var(--theme-muted)]">{t('deposit.card.charge_amount')}</span>
+                <span className="text-base font-semibold text-[var(--theme-text)]">{formatUSD(usdAmount)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-4">
+                <span className="text-sm text-[var(--theme-muted)]">{t('deposit.card.wallet_credit')}</span>
+                <span className="text-base font-semibold text-[var(--theme-accent)]">{formatVND(vndAmount)}</span>
+              </div>
+              <div className="mt-3 border-t border-[var(--theme-border)] pt-3 text-xs text-[var(--theme-muted)]">
+                {t('deposit.card.exchange_rate', { rate: Math.round(exchangeRate || 0).toLocaleString('vi-VN') })}
+              </div>
+            </div>
           ) : (
             <p className="text-sm font-medium text-[var(--theme-muted)]">{t('deposit.card.exchange_loading')}</p>
           )}
@@ -178,9 +184,21 @@ function StripeCardForm({
               tabIndex={0}
               onClick={() => cardNumber?.focus()}
               onKeyDown={(event) => event.key === 'Enter' && cardNumber?.focus()}
-              className="cursor-text rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3 transition-colors focus-within:border-[var(--theme-accent)]"
+              className="relative cursor-text rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3 pr-36 transition-colors focus-within:border-[var(--theme-accent)]"
             >
-              <CardNumberElement onReady={setCardNumber} options={{ ...cardStyle, showIcon: true, placeholder: t('deposit.card.card_number_placeholder') }} />
+              <CardNumberElement
+                onReady={setCardNumber}
+                options={{ ...cardStyle, showIcon: true, placeholder: t('deposit.card.card_number_placeholder') }}
+              />
+              <div className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1">
+                <span className="rounded bg-[#0a4ea3] px-1.5 py-0.5 text-[9px] font-bold leading-none text-white">VISA</span>
+                <span className="relative h-4 w-6 rounded bg-[#1f2937]">
+                  <span className="absolute left-1 top-1/2 size-2.5 -translate-y-1/2 rounded-full bg-[#eb001b]" />
+                  <span className="absolute right-1 top-1/2 size-2.5 -translate-y-1/2 rounded-full bg-[#f79e1b]" />
+                </span>
+                <span className="rounded bg-[#00a1df] px-1.5 py-0.5 text-[9px] font-bold leading-none text-white">AMEX</span>
+                <span className="rounded bg-white px-1.5 py-0.5 text-[8px] font-bold leading-none text-[#f58220]">DISC</span>
+              </div>
             </div>
           </label>
 
@@ -490,6 +508,16 @@ export default function DepositPage() {
 
           <div className="mb-6 flex gap-1 rounded-xl bg-[var(--theme-elevated)] p-1">
             <button
+              onClick={() => setTab('card')}
+              className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+                tab === 'card'
+                  ? 'bg-[var(--theme-accent)] text-[var(--theme-button-text)] shadow-sm'
+                  : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
+              }`}
+            >
+              {t('deposit.tab_card')}
+            </button>
+            <button
               onClick={() => setTab('qr')}
               className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
                 tab === 'qr'
@@ -508,16 +536,6 @@ export default function DepositPage() {
               }`}
             >
               {t('deposit.tab_manual')}
-            </button>
-            <button
-              onClick={() => setTab('card')}
-              className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-                tab === 'card'
-                  ? 'bg-[var(--theme-accent)] text-[var(--theme-button-text)] shadow-sm'
-                  : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
-              }`}
-            >
-              {t('deposit.tab_card')}
             </button>
           </div>
 
