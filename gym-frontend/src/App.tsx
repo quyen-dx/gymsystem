@@ -1,5 +1,6 @@
 import { ConfigProvider, theme } from 'antd'
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import MemberLayout from './components/layout/header/MemberLayout'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { useAuth } from './hooks/useAuth'
@@ -24,8 +25,7 @@ import MemberStorePage from './pages/dashboard/member/MemberStorePage'
 import OrderHistoryPage from './pages/dashboard/member/OrderHistoryPage'
 import OrderTrackingPage from './pages/dashboard/member/OrderTrackingPage'
 import ProductDetailPage from './pages/dashboard/member/ProductDetailPage'
-import TransferPage from './pages/dashboard/member/TransferPage'
-import WalletPage from './pages/dashboard/member/WalletPage'
+
 import WorkoutPage from './pages/dashboard/member/WorkoutPage'
 import PTSchedulePage from './pages/dashboard/pt/PTSchedulePage'
 import PTStudentPage from './pages/dashboard/pt/PTStudentPage'
@@ -62,16 +62,17 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function MemberCheckinPage() {
+  const { t } = useTranslation()
   return (
     <MemberLayout>
       <div className="member-page">
         <div className="rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8 max-[640px]:p-5">
           <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">
-            QR Check-in
+            {t('checkin_page.overline')}
           </p>
-          <h1 className="mt-3 text-2xl font-semibold text-[var(--gs-text)]">Check-in hội viên</h1>
+          <h1 className="mt-3 text-2xl font-semibold text-[var(--gs-text)]">{t('checkin_page.title')}</h1>
           <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
-            Chức năng QR Check-in đang được phát triển.
+            {t('checkin_page.under_development')}
           </p>
         </div>
       </div>
@@ -206,9 +207,7 @@ function AppWithTheme() {
 
         {/* MEMBER */}
         <Route path="/" element={<PrivateRoute><MemberDashboard /></PrivateRoute>} />
-        <Route path="/wallet" element={<PrivateRoute><WalletPage /></PrivateRoute>} />
-        <Route path="/wallet/deposit" element={<PrivateRoute><DepositPage /></PrivateRoute>} />
-        <Route path="/transfer" element={<PrivateRoute><TransferPage /></PrivateRoute>} />
+        <Route path="/deposit" element={<PrivateRoute><DepositPage /></PrivateRoute>} />
         <Route path="/checkout" element={<PrivateRoute><CheckoutPage /></PrivateRoute>} />
         <Route path="/orders" element={<PrivateRoute><OrderHistoryPage /></PrivateRoute>} />
         <Route path="/track/:id" element={<PrivateRoute><OrderTrackingPage /></PrivateRoute>} />

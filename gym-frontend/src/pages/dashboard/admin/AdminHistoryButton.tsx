@@ -1,6 +1,7 @@
 import { HistoryOutlined } from '@ant-design/icons'
 import { Button, Modal, Select, Table, Tag, message } from 'antd'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '../../../services/api'
 
 type AuditModule = 'users' | 'plans' | 'products' | 'shops'
@@ -19,12 +20,6 @@ interface AuditLog {
   createdAt: string
 }
 
-const actionLabels: Record<AuditAction, string> = {
-  create: 'Thêm',
-  update: 'Sửa',
-  delete: 'Xóa',
-}
-
 const actionColors: Record<AuditAction, string> = {
   create: 'green',
   update: 'blue',
@@ -38,6 +33,7 @@ export default function AdminHistoryButton({
   module: AuditModule
   title: string
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(false)
@@ -55,7 +51,7 @@ export default function AdminHistoryButton({
       })
       setLogs(data.logs || [])
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Không thể tải lịch sử')
+      message.error(err.response?.data?.message || t('admin_history.messages.fetch_failed'))
     } finally {
       setLoading(false)
     }
@@ -65,14 +61,20 @@ export default function AdminHistoryButton({
     if (open) fetchLogs()
   }, [open])
 
+  const actionLabels: Record<AuditAction, string> = {
+    create: t('admin_history.actions.create'),
+    update: t('admin_history.actions.update'),
+    delete: t('admin_history.actions.delete'),
+  }
+
   return (
     <>
       <Button icon={<HistoryOutlined />} onClick={() => setOpen(true)}>
-        Lịch sử
+        {t('admin_history.button')}
       </Button>
 
       <Modal
-        title={`Lịch sử ${title}`}
+        title={t('admin_history.title', { subject: title })}
         open={open}
         onCancel={() => setOpen(false)}
         footer={null}
@@ -83,7 +85,7 @@ export default function AdminHistoryButton({
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
           <Select
             allowClear
-            placeholder="Lọc thao tác"
+            placeholder={t('admin_history.filter_placeholder')}
             style={{ width: 180 }}
             value={action || undefined}
             onChange={(value) => {
@@ -92,9 +94,9 @@ export default function AdminHistoryButton({
               fetchLogs(nextAction)
             }}
             options={[
-              { label: 'Thêm', value: 'create' },
-              { label: 'Sửa', value: 'update' },
-              { label: 'Xóa', value: 'delete' },
+              { label: t('admin_history.actions.create'), value: 'create' },
+              { label: t('admin_history.actions.update'), value: 'update' },
+              { label: t('admin_history.actions.delete'), value: 'delete' },
             ]}
           />
         </div>
@@ -106,13 +108,13 @@ export default function AdminHistoryButton({
           pagination={{ pageSize: 10 }}
           columns={[
             {
-              title: 'Thời gian',
+              title: t('admin_history.columns.time'),
               dataIndex: 'createdAt',
               width: 170,
               render: (value: string) => new Date(value).toLocaleString('vi-VN'),
             },
             {
-              title: 'Thao tác',
+              title: t('admin_history.columns.action'),
               dataIndex: 'action',
               width: 90,
               render: (value: AuditAction) => (
@@ -120,22 +122,22 @@ export default function AdminHistoryButton({
               ),
             },
             {
-              title: 'Đối tượng',
+              title: t('admin_history.columns.entity'),
               dataIndex: 'entityName',
               width: 190,
-              render: (value: string) => value || 'Không có tên',
+              render: (value: string) => value || t('admin_history.fallback.no_entity_name'),
             },
             {
-              title: 'Admin thao tác',
+              title: t('admin_history.columns.admin'),
               render: (_: any, record: AuditLog) => (
                 <div>
-                  <div style={{ fontWeight: 600 }}>{record.admin?.name || 'Admin'}</div>
-                  <div style={{ fontSize: 12, color: '#888' }}>{record.admin?.email || 'Không có email'}</div>
+                  <div style={{ fontWeight: 600 }}>{record.admin?.name || t('admin_history.fallback.admin')}</div>
+                  <div style={{ fontSize: 12, color: '#888' }}>{record.admin?.email || t('admin_history.fallback.no_email')}</div>
                 </div>
               ),
             },
             {
-              title: 'Chi tiết',
+              title: t('admin_history.columns.details'),
               dataIndex: 'details',
               render: (value: string) => value || '-',
             },

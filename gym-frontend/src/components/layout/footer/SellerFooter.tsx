@@ -15,6 +15,7 @@ import {
   Store,
   Truck,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../../context/ThemeProvider'
 
 type FooterLink = {
@@ -28,27 +29,6 @@ type Commitment = {
   icon: LucideIcon
 }
 
-const commitments: Commitment[] = [
-  { label: 'Sản phẩm chính hãng, uy tín', icon: ShieldCheck },
-  { label: 'Giao hàng nhanh chóng, đúng hẹn', icon: Truck },
-  { label: 'Thanh toán an toàn, bảo mật', icon: LockKeyhole },
-  { label: 'Đổi trả dễ dàng trong 7 ngày', icon: RotateCcw },
-]
-
-const sellerLinks: FooterLink[] = [
-  { label: 'Quản lý sản phẩm', href: '/seller/products', icon: Package },
-  { label: 'Đơn hàng', href: '/seller/orders', icon: ClipboardList },
-  { label: 'Doanh thu', href: '/seller/revenue', icon: BarChart3 },
-  { label: 'Chính sách bán hàng', href: '/seller/policy', icon: ScrollText },
-]
-
-const supportLinks: FooterLink[] = [
-  { label: 'Trung tâm trợ giúp', href: '/support/help-center', icon: LifeBuoy },
-  { label: 'Liên hệ CSKH', href: '/support/contact', icon: Headphones },
-  { label: 'Báo cáo vi phạm', href: '/support/report', icon: Flag },
-  { label: 'Điều khoản sử dụng', href: '/terms', icon: FileText },
-]
-
 const socialLogos = {
   facebook: '/facebook.png',
   zalo: '/zalo.png',
@@ -56,8 +36,30 @@ const socialLogos = {
 }
 
 function SellerFooter() {
+  const { t } = useTranslation()
   const currentYear = new Date().getFullYear()
   const { dark } = useTheme()
+
+  const commitments: Commitment[] = [
+    { label: t('footer.seller.commitments.authentic'), icon: ShieldCheck },
+    { label: t('footer.seller.commitments.delivery'), icon: Truck },
+    { label: t('footer.seller.commitments.payment'), icon: LockKeyhole },
+    { label: t('footer.seller.commitments.returns'), icon: RotateCcw },
+  ]
+
+  const sellerLinks: FooterLink[] = [
+    { label: t('footer.seller.links.products'), href: '/seller/products', icon: Package },
+    { label: t('footer.seller.links.orders'), href: '/seller/orders', icon: ClipboardList },
+    { label: t('footer.seller.links.revenue'), href: '/seller/revenue', icon: BarChart3 },
+    { label: t('footer.seller.links.policy'), href: '/seller/policy', icon: ScrollText },
+  ]
+
+  const supportLinks: FooterLink[] = [
+    { label: t('footer.seller.support.help_center'), href: '/support/help-center', icon: LifeBuoy },
+    { label: t('footer.seller.support.contact'), href: '/support/contact', icon: Headphones },
+    { label: t('footer.seller.support.report'), href: '/support/report', icon: Flag },
+    { label: t('footer.seller.support.terms'), href: '/terms', icon: FileText },
+  ]
 
   const renderLink = (item: FooterLink) => {
     const Icon = item.icon
@@ -94,7 +96,7 @@ function SellerFooter() {
       >
         <div className="w-full">
           <h2 className="text-center text-xl font-extrabold md:text-2xl">
-            Cam Kết Của Chúng Tôi
+            {t('footer.seller.heading')}
           </h2>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {commitments.map((item) => {
@@ -133,33 +135,32 @@ function SellerFooter() {
               <div>
                 <p className="text-lg font-extrabold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymPro Seller</p>
                 <p className={['text-sm', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-                  Bán hàng dễ hơn mỗi ngày
+                  {t('footer.seller.tagline')}
                 </p>
               </div>
             </div>
             <p className={['mt-5 text-sm leading-6', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-              Nền tảng giúp Seller tiếp cận hội viên, quản lý sản phẩm và vận hành đơn hàng
-              trong cùng một hệ sinh thái GymPro.
+              {t('footer.seller.description')}
             </p>
           </div>
 
           <div>
             <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
-              Dành cho Seller
+              {t('footer.seller.section.for_seller')}
             </h3>
             <div className="mt-5 space-y-3">{sellerLinks.map(renderLink)}</div>
           </div>
 
           <div>
             <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
-              Hỗ trợ
+              {t('footer.seller.section.support')}
             </h3>
             <div className="mt-5 space-y-3">{supportLinks.map(renderLink)}</div>
           </div>
 
           <div>
             <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
-              Kết nối
+              {t('footer.seller.section.connect')}
             </h3>
             <div className="mt-5 flex items-center gap-3">
               <a
@@ -202,10 +203,10 @@ function SellerFooter() {
         style={{ borderColor: 'var(--theme-border)' }}
       >
         <div className={['flex w-full flex-col gap-2 text-sm md:flex-row md:items-center md:justify-between', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-          <p>Copyright © {currentYear} GymPro Seller. All rights reserved.</p>
+          <p>{t('footer.seller.copyright', { year: currentYear })}</p>
           <p className={['flex items-center gap-2 font-semibold', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
             <BadgeCheck className="h-4 w-4" style={{ color: 'var(--theme-accent)' }} />
-            Nền tảng hợp tác uy tín
+            {t('footer.seller.trust')}
           </p>
         </div>
       </div>

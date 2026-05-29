@@ -6,6 +6,7 @@ export interface CartProduct {
   image?: string
   stock?: number
   sellerId?: string
+  brand?: string
 }
 
 export interface CartItem extends CartProduct {

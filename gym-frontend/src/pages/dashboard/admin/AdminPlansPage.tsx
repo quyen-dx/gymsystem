@@ -16,12 +16,14 @@ import {
   message
 } from 'antd'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import api from '../../../services/api'
 import type { AdminPlan } from '../../../types/admin/plan'
 import AdminHistoryButton from './AdminHistoryButton'
 
 export default function AdminPlansPage() {
+  const { t } = useTranslation()
   const [plans, setPlans] = useState<AdminPlan[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
@@ -41,7 +43,7 @@ export default function AdminPlansPage() {
       setPlans(data.plans)
       setTotal(data.pagination.total)
     } catch {
-      message.error('Không thể tải danh sách gói tập')
+      message.error(t('admin.plans.messages.fetch_failed'))
     } finally {
       setLoading(false)
     }
@@ -82,16 +84,16 @@ export default function AdminPlansPage() {
 
       if (editingPlan) {
         await api.put(`/plans/${editingPlan._id}`, payload)
-        message.success('Cập nhật gói tập thành công')
+        message.success(t('admin.plans.messages.update_success'))
       } else {
         await api.post('/plans', payload)
-        message.success('Tạo gói tập thành công')
+        message.success(t('admin.plans.messages.create_success'))
       }
 
       setModalOpen(false)
       fetchPlans()
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Thao tác thất bại')
+      message.error(err.response?.data?.message || t('admin.plans.messages.action_failed'))
     } finally {
       setSubmitLoading(false)
     }
@@ -100,26 +102,26 @@ export default function AdminPlansPage() {
   const handleDelete = async (id: string) => {
     try {
       await api.delete(`/plans/${id}`)
-      message.success('Xóa gói tập thành công')
+      message.success(t('admin.plans.messages.delete_success'))
       fetchPlans()
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Xóa thất bại')
+      message.error(err.response?.data?.message || t('admin.plans.messages.delete_failed'))
     }
   }
 
   const handleToggle = async (id: string) => {
     try {
       await api.patch(`/plans/${id}/toggle-status`)
-      message.success('Cập nhật trạng thái thành công')
+      message.success(t('admin.plans.messages.toggle_success'))
       fetchPlans()
     } catch {
-      message.error('Thao tác thất bại')
+      message.error(t('admin.plans.messages.action_failed'))
     }
   }
 
   const columns = [
     {
-      title: 'Gói tập',
+      title: t('admin.plans.columns.name'),
       dataIndex: 'name',
       render: (name: string, record: AdminPlan) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -134,35 +136,35 @@ export default function AdminPlansPage() {
       ),
     },
     {
-      title: 'Giá',
+      title: t('admin.plans.columns.price'),
       dataIndex: 'price',
       render: (price: number) => (
         <span>{price.toLocaleString('vi-VN')}đ</span>
       ),
     },
     {
-      title: 'Số ngày',
+      title: t('admin.plans.columns.duration'),
       dataIndex: 'durationDays',
-      render: (days: number) => `${days} ngày`,
+      render: (days: number) => t('admin.plans.days', { days }),
     },
     {
-      title: 'Members',
+      title: t('admin.plans.columns.members'),
       dataIndex: 'memberCount',
       render: (count: number) => (
         <Tag color={count > 0 ? 'blue' : 'default'}>{count} members</Tag>
       ),
     },
     {
-      title: 'Trạng thái',
+      title: t('admin.plans.columns.status'),
       dataIndex: 'isActive',
       render: (isActive: boolean) => (
         <Tag color={isActive ? 'success' : 'error'}>
-          {isActive ? 'Đang hoạt động' : 'Vô hiệu hóa'}
+          {isActive ? t('admin.plans.status.active') : t('admin.plans.status.disabled')}
         </Tag>
       ),
     },
     {
-      title: 'Thao tác',
+      title: t('admin.plans.columns.actions'),
       render: (_: any, record: AdminPlan) => (
         <Space>
           <Button
@@ -174,14 +176,14 @@ export default function AdminPlansPage() {
             size="small"
             icon={<PoweroffOutlined />}
             onClick={() => handleToggle(record._id)}
-            title={record.isActive ? 'Vô hiệu hóa' : 'Kích hoạt'}
+            title={record.isActive ? t('admin.plans.actions.disable') : t('admin.plans.actions.enable')}
           />
           <Popconfirm
-            title="Xóa gói tập này?"
-            description="Không thể xóa nếu có member đang sử dụng."
+            title={t('admin.plans.popconfirm.title')}
+            description={t('admin.plans.popconfirm.description')}
             onConfirm={() => handleDelete(record._id)}
-            okText="Xóa"
-            cancelText="Hủy"
+            okText={t('admin.plans.popconfirm.ok')}
+            cancelText={t('admin.plans.popconfirm.cancel')}
           >
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
@@ -194,13 +196,13 @@ export default function AdminPlansPage() {
     <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Admin</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý gói tập</h1>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.plans.title')}</h1>
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
         <div className="dashboard-filter-bar">
           <Input.Search
-            placeholder="Tìm kiếm gói tập..."
+            placeholder={t('admin.plans.search_placeholder')}
             allowClear
             onSearch={(val) => {
               setSearch(val)
@@ -211,7 +213,7 @@ export default function AdminPlansPage() {
           <Space wrap>
             <AdminHistoryButton module="plans" title="gói tập" />
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Tạo gói tập
+              {t('admin.plans.create')}
             </Button>
           </Space>
         </div>
@@ -236,40 +238,40 @@ export default function AdminPlansPage() {
       </div>
 
       <Modal
-        title={editingPlan ? 'Cập nhật gói tập' : 'Tạo gói tập mới'}
+        title={editingPlan ? t('admin.plans.modal.edit_title') : t('admin.plans.modal.create_title')}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={null}
         destroyOnClose
       >
         <Form layout="vertical" form={form} onFinish={handleSubmit}>
-          <Form.Item label="Tên gói" name="name" rules={[{ required: true, message: 'Nhập tên gói' }]}>
-            <Input placeholder="VD: Gói 1 tháng" />
+          <Form.Item label={t('admin.plans.form.name')} name="name" rules={[{ required: true, message: t('admin.plans.form.name_required') }]}>
+            <Input placeholder={t('admin.plans.form.name_placeholder')} />
           </Form.Item>
 
-          <Form.Item label="Giá (VNĐ)" name="price" rules={[{ required: true, message: 'Nhập giá' }]}>
+          <Form.Item label={t('admin.plans.form.price')} name="price" rules={[{ required: true, message: t('admin.plans.form.price_required') }]}>
             <InputNumber
               style={{ width: '100%' }}
               min={0}
               formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              placeholder="VD: 500000"
+              placeholder={t('admin.plans.form.price_placeholder')}
             />
           </Form.Item>
 
-          <Form.Item label="Số ngày" name="durationDays" rules={[{ required: true, message: 'Nhập số ngày' }]}>
-            <InputNumber style={{ width: '100%' }} min={1} placeholder="VD: 30" />
+          <Form.Item label={t('admin.plans.form.duration')} name="durationDays" rules={[{ required: true, message: t('admin.plans.form.duration_required') }]}>
+            <InputNumber style={{ width: '100%' }} min={1} placeholder={t('admin.plans.form.duration_placeholder')} />
           </Form.Item>
 
-          <Form.Item label="Mô tả" name="description">
-            <Input.TextArea rows={3} placeholder="Mô tả gói tập..." />
+          <Form.Item label={t('admin.plans.form.description')} name="description">
+            <Input.TextArea rows={3} placeholder={t('admin.plans.form.description_placeholder')} />
           </Form.Item>
 
-          <Form.Item label="Màu sắc" name="color">
+          <Form.Item label={t('admin.plans.form.color')} name="color">
             <ColorPicker format="hex" />
           </Form.Item>
 
           <Button type="primary" htmlType="submit" block loading={submitLoading}>
-            {editingPlan ? 'Cập nhật' : 'Tạo gói tập'}
+            {editingPlan ? t('admin.plans.submit.update') : t('admin.plans.submit.create')}
           </Button>
         </Form>
       </Modal>

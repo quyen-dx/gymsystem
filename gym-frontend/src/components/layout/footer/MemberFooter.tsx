@@ -15,6 +15,7 @@ import {
   UserRound,
   UsersRound,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeProvider'
 import { useAuth } from '../../../hooks/useAuth'
@@ -26,19 +27,6 @@ type FooterLink = {
   match?: string[]
   end?: boolean
 }
-
-const serviceLinks: FooterLink[] = [
-  { label: 'Gói tập', to: '/health', icon: Dumbbell },
-  { label: 'Danh sách PT', to: '/booking', icon: UsersRound },
-  { label: 'Lớp tập nhóm', to: '/workout', icon: CalendarDays },
-  { label: 'Cửa hàng', to: '/store', icon: Store },
-]
-
-const accountLinks: FooterLink[] = [
-  { label: 'Thông tin cá nhân', to: '/profile', icon: UserRound },
-  { label: 'Lịch sử gói tập', to: '/orders', icon: ShoppingBag },
-  { label: 'Thông báo', to: '/notifications', icon: Bell },
-]
 
 const socialLogos = {
   facebook: '/facebook.png',
@@ -53,10 +41,24 @@ const isRouteActive = (pathname: string, item: FooterLink, isActive: boolean) =>
 }
 
 function MemberFooter() {
+  const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
   const { logout } = useAuth()
   const { dark } = useTheme()
+
+  const serviceLinks: FooterLink[] = [
+    { label: t('footer.member.services.packages'), to: '/health', icon: Dumbbell },
+    { label: t('footer.member.services.pt_list'), to: '/booking', icon: UsersRound },
+    { label: t('footer.member.services.group_classes'), to: '/workout', icon: CalendarDays },
+    { label: t('footer.member.services.store'), to: '/store', icon: Store },
+  ]
+
+  const accountLinks: FooterLink[] = [
+    { label: t('footer.member.account.profile'), to: '/profile', icon: UserRound },
+    { label: t('footer.member.account.orders'), to: '/orders', icon: ShoppingBag },
+    { label: t('footer.member.account.notifications'), to: '/notifications', icon: Bell },
+  ]
 
   const handleLogout = () => {
     logout()
@@ -93,7 +95,6 @@ function MemberFooter() {
 
   return (
     <>
-      {/* Desktop footer */}
       <footer
         className={[
           'border-t',
@@ -104,7 +105,6 @@ function MemberFooter() {
         style={{ background: 'var(--theme-card)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
       >
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-4 py-8 sm:px-6 sm:gap-8 md:px-8 md:py-10 lg:grid-cols-4 lg:gap-10 lg:py-12">
-          {/* Cột 1 - Logo */}
           <div className="col-span-2 lg:col-span-1">
             <button
               type="button"
@@ -120,36 +120,34 @@ function MemberFooter() {
               <span>
                 <span className="block text-lg font-bold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymPro</span>
                 <span className={['block text-sm', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-                  Train smarter every day
+                  {t('footer.member.tagline')}
                 </span>
               </span>
             </button>
             <p className={['mt-5 max-w-full text-sm leading-6 lg:max-w-xs', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-              Không gian luyện tập hiện đại, lịch trình rõ ràng và lộ trình cá nhân hóa cho hội viên.
+              {t('footer.member.description')}
             </p>
             <div className={['mt-5 flex items-start gap-2 text-sm', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
               <Clock3 className={['mt-0.5 h-4 w-4 shrink-0', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
               <span>
-                Giờ mở cửa
+                {t('footer.member.hours_label')}
                 <span className={['block font-medium', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
-                  05:30 - 22:00 hằng ngày
+                  {t('footer.member.hours_value')}
                 </span>
               </span>
             </div>
           </div>
 
-          {/* Cột 2 - Dịch vụ */}
           <div>
             <h2 className={['text-sm font-semibold uppercase tracking-wide', dark ? 'text-zinc-100' : 'text-[#edebe6]'].join(' ')}>
-              Dịch vụ
+              {t('footer.member.section.services')}
             </h2>
             <div className="mt-5 space-y-3">{serviceLinks.map(renderDesktopLink)}</div>
           </div>
 
-          {/* Cột 3 - Tài khoản */}
           <div>
             <h2 className={['text-sm font-semibold uppercase tracking-wide', dark ? 'text-zinc-100' : 'text-[#edebe6]'].join(' ')}>
-              Tài khoản
+              {t('footer.member.section.account')}
             </h2>
             <div className="mt-5 space-y-3">
               {accountLinks.map(renderDesktopLink)}
@@ -159,15 +157,14 @@ function MemberFooter() {
                 className={['group flex items-center gap-2 text-sm transition-colors', dark ? 'text-zinc-300 hover:text-white' : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]'].join(' ')}
               >
                 <LogOut className={['h-4 w-4 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-[rgba(237,235,230,0.5)] group-hover:text-[#edebe6]'].join(' ')} />
-                <span>Đăng xuất</span>
+                <span>{t('footer.member.logout')}</span>
               </button>
             </div>
           </div>
 
-          {/* Cột 4 - Liên hệ */}
           <div className="col-span-2 lg:col-span-1">
             <h2 className={['text-sm font-semibold uppercase tracking-wide', dark ? 'text-zinc-100' : 'text-[#edebe6]'].join(' ')}>
-              Liên hệ
+              {t('footer.member.section.contact')}
             </h2>
             <div className={['mt-5 space-y-3 text-sm', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
               <a
@@ -230,9 +227,9 @@ function MemberFooter() {
                 >
                   <Smartphone className={['h-5 w-5', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
                   <span>
-                    <span className="block text-[10px] text-zinc-400">Tải trên</span>
+                    <span className="block text-[10px] text-zinc-400">{t('footer.member.download.download_on')}</span>
                     <span className={['block text-sm font-semibold', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
-                      App Store
+                      {t('footer.member.download.app_store')}
                     </span>
                   </span>
                 </a>
@@ -243,9 +240,9 @@ function MemberFooter() {
                 >
                   <PlayCircle className={['h-5 w-5', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
                   <span>
-                    <span className="block text-[10px] text-zinc-400">Tải trên</span>
+                    <span className="block text-[10px] text-zinc-400">{t('footer.member.download.download_on')}</span>
                     <span className={['block text-sm font-semibold', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
-                      CH Play
+                      {t('footer.member.download.ch_play')}
                     </span>
                   </span>
                 </a>
@@ -267,7 +264,7 @@ function MemberFooter() {
                   }}
                 >
                   <MonitorDown className="h-5 w-5 shrink-0" />
-                  <span className="text-sm font-semibold leading-5">Tải xuống Windows</span>
+                  <span className="text-sm font-semibold leading-5">{t('footer.member.download.desktop')}</span>
                 </a>
               </div>
             </div>
@@ -279,7 +276,7 @@ function MemberFooter() {
           style={{ borderColor: 'var(--theme-border)' }}
         >
           <p className={['mx-auto max-w-7xl text-sm', dark ? 'text-zinc-500' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-            Copyright © {new Date().getFullYear()} GymPro. All rights reserved.
+            {t('footer.member.copyright', { year: new Date().getFullYear() })}
           </p>
         </div>
       </footer>

@@ -1,6 +1,7 @@
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Button, Divider, Form, Input, Typography, message } from 'antd'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../context/ThemeProvider'
 import { authService } from '../../services/authService'
@@ -15,6 +16,7 @@ const getDashboardPath = (role: string) => {
 }
 
 export default function RegisterPage() {
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { dark } = useTheme()
 
@@ -37,9 +39,9 @@ export default function RegisterPage() {
       setOtpPreview(data.otpPreview || '')
       setStep('otp')
 
-      message.success(data.message || 'OTP đã được gửi')
+      message.success(data.message || t('register.otp_sent'))
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Gửi OTP thất bại')
+      message.error(err.response?.data?.message || t('register.otp_failed'))
     } finally {
       setLoading(false)
     }
@@ -55,12 +57,12 @@ export default function RegisterPage() {
         otp: values.otp,
       })
 
-      message.success('Đăng ký thành công')
+      message.success(t('register.success'))
 
       localStorage.setItem('token', data.accessToken)
       navigate(getDashboardPath(data.user.role))
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'OTP không hợp lệ')
+      message.error(err.response?.data?.message || t('register.otp_invalid'))
     } finally {
       setLoading(false)
     }
@@ -91,6 +93,33 @@ export default function RegisterPage() {
         `}
         style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a' }}
       >
+        {/* LANGUAGE TOGGLE */}
+        <div className="absolute right-3 top-3 flex items-center gap-1">
+          <button
+            onClick={() => i18n.changeLanguage('vi')}
+            title="Tiếng Việt"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+              lineHeight: 1,
+              opacity: i18n.language === 'vi' ? 1 : 0.35,
+              transition: 'opacity 0.2s',
+            }}
+          >
+            <img src="https://flagcdn.com/16x12/vn.png" alt="" style={{ height: 14, width: 'auto', display: 'block' }} />
+          </button>
+          <button
+            onClick={() => i18n.changeLanguage('en')}
+            title="English"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+              lineHeight: 1,
+              opacity: i18n.language === 'en' ? 1 : 0.35,
+              transition: 'opacity 0.2s',
+            }}
+          >
+            <img src="https://flagcdn.com/16x12/us.png" alt="" style={{ height: 14, width: 'auto', display: 'block' }} />
+          </button>
+        </div>
 
         {/* HEADER */}
         <div className="flex items-center gap-2 mb-4">
@@ -111,7 +140,7 @@ export default function RegisterPage() {
               color: dark ? '#fff' : '#edebe6',
             }}
           >
-            Đăng ký
+            {t('register.title')}
           </Title>
         </div>
         {/* FORM STEP 1 */}
@@ -119,25 +148,25 @@ export default function RegisterPage() {
           <Form layout="vertical" form={form} onFinish={handleSendOtp}>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Họ và tên</span>}
+              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>{t('register.fullname')}</span>}
               name="name"
-              rules={[{ required: true, message: 'Nhập họ tên' }]}
+              rules={[{ required: true, message: t('register.fullname_required') }]}
             >
               <Input size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
             </Form.Item>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Số điện thoại</span>}
+              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>{t('register.phone')}</span>}
               name="phone"
-              rules={[{ required: true, message: 'Nhập số điện thoại' }]}
+              rules={[{ required: true, message: t('register.phone_required') }]}
             >
               <Input size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
             </Form.Item>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Mật khẩu</span>}
+              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>{t('register.password')}</span>}
               name="password"
-              rules={[{ required: true, message: 'Nhập mật khẩu' }]}
+              rules={[{ required: true, message: t('register.password_required') }]}
             >
               <Input.Password size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
             </Form.Item>
@@ -149,7 +178,7 @@ export default function RegisterPage() {
               size="large"
               loading={loading}
             >
-              Gửi OTP
+              {t('register.send_otp')}
             </Button>
 
             <Divider />
@@ -158,9 +187,9 @@ export default function RegisterPage() {
               className="text-center text-sm"
               style={{ color: dark ? '#ccc' : 'rgba(237,235,230,0.65)' }}
             >
-              Đã có tài khoản?{' '}
+              {t('register.has_account')}{' '}
               <Link to="/login" className="font-semibold" style={{ color: 'var(--theme-accent)' }}>
-                Đăng nhập
+                {t('register.login')}
               </Link>
             </div>
 
@@ -178,12 +207,12 @@ export default function RegisterPage() {
             )}
 
             <Text style={{ color: dark ? '#fff' : '#edebe6' }}>
-              Nhập OTP
+              {t('register.otp_label')}
             </Text>
 
             <Form.Item
               name="otp"
-              rules={[{ required: true, message: 'Nhập OTP' }]}
+              rules={[{ required: true, message: t('register.otp_required') }]}
             >
               <Input.OTP length={6} />
             </Form.Item>
@@ -195,7 +224,7 @@ export default function RegisterPage() {
               size="large"
               loading={loading}
             >
-              Xác minh
+              {t('register.otp_verify')}
             </Button>
 
           </Form>

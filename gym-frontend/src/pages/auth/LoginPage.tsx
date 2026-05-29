@@ -6,6 +6,7 @@ import {
 } from '@ant-design/icons'
 import { Button, Divider, Form, Input, Typography, message } from 'antd'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import { API_URL } from '../../config/env'
 import { useTheme } from '../../context/ThemeProvider'
@@ -22,7 +23,7 @@ const getDashboardPath = (role: string) => {
 }
 
 export default function LoginPage() {
-
+  const { t, i18n } = useTranslation()
   const { login } = useAuth()
   const navigate = useNavigate()
   const { dark } = useTheme()
@@ -33,15 +34,15 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const user = await login({
-        provider: 'phone', // giữ nguyên field này nhưng backend sẽ ignore
+        provider: 'phone',
         identifier: values.phone,
         password: values.password,
       })
 
-      message.success('Đăng nhập thành công')
+      message.success(t('login.success'))
       setTimeout(() => navigate(getDashboardPath(user.role)), 500)
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Đăng nhập thất bại')
+      message.error(err.response?.data?.message || t('login.failed'))
     } finally {
       setLoading(false)
     }
@@ -78,6 +79,33 @@ export default function LoginPage() {
         `}
         style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a' }}
       >
+        {/* LANGUAGE TOGGLE */}
+        <div className="absolute right-3 top-3 flex items-center gap-1">
+          <button
+            onClick={() => i18n.changeLanguage('vi')}
+            title="Tiếng Việt"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+              lineHeight: 1,
+              opacity: i18n.language === 'vi' ? 1 : 0.35,
+              transition: 'opacity 0.2s',
+            }}
+          >
+            <img src="https://flagcdn.com/16x12/vn.png" alt="" style={{ height: 14, width: 'auto', display: 'block' }} />
+          </button>
+          <button
+            onClick={() => i18n.changeLanguage('en')}
+            title="English"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+              lineHeight: 1,
+              opacity: i18n.language === 'en' ? 1 : 0.35,
+              transition: 'opacity 0.2s',
+            }}
+          >
+            <img src="https://flagcdn.com/16x12/us.png" alt="" style={{ height: 14, width: 'auto', display: 'block' }} />
+          </button>
+        </div>
 
         {/* TITLE */}
         <Title
@@ -88,27 +116,27 @@ export default function LoginPage() {
             color: dark ? '#fff' : '#edebe6',
           }}
         >
-          Đăng nhập
+          {t('login.title')}
         </Title>
         {/* FORM */}
         <Form layout="vertical" onFinish={handleSubmit}>
 
           <Form.Item
-            label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Số điện thoại / Email / Username</span>}
+            label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>{t('login.label')}</span>}
             name="phone"
-            rules={[{ required: true, message: 'Nhập thông tin đăng nhập' }]}
+            rules={[{ required: true, message: t('login.required') }]}
           >
-            <Input size="large" placeholder="Số điện thoại, email hoặc username" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
+            <Input size="large" placeholder={t('login.placeholder')} style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
           </Form.Item>
 
           <Form.Item
-            label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Mật khẩu</span>}
+            label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>{t('login.password_label')}</span>}
             name="password"
-            rules={[{ required: true, message: 'Nhập mật khẩu' }]}
+            rules={[{ required: true, message: t('login.password_required') }]}
           >
             <Input.Password
               size="large"
-              placeholder="Mật khẩu"
+              placeholder={t('login.password_placeholder')}
               style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined}
               iconRender={(v) =>
                 v ? <EyeTwoTone /> : <EyeInvisibleOutlined />
@@ -123,18 +151,18 @@ export default function LoginPage() {
             size="large"
             loading={loading}
           >
-            Đăng nhập
+            {t('login.submit')}
           </Button>
 
           <div className="text-right mt-2">
             <Link to="/forgot-password" className="text-sm" style={{ color: '#ffffff' }}>
-              Quên mật khẩu?
+              {t('login.forgot_password')}
             </Link>
           </div>
 
         </Form>
 
-        <Divider>Hoặc</Divider>
+        <Divider>{t('login.divider')}</Divider>
 
         {/* SOCIAL */}
         <Button
@@ -161,9 +189,9 @@ export default function LoginPage() {
           className={`text-center mt-6 text-sm ${dark ? 'text-gray-300' : 'text-[rgba(237,235,230,0.65)]'
             }`}
         >
-          Chưa có tài khoản?{' '}
+          {t('login.no_account')}{' '}
           <Link to="/register" className="font-semibold" style={{ color: 'var(--theme-accent)' }}>
-            Đăng ký
+            {t('login.register')}
           </Link>
         </div>
 

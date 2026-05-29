@@ -1,5 +1,6 @@
 import { Button, Divider, Form, Input, Steps, Typography, message } from 'antd'
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../context/ThemeProvider'
 import { authService } from '../../services/authService'
@@ -9,6 +10,7 @@ const { Title, Text } = Typography
 type Step = 'identifier' | 'otp' | 'password'
 
 export default function ForgotPasswordPage() {
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { dark } = useTheme()
 
@@ -20,8 +22,10 @@ export default function ForgotPasswordPage() {
   const [resetToken, setResetToken] = useState('')
 
   const identifierType = useMemo(
-    () => (identifier.includes('@') ? 'email' : 'số điện thoại'),
-    [identifier],
+    () => (identifier.includes('@')
+      ? t('forgot.identifier_type_email')
+      : t('forgot.identifier_type_phone')),
+    [identifier, i18n.language],
   )
 
   const handleSendOtp = async (values: Record<string, string>) => {
@@ -31,10 +35,10 @@ export default function ForgotPasswordPage() {
       const { data } = await authService.sendForgotPasswordOtp(values.identifier)
       setOtpPreview(data.otpPreview || '')
       setStep('otp')
-      message.success(data.message || 'OTP đã được gửi')
+      message.success(data.message || t('forgot.otp_sent_msg'))
     } catch (error) {
       const err = error as any;
-      message.error(err.response?.data?.message || 'Không thể gửi OTP')
+      message.error(err.response?.data?.message || t('forgot.otp_send_failed'))
     } finally {
       setLoading(false)
     }
@@ -49,10 +53,10 @@ export default function ForgotPasswordPage() {
       })
       setResetToken(data.resetToken)
       setStep('password')
-      message.success('OTP hợp lệ')
+      message.success(t('forgot.otp_valid'))
     } catch (error) {
       const err = error as any;
-      message.error(err.response?.data?.message || 'OTP không đúng')
+      message.error(err.response?.data?.message || t('forgot.otp_invalid_msg'))
     } finally {
       setLoading(false)
     }
@@ -62,18 +66,18 @@ export default function ForgotPasswordPage() {
     setLoading(true)
     try {
       if (values.newPassword !== values.confirmPassword) {
-        message.error('Mật khẩu xác nhận không khớp')
+        message.error(t('forgot.confirm_mismatch'))
         return
       }
       await authService.resetPassword({
         resetToken,
         newPassword: values.newPassword,
       })
-      message.success('Đổi mật khẩu thành công')
+      message.success(t('forgot.reset_success'))
       setTimeout(() => navigate('/login'), 800)
     } catch (error) {
       const err = error as any;
-      message.error(err.response?.data?.message || 'Không thể đặt lại mật khẩu')
+      message.error(err.response?.data?.message || t('forgot.reset_failed'))
     } finally {
       setLoading(false)
     }
@@ -115,17 +119,45 @@ export default function ForgotPasswordPage() {
           color: textColor,
         }}
       >
+        {/* LANGUAGE TOGGLE */}
+        <div className="absolute right-3 top-3 flex items-center gap-1">
+          <button
+            onClick={() => i18n.changeLanguage('vi')}
+            title="Tiếng Việt"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+              lineHeight: 1,
+              opacity: i18n.language === 'vi' ? 1 : 0.35,
+              transition: 'opacity 0.2s',
+            }}
+          >
+            <img src="https://flagcdn.com/16x12/vn.png" alt="" style={{ height: 14, width: 'auto', display: 'block' }} />
+          </button>
+          <button
+            onClick={() => i18n.changeLanguage('en')}
+            title="English"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+              lineHeight: 1,
+              opacity: i18n.language === 'en' ? 1 : 0.35,
+              transition: 'opacity 0.2s',
+            }}
+          >
+            <img src="https://flagcdn.com/16x12/us.png" alt="" style={{ height: 14, width: 'auto', display: 'block' }} />
+          </button>
+        </div>
+
         <Title level={3} style={{ textAlign: 'center', color: textColor }}>
-          Khôi phục mật khẩu
+          {t('forgot.title')}
         </Title>
 
         <Steps
           size="small"
           current={step === 'identifier' ? 0 : step === 'otp' ? 1 : 2}
           items={[
-            { title: <span style={{ color: textColor }}>Thông tin</span> },
-            { title: <span style={{ color: textColor }}>OTP</span> },
-            { title: <span style={{ color: textColor }}>Mật khẩu</span> },
+            { title: <span style={{ color: textColor }}>{t('forgot.step_info')}</span> },
+            { title: <span style={{ color: textColor }}>{t('forgot.step_otp')}</span> },
+            { title: <span style={{ color: textColor }}>{t('forgot.step_password')}</span> },
           ]}
           className="mb-6"
         />
@@ -146,20 +178,20 @@ export default function ForgotPasswordPage() {
         {step === 'identifier' && (
           <Form layout="vertical" onFinish={handleSendOtp}>
             <Form.Item
-              label={<span style={{ color: textColor }}>Email hoặc số điện thoại</span>}
+              label={<span style={{ color: textColor }}>{t('forgot.identifier_label')}</span>}
               name="identifier"
-              rules={[{ required: true, message: 'Nhập thông tin' }]}
+              rules={[{ required: true, message: t('forgot.identifier_required') }]}
             >
               <Input
                 size="large"
-                placeholder="Email hoặc số điện thoại"
+                placeholder={t('forgot.identifier_placeholder')}
                 onChange={(e) => setIdentifier(e.target.value)}
                 style={inputStyle}
               />
             </Form.Item>
 
             <Button type="primary" htmlType="submit" block size="large" loading={loading}>
-              Gửi OTP
+              {t('forgot.send_otp')}
             </Button>
           </Form>
         )}
@@ -168,26 +200,26 @@ export default function ForgotPasswordPage() {
         {step === 'otp' && (
           <Form layout="vertical" onFinish={handleVerifyOtp}>
             <Text style={{ color: subTextColor }}>
-              Đã gửi OTP tới: <b style={{ color: textColor }}>{identifier}</b> ({identifierType})
+              {t('forgot.otp_sent_to')} <b style={{ color: textColor }}>{identifier}</b> ({identifierType})
             </Text>
 
             <Form.Item
-              label={<span style={{ color: textColor }}>OTP</span>}
+              label={<span style={{ color: textColor }}>{t('forgot.otp_label')}</span>}
               name="otp"
-              rules={[{ required: true, message: 'Nhập OTP' }]}
+              rules={[{ required: true, message: t('forgot.otp_required') }]}
               className="mt-3"
             >
               <Input.OTP length={6} style={inputStyle} />
             </Form.Item>
 
             <Button type="primary" htmlType="submit" block size="large" loading={loading}>
-              Xác minh
+              {t('forgot.verify')}
             </Button>
 
             <Divider />
 
             <Button block onClick={() => setStep('identifier')} style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined}>
-              Quay lại
+              {t('forgot.back')}
             </Button>
           </Form>
         )}
@@ -196,30 +228,30 @@ export default function ForgotPasswordPage() {
         {step === 'password' && (
           <Form layout="vertical" onFinish={handleResetPassword}>
             <Form.Item
-              label={<span style={{ color: textColor }}>Mật khẩu mới</span>}
+              label={<span style={{ color: textColor }}>{t('forgot.new_password')}</span>}
               name="newPassword"
-              rules={[{ required: true, message: 'Nhập mật khẩu mới' }]}
+              rules={[{ required: true, message: t('forgot.new_password_required') }]}
             >
               <Input.Password size="large" style={inputStyle} />
             </Form.Item>
 
             <Form.Item
-              label={<span style={{ color: textColor }}>Xác nhận mật khẩu</span>}
+              label={<span style={{ color: textColor }}>{t('forgot.confirm_password')}</span>}
               name="confirmPassword"
-              rules={[{ required: true, message: 'Nhập lại mật khẩu' }]}
+              rules={[{ required: true, message: t('forgot.confirm_password_required') }]}
             >
               <Input.Password size="large" style={inputStyle} />
             </Form.Item>
 
             <Button type="primary" htmlType="submit" block size="large" loading={loading}>
-              Đặt lại mật khẩu
+              {t('forgot.reset')}
             </Button>
           </Form>
         )}
 
         <div className="text-center mt-6 text-sm">
           <Link to="/login" className="font-semibold" style={{ color: 'var(--theme-accent)' }}>
-            Quay lại đăng nhập
+            {t('forgot.back_to_login')}
           </Link>
         </div>
       </div>

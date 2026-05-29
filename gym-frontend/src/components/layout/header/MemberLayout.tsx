@@ -20,6 +20,7 @@ import {
   Typography,
 } from 'antd'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useCart } from '../../../context/useCart'
 import { useWallet } from '../../../context/WalletProvider'
@@ -34,9 +35,7 @@ const { Header, Content } = Layout
 const { Text } = Typography
 const MEMBER_INTERACTION_LOCK_ROUTES = [
   '/',
-  '/wallet',
-  '/wallet/deposit',
-  '/transfer',
+  '/deposit',
   '/checkout',
   '/orders',
   '/cart',
@@ -57,6 +56,7 @@ export default function MemberLayout({
   children: React.ReactNode
   hideFooter?: boolean
 }) {
+  const { t } = useTranslation()
   const { user } = useAuth()
   const [accountOpen, setAccountOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -70,12 +70,12 @@ export default function MemberLayout({
   const navigate = useNavigate()
   const location = useLocation()
   const navItems = [
-    { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
-    { key: '/store', label: 'Cửa hàng', icon: <ShopOutlined /> },
-    { key: '/booking', label: 'Đặt lịch PT', icon: <CalendarOutlined /> },
-    { key: '/health', label: 'Sức khoẻ', icon: <HeartOutlined /> },
-    { key: '/workout', label: 'Lộ trình', icon: <FundOutlined /> },
-    { key: '/checkin', label: 'Checkin', icon: <CreditCardOutlined /> },
+    { key: '/', label: t('nav.home'), icon: <HomeOutlined /> },
+    { key: '/store', label: t('nav.store'), icon: <ShopOutlined /> },
+    { key: '/booking', label: t('nav.book_pt'), icon: <CalendarOutlined /> },
+    { key: '/health', label: t('nav.health'), icon: <HeartOutlined /> },
+    { key: '/workout', label: t('nav.workout'), icon: <FundOutlined /> },
+    { key: '/checkin', label: t('nav.checkin'), icon: <CreditCardOutlined /> },
   ]
 
   const selectedKey =
@@ -210,7 +210,7 @@ export default function MemberLayout({
                           <div className="member-store-dropdown-list">
                             {storeDropdownShops.map((shop) => {
                               const owner = shop.user_id
-                              const name = shop.name || owner?.name || 'Cửa hàng'
+                              const name = shop.name || owner?.name || t('store_fallback')
                               const avatar = shop.avatar || owner?.avatar
 
                               return (
@@ -261,26 +261,27 @@ export default function MemberLayout({
             style={{ marginLeft: 8 }}
           >
             <DashboardOutlined />
-            <span>Quản lý {user?.role === 'admin' ? 'Admin' : user?.role === 'pt' ? 'PT' : user?.role === 'staff' ? 'Staff' : 'Shop'}</span>
+            <span>{t('management', { role: t(`role.${user?.role}`) })}</span>
           </button>
         )}
 
         <div className="member-shell-desktop-actions">
+
           <div
             className="member-shell-wallet-pill"
             style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
           >
-            <Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>Ví:</Text>
+            <Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>{t('wallet.label')}</Text>
             <Text strong style={{ fontSize: 14 }}>
               {walletText}
             </Text>
             <Button
               type="link"
               size="small"
-              onClick={() => goTo('/wallet')}
+              onClick={() => goTo('/deposit')}
               style={{ padding: 0, height: 'auto', fontSize: 12, marginLeft: 4 }}
             >
-              Nạp tiền
+              {t('wallet.deposit')}
             </Button>
           </div>
 
@@ -355,7 +356,7 @@ export default function MemberLayout({
         {children}
       </Content>
 
-      { !hideFooter && <MemberFooter /> }
+      {!hideFooter && <MemberFooter />}
 
       <Drawer
         title="GymPro"
@@ -368,7 +369,7 @@ export default function MemberLayout({
           <img className="h-10 w-10 rounded-full object-cover" src={avatarUrl} alt={user?.name || 'Avatar'} />
           <div className="min-w-0 flex-1">
             <p className="m-0 truncate text-sm font-medium text-[#edebe6]" style={{ color: 'var(--theme-text)' }}>{user?.name}</p>
-            <p className="m-0 truncate text-xs text-[rgba(237,235,230,0.5)]">{user?.role || 'Member'}</p>
+            <p className="m-0 truncate text-xs text-[rgba(237,235,230,0.5)]">{t('role.' + (user?.role || 'member'))}</p>
           </div>
           <button
             onClick={openProfileModal}
@@ -376,17 +377,17 @@ export default function MemberLayout({
             style={{ borderColor: 'var(--theme-border)', backgroundColor: 'var(--theme-card)', color: 'var(--theme-text)' }}
             type="button"
           >
-            Tài khoản
+            {t('account')}
           </button>
         </div>
 
         <div className="member-shell-drawer-wallet">
-          <Text type="secondary">Ví hiện tại</Text>
+          <Text type="secondary">{t('wallet.current')}</Text>
           <Text strong style={{ fontSize: 18 }}>
             {walletText}
           </Text>
-          <Button type="primary" block onClick={() => goTo('/wallet')}>
-            Nạp / xem ví
+          <Button type="primary" block onClick={() => goTo('/deposit')}>
+            {t('wallet.deposit')}
           </Button>
         </div>
 
@@ -408,7 +409,7 @@ export default function MemberLayout({
               selectedKeys={[]}
               items={[{
                 key: user?.role === 'pt' ? '/pt/schedule' : user?.role === 'staff' ? '/staff/checkin' : user?.role === 'seller' ? '/seller/products' : '/admin',
-                label: `Quản lý ${user?.role === 'admin' ? 'Admin' : user?.role === 'pt' ? 'PT' : user?.role === 'staff' ? 'Staff' : 'Shop'}`,
+                label: t('management', { role: t(`role.${user?.role}`) }),
                 icon: <DashboardOutlined />,
               }]}
               onClick={(event) => goTo(event.key)}
@@ -420,7 +421,7 @@ export default function MemberLayout({
       </Drawer>
 
       <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
-  { !accountOpen && !menuOpen && <AiChatWidget /> }
+      {!accountOpen && !menuOpen && <AiChatWidget />}
     </Layout >
   )
 }

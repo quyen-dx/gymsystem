@@ -1,86 +1,88 @@
 import { Button, theme } from 'antd'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useAuth } from '../../../hooks/useAuth'
 
-const stats = [
-  { value: '500+', label: 'Thành viên' },
-  { value: '20+', label: 'Huấn luyện viên' },
-  { value: '4', label: 'Cơ sở' },
-  { value: '98%', label: 'Hài lòng' },
-]
-
-const services = [
-  {
-    icon: '▣',
-    title: 'QR Check-in',
-    desc: 'Vào phòng tập nhanh qua mã QR',
-    color: '#e05a30',
-    path: '/checkin',
-  },
-  {
-    icon: '◴',
-    title: 'Đặt lịch PT',
-    desc: 'Chọn khung giờ cùng huấn luyện viên',
-    color: '#3d9dd0',
-    path: '/booking',
-  },
-  {
-    icon: '↗',
-    title: 'Lộ trình cá nhân',
-    desc: 'Theo sát giáo án và tiến độ tập',
-    color: '#5cb85c',
-    path: '/workout',
-  },
-  {
-    icon: '♡',
-    title: 'Theo dõi sức khoẻ',
-    desc: 'Quản lý chỉ số và mục tiêu cơ thể',
-    color: '#e6a317',
-    path: '/health',
-  },
-  {
-    icon: '◎',
-    title: 'Lớp tập nhóm',
-    desc: 'Các lớp cộng đồng sắp ra mắt',
-    color: '#b464c8',
-  },
-  {
-    icon: '!',
-    title: 'Thông báo',
-    desc: 'Cập nhật lịch tập và ưu đãi mới',
-    color: '#e05a30',
-  },
-]
-
-const testimonials = [
-  {
-    name: 'Thanh Liêm',
-    duration: 'Thành viên 8 tháng',
-    quote: 'Lịch tập rõ ràng, PT theo sát và tôi duy trì được thói quen tập đều hơn trước.',
-  },
-  {
-    name: 'Ngọc Hà',
-    duration: 'Thành viên 6 tháng',
-    quote: 'Check-in nhanh, đặt lịch tiện, mọi chỉ số sức khoẻ đều được lưu lại rất dễ theo dõi.',
-  },
-  {
-    name: 'Minh Quân',
-    duration: 'Thành viên 12 tháng',
-    quote: 'Không gian chuyên nghiệp và lộ trình cá nhân giúp tôi thấy tiến bộ qua từng tuần.',
-  },
-]
-
 export default function MemberDashboard() {
+  const { t, i18n } = useTranslation()
   const { user } = useAuth()
   const { token } = theme.useToken()
   const navigate = useNavigate()
-  const firstName = user?.name?.split(' ').pop() || 'bạn'
-  const slogan1 = 'NƠI BẠN VƯỢT QUA GIỚI HẠN'
-  const slogan2 = 'CHINH PHỤC TỪNG NGÀY'
+  const firstName = user?.name?.split(' ').pop() || t('dashboard.greeting_fallback')
+  const slogan1 = t('dashboard.slogan1')
+  const slogan2 = t('dashboard.slogan2')
   const slogans = [slogan1, slogan2]
   const [displayText, setDisplayText] = useState('')
+
+  const stats = [
+    { value: '500+', label: t('dashboard.stats.members') },
+    { value: '20+', label: t('dashboard.stats.trainers') },
+    { value: '4', label: t('dashboard.stats.branches') },
+    { value: '98%', label: t('dashboard.stats.satisfaction') },
+  ]
+
+  const services = [
+    {
+      icon: '▣',
+      title: t('dashboard.services.qr_checkin'),
+      desc: t('dashboard.services.qr_checkin_desc'),
+      color: '#e05a30',
+      path: '/checkin',
+    },
+    {
+      icon: '◴',
+      title: t('dashboard.services.book_pt'),
+      desc: t('dashboard.services.book_pt_desc'),
+      color: '#3d9dd0',
+      path: '/booking',
+    },
+    {
+      icon: '↗',
+      title: t('dashboard.services.workout'),
+      desc: t('dashboard.services.workout_desc'),
+      color: '#5cb85c',
+      path: '/workout',
+    },
+    {
+      icon: '♡',
+      title: t('dashboard.services.health'),
+      desc: t('dashboard.services.health_desc'),
+      color: '#e6a317',
+      path: '/health',
+    },
+    {
+      icon: '◎',
+      title: t('dashboard.services.group_class'),
+      desc: t('dashboard.services.group_class_desc'),
+      color: '#b464c8',
+    },
+    {
+      icon: '!',
+      title: t('dashboard.services.notification'),
+      desc: t('dashboard.services.notification_desc'),
+      color: '#e05a30',
+    },
+  ]
+
+  const testimonials = [
+    {
+      name: t('dashboard.testimonials.item_0_name'),
+      duration: t('dashboard.testimonials.item_0_duration'),
+      quote: t('dashboard.testimonials.item_0_quote'),
+    },
+    {
+      name: t('dashboard.testimonials.item_1_name'),
+      duration: t('dashboard.testimonials.item_1_duration'),
+      quote: t('dashboard.testimonials.item_1_quote'),
+    },
+    {
+      name: t('dashboard.testimonials.item_2_name'),
+      duration: t('dashboard.testimonials.item_2_duration'),
+      quote: t('dashboard.testimonials.item_2_quote'),
+    },
+  ]
 
   useEffect(() => {
     let cancelled = false
@@ -116,7 +118,7 @@ export default function MemberDashboard() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [i18n.language])
 
   return (
     <MemberLayout>
@@ -162,7 +164,7 @@ export default function MemberDashboard() {
               }}
             >
               <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--theme-accent)]" />
-              Hệ thống quản lý gym chuyên nghiệp
+              {t('dashboard.badge')}
             </div>
 
             <h1
@@ -181,7 +183,7 @@ export default function MemberDashboard() {
             </h1>
 
             <p className="mt-5 max-w-[720px] text-[15px] leading-7 md:text-[17px]" style={{ color: token.colorTextSecondary }}>
-              Quản lý lịch tập, sức khoẻ và hành trình luyện tập của bạn trong một trải nghiệm hiện đại.
+              {t('dashboard.subtitle')}
             </p>
 
             <div className="mt-8 flex flex-col flex-wrap gap-3 min-[421px]:flex-row">
@@ -195,7 +197,7 @@ export default function MemberDashboard() {
                 }}
                 onClick={() => navigate('/booking')}
               >
-                Đặt lịch tập ngay
+                {t('dashboard.cta_booking')}
               </Button>
               <Button
                 size="large"
@@ -207,7 +209,7 @@ export default function MemberDashboard() {
                 }}
                 onClick={() => navigate('/checkin')}
               >
-                Check-in ngay
+                {t('dashboard.cta_checkin')}
               </Button>
             </div>
 
@@ -227,9 +229,9 @@ export default function MemberDashboard() {
         </section>
 
         <section className="mx-auto w-[calc(100%-40px)] max-w-6xl pt-14 md:w-[calc(100%-64px)] md:pt-[74px]">
-          <p className="mb-2.5 text-xs font-black uppercase tracking-[0.14em] text-[var(--theme-accent)]">Dịch vụ & tiện ích</p>
+          <p className="mb-2.5 text-xs font-black uppercase tracking-[0.14em] text-[var(--theme-accent)]">{t('dashboard.services.overline')}</p>
           <h2 className="font-['Bebas_Neue'] text-[44px] font-normal leading-none tracking-normal" style={{ color: token.colorText }}>
-            MỌI THỨ BẠN CẦN
+            {t('dashboard.services.heading')}
           </h2>
 
           <div className="mt-7 grid grid-cols-1 gap-4 min-[421px]:grid-cols-2 md:grid-cols-[repeat(auto-fit,minmax(170px,1fr))]">
@@ -259,9 +261,9 @@ export default function MemberDashboard() {
         </section>
 
         <section className="mx-auto w-[calc(100%-40px)] max-w-6xl pt-14 md:w-[calc(100%-64px)] md:pt-[74px]">
-          <p className="mb-2.5 text-xs font-black uppercase tracking-[0.14em] text-[var(--theme-accent)]">Thành viên nói gì</p>
+          <p className="mb-2.5 text-xs font-black uppercase tracking-[0.14em] text-[var(--theme-accent)]">{t('dashboard.testimonials.overline')}</p>
           <h2 className="font-['Bebas_Neue'] text-[44px] font-normal leading-none tracking-normal" style={{ color: token.colorText }}>
-            ĐƯỢC TIN TƯỞNG
+            {t('dashboard.testimonials.heading')}
           </h2>
 
           <div className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -269,7 +271,7 @@ export default function MemberDashboard() {
               <article className="rounded-lg border p-6" key={item.name} style={{ backgroundColor: token.colorBgContainer, borderColor: token.colorBorder }}>
                 <div className="text-sm tracking-normal text-[#e6a317]">★★★★★</div>
                 <p className="my-[18px] min-h-0 text-[15px] italic leading-7 md:min-h-[92px]" style={{ color: token.colorTextSecondary }}>
-                  "{item.quote}"
+                  &ldquo;{item.quote}&rdquo;
                 </p>
                 <div className="flex items-center gap-3">
                   <span className="grid h-[42px] w-[42px] place-items-center rounded-full font-black" style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}>
@@ -287,11 +289,11 @@ export default function MemberDashboard() {
 
         <section className="mx-auto w-[calc(100%-40px)] max-w-[900px] py-[74px] text-center md:w-[calc(100%-64px)] md:pt-[88px]">
           <h2 className="grid font-['Bebas_Neue'] text-5xl font-normal leading-[0.95] tracking-normal md:text-[64px]" style={{ color: token.colorText }}>
-            BẮT ĐẦU
-            <span>HÀNH TRÌNH</span>
+            {t('dashboard.cta.heading1')}
+            <span>{t('dashboard.cta.heading2')}</span>
           </h2>
           <p className="mx-auto mt-[18px] max-w-[560px] text-base leading-7" style={{ color: token.colorTextSecondary }}>
-            {firstName}, lịch tập tiếp theo của bạn đã sẵn sàng để được chinh phục.
+            {t('dashboard.cta.subtitle', { firstName })}
           </p>
           <div className="mt-8 flex flex-col flex-wrap justify-center gap-3 min-[421px]:flex-row">
             <Button
@@ -300,7 +302,7 @@ export default function MemberDashboard() {
               style={{ backgroundColor: 'var(--theme-accent)', borderColor: 'var(--theme-accent)', color: 'var(--theme-button-text)' }}
               onClick={() => navigate('/booking')}
             >
-              Đặt lịch PT ngay
+              {t('dashboard.cta.book_pt')}
             </Button>
             <Button
               size="large"
@@ -308,7 +310,7 @@ export default function MemberDashboard() {
               style={{ borderColor: token.colorBorder, color: token.colorText }}
               onClick={() => navigate('/health')}
             >
-              Xem sức khoẻ
+              {t('dashboard.cta.view_health')}
             </Button>
           </div>
         </section>

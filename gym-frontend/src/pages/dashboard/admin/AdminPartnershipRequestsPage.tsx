@@ -1,5 +1,6 @@
 import { Button, Descriptions, Image, Input, message, Modal, Select, Space, Table, Tag, Tabs, Typography } from 'antd'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import {
   approvePartnershipRequest,
@@ -35,24 +36,10 @@ const statusColor: Record<PartnershipRequest['status'], string> = {
   rejected: 'red',
 }
 
-const statusLabel: Record<PartnershipRequest['status'], string> = {
-  pending: 'Chờ xử lý',
-  approved: 'Đã duyệt',
-  rejected: 'Từ chối',
-}
-
-const categoryOptions = [
-  { label: 'Thiết bị gym', value: 'Thiết bị gym' },
-  { label: 'Thực phẩm thể thao', value: 'Thực phẩm thể thao' },
-  { label: 'Phụ kiện', value: 'Phụ kiện' },
-  { label: 'Trang phục', value: 'Trang phục' },
-  { label: 'Khác', value: 'Khác' },
-]
-
 export default function AdminPartnershipRequestsPage() {
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState('requests')
 
-  // Partnerships state
   const [requests, setRequests] = useState<PartnershipRequest[]>([])
   const [requestsLoading, setRequestsLoading] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState('')
@@ -61,7 +48,6 @@ export default function AdminPartnershipRequestsPage() {
   const [requestCategoryFilter, setRequestCategoryFilter] = useState<string>('')
   const [selectedRequest, setSelectedRequest] = useState<PartnershipRequest | null>(null)
 
-  // Shop state
   const [shops, setShops] = useState<AdminShop[]>([])
   const [shopsLoading, setShopsLoading] = useState(false)
   const [shopSearch, setShopSearch] = useState('')
@@ -75,14 +61,27 @@ export default function AdminPartnershipRequestsPage() {
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  // Fetch partnerships
+  const statusLabel: Record<PartnershipRequest['status'], string> = {
+    pending: t('admin.partnership_requests.status.pending'),
+    approved: t('admin.partnership_requests.status.approved'),
+    rejected: t('admin.partnership_requests.status.rejected'),
+  }
+
+  const categoryOptions = [
+    { label: t('admin.partnership_requests.category_options.equipment'), value: 'Thiết bị gym' },
+    { label: t('admin.partnership_requests.category_options.sports_food'), value: 'Thực phẩm thể thao' },
+    { label: t('admin.partnership_requests.category_options.accessories'), value: 'Phụ kiện' },
+    { label: t('admin.partnership_requests.category_options.clothing'), value: 'Trang phục' },
+    { label: t('admin.partnership_requests.category_options.other'), value: 'Khác' },
+  ]
+
   const fetchRequests = async () => {
     setRequestsLoading(true)
     try {
       const res = await getAdminPartnershipRequests()
       setRequests(res.data.requests || [])
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Không thể tải yêu cầu hợp tác')
+      message.error(err.response?.data?.message || t('admin.partnership_requests.messages.fetch_requests_failed'))
     } finally {
       setRequestsLoading(false)
     }
@@ -92,14 +91,13 @@ export default function AdminPartnershipRequestsPage() {
     fetchRequests()
   }, [])
 
-  // Fetch shops
   const fetchShops = async () => {
     setShopsLoading(true)
     try {
       const res = await getAdminShops()
       setShops(res.data)
     } catch {
-      message.error('Không thể tải danh sách thương hiệu')
+      message.error(t('admin.partnership_requests.messages.fetch_shops_failed'))
     } finally {
       setShopsLoading(false)
     }
@@ -107,15 +105,14 @@ export default function AdminPartnershipRequestsPage() {
 
   useEffect(() => { fetchShops() }, [])
 
-  // Partnership actions
   const handleApprove = async (request: PartnershipRequest) => {
     setActionLoadingId(request._id)
     try {
       await approvePartnershipRequest(request._id)
-      message.success('Đã duyệt yêu cầu và tạo shop')
+      message.success(t('admin.partnership_requests.messages.approve_success'))
       fetchRequests()
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Không thể duyệt yêu cầu')
+      message.error(err.response?.data?.message || t('admin.partnership_requests.messages.approve_failed'))
     } finally {
       setActionLoadingId('')
     }
@@ -125,16 +122,15 @@ export default function AdminPartnershipRequestsPage() {
     setActionLoadingId(request._id)
     try {
       await rejectPartnershipRequest(request._id)
-      message.success('Đã từ chối yêu cầu')
+      message.success(t('admin.partnership_requests.messages.reject_success'))
       fetchRequests()
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Không thể từ chối yêu cầu')
+      message.error(err.response?.data?.message || t('admin.partnership_requests.messages.reject_failed'))
     } finally {
       setActionLoadingId('')
     }
   }
 
-  // Shop actions
   const handleViewProducts = async (shop: AdminShop) => {
     setViewingShopName(shop.name)
     setProductsLoading(true)
@@ -143,7 +139,7 @@ export default function AdminPartnershipRequestsPage() {
       const res = await getAdminShopProducts(shop._id)
       setViewingProducts(res.data.products || res.data)
     } catch {
-      message.error('Không thể tải sản phẩm của thương hiệu')
+      message.error(t('admin.partnership_requests.messages.products_failed'))
     } finally {
       setProductsLoading(false)
     }
@@ -158,23 +154,22 @@ export default function AdminPartnershipRequestsPage() {
   const handleDeleteShop = async () => {
     if (!deletingShop) return
     if (!deleteReason.trim()) {
-      message.warning('Vui lòng nhập lý do xóa')
+      message.warning(t('admin.partnership_requests.messages.reason_required'))
       return
     }
     setDeleteLoading(true)
     try {
       await deleteShop(deletingShop._id, deleteReason)
-      message.success(`Đã xóa thương hiệu ${deletingShop.name}`)
+      message.success(t('admin.partnership_requests.messages.delete_success', { name: deletingShop.name }))
       setIsDeleteModalVisible(false)
       fetchShops()
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Lỗi khi xóa thương hiệu')
+      message.error(err.response?.data?.message || t('admin.partnership_requests.messages.delete_failed'))
     } finally {
       setDeleteLoading(false)
     }
   }
 
-  // Filtered data
   const filteredRequests = requests.filter((item) => {
     const query = requestSearch.trim().toLowerCase()
     const matchesSearch = !query || [item.brand_name, item.category, item.phone, item.email, item.contact_name]
@@ -205,7 +200,7 @@ export default function AdminPartnershipRequestsPage() {
 
   const requestColumns = [
     {
-      title: 'Thương hiệu',
+      title: t('admin.partnership_requests.request_columns.brand'),
       dataIndex: 'brand_name',
       render: (value: string, item: PartnershipRequest) => (
         <div>
@@ -214,23 +209,23 @@ export default function AdminPartnershipRequestsPage() {
         </div>
       ),
     },
-    { title: 'Lĩnh vực', dataIndex: 'category' },
-    { title: 'SĐT', dataIndex: 'phone' },
-    { title: 'Email', dataIndex: 'email' },
+    { title: t('admin.partnership_requests.request_columns.category'), dataIndex: 'category' },
+    { title: t('admin.partnership_requests.request_columns.phone'), dataIndex: 'phone' },
+    { title: t('admin.partnership_requests.request_columns.email'), dataIndex: 'email' },
     {
-      title: 'Ngày gửi',
+      title: t('admin.partnership_requests.request_columns.submitted_at'),
       dataIndex: 'created_at',
       render: (value: string) => new Date(value).toLocaleString('vi-VN'),
     },
     {
-      title: 'Trạng thái',
+      title: t('admin.partnership_requests.request_columns.status'),
       dataIndex: 'status',
       render: (value: PartnershipRequest['status']) => (
         <Tag color={statusColor[value]}>{statusLabel[value]}</Tag>
       ),
     },
     {
-      title: 'Hành động',
+      title: t('admin.partnership_requests.request_columns.actions'),
       render: (_: any, item: PartnershipRequest) => (
         <Space onClick={(event) => event.stopPropagation()}>
           <Button
@@ -239,7 +234,7 @@ export default function AdminPartnershipRequestsPage() {
             loading={actionLoadingId === item._id}
             onClick={() => handleApprove(item)}
           >
-            Duyệt
+            {t('admin.partnership_requests.request_actions.approve')}
           </Button>
           <Button
             type="link"
@@ -248,7 +243,7 @@ export default function AdminPartnershipRequestsPage() {
             loading={actionLoadingId === item._id}
             onClick={() => handleReject(item)}
           >
-            Từ chối
+            {t('admin.partnership_requests.request_actions.reject')}
           </Button>
         </Space>
       ),
@@ -257,7 +252,7 @@ export default function AdminPartnershipRequestsPage() {
 
   const shopColumns = [
     {
-      title: 'Thương hiệu',
+      title: t('admin.partnership_requests.shop_columns.brand'),
       render: (_: any, s: AdminShop) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Image
@@ -274,52 +269,52 @@ export default function AdminPartnershipRequestsPage() {
       ),
     },
     {
-      title: 'Lĩnh vực',
+      title: t('admin.partnership_requests.shop_columns.category'),
       render: (_: any, s: AdminShop) => {
         const req = requestByShopId.get(s._id)
         return req?.category || '—'
       },
     },
     {
-      title: 'SĐT',
+      title: t('admin.partnership_requests.shop_columns.phone'),
       render: (_: any, s: AdminShop) => {
         const req = requestByShopId.get(s._id)
         return req?.phone || '—'
       },
     },
     {
-      title: 'Email',
+      title: t('admin.partnership_requests.shop_columns.email'),
       render: (_: any, s: AdminShop) => {
         const req = requestByShopId.get(s._id)
         return req?.email || '—'
       },
     },
     {
-      title: 'Website',
+      title: t('admin.partnership_requests.shop_columns.website'),
       render: (_: any, s: AdminShop) => {
         const req = requestByShopId.get(s._id)
         return req?.website || '—'
       },
     },
     {
-      title: 'Ngày tạo',
+      title: t('admin.partnership_requests.shop_columns.created_at'),
       dataIndex: 'createdAt',
       render: (d: string) => new Date(d).toLocaleDateString('vi-VN'),
     },
     {
-      title: 'Trạng thái',
+      title: t('admin.partnership_requests.shop_columns.status'),
       render: (_: any, s: AdminShop) => (
         <Tag color={s.isActive ? 'green' : 'red'}>
-          {s.isActive ? 'Đang hoạt động' : 'Tạm ngưng'}
+          {s.isActive ? t('admin.partnership_requests.shop_status.active') : t('admin.partnership_requests.shop_status.inactive')}
         </Tag>
       ),
     },
     {
-      title: 'Hành động',
+      title: t('admin.partnership_requests.shop_columns.actions'),
       render: (_: any, s: AdminShop) => (
         <Space>
-          <Button type="link" onClick={() => handleViewProducts(s)}>Sản phẩm</Button>
-          <Button type="link" danger onClick={() => showDeleteModal(s)}>Xóa</Button>
+          <Button type="link" onClick={() => handleViewProducts(s)}>{t('admin.partnership_requests.shop_actions.products')}</Button>
+          <Button type="link" danger onClick={() => showDeleteModal(s)}>{t('admin.partnership_requests.shop_actions.delete')}</Button>
         </Space>
       ),
     },
@@ -327,7 +322,7 @@ export default function AdminPartnershipRequestsPage() {
 
   const productColumns = [
     {
-      title: 'Sản phẩm',
+      title: t('admin.shops.products_columns.product'),
       render: (_: any, p: AdminProduct) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Image src={p.image} width={40} height={40} style={{ borderRadius: 4 }} />
@@ -335,20 +330,20 @@ export default function AdminPartnershipRequestsPage() {
         </div>
       )
     },
-    { title: 'Danh mục', dataIndex: 'category' },
-    { title: 'Giá', dataIndex: 'price', render: (v: number) => v.toLocaleString() + 'đ' },
-    { title: 'Tồn kho', dataIndex: 'stock' },
+    { title: t('admin.shops.products_columns.category'), dataIndex: 'category' },
+    { title: t('admin.shops.products_columns.price'), dataIndex: 'price', render: (v: number) => v.toLocaleString() + 'đ' },
+    { title: t('admin.shops.products_columns.stock'), dataIndex: 'stock' },
   ]
 
   const subtitleText = activeTab === 'requests'
-    ? `${requests.length} yêu cầu | ${pendingCount} đang chờ xử lý`
-    : `Tổng: ${shops.length} thương hiệu`
+    ? t('admin.partnership_requests.subtitle.requests', { total: requests.length, pending: pendingCount })
+    : t('admin.partnership_requests.subtitle.shops', { total: shops.length })
 
   return (
     <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,var(--theme-accent-muted),rgba(255,255,255,0.02))]">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Admin</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Partnerships</h1>
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('admin.partnership_requests.overline')}</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.partnership_requests.title')}</h1>
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">{subtitleText}</p>
       </div>
 
@@ -358,31 +353,31 @@ export default function AdminPartnershipRequestsPage() {
         items={[
           {
             key: 'requests',
-            label: 'Yêu cầu hợp tác',
+            label: t('admin.partnership_requests.tabs.requests'),
             children: (
               <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
                 <div className="dashboard-filter-bar">
                   <Input.Search
                     allowClear
-                    placeholder="Tìm thương hiệu, lĩnh vực, liên hệ..."
+                    placeholder={t('admin.partnership_requests.search_placeholder')}
                     onChange={(event) => setRequestSearch(event.target.value)}
                   />
                   <Space wrap>
                     <Select
                       allowClear
-                      placeholder="Tất cả trạng thái"
+                      placeholder={t('admin.partnership_requests.filter_status')}
                       style={{ minWidth: 150 }}
                       value={statusFilter || undefined}
                       onChange={(value) => setStatusFilter(value || '')}
                       options={[
-                        { label: 'Chờ xử lý', value: 'pending' },
-                        { label: 'Đã duyệt', value: 'approved' },
-                        { label: 'Từ chối', value: 'rejected' },
+                        { label: t('admin.partnership_requests.status.pending'), value: 'pending' },
+                        { label: t('admin.partnership_requests.status.approved'), value: 'approved' },
+                        { label: t('admin.partnership_requests.status.rejected'), value: 'rejected' },
                       ]}
                     />
                     <Select
                       allowClear
-                      placeholder="Tất cả lĩnh vực"
+                      placeholder={t('admin.partnership_requests.filter_category')}
                       style={{ minWidth: 150 }}
                       value={requestCategoryFilter || undefined}
                       onChange={(value) => setRequestCategoryFilter(value || '')}
@@ -408,19 +403,19 @@ export default function AdminPartnershipRequestsPage() {
           },
           {
             key: 'shops',
-            label: 'Quản lý Thương hiệu',
+            label: t('admin.partnership_requests.tabs.shops'),
             children: (
               <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
                 <div className="dashboard-filter-bar">
                   <Space wrap>
                     <Input.Search
-                      placeholder="Tìm thương hiệu, chủ sở hữu..."
+                      placeholder={t('admin.partnership_requests.search_placeholder')}
                       allowClear
                       onChange={(e) => setShopSearch(e.target.value)}
                     />
                     <Select
                       allowClear
-                      placeholder="Tất cả lĩnh vực"
+                      placeholder={t('admin.partnership_requests.filter_category')}
                       style={{ minWidth: 150 }}
                       value={shopCategoryFilter || undefined}
                       onChange={(value) => setShopCategoryFilter(value || '')}
@@ -445,7 +440,7 @@ export default function AdminPartnershipRequestsPage() {
       />
 
       <Modal
-        title="Chi tiết yêu cầu hợp tác"
+        title={t('admin.partnership_requests.detail_modal_title')}
         open={!!selectedRequest}
         onCancel={() => setSelectedRequest(null)}
         footer={null}
@@ -453,25 +448,25 @@ export default function AdminPartnershipRequestsPage() {
       >
         {selectedRequest && (
           <Descriptions bordered column={1}>
-            <Descriptions.Item label="Tên thương hiệu">{selectedRequest.brand_name}</Descriptions.Item>
-            <Descriptions.Item label="Lĩnh vực">{selectedRequest.category}</Descriptions.Item>
-            <Descriptions.Item label="Người liên hệ">{selectedRequest.contact_name}</Descriptions.Item>
-            <Descriptions.Item label="Số điện thoại">{selectedRequest.phone}</Descriptions.Item>
-            <Descriptions.Item label="Email">{selectedRequest.email}</Descriptions.Item>
-            <Descriptions.Item label="Website">{selectedRequest.website || 'Không cung cấp'}</Descriptions.Item>
-            <Descriptions.Item label="Mô tả">{selectedRequest.description || 'Không cung cấp'}</Descriptions.Item>
-            <Descriptions.Item label="Trạng thái">
+            <Descriptions.Item label={t('admin.partnership_requests.detail.brand_name')}>{selectedRequest.brand_name}</Descriptions.Item>
+            <Descriptions.Item label={t('admin.partnership_requests.detail.category')}>{selectedRequest.category}</Descriptions.Item>
+            <Descriptions.Item label={t('admin.partnership_requests.detail.contact')}>{selectedRequest.contact_name}</Descriptions.Item>
+            <Descriptions.Item label={t('admin.partnership_requests.detail.phone')}>{selectedRequest.phone}</Descriptions.Item>
+            <Descriptions.Item label={t('admin.partnership_requests.detail.email')}>{selectedRequest.email}</Descriptions.Item>
+            <Descriptions.Item label={t('admin.partnership_requests.detail.website')}>{selectedRequest.website || t('admin.partnership_requests.detail.not_provided')}</Descriptions.Item>
+            <Descriptions.Item label={t('admin.partnership_requests.detail.description')}>{selectedRequest.description || t('admin.partnership_requests.detail.not_provided')}</Descriptions.Item>
+            <Descriptions.Item label={t('admin.partnership_requests.detail.status')}>
               <Tag color={statusColor[selectedRequest.status]}>{statusLabel[selectedRequest.status]}</Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="Shop đã tạo">
-              {selectedRequest.shop_id?.name || 'Chưa có'}
+            <Descriptions.Item label={t('admin.partnership_requests.detail.shop_created')}>
+              {selectedRequest.shop_id?.name || t('admin.partnership_requests.detail.not_yet')}
             </Descriptions.Item>
           </Descriptions>
         )}
       </Modal>
 
       <Modal
-        title={`Sản phẩm của thương hiệu: ${viewingShopName}`}
+        title={t('admin.partnership_requests.products_modal_title', { name: viewingShopName })}
         open={isProductsModalVisible}
         onCancel={() => setIsProductsModalVisible(false)}
         footer={null}
@@ -487,22 +482,22 @@ export default function AdminPartnershipRequestsPage() {
       </Modal>
 
       <Modal
-        title="Xác nhận xóa thương hiệu"
+        title={t('admin.partnership_requests.delete_modal.title')}
         open={isDeleteModalVisible}
         onOk={handleDeleteShop}
         onCancel={() => setIsDeleteModalVisible(false)}
         confirmLoading={deleteLoading}
-        okText="Xác nhận xóa"
-        cancelText="Hủy"
+        okText={t('admin.partnership_requests.delete_modal.ok_text')}
+        cancelText={t('admin.partnership_requests.delete_modal.cancel_text')}
         okButtonProps={{ danger: true }}
       >
-        <p>Bạn có chắc chắn muốn xóa thương hiệu <strong>{deletingShop?.name}</strong>?</p>
-        <p>Hành động này sẽ xóa tất cả sản phẩm của thương hiệu và gửi thông báo cho chủ sở hữu.</p>
+        <p dangerouslySetInnerHTML={{ __html: t('admin.partnership_requests.delete_modal.confirm', { name: deletingShop?.name }) }} />
+        <p>{t('admin.partnership_requests.delete_modal.warning')}</p>
         <div className="mt-4">
-          <Text strong>Lý do xóa:</Text>
+          <Text strong>{t('admin.partnership_requests.delete_modal.reason_label')}</Text>
           <Input.TextArea
             rows={4}
-            placeholder="Nhập lý do xóa thương hiệu..."
+            placeholder={t('admin.partnership_requests.delete_modal.reason_placeholder')}
             value={deleteReason}
             onChange={e => setDeleteReason(e.target.value)}
             className="mt-2"
