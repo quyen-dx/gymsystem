@@ -12,6 +12,7 @@ interface BankInfoCardProps {
 }
 
 function CopyableRow({ label, value }: { label: string; value: string }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {

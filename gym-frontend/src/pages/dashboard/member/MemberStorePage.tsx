@@ -171,7 +171,6 @@ export default function MemberStorePage() {
   const shopAvatar = shopDetail?.avatar || firstShop?.avatar || shopOwner?.avatar
   const shopDescription = shopDetail?.description || firstShop?.description
   const shopRating = shopDetail?.rating ?? firstShop?.rating ?? 0
-  const shopReviewCount = shopDetail?.reviewCount ?? firstShop?.reviewCount ?? 0
   const shopReviews = shopDetail?.reviews || []
   const shopAddress = shopDetail?.address || firstShop?.address
   const normalizeCategory = (value?: string) =>
