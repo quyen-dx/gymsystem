@@ -6,6 +6,7 @@ import { getClientUrls } from './src/config/appUrls.js'
 import connectDB from './src/config/db.js'
 import passport from './src/config/passport.js'
 import { getMyProducts } from './src/controllers/productController.js'
+import { handleStripeWebhook } from './src/controllers/walletController.js'
 import { protect, sellerOnly } from './src/middlewares/authMiddleware.js'
 import addressRoutes from './src/routes/addressRoutes.js'
 import aiRoutes from './src/routes/aiRoutes.js'
@@ -14,7 +15,6 @@ import authRoutes from './src/routes/authRoutes.js'
 import membershipRoutes from './src/routes/membershipRoutes.js'
 import orderRoutes from './src/routes/orderRoutes.js'
 import partnershipRequestRoutes from './src/routes/partnershipRequestRoutes.js'
-import paymentRoutes from './src/routes/paymentRoutes.js'
 import planRoutes from './src/routes/planRoutes.js'
 import productRoutes from './src/routes/productRoutes.js'
 import sellerRoutes from './src/routes/sellerRoutes.js'
@@ -29,6 +29,7 @@ app.use(
     credentials: true,
   }),
 )
+app.post('/api/wallet/stripe-webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())
@@ -56,8 +57,6 @@ app.use('/api/products', productRoutes)
 app.use('/api/shops', shopRoutes)
 app.use('/api/wallet', walletRoutes)
 app.use('/api/addresses', addressRoutes)
-app.use('/api/payments', paymentRoutes)
-app.use('/api/payment', paymentRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/seller', sellerRoutes)
 app.use('/api/memberships', membershipRoutes)

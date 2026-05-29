@@ -1,5 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Button, Card, Skeleton, Table, Typography } from 'antd'
+import type { ReactNode } from 'react'
+import { Button, Card, Skeleton, Table, Typography, message } from 'antd'
+import { loadStripe } from '@stripe/stripe-js'
+import type { StripeCardCvcElement, StripeCardExpiryElement, StripeCardNumberElement } from '@stripe/stripe-js'
+import { CardCvcElement, CardExpiryElement, CardNumberElement, Elements, useElements, useStripe } from '@stripe/react-stripe-js'
 import { useTranslation } from 'react-i18next'
 import i18n from '../../../i18n'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
@@ -7,11 +11,25 @@ import DepositQR from '../../../components/wallet/DepositQR'
 import BankInfoCard from '../../../components/wallet/BankInfoCard'
 import { useDeposit } from '../../../hooks/useDeposit'
 import { useWallet } from '../../../context/WalletProvider'
-import { getWalletTransactions } from '../../../services/walletService'
+import { createStripePaymentIntent, getWalletTransactions } from '../../../services/walletService'
 import { BANKS, PRESET_AMOUNTS } from '../../../types/member/wallet'
 import type { BankOption } from '../../../types/member/wallet'
 
 const { Text } = Typography
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || ''
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
+
+const cardStyle = {
+  style: {
+    base: {
+      color: '#ffffff',
+      fontFamily: 'Plus Jakarta Sans, sans-serif',
+      fontSize: '14px',
+      '::placeholder': { color: '#6b7280' },
+    },
+    invalid: { color: '#ef4444' },
+  },
+}
 
 function formatVND(amount: number) {
   return new Intl.NumberFormat(i18n.language === 'vi' ? 'vi-VN' : 'en-US', {
@@ -26,6 +44,133 @@ const STEPS = [
   { step: 3, titleKey: 'deposit.step_3_title', descKey: 'deposit.step_3_desc' },
   { step: 4, titleKey: 'deposit.step_4_title', descKey: 'deposit.step_4_desc' },
 ]
+
+function StripeCardForm({
+  amount,
+  amountError,
+  renderAmountSection,
+  onPaid,
+}: {
+  amount: number
+  amountError: string | null
+  renderAmountSection: () => ReactNode
+  onPaid: () => void
+}) {
+  const { t } = useTranslation()
+  const stripe = useStripe()
+  const elements = useElements()
+  const [paying, setPaying] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [cardNumber, setCardNumber] = useState<StripeCardNumberElement | null>(null)
+  const [cardExpiry, setCardExpiry] = useState<StripeCardExpiryElement | null>(null)
+  const [cardCvc, setCardCvc] = useState<StripeCardCvcElement | null>(null)
+
+  const handlePay = async () => {
+    if (!stripe || !elements || amountError) return
+
+    const cardElement = elements.getElement(CardNumberElement)
+    if (!cardElement) return
+
+    setPaying(true)
+    setError(null)
+
+    try {
+      const res = await createStripePaymentIntent({ amount })
+      const clientSecret = res.data.clientSecret
+      const result = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: { card: cardElement },
+      })
+
+      if (result.error) {
+        setError(result.error.message || t('deposit.card.payment_failed'))
+        return
+      }
+
+      message.success(t('deposit.card.success'))
+      onPaid()
+    } catch (err: any) {
+      setError(err?.response?.data?.message || t('deposit.card.process_failed'))
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-6 md:grid-cols-[1fr_1.1fr]">
+      <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5">
+        {renderAmountSection()}
+      </div>
+      <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5">
+        <div className="mb-5">
+          <p className="text-base font-semibold text-[var(--theme-text)]">{t('deposit.card.title')}</p>
+          <p className="mt-1 text-xs text-[var(--theme-muted)]">{t('deposit.card.description')}</p>
+        </div>
+
+        <div className="space-y-4">
+          {!stripePublishableKey && (
+            <p className="rounded-lg border border-[#ef444433] bg-[#ef44440f] px-3 py-2 text-xs text-[#ef4444]">
+              {t('deposit.card.missing_key')}
+            </p>
+          )}
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">{t('deposit.card.card_number')}</span>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => cardNumber?.focus()}
+              onKeyDown={(event) => event.key === 'Enter' && cardNumber?.focus()}
+              className="cursor-text rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3 transition-colors focus-within:border-[var(--theme-accent)]"
+            >
+              <CardNumberElement onReady={setCardNumber} options={{ ...cardStyle, showIcon: true, placeholder: t('deposit.card.card_number_placeholder') }} />
+            </div>
+          </label>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">{t('deposit.card.expiration_date')}</span>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => cardExpiry?.focus()}
+                onKeyDown={(event) => event.key === 'Enter' && cardExpiry?.focus()}
+                className="cursor-text rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3 transition-colors focus-within:border-[var(--theme-accent)]"
+              >
+                <CardExpiryElement onReady={setCardExpiry} options={{ ...cardStyle, placeholder: t('deposit.card.expiration_placeholder') }} />
+              </div>
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">{t('deposit.card.security_code')}</span>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => cardCvc?.focus()}
+                onKeyDown={(event) => event.key === 'Enter' && cardCvc?.focus()}
+                className="cursor-text rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3 transition-colors focus-within:border-[var(--theme-accent)]"
+              >
+                <CardCvcElement onReady={setCardCvc} options={{ ...cardStyle, placeholder: t('deposit.card.cvc_placeholder') }} />
+              </div>
+            </label>
+          </div>
+
+          {error && <p className="text-xs text-[#ef4444]">{error}</p>}
+
+          <Button
+            type="primary"
+            size="large"
+            block
+            loading={paying}
+            disabled={!stripe || !!amountError}
+            onClick={handlePay}
+            className="!h-11 !bg-[var(--theme-accent)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
+          >
+            {t('deposit.card.pay_button', { amount: formatVND(amount) })}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function DepositPage() {
   const { t } = useTranslation()
@@ -44,7 +189,7 @@ export default function DepositPage() {
     handleConfirmDeposit,
     handleCancelDeposit,
   } = useDeposit()
-  const [tab, setTab] = useState<'qr' | 'manual'>('qr')
+  const [tab, setTab] = useState<'qr' | 'manual' | 'card'>('qr')
   const [amount, setAmount] = useState(PRESET_AMOUNTS[1])
   const [customInput, setCustomInput] = useState('')
   const [transactions, setTransactions] = useState<any[]>([])
@@ -86,6 +231,12 @@ export default function DepositPage() {
     await handleCancelDeposit()
     setAmount(PRESET_AMOUNTS[1])
     setCustomInput('')
+  }
+
+  const refreshTransactions = () => {
+    getWalletTransactions()
+      .then((res) => setTransactions(res.data.data))
+      .catch(() => {})
   }
 
   const bankOptions: { key: BankOption; label: string; sub: string }[] = [
@@ -294,6 +445,16 @@ export default function DepositPage() {
             >
               {t('deposit.tab_manual')}
             </button>
+            <button
+              onClick={() => setTab('card')}
+              className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+                tab === 'card'
+                  ? 'bg-[var(--theme-accent)] text-[var(--theme-button-text)] shadow-sm'
+                  : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
+              }`}
+            >
+              {t('deposit.tab_card')}
+            </button>
           </div>
 
           {bankInfoLoading ? (
@@ -305,6 +466,18 @@ export default function DepositPage() {
               <div>{renderLeftColumn()}</div>
               <div>{renderRightColumn()}</div>
             </div>
+          ) : tab === 'card' ? (
+            <Elements stripe={stripePromise} options={{ locale: i18n.language.startsWith('vi') ? 'vi' : 'en' }}>
+              <StripeCardForm
+                amount={amount}
+                amountError={amountError}
+                renderAmountSection={renderAmountSection}
+                onPaid={() => {
+                  refreshTransactions()
+                  setTimeout(refreshTransactions, 3000)
+                }}
+              />
+            </Elements>
           ) : (
             renderManualTab()
           )}

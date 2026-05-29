@@ -1,8 +1,11 @@
 import mongoose from 'mongoose'
+import Stripe from 'stripe'
 import Transaction from '../models/Transaction.js'
 import Wallet from '../models/Wallet.js'
 import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, transferWalletBalance } from '../services/walletService.js'
 import AppError from '../utils/appError.js'
+
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
 
 export const getMyWallet = async (req, res, next) => {
     try {
@@ -108,6 +111,79 @@ export const createDepositTransaction = async (req, res, next) => {
             },
         })
     } catch (error) {
+        next(error)
+    }
+}
+
+export const createStripePaymentIntent = async (req, res, next) => {
+    try {
+        if (!stripe) {
+            throw new AppError('Stripe chưa được cấu hình', 500)
+        }
+
+        const amount = Number(req.body.amount)
+        if (!amount || amount < 10000 || amount > 50000000) {
+            throw new AppError('Số tiền không hợp lệ (10.000đ - 50.000.000đ)', 400)
+        }
+
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount,
+            currency: 'vnd',
+            metadata: { userId: req.user._id.toString() },
+        })
+
+        return res.json({ clientSecret: paymentIntent.client_secret })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const handleStripeWebhook = async (req, res, next) => {
+    try {
+        if (!stripe) {
+            throw new AppError('Stripe chưa được cấu hình', 500)
+        }
+
+        const signature = req.headers['stripe-signature']
+        const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+        let event
+
+        if (webhookSecret) {
+            event = stripe.webhooks.constructEvent(req.body, signature, webhookSecret)
+        } else {
+            const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : JSON.stringify(req.body)
+            event = JSON.parse(rawBody)
+        }
+
+        if (event.type === 'payment_intent.succeeded') {
+            const paymentIntent = event.data.object
+            const userId = paymentIntent.metadata?.userId
+            const amount = Number(paymentIntent.amount_received || paymentIntent.amount)
+
+            if (userId && amount > 0) {
+                await applyWalletTransaction({
+                    userId,
+                    amount,
+                    type: 'deposit',
+                    provider: 'stripe',
+                    source: 'card',
+                    description: 'Stripe card deposit',
+                    referenceId: paymentIntent.id,
+                    status: 'completed',
+                    metadata: {
+                        stripePaymentIntentId: paymentIntent.id,
+                        paymentMethod: paymentIntent.payment_method,
+                    },
+                    idempotencyKey: paymentIntent.id,
+                })
+            }
+        }
+
+        return res.json({ received: true })
+    } catch (error) {
+        if (error.type === 'StripeSignatureVerificationError') {
+            return res.status(400).json({ success: false, message: `Webhook Error: ${error.message}` })
+        }
         next(error)
     }
 }

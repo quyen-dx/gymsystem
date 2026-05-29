@@ -144,6 +144,7 @@
     "current_balance": "Current Balance:",
     "tab_qr": "QR Transfer",
     "tab_manual": "Manual Transfer",
+    "tab_card": "Visa / Card",
     "select_amount": "Select Amount",
     "placeholder_custom": "Enter a different amount...",
     "select_bank": "Select Bank",
@@ -185,6 +186,22 @@
       "warning": "You must enter the correct transfer content for the system to auto-confirm.",
       "copied": "Copied {{label}}",
       "copy_failed": "Unable to copy"
+    },
+    "card": {
+      "title": "Visa / Card",
+      "description": "Pay in Stripe test mode. Your wallet will be credited after the webhook confirms the payment.",
+      "card_number": "Card number",
+      "card_number_placeholder": "1234 1234 1234 1234",
+      "expiration_date": "Expiration date",
+      "expiration_placeholder": "MM / YY",
+      "security_code": "Security code",
+      "cvc_placeholder": "CVC",
+      "pay_button": "Pay {{amount}}",
+      "success": "Payment successful! Your wallet will be credited in a few seconds",
+      "payment_failed": "Payment failed",
+      "process_failed": "Unable to process payment",
+      "missing_key": "VITE_STRIPE_PUBLISHABLE_KEY is missing, so card input is unavailable. Please configure the frontend Stripe publishable key.",
+      "test_hint": "Test mode: 4242 4242 4242 4242 succeeds, 4000 0000 0000 9995 is declined. Use any future expiry date and any 3-digit CVC."
     }
   },
   "cart": {

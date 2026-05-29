@@ -144,6 +144,7 @@
     "current_balance": "Số dư hiện tại:",
     "tab_qr": "Chuyển khoản QR",
     "tab_manual": "Chuyển khoản thủ công",
+    "tab_card": "Visa / Thẻ",
     "select_amount": "Chọn số tiền",
     "placeholder_custom": "Nhập số tiền khác...",
     "select_bank": "Chọn ngân hàng",
@@ -185,6 +186,22 @@
       "warning": "Bạn phải nhập đúng nội dung chuyển khoản để hệ thống xác nhận tự động.",
       "copied": "Đã copy {{label}}",
       "copy_failed": "Không thể copy"
+    },
+    "card": {
+      "title": "Visa / Thẻ",
+      "description": "Thanh toán test mode qua Stripe. Ví sẽ được cộng sau khi webhook xác nhận.",
+      "card_number": "Số thẻ",
+      "card_number_placeholder": "1234 1234 1234 1234",
+      "expiration_date": "Ngày hết hạn",
+      "expiration_placeholder": "MM / YY",
+      "security_code": "Mã bảo mật",
+      "cvc_placeholder": "CVC",
+      "pay_button": "Thanh toán {{amount}}",
+      "success": "Thanh toán thành công! Ví sẽ được cộng tiền trong vài giây",
+      "payment_failed": "Thanh toán thất bại",
+      "process_failed": "Không thể xử lý thanh toán",
+      "missing_key": "Thiếu VITE_STRIPE_PUBLISHABLE_KEY nên không thể nhập thông tin thẻ. Vui lòng cấu hình Stripe publishable key cho frontend.",
+      "test_hint": "Test mode: 4242 4242 4242 4242 thành công, 4000 0000 0000 9995 bị từ chối. Ngày hết hạn nhập tháng/năm tương lai, CVC bất kỳ 3 số."
     }
   },
   "cart": {
