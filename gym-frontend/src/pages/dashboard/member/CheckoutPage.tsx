@@ -7,7 +7,7 @@ import CartItemRow from '../../../components/checkout/CartItemRow'
 import { useCart } from '../../../context/useCart'
 import { useWallet } from '../../../context/WalletProvider'
 import { createAddress, getAddresses } from '../../../services/addressService'
-import { createOrder, calculateShipping as fetchShippingApi } from '../../../services/orderService'
+import { createOrder, calculateShipping as fetchShippingApi, validateDiscountCode } from '../../../services/orderService'
 import { getWallet } from '../../../services/walletService'
 
 const { Text } = Typography
@@ -33,6 +33,9 @@ export default function CheckoutPage() {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
   const [addressModalOpen, setAddressModalOpen] = useState(false)
   const [addingAddress, setAddingAddress] = useState(false)
+  const [discountInput, setDiscountInput] = useState('')
+  const [appliedDiscountCode, setAppliedDiscountCode] = useState('')
+  const [discountAmount, setDiscountAmount] = useState(0)
 
   const subtotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
@@ -81,7 +84,7 @@ export default function CheckoutPage() {
     return () => clearTimeout(delayDebounceFn)
   }, [selectedAddress, totalWeightKg])
 
-  const grandTotal = subtotal + shippingInfo.shippingFee
+  const grandTotal = Math.max(0, subtotal + shippingInfo.shippingFee - discountAmount)
 
   const loadAddresses = async () => {
     try {
@@ -100,6 +103,30 @@ export default function CheckoutPage() {
   }
 
   useEffect(() => { loadAddresses(); loadWallet() }, [])
+
+  useEffect(() => {
+    if (appliedDiscountCode) handleApplyDiscount()
+  }, [subtotal, shippingInfo.shippingFee])
+
+  const handleApplyDiscount = async () => {
+    const code = discountInput.trim().toUpperCase()
+    if (!code) return message.error(t('checkout.discount_required'))
+    try {
+      const res = await validateDiscountCode({ code, subtotal, shippingFee: shippingInfo.shippingFee })
+      setAppliedDiscountCode(code)
+      setDiscountInput(code)
+      setDiscountAmount(Number(res.data.data.amount || 0))
+      message.success(t('checkout.discount_applied'))
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || t('checkout.discount_invalid'))
+    }
+  }
+
+  const handleRemoveDiscount = () => {
+    setAppliedDiscountCode('')
+    setDiscountInput('')
+    setDiscountAmount(0)
+  }
 
   const handleCreateAddress = async (values: any) => {
     setAddingAddress(true)
@@ -147,6 +174,7 @@ export default function CheckoutPage() {
           city: selectedAddress.city,
         },
         paymentReference: `wallet_checkout_${Date.now()}`,
+        discountCode: appliedDiscountCode || undefined,
       }
 
       await createOrder(orderPayload)
@@ -286,6 +314,30 @@ export default function CheckoutPage() {
                   )}
                 </Col>
               </Row>
+              <div style={{ marginBottom: 12 }}>
+                <Text>{t('checkout.discount_code')}</Text>
+                <Space.Compact style={{ width: '100%', marginTop: 8 }}>
+                  <Input
+                    value={discountInput}
+                    onChange={(event) => setDiscountInput(event.target.value.toUpperCase())}
+                    placeholder={t('checkout.discount_placeholder')}
+                    disabled={!!appliedDiscountCode}
+                  />
+                  {appliedDiscountCode ? (
+                    <Button onClick={handleRemoveDiscount}>{t('checkout.discount_remove')}</Button>
+                  ) : (
+                    <Button onClick={handleApplyDiscount}>{t('checkout.discount_apply')}</Button>
+                  )}
+                </Space.Compact>
+              </div>
+              {discountAmount > 0 && (
+                <Row style={{ marginBottom: 12 }}>
+                  <Col span={14}><Text>{t('checkout.discount')}</Text></Col>
+                  <Col span={10} style={{ textAlign: 'right' }}>
+                    <Text style={{ color: '#52c41a' }}>-{discountAmount.toLocaleString('vi-VN')}đ</Text>
+                  </Col>
+                </Row>
+              )}
               <Row style={{ marginBottom: 16, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12 }}>
                 <Col span={14}><Text strong>{t('checkout.grand_total')}</Text></Col>
                 <Col span={10} style={{ textAlign: 'right' }}>

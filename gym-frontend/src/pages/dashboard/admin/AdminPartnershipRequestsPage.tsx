@@ -1,11 +1,14 @@
-import { Button, Descriptions, Image, Input, message, Modal, Select, Space, Table, Tag, Tabs, Typography } from 'antd'
+import { Button, Descriptions, Form, Image, Input, InputNumber, message, Modal, Select, Space, Table, Tag, Tabs, Typography } from 'antd'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import {
   approvePartnershipRequest,
+  createDiscountCode,
   getAdminPartnershipRequests,
+  getDiscountCodes,
   rejectPartnershipRequest,
+  toggleDiscountCode,
 } from '../../../services/partnershipRequestService'
 import { getAdminShopProducts } from '../../../services/productService'
 import { deleteShop, getAdminShops } from '../../../services/shopService'
@@ -28,6 +31,14 @@ type PartnershipRequest = {
   created_at: string
   updated_at: string
   shop_id?: { _id: string; name: string } | null
+}
+
+type DiscountCode = {
+  _id: string
+  code: string
+  type: 'order_discount' | 'free_shipping' | 'shipping_discount'
+  amount: number
+  isActive: boolean
 }
 
 const statusColor: Record<PartnershipRequest['status'], string> = {
@@ -60,6 +71,11 @@ export default function AdminPartnershipRequestsPage() {
   const [deletingShop, setDeletingShop] = useState<AdminShop | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [discountModalOpen, setDiscountModalOpen] = useState(false)
+  const [discountCodes, setDiscountCodes] = useState<DiscountCode[]>([])
+  const [discountLoading, setDiscountLoading] = useState(false)
+  const [discountForm] = Form.useForm()
+  const discountType = Form.useWatch('type', discountForm)
 
   const statusLabel: Record<PartnershipRequest['status'], string> = {
     pending: t('admin.partnership_requests.status.pending'),
@@ -104,6 +120,48 @@ export default function AdminPartnershipRequestsPage() {
   }
 
   useEffect(() => { fetchShops() }, [])
+
+  const fetchDiscountCodes = async () => {
+    setDiscountLoading(true)
+    try {
+      const res = await getDiscountCodes()
+      setDiscountCodes(res.data.codes || [])
+    } catch (err: any) {
+      message.error(err.response?.data?.message || 'Không thể tải mã giảm giá')
+    } finally {
+      setDiscountLoading(false)
+    }
+  }
+
+  const openDiscountModal = () => {
+    setDiscountModalOpen(true)
+    fetchDiscountCodes()
+  }
+
+  const handleCreateDiscount = async (values: any) => {
+    try {
+      await createDiscountCode({
+        code: values.code,
+        type: values.type,
+        amount: values.type === 'free_shipping' ? 0 : Number(values.amount || 0),
+      })
+      message.success('Đã tạo mã giảm giá')
+      discountForm.resetFields()
+      discountForm.setFieldValue('type', 'order_discount')
+      fetchDiscountCodes()
+    } catch (err: any) {
+      message.error(err.response?.data?.message || 'Không thể tạo mã giảm giá')
+    }
+  }
+
+  const handleToggleDiscount = async (id: string) => {
+    try {
+      await toggleDiscountCode(id)
+      fetchDiscountCodes()
+    } catch (err: any) {
+      message.error(err.response?.data?.message || 'Không thể cập nhật mã giảm giá')
+    }
+  }
 
   const handleApprove = async (request: PartnershipRequest) => {
     setActionLoadingId(request._id)
@@ -335,6 +393,22 @@ export default function AdminPartnershipRequestsPage() {
     { title: t('admin.shops.products_columns.stock'), dataIndex: 'stock' },
   ]
 
+  const discountColumns = [
+    { title: 'Mã', dataIndex: 'code' },
+    {
+      title: 'Loại',
+      dataIndex: 'type',
+      render: (value: DiscountCode['type']) => ({
+        order_discount: 'Giảm giá đơn hàng',
+        free_shipping: 'Free ship',
+        shipping_discount: 'Giảm phí ship',
+      }[value]),
+    },
+    { title: 'Số tiền giảm', dataIndex: 'amount', render: (value: number) => value ? `${value.toLocaleString('vi-VN')}đ` : '—' },
+    { title: 'Trạng thái', dataIndex: 'isActive', render: (value: boolean) => <Tag color={value ? 'green' : 'red'}>{value ? 'Đang bật' : 'Đã tắt'}</Tag> },
+    { title: 'Thao tác', render: (_: any, item: DiscountCode) => <Button type="link" onClick={() => handleToggleDiscount(item._id)}>{item.isActive ? 'Tắt' : 'Bật'}</Button> },
+  ]
+
   const subtitleText = activeTab === 'requests'
     ? t('admin.partnership_requests.subtitle.requests', { total: requests.length, pending: pendingCount })
     : t('admin.partnership_requests.subtitle.shops', { total: shops.length })
@@ -345,6 +419,7 @@ export default function AdminPartnershipRequestsPage() {
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('admin.partnership_requests.overline')}</p>
         <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.partnership_requests.title')}</h1>
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">{subtitleText}</p>
+        <Button className="mt-4" type="primary" onClick={openDiscountModal}>Mã giảm giá</Button>
       </div>
 
       <Tabs
@@ -438,6 +513,41 @@ export default function AdminPartnershipRequestsPage() {
           },
         ]}
       />
+
+      <Modal
+        title="Mã giảm giá"
+        open={discountModalOpen}
+        onCancel={() => setDiscountModalOpen(false)}
+        footer={null}
+        width={820}
+      >
+        <Form form={discountForm} layout="vertical" onFinish={handleCreateDiscount} initialValues={{ type: 'order_discount' }}>
+          <Space align="start" wrap>
+            <Form.Item name="code" label="Mã" rules={[{ required: true, message: 'Vui lòng nhập mã' }]}>
+              <Input placeholder="VD: GYM30K" onChange={(event) => discountForm.setFieldValue('code', event.target.value.toUpperCase())} />
+            </Form.Item>
+            <Form.Item name="type" label="Loại" rules={[{ required: true }]}>
+              <Select
+                style={{ width: 180 }}
+                options={[
+                  { label: 'Giảm giá', value: 'order_discount' },
+                  { label: 'Free ship', value: 'free_shipping' },
+                  { label: 'Giảm phí ship', value: 'shipping_discount' },
+                ]}
+              />
+            </Form.Item>
+            {discountType !== 'free_shipping' && (
+              <Form.Item name="amount" label="Số tiền giảm" rules={[{ required: true, message: 'Vui lòng nhập số tiền' }]}>
+                <InputNumber min={1000} step={1000} addonAfter="đ" />
+              </Form.Item>
+            )}
+            <Form.Item label=" ">
+              <Button type="primary" htmlType="submit">Tạo mã</Button>
+            </Form.Item>
+          </Space>
+        </Form>
+        <Table rowKey="_id" loading={discountLoading} dataSource={discountCodes} columns={discountColumns} pagination={{ pageSize: 6 }} />
+      </Modal>
 
       <Modal
         title={t('admin.partnership_requests.detail_modal_title')}

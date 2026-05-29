@@ -80,6 +80,26 @@ const orderSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+        discountCode: {
+            type: String,
+            trim: true,
+            default: '',
+        },
+        discountAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        discountCode: {
+            type: String,
+            trim: true,
+            default: '',
+        },
+        discountAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
         address: {
             recipientName: { type: String, required: true },
             phone: { type: String, required: true },

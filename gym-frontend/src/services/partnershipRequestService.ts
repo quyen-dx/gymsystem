@@ -32,3 +32,12 @@ export const approvePartnershipRequest = (id: string) =>
 
 export const rejectPartnershipRequest = (id: string) =>
   api.patch(`/partnership-requests/${id}/reject`)
+
+export const getDiscountCodes = () =>
+  api.get('/partnership-requests/admin/discount-codes')
+
+export const createDiscountCode = (data: { code: string; type: string; amount?: number }) =>
+  api.post('/partnership-requests/admin/discount-codes', data)
+
+export const toggleDiscountCode = (id: string) =>
+  api.patch(`/partnership-requests/admin/discount-codes/${id}/toggle`)

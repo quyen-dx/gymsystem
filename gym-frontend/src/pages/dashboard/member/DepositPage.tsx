@@ -19,6 +19,10 @@ const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || ''
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
 const USD_PRESET_AMOUNTS = [5, 10, 20, 50]
 const FALLBACK_USD_TO_VND_RATE = 25000
+const DEPOSIT_BONUS_TIERS = [
+  { threshold: 70000000, rate: 0.03 },
+  { threshold: 15000000, rate: 0.02 },
+]
 
 const cardStyle = {
   style: {
@@ -46,6 +50,12 @@ function formatUSD(amount: number) {
   }).format(amount)
 }
 
+function getDepositCredit(amount: number) {
+  const bonusRate = DEPOSIT_BONUS_TIERS.find((tier) => amount >= tier.threshold)?.rate || 0
+  const bonus = Math.round(amount * bonusRate)
+  return { bonus, total: amount + bonus }
+}
+
 const STEPS = [
   { step: 1, titleKey: 'deposit.step_1_title', descKey: 'deposit.step_1_desc' },
   { step: 2, titleKey: 'deposit.step_2_title', descKey: 'deposit.step_2_desc' },
@@ -70,6 +80,7 @@ function StripeCardForm({
   const [customUsdInput, setCustomUsdInput] = useState('')
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
   const vndAmount = exchangeRate ? Math.round(usdAmount * exchangeRate) : null
+  const cardCredit = vndAmount ? getDepositCredit(vndAmount) : null
   const usdAmountError = usdAmount < 0.5 ? t('deposit.card.min_usd') : null
 
   useEffect(() => {
@@ -151,8 +162,16 @@ function StripeCardForm({
                 <span className="text-base font-semibold text-[var(--theme-text)]">{formatUSD(usdAmount)}</span>
               </div>
               <div className="mt-2 flex items-center justify-between gap-4">
+                <span className="text-sm text-[var(--theme-muted)]">{t('deposit.card.deposit_amount')}</span>
+                <span className="text-base font-semibold text-[var(--theme-text)]">{formatVND(vndAmount)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-4">
+                <span className="text-sm text-[var(--theme-muted)]">{t('deposit.bonus_amount')}</span>
+                <span className="text-base font-semibold text-[var(--theme-accent)]">+{formatVND(cardCredit?.bonus || 0)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-4">
                 <span className="text-sm text-[var(--theme-muted)]">{t('deposit.card.wallet_credit')}</span>
-                <span className="text-base font-semibold text-[var(--theme-accent)]">{formatVND(vndAmount)}</span>
+                <span className="text-lg font-bold text-[var(--theme-accent)]">{formatVND(cardCredit?.total || vndAmount)}</span>
               </div>
               <div className="mt-3 border-t border-[var(--theme-border)] pt-3 text-xs text-[var(--theme-muted)]">
                 {t('deposit.card.exchange_rate', { rate: Math.round(exchangeRate || 0).toLocaleString('vi-VN') })}
@@ -274,7 +293,7 @@ export default function DepositPage() {
   const bankMeta = useMemo(() => BANKS[selectedBank], [selectedBank])
   const amountError = useMemo(() => {
     if (amount < 10000) return t('deposit.min_amount')
-    if (amount > 50000000) return t('deposit.max_amount')
+    if (amount > 100000000) return t('deposit.max_amount')
     return null
   }, [amount, t])
   const filteredTransactions = useMemo(() => {
@@ -362,6 +381,22 @@ export default function DepositPage() {
       </div>
       {amountError && (
         <p className="text-xs text-[#ef4444]">{amountError}</p>
+      )}
+      {!amountError && (
+        <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-sm text-[var(--theme-muted)]">{t('deposit.deposit_amount')}</span>
+            <span className="text-base font-semibold text-[var(--theme-text)]">{formatVND(amount)}</span>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-4">
+            <span className="text-sm text-[var(--theme-muted)]">{t('deposit.bonus_amount')}</span>
+            <span className="text-base font-semibold text-[var(--theme-accent)]">+{formatVND(getDepositCredit(amount).bonus)}</span>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-4">
+            <span className="text-sm text-[var(--theme-muted)]">{t('deposit.total_credit')}</span>
+            <span className="text-lg font-bold text-[var(--theme-accent)]">{formatVND(getDepositCredit(amount).total)}</span>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -504,6 +539,11 @@ export default function DepositPage() {
                 <span className="font-semibold text-[var(--theme-accent)]">{formatVND(wallet.balance)}</span>
               </p>
             )}
+          </div>
+
+          <div className="mb-6 rounded-xl border border-[var(--theme-accent-border)] bg-[var(--theme-accent-muted)] px-4 py-3 text-sm text-[var(--theme-accent)]">
+            <span className="font-semibold">{t('deposit.bonus_title')}</span>{' '}
+            {t('deposit.bonus_desc')}
           </div>
 
           <div className="mb-6 flex gap-1 rounded-xl bg-[var(--theme-elevated)] p-1">

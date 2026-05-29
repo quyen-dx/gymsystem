@@ -1,5 +1,5 @@
 import express from 'express'
-import { calculateShippingController, checkoutOrder, deleteMyOrderHistory, getMyOrders, getOrder, getSellerOrders, trackOrder, updateSellerOrderStatusController } from '../controllers/orderController.js'
+import { calculateShippingController, checkoutOrder, deleteMyOrderHistory, getMyOrders, getOrder, getSellerOrders, trackOrder, updateSellerOrderStatusController, validateDiscountCode } from '../controllers/orderController.js'
 import { protect, sellerOnly } from '../middlewares/authMiddleware.js'
 
 const router = express.Router()
@@ -7,6 +7,7 @@ const router = express.Router()
 router.use(protect)
 router.post('/checkout', checkoutOrder)
 router.post('/calculate-shipping', calculateShippingController)
+router.post('/validate-discount', validateDiscountCode)
 router.get('/my', getMyOrders)
 router.delete('/my/:id', deleteMyOrderHistory)
 router.get('/seller', sellerOnly, getSellerOrders)

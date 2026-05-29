@@ -9,7 +9,23 @@ const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SEC
 const FALLBACK_USD_TO_VND_RATE = 25000
 const EXCHANGE_RATE_CACHE_TTL = 10 * 60 * 1000
 const MIN_STRIPE_AMOUNT_USD = 0.5
+const DEPOSIT_BONUS_TIERS = [
+    { threshold: 70000000, rate: 0.03 },
+    { threshold: 15000000, rate: 0.02 },
+]
 let exchangeRateCache = { rate: null, expiresAt: 0, source: 'fallback' }
+
+const calculateDepositCredit = (amount) => {
+    const depositAmount = Number(amount)
+    const bonusRate = DEPOSIT_BONUS_TIERS.find((tier) => depositAmount >= tier.threshold)?.rate || 0
+    const bonusAmount = Math.round(depositAmount * bonusRate)
+    return {
+        originalAmount: depositAmount,
+        bonusAmount,
+        bonusRate,
+        creditedAmount: depositAmount + bonusAmount,
+    }
+}
 
 const getUsdToVndRate = async () => {
     if (exchangeRateCache.rate && exchangeRateCache.expiresAt > Date.now()) {
@@ -113,8 +129,8 @@ export const transferWallet = async (req, res, next) => {
 export const createDepositTransaction = async (req, res, next) => {
     try {
         const { amount, bankId } = req.body
-        if (!amount || amount < 10000 || amount > 50000000) {
-            throw new AppError('Số tiền không hợp lệ (10.000đ - 50.000.000đ)', 400)
+        if (!amount || amount < 10000 || amount > 100000000) {
+            throw new AppError('Số tiền không hợp lệ (10.000đ - 100.000.000đ)', 400)
         }
 
         const wallet = await getOrCreateWallet(req.user._id)
@@ -155,8 +171,8 @@ export const createStripePaymentIntent = async (req, res, next) => {
         const { rate: exchangeRate, source: exchangeRateSource } = await getUsdToVndRate()
         const amountUsd = Number(req.body.amountUsd)
         const amount = amountUsd > 0 ? Math.round(amountUsd * exchangeRate) : Number(req.body.amount)
-        if (!amount || amount < 10000 || amount > 50000000) {
-            throw new AppError('Số tiền không hợp lệ (10.000đ - 50.000.000đ)', 400)
+        if (!amount || amount < 10000 || amount > 100000000) {
+            throw new AppError('Số tiền không hợp lệ (10.000đ - 100.000.000đ)', 400)
         }
 
         const stripeAmount = Math.round((amountUsd > 0 ? amountUsd : amount / exchangeRate) * 100)
@@ -219,11 +235,12 @@ export const handleStripeWebhook = async (req, res, next) => {
             const paymentIntent = event.data.object
             const userId = paymentIntent.metadata?.userId
             const amount = Number(paymentIntent.metadata?.walletAmountVnd || 0)
+            const depositCredit = calculateDepositCredit(amount)
 
             if (userId && amount > 0) {
                 await applyWalletTransaction({
                     userId,
-                    amount,
+                    amount: depositCredit.creditedAmount,
                     type: 'deposit',
                     provider: 'stripe',
                     source: 'card',
@@ -236,6 +253,9 @@ export const handleStripeWebhook = async (req, res, next) => {
                         stripeAmount: paymentIntent.amount_received || paymentIntent.amount,
                         stripeCurrency: paymentIntent.currency,
                         exchangeRate: paymentIntent.metadata?.exchangeRate,
+                        originalAmount: depositCredit.originalAmount,
+                        bonusAmount: depositCredit.bonusAmount,
+                        bonusRate: depositCredit.bonusRate,
                     },
                     idempotencyKey: paymentIntent.id,
                 })
@@ -282,13 +302,21 @@ export const confirmDeposit = async (req, res, next) => {
             }
 
             const balanceBefore = wallet.balance
-            wallet.balance += transaction.amount
+            const depositCredit = calculateDepositCredit(transaction.amount)
+            wallet.balance += depositCredit.creditedAmount
             await wallet.save({ session })
 
             transaction.status = 'completed'
             transaction.completedAt = new Date()
+            transaction.amount = depositCredit.creditedAmount
             transaction.balanceBefore = balanceBefore
             transaction.balanceAfter = wallet.balance
+            transaction.metadata = {
+                ...(transaction.metadata || {}),
+                originalAmount: depositCredit.originalAmount,
+                bonusAmount: depositCredit.bonusAmount,
+                bonusRate: depositCredit.bonusRate,
+            }
             await transaction.save({ session })
 
             await session.commitTransaction()

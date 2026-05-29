@@ -1,4 +1,5 @@
 import PartnershipRequest from '../models/PartnershipRequest.js'
+import DiscountCode from '../models/DiscountCode.js'
 import Shop from '../models/Shop.js'
 import User from '../models/User.js'
 import { recordAuditLog } from '../services/auditLogService.js'
@@ -152,6 +153,49 @@ export const rejectPartnershipRequest = async (req, res, next) => {
     await request.save()
 
     res.json({ message: 'Đã từ chối yêu cầu hợp tác', request })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const getDiscountCodes = async (_req, res, next) => {
+  try {
+    const codes = await DiscountCode.find().sort({ createdAt: -1 })
+    res.json({ codes })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const createDiscountCode = async (req, res, next) => {
+  try {
+    const code = sanitize(req.body.code).toUpperCase()
+    const type = sanitize(req.body.type)
+    const amount = Number(req.body.amount || 0)
+
+    if (!code) return next(new AppError('Vui lòng nhập mã giảm giá', 400))
+    if (!['order_discount', 'free_shipping', 'shipping_discount'].includes(type)) {
+      return next(new AppError('Loại mã giảm giá không hợp lệ', 400))
+    }
+    if (type !== 'free_shipping' && amount <= 0) {
+      return next(new AppError('Vui lòng nhập số tiền giảm hợp lệ', 400))
+    }
+
+    const discountCode = await DiscountCode.create({ code, type, amount: type === 'free_shipping' ? 0 : amount })
+    res.status(201).json({ code: discountCode })
+  } catch (err) {
+    if (err.code === 11000) return next(new AppError('Mã giảm giá đã tồn tại', 400))
+    next(err)
+  }
+}
+
+export const toggleDiscountCode = async (req, res, next) => {
+  try {
+    const discountCode = await DiscountCode.findById(req.params.id)
+    if (!discountCode) return next(new AppError('Không tìm thấy mã giảm giá', 404))
+    discountCode.isActive = !discountCode.isActive
+    await discountCode.save()
+    res.json({ code: discountCode })
   } catch (err) {
     next(err)
   }
