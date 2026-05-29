@@ -2,6 +2,7 @@ import { Button, Divider, Form, Input, Steps, Typography, message } from 'antd'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
+import LanguageSelect from '../../components/common/LanguageSelect'
 import { useTheme } from '../../context/ThemeProvider'
 import { authService } from '../../services/authService'
 
@@ -91,7 +92,7 @@ export default function ForgotPasswordPage() {
     : undefined
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
+    <div className="relative flex min-h-screen items-center justify-center overflow-y-auto px-4 py-6 pt-20 sm:overflow-hidden sm:p-0">
 
       {/* BACKGROUND */}
       <div
@@ -110,6 +111,10 @@ export default function ForgotPasswordPage() {
         style={{ background: dark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)' }}
       />
 
+      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6">
+        <LanguageSelect />
+      </div>
+
       {/* CARD */}
       <div
         className="relative z-10 w-full max-w-md rounded-2xl p-7 shadow-2xl"
@@ -119,34 +124,6 @@ export default function ForgotPasswordPage() {
           color: textColor,
         }}
       >
-        {/* LANGUAGE TOGGLE */}
-        <div className="absolute right-3 top-3 flex items-center gap-1">
-          <button
-            onClick={() => i18n.changeLanguage('vi')}
-            title="Tiếng Việt"
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
-              lineHeight: 1,
-              opacity: i18n.language === 'vi' ? 1 : 0.35,
-              transition: 'opacity 0.2s',
-            }}
-          >
-            <img src="https://flagcdn.com/16x12/vn.png" alt="" style={{ height: 14, width: 'auto', display: 'block' }} />
-          </button>
-          <button
-            onClick={() => i18n.changeLanguage('en')}
-            title="English"
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
-              lineHeight: 1,
-              opacity: i18n.language === 'en' ? 1 : 0.35,
-              transition: 'opacity 0.2s',
-            }}
-          >
-            <img src="https://flagcdn.com/16x12/us.png" alt="" style={{ height: 14, width: 'auto', display: 'block' }} />
-          </button>
-        </div>
-
         <Title level={3} style={{ textAlign: 'center', color: textColor }}>
           {t('forgot.title')}
         </Title>

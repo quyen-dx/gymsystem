@@ -170,6 +170,9 @@
     "table_amount": "Amount",
     "table_status": "Status",
     "table_note": "Note",
+    "filter_all": "All transactions",
+    "filter_deposit": "Deposited",
+    "filter_spending": "Spent",
     "qr": {
       "amount_label": "Amount",
       "expired": "QR code has expired. Please create a new request.",
@@ -197,10 +200,16 @@
       "security_code": "Security code",
       "cvc_placeholder": "CVC",
       "pay_button": "Pay {{amount}}",
+      "select_usd_amount": "Select USD amount",
+      "placeholder_custom_usd": "Enter another USD amount...",
+      "usd_to_vnd": "{{usd}} = {{vnd}} at 1 USD = {{rate}} VND.",
+      "min_usd": "Minimum amount is 0.50 USD",
       "success": "Payment successful! Your wallet will be credited in a few seconds",
       "payment_failed": "Payment failed",
       "process_failed": "Unable to process payment",
       "missing_key": "VITE_STRIPE_PUBLISHABLE_KEY is missing, so card input is unavailable. Please configure the frontend Stripe publishable key.",
+      "exchange_note": "Stripe will charge about {{amount}} at 1 USD = {{rate}} VND.",
+      "exchange_loading": "Updating USD/VND exchange rate...",
       "test_hint": "Test mode: 4242 4242 4242 4242 succeeds, 4000 0000 0000 9995 is declined. Use any future expiry date and any 3-digit CVC."
     }
   },

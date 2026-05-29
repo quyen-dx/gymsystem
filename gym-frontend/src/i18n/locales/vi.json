@@ -170,6 +170,9 @@
     "table_amount": "Số tiền",
     "table_status": "Trạng thái",
     "table_note": "Ghi chú",
+    "filter_all": "Tất cả giao dịch",
+    "filter_deposit": "Đã nạp tiền",
+    "filter_spending": "Đã tiêu tiền",
     "qr": {
       "amount_label": "Số tiền",
       "expired": "Mã QR đã hết hạn. Vui lòng tạo lại yêu cầu mới.",
@@ -197,10 +200,16 @@
       "security_code": "Mã bảo mật",
       "cvc_placeholder": "CVC",
       "pay_button": "Thanh toán {{amount}}",
+      "select_usd_amount": "Chọn số tiền USD",
+      "placeholder_custom_usd": "Nhập số USD khác...",
+      "usd_to_vnd": "{{usd}} = {{vnd}} theo tỷ giá 1 USD = {{rate}} VND.",
+      "min_usd": "Số tiền tối thiểu là 0.50 USD",
       "success": "Thanh toán thành công! Ví sẽ được cộng tiền trong vài giây",
       "payment_failed": "Thanh toán thất bại",
       "process_failed": "Không thể xử lý thanh toán",
       "missing_key": "Thiếu VITE_STRIPE_PUBLISHABLE_KEY nên không thể nhập thông tin thẻ. Vui lòng cấu hình Stripe publishable key cho frontend.",
+      "exchange_note": "Stripe sẽ thu khoảng {{amount}} theo tỷ giá 1 USD = {{rate}} VND.",
+      "exchange_loading": "Đang cập nhật tỷ giá USD/VND...",
       "test_hint": "Test mode: 4242 4242 4242 4242 thành công, 4000 0000 0000 9995 bị từ chối. Ngày hết hạn nhập tháng/năm tương lai, CVC bất kỳ 3 số."
     }
   },

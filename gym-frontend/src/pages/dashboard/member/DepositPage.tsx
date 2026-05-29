@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import type { ReactNode } from 'react'
-import { Button, Card, Skeleton, Table, Typography, message } from 'antd'
+import { Button, Card, Select, Skeleton, Table, Typography, message } from 'antd'
 import { loadStripe } from '@stripe/stripe-js'
 import type { StripeCardCvcElement, StripeCardExpiryElement, StripeCardNumberElement } from '@stripe/stripe-js'
 import { CardCvcElement, CardExpiryElement, CardNumberElement, Elements, useElements, useStripe } from '@stripe/react-stripe-js'
@@ -11,13 +10,15 @@ import DepositQR from '../../../components/wallet/DepositQR'
 import BankInfoCard from '../../../components/wallet/BankInfoCard'
 import { useDeposit } from '../../../hooks/useDeposit'
 import { useWallet } from '../../../context/WalletProvider'
-import { createStripePaymentIntent, getWalletTransactions } from '../../../services/walletService'
+import { createStripePaymentIntent, getStripeExchangeRate, getWalletTransactions } from '../../../services/walletService'
 import { BANKS, PRESET_AMOUNTS } from '../../../types/member/wallet'
 import type { BankOption } from '../../../types/member/wallet'
 
 const { Text } = Typography
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || ''
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
+const USD_PRESET_AMOUNTS = [5, 10, 20, 50]
+const FALLBACK_USD_TO_VND_RATE = 25000
 
 const cardStyle = {
   style: {
@@ -38,6 +39,13 @@ function formatVND(amount: number) {
   }).format(amount)
 }
 
+function formatUSD(amount: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount)
+}
+
 const STEPS = [
   { step: 1, titleKey: 'deposit.step_1_title', descKey: 'deposit.step_1_desc' },
   { step: 2, titleKey: 'deposit.step_2_title', descKey: 'deposit.step_2_desc' },
@@ -46,14 +54,8 @@ const STEPS = [
 ]
 
 function StripeCardForm({
-  amount,
-  amountError,
-  renderAmountSection,
   onPaid,
 }: {
-  amount: number
-  amountError: string | null
-  renderAmountSection: () => ReactNode
   onPaid: () => void
 }) {
   const { t } = useTranslation()
@@ -64,9 +66,20 @@ function StripeCardForm({
   const [cardNumber, setCardNumber] = useState<StripeCardNumberElement | null>(null)
   const [cardExpiry, setCardExpiry] = useState<StripeCardExpiryElement | null>(null)
   const [cardCvc, setCardCvc] = useState<StripeCardCvcElement | null>(null)
+  const [usdAmount, setUsdAmount] = useState(10)
+  const [customUsdInput, setCustomUsdInput] = useState('')
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null)
+  const vndAmount = exchangeRate ? Math.round(usdAmount * exchangeRate) : null
+  const usdAmountError = usdAmount < 0.5 ? t('deposit.card.min_usd') : null
+
+  useEffect(() => {
+    getStripeExchangeRate()
+      .then((res) => setExchangeRate(Number(res.data.data.rate)))
+      .catch(() => setExchangeRate(FALLBACK_USD_TO_VND_RATE))
+  }, [])
 
   const handlePay = async () => {
-    if (!stripe || !elements || amountError) return
+    if (!stripe || !elements || usdAmountError) return
 
     const cardElement = elements.getElement(CardNumberElement)
     if (!cardElement) return
@@ -75,7 +88,7 @@ function StripeCardForm({
     setError(null)
 
     try {
-      const res = await createStripePaymentIntent({ amount })
+      const res = await createStripePaymentIntent({ amountUsd: usdAmount })
       const clientSecret = res.data.clientSecret
       const result = await stripe.confirmCardPayment(clientSecret, {
         payment_method: { card: cardElement },
@@ -98,7 +111,52 @@ function StripeCardForm({
   return (
     <div className="grid gap-6 md:grid-cols-[1fr_1.1fr]">
       <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5">
-        {renderAmountSection()}
+        <div className="space-y-3">
+          <Text className="block text-sm font-medium text-[var(--theme-text)]">{t('deposit.card.select_usd_amount')}</Text>
+          <div className="grid grid-cols-4 gap-2">
+            {USD_PRESET_AMOUNTS.map((val) => (
+              <button
+                key={val}
+                onClick={() => {
+                  setUsdAmount(val)
+                  setCustomUsdInput('')
+                }}
+                className={`rounded-lg border px-2 py-2.5 text-sm font-medium transition-all ${
+                  usdAmount === val && !customUsdInput
+                    ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                    : 'border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-muted)] hover:border-[var(--theme-accent-border)]'
+                }`}
+              >
+                {formatUSD(val)}
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={customUsdInput}
+            onChange={(event) => {
+              const raw = event.target.value.replace(/[^\d.]/g, '')
+              const normalized = raw.replace(/(\..*)\./g, '$1')
+              setCustomUsdInput(normalized)
+              if (normalized) setUsdAmount(Number(normalized))
+            }}
+            placeholder={t('deposit.card.placeholder_custom_usd')}
+            className="w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-2.5 text-sm text-[var(--theme-text)] placeholder:text-[var(--theme-placeholder)] outline-none transition-colors focus:border-[var(--theme-accent)]"
+          />
+          {vndAmount ? (
+            <p className="text-sm font-medium text-[var(--theme-text)]">
+              {t('deposit.card.usd_to_vnd', {
+                usd: formatUSD(usdAmount),
+                vnd: formatVND(vndAmount),
+                rate: Math.round(exchangeRate || 0).toLocaleString('vi-VN'),
+              })}
+            </p>
+          ) : (
+            <p className="text-sm font-medium text-[var(--theme-muted)]">{t('deposit.card.exchange_loading')}</p>
+          )}
+          {usdAmountError && <p className="text-xs text-[#ef4444]">{usdAmountError}</p>}
+        </div>
       </div>
       <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5">
         <div className="mb-5">
@@ -160,11 +218,11 @@ function StripeCardForm({
             size="large"
             block
             loading={paying}
-            disabled={!stripe || !!amountError}
+            disabled={!stripe || !!usdAmountError}
             onClick={handlePay}
             className="!h-11 !bg-[var(--theme-accent)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
           >
-            {t('deposit.card.pay_button', { amount: formatVND(amount) })}
+            {t('deposit.card.pay_button', { amount: formatUSD(usdAmount) })}
           </Button>
         </div>
       </div>
@@ -193,6 +251,7 @@ export default function DepositPage() {
   const [amount, setAmount] = useState(PRESET_AMOUNTS[1])
   const [customInput, setCustomInput] = useState('')
   const [transactions, setTransactions] = useState<any[]>([])
+  const [transactionFilter, setTransactionFilter] = useState<'all' | 'deposit' | 'spending'>('all')
 
   const bankMeta = useMemo(() => BANKS[selectedBank], [selectedBank])
   const amountError = useMemo(() => {
@@ -200,6 +259,11 @@ export default function DepositPage() {
     if (amount > 50000000) return t('deposit.max_amount')
     return null
   }, [amount, t])
+  const filteredTransactions = useMemo(() => {
+    if (transactionFilter === 'deposit') return transactions.filter((item) => item.amount > 0)
+    if (transactionFilter === 'spending') return transactions.filter((item) => item.amount < 0)
+    return transactions
+  }, [transactionFilter, transactions])
 
   useEffect(() => {
     fetchBankInfo()
@@ -469,9 +533,6 @@ export default function DepositPage() {
           ) : tab === 'card' ? (
             <Elements stripe={stripePromise} options={{ locale: i18n.language.startsWith('vi') ? 'vi' : 'en' }}>
               <StripeCardForm
-                amount={amount}
-                amountError={amountError}
-                renderAmountSection={renderAmountSection}
                 onPaid={() => {
                   refreshTransactions()
                   setTimeout(refreshTransactions, 3000)
@@ -500,14 +561,32 @@ export default function DepositPage() {
           </div>
 
           <div className="mt-10">
-            <Card title={t('deposit.transaction_history')}>
+            <Card
+              title={t('deposit.transaction_history')}
+              extra={(
+                <Select
+                  value={transactionFilter}
+                  onChange={setTransactionFilter}
+                  className="min-w-40"
+                  options={[
+                    { label: t('deposit.filter_all'), value: 'all' },
+                    { label: t('deposit.filter_deposit'), value: 'deposit' },
+                    { label: t('deposit.filter_spending'), value: 'spending' },
+                  ]}
+                />
+              )}
+            >
               <Table
                 rowKey="_id"
-                dataSource={transactions}
+                dataSource={filteredTransactions}
                 columns={[
                   { title: t('deposit.table_time'), dataIndex: 'createdAt', key: 'createdAt', render: (value: string) => new Date(value).toLocaleString() },
-                  { title: t('deposit.table_type'), dataIndex: 'type', key: 'type' },
-                  { title: t('deposit.table_amount'), dataIndex: 'amount', key: 'amount', render: (value: number) => value.toLocaleString('vi-VN') },
+                  {
+                    title: t('deposit.table_amount'),
+                    dataIndex: 'amount',
+                    key: 'amount',
+                    render: (value: number) => `${value > 0 ? '+' : ''}${formatVND(value)}`,
+                  },
                   { title: t('deposit.table_status'), dataIndex: 'status', key: 'status' },
                   { title: t('deposit.table_note'), dataIndex: ['metadata', 'note'], key: 'note' },
                 ]}

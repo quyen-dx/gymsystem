@@ -6,6 +6,37 @@ import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, trans
 import AppError from '../utils/appError.js'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
+const FALLBACK_USD_TO_VND_RATE = 25000
+const EXCHANGE_RATE_CACHE_TTL = 10 * 60 * 1000
+const MIN_STRIPE_AMOUNT_USD = 0.5
+let exchangeRateCache = { rate: null, expiresAt: 0, source: 'fallback' }
+
+const getUsdToVndRate = async () => {
+    if (exchangeRateCache.rate && exchangeRateCache.expiresAt > Date.now()) {
+        return { rate: exchangeRateCache.rate, source: exchangeRateCache.source }
+    }
+
+    const apiKey = process.env.EXCHANGE_RATE_API_KEY
+    if (!apiKey) return { rate: FALLBACK_USD_TO_VND_RATE, source: 'fallback' }
+
+    try {
+        const response = await fetch(`https://v6.exchangerate-api.com/v6/${apiKey}/latest/USD`)
+        if (!response.ok) throw new Error(`Exchange rate API returned ${response.status}`)
+
+        const data = await response.json()
+        const rate = Number(data?.conversion_rates?.VND)
+        if (!rate || Number.isNaN(rate)) throw new Error('Missing USD/VND rate')
+
+        exchangeRateCache = { rate, expiresAt: Date.now() + EXCHANGE_RATE_CACHE_TTL, source: 'api' }
+        return { rate, source: 'api' }
+    } catch (error) {
+        console.error('Không thể lấy tỷ giá USD/VND:', error.message)
+        return {
+            rate: exchangeRateCache.rate || FALLBACK_USD_TO_VND_RATE,
+            source: exchangeRateCache.rate ? exchangeRateCache.source : 'fallback',
+        }
+    }
+}
 
 export const getMyWallet = async (req, res, next) => {
     try {
@@ -121,18 +152,47 @@ export const createStripePaymentIntent = async (req, res, next) => {
             throw new AppError('Stripe chưa được cấu hình', 500)
         }
 
-        const amount = Number(req.body.amount)
+        const { rate: exchangeRate, source: exchangeRateSource } = await getUsdToVndRate()
+        const amountUsd = Number(req.body.amountUsd)
+        const amount = amountUsd > 0 ? Math.round(amountUsd * exchangeRate) : Number(req.body.amount)
         if (!amount || amount < 10000 || amount > 50000000) {
             throw new AppError('Số tiền không hợp lệ (10.000đ - 50.000.000đ)', 400)
         }
 
+        const stripeAmount = Math.round((amountUsd > 0 ? amountUsd : amount / exchangeRate) * 100)
+        if (stripeAmount < MIN_STRIPE_AMOUNT_USD * 100) {
+            throw new AppError(`Số tiền thanh toán thẻ tối thiểu là ${MIN_STRIPE_AMOUNT_USD} USD`, 400)
+        }
+
         const paymentIntent = await stripe.paymentIntents.create({
-            amount,
-            currency: 'vnd',
-            metadata: { userId: req.user._id.toString() },
+            amount: stripeAmount,
+            currency: 'usd',
+            metadata: {
+                userId: req.user._id.toString(),
+                walletAmountVnd: String(amount),
+                stripeAmountUsd: String(stripeAmount / 100),
+                exchangeRate: String(exchangeRate),
+                exchangeRateSource,
+            },
         })
 
-        return res.json({ clientSecret: paymentIntent.client_secret })
+        return res.json({
+            clientSecret: paymentIntent.client_secret,
+            stripeAmount,
+            stripeCurrency: 'usd',
+            exchangeRate,
+            exchangeRateSource,
+            walletAmountVnd: amount,
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const getStripeExchangeRate = async (_req, res, next) => {
+    try {
+        const { rate, source } = await getUsdToVndRate()
+        return res.json({ success: true, data: { base: 'USD', target: 'VND', rate, source } })
     } catch (error) {
         next(error)
     }
@@ -158,7 +218,7 @@ export const handleStripeWebhook = async (req, res, next) => {
         if (event.type === 'payment_intent.succeeded') {
             const paymentIntent = event.data.object
             const userId = paymentIntent.metadata?.userId
-            const amount = Number(paymentIntent.amount_received || paymentIntent.amount)
+            const amount = Number(paymentIntent.metadata?.walletAmountVnd || 0)
 
             if (userId && amount > 0) {
                 await applyWalletTransaction({
@@ -173,6 +233,9 @@ export const handleStripeWebhook = async (req, res, next) => {
                     metadata: {
                         stripePaymentIntentId: paymentIntent.id,
                         paymentMethod: paymentIntent.payment_method,
+                        stripeAmount: paymentIntent.amount_received || paymentIntent.amount,
+                        stripeCurrency: paymentIntent.currency,
+                        exchangeRate: paymentIntent.metadata?.exchangeRate,
                     },
                     idempotencyKey: paymentIntent.id,
                 })

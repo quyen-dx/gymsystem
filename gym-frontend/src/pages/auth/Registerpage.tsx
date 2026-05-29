@@ -3,6 +3,7 @@ import { Button, Divider, Form, Input, Typography, message } from 'antd'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
+import LanguageSelect from '../../components/common/LanguageSelect'
 import { useTheme } from '../../context/ThemeProvider'
 import { authService } from '../../services/authService'
 const { Title, Text } = Typography
@@ -16,7 +17,7 @@ const getDashboardPath = (role: string) => {
 }
 
 export default function RegisterPage() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { dark } = useTheme()
 
@@ -69,7 +70,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
+    <div className="relative flex min-h-screen items-center justify-center overflow-y-auto px-4 py-6 pt-20 sm:overflow-hidden sm:p-0">
 
       {/* BACKGROUND */}
       <div
@@ -86,6 +87,10 @@ export default function RegisterPage() {
 
       <div className="absolute inset-0 bg-black/65" />
 
+      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6">
+        <LanguageSelect />
+      </div>
+
       {/* CARD */}
       <div
         className={`relative z-10 w-full max-w-md rounded-2xl p-7 shadow-2xl transition-all
@@ -93,34 +98,6 @@ export default function RegisterPage() {
         `}
         style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a' }}
       >
-        {/* LANGUAGE TOGGLE */}
-        <div className="absolute right-3 top-3 flex items-center gap-1">
-          <button
-            onClick={() => i18n.changeLanguage('vi')}
-            title="Tiếng Việt"
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
-              lineHeight: 1,
-              opacity: i18n.language === 'vi' ? 1 : 0.35,
-              transition: 'opacity 0.2s',
-            }}
-          >
-            <img src="https://flagcdn.com/16x12/vn.png" alt="" style={{ height: 14, width: 'auto', display: 'block' }} />
-          </button>
-          <button
-            onClick={() => i18n.changeLanguage('en')}
-            title="English"
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
-              lineHeight: 1,
-              opacity: i18n.language === 'en' ? 1 : 0.35,
-              transition: 'opacity 0.2s',
-            }}
-          >
-            <img src="https://flagcdn.com/16x12/us.png" alt="" style={{ height: 14, width: 'auto', display: 'block' }} />
-          </button>
-        </div>
-
         {/* HEADER */}
         <div className="flex items-center gap-2 mb-4">
 
