@@ -71,11 +71,18 @@ html[data-theme="light"] body {
   min-height: 100vh;
 }
 
-button,
 input,
-textarea,
-select {
-  font: inherit;
+select,
+textarea {
+  font-size: max(16px, 1em);
+}
+
+@media screen and (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 .ant-modal-content {
