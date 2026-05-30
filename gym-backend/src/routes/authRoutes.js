@@ -44,7 +44,7 @@ const ensureFacebookOAuthConfigured = (_req, res, next) => {
 }
 
 // Google
-router.get('/google', ensureGoogleOAuthConfigured, passport.authenticate('google', { scope: ['profile', 'email'] }))
+router.get('/google', ensureGoogleOAuthConfigured, passport.authenticate('google', { scope: ['profile', 'email'], prompt: 'select_account' }))
 router.get(
   '/google/callback',
   ensureGoogleOAuthConfigured,

@@ -4,6 +4,7 @@ import type { MouseEvent as ReactMouseEvent, ReactNode, TouchEvent as ReactTouch
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hooks/useAuth'
 import { useDraggable } from '../../hooks/useDraggable'
@@ -16,11 +17,6 @@ const MASCOT_HEIGHT = 100
 const CHAT_PANEL_BACKGROUND_IMAGE = 'https://genk.mediacdn.vn/2019/7/3/photo-1-1562129061617297549771.jpg'
 const AI_AVATAR_IMAGE = 'https://vcdn1-giaitri.vnecdn.net/2023/04/28/doraemon4-1682675790-8961-1682675801.jpg?w=500&h=300&q=100&dpr=1&fit=crop&s=3dxqum5l0xkhHX-R0z_a1g'
 
-const AI_MODE_OPTIONS: { label: string; value: AiMode }[] = [
-    { label: 'Gym', value: 'gym' },
-    { label: 'Khác', value: 'general' },
-]
-
 const getSourceDomain = (url: string) => {
     try {
         return new URL(url).hostname.replace(/^www\./, '')
@@ -29,10 +25,10 @@ const getSourceDomain = (url: string) => {
     }
 }
 
-const getSourceName = (source: WebSearchResult) => {
+const getSourceName = (source: WebSearchResult, t?: (key: string) => string) => {
     const domain = getSourceDomain(source.url)
     const title = String(source.title || '').replace(/\s+/g, ' ').trim()
-    if (!title) return domain || 'Nguồn web'
+    if (!title) return domain || (t ? t('chat.source_web') : 'Web source')
     return title
         .replace(/\s*[-|]\s*.*$/, '')
         .slice(0, 80)
@@ -163,53 +159,53 @@ const parseAiActionPayload = (content: unknown): AiActionPayload | null => {
     return null
 }
 
-const getAiActionFallbackMessage = (action?: string) => {
+const getAiActionFallbackMessage = (t: (key: string) => string, action?: string) => {
     const messages: Record<string, string> = {
-        change_theme: 'Đã đổi giao diện theo yêu cầu.',
-        open_modal: 'Mình đã mở phần bạn cần.',
-        navigate: 'Mình đã chuyển đến trang phù hợp.',
-        search_web: 'Mình đã tìm thông tin liên quan cho bạn.',
+        change_theme: t('chat.action_change_theme'),
+        open_modal: t('chat.action_open_modal'),
+        navigate: t('chat.action_navigate'),
+        search_web: t('chat.action_search_web'),
     }
-    return action ? messages[action] || 'Mình đã thực hiện yêu cầu của bạn.' : 'Mình đã thực hiện yêu cầu của bạn.'
+    return action ? messages[action] || t('chat.action_fallback') : t('chat.action_fallback')
 }
 
 const getAiActionDisplayMessage = (
     actionPayload: ReturnType<typeof parseAiActionPayload>,
     currentContent = '',
+    t: (key: string) => string,
 ) => {
     if (!actionPayload) return currentContent
     const actionMessage = typeof actionPayload.message === 'string'
         ? actionPayload.message
         : ''
-    return actionMessage.trim() ? actionMessage : getAiActionFallbackMessage(actionPayload.action)
+    return actionMessage.trim() ? actionMessage : getAiActionFallbackMessage(t, actionPayload.action)
 }
 
-const getAiObjectDisplayMessage = (content: unknown) => {
+const getAiObjectDisplayMessage = (content: unknown, t: (key: string) => string) => {
     const parsed = extractJsonObjectPayload(content)
     if (!parsed) return null
     const actionPayload = typeof parsed.action === 'string'
         ? parsed as AiActionPayload
         : null
-    if (actionPayload) return getAiActionDisplayMessage(actionPayload)
+    if (actionPayload) return getAiActionDisplayMessage(actionPayload, '', t)
 
     const naturalMessage = [parsed.message, parsed.text, parsed.answer, parsed.content]
         .find((value) => typeof value === 'string' && value.trim())
     return typeof naturalMessage === 'string'
         ? naturalMessage
-        : 'Mình đã xử lý xong yêu cầu của bạn.'
+        : t('chat.action_processed')
 }
 
-const getSafeAssistantDisplayContent = (content: unknown, actionPayload: ReturnType<typeof parseAiActionPayload>) => {
-    if (actionPayload) return getAiActionDisplayMessage(actionPayload)
-    const objectMessage = getAiObjectDisplayMessage(content)
-    if (objectMessage) return objectMessage
-    return typeof content === 'string' ? content : ''
+const getSafeAssistantDisplayContent = (content: unknown, actionPayload: ReturnType<typeof parseAiActionPayload>, t: (key: string) => string) => {
+    if (actionPayload) return getAiActionDisplayMessage(actionPayload, '', t)
+    const objectMessage = getAiObjectDisplayMessage(content, t)
+    return objectMessage ? objectMessage : typeof content === 'string' ? content : ''
 }
 
-const splitAiAssistantResponse = (rawContent: unknown, currentContent = '') => {
+const splitAiAssistantResponse = (rawContent: unknown, currentContent = '', t: (key: string) => string) => {
     const actionPayload = parseAiActionPayload(rawContent)
     const chatContent = rawContent
-        ? getSafeAssistantDisplayContent(rawContent, actionPayload)
+        ? getSafeAssistantDisplayContent(rawContent, actionPayload, t)
         : currentContent
 
     return {
@@ -441,7 +437,7 @@ const renderMarkdownText = (text: string, color: string) => {
     )
 }
 
-const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean) => {
+const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean, t?: (key: string) => string) => {
     const uniqueSources = sources
         .filter((source) => /^https:\/\//i.test(source.url || '') && getSourceDomain(source.url))
         .filter((source, index, list) => list.findIndex((item) => item.url === source.url) === index)
@@ -453,7 +449,7 @@ const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean) => {
         <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
             {uniqueSources.map((source) => {
                 const domain = getSourceDomain(source.url)
-                const name = getSourceName(source)
+                const name = getSourceName(source, t)
                 return (
                     <a
                         key={source.url}
@@ -642,6 +638,7 @@ const DoraemonMiniAvatar = () => (
 export default function AiChatWidget() {
     const { dark, tokens, applyTheme } = useTheme()
     const { user } = useAuth()
+    const { t, i18n } = useTranslation()
     const navigate = useNavigate()
     const [visible, setVisible] = useState(false)
     const [expanded, setExpanded] = useState(false)
@@ -926,10 +923,10 @@ export default function AiChatWidget() {
 
     const confirmDeleteSession = (sessionId: string) => {
         Modal.confirm({
-            title: 'Xóa cuộc trò chuyện',
-            content: 'Bạn có chắc muốn xóa cuộc trò chuyện này không?',
-            okText: 'Xóa',
-            cancelText: 'Hủy',
+            title: t('chat.delete_modal_title'),
+            content: t('chat.delete_modal_content'),
+            okText: t('chat.delete'),
+            cancelText: t('chat.cancel'),
             okButtonProps: { danger: true },
             zIndex: 12000,
             onOk: () => deleteSession(sessionId),
@@ -1056,7 +1053,7 @@ export default function AiChatWidget() {
                 stopStreamTyping()
                 const fallbackResponse = await requestAiAssistant(trimmed, mode, conversationContext)
                 const fallbackContent = extractAiResponseContent(fallbackResponse)
-                const fallbackSplit = splitAiAssistantResponse(fallbackContent)
+                const fallbackSplit = splitAiAssistantResponse(fallbackContent, '', t)
                 const fallbackAction = fallbackSplit.actionPayload
                 if (fallbackAction) executeAiAction(fallbackAction)
                 setAiActionLoading(false)
@@ -1064,7 +1061,7 @@ export default function AiChatWidget() {
                     ...message,
                     content: fallbackContent
                         ? fallbackSplit.chatContent
-                        : 'Mình không có câu trả lời cho câu hỏi này.',
+                        : t('chat.fallback_response'),
                     intent: fallbackAction?.action,
                     action: fallbackAction?.action,
                     webSearch: fallbackResponse.webSearch,
@@ -1073,7 +1070,7 @@ export default function AiChatWidget() {
             }
 
             const responseContent = extractAiResponseContent(response, suppressedActionText)
-            const splitResponse = splitAiAssistantResponse(responseContent, suppressedActionText)
+            const splitResponse = splitAiAssistantResponse(responseContent, suppressedActionText, t)
             const actionPayload = splitResponse.actionPayload
             if (actionPayload) executeAiAction(actionPayload)
 
@@ -1096,7 +1093,7 @@ export default function AiChatWidget() {
                     ...message,
                     content: splitResponse.chatContent
                         ? splitResponse.chatContent
-                        : message.content || 'Mình không có câu trả lời cho câu hỏi này.',
+                        : message.content || t('chat.fallback_response'),
                     intent: actionPayload?.action,
                     action: actionPayload?.action,
                     webSearch: response.webSearch,
@@ -1104,7 +1101,7 @@ export default function AiChatWidget() {
             }
         } catch (error: any) {
             setAiActionLoading(false)
-            const errMsg = error?.userMessage || 'Có lỗi khi gọi AI. Vui lòng thử lại.'
+            const errMsg = error?.userMessage || t('chat.error_message')
             if (error?.code === 429) setRetryCountdown(4)
             setErrorInfo({ code: error?.code || 500, message: errMsg })
             flushStreamTextBuffer(assistantMessageId)
@@ -1208,15 +1205,15 @@ export default function AiChatWidget() {
                                                 {session.title}
                                             </Typography.Text>
                                             <Typography.Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>
-                                                {new Date(session.createdAt).toLocaleString('vi-VN')}
+                                                            {new Date(session.createdAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}
                                             </Typography.Text>
                                         </div>
                                         <Dropdown
                                             trigger={['click']}
                                             menu={{
                                                 items: [
-                                                    { key: 'rename', icon: <EditOutlined />, label: 'Đổi tên' },
-                                                    { key: 'delete', icon: <DeleteOutlined />, label: 'Xóa', danger: true },
+                                                    { key: 'rename', icon: <EditOutlined />, label: t('chat.rename') },
+                                                    { key: 'delete', icon: <DeleteOutlined />, label: t('chat.delete'), danger: true },
                                                 ],
                                                 onClick: ({ key, domEvent }) => {
                                                     domEvent.stopPropagation()
@@ -1410,7 +1407,7 @@ export default function AiChatWidget() {
                         <button
                             type="button"
                             className={`doraemon-chat-trigger ${visible ? 'is-active' : ''}`}
-                            aria-label="Chat với AI"
+                            aria-label={t('chat.aria_label')}
                             style={{
                                 width: mascotButtonWidth,
                                 height: mascotButtonHeight,
@@ -1517,39 +1514,9 @@ export default function AiChatWidget() {
                                 }}>
                                 <div style={{ minWidth: 0 }}>
                                     <Typography.Title level={5} style={{ margin: 0, color: 'var(--theme-button-text)', fontSize: mobileChat ? 14 : 16 }}>
-                                        Gì cũng biết! Tò mò hỏi Doraemon
+                                        {t('chat.header_title')}
                                     </Typography.Title>
-                                    {mode === 'gym' && (
-                                        <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                                            <span style={{
-                                                background: 'var(--theme-accent-muted)',
-                                                color: 'var(--theme-button-text)',
-                                                border: '1px solid var(--theme-accent-border)',
-                                                borderRadius: 999,
-                                                padding: '2px 8px',
-                                                fontSize: 11,
-                                                fontWeight: 700,
-                                            }}>
-                                                Gym Assistant
-                                            </span>
-                                            <span style={{
-                                                background: 'var(--theme-accent-muted)',
-                                                color: 'var(--theme-button-text)',
-                                                border: '1px solid var(--theme-accent-border)',
-                                                borderRadius: 999,
-                                                padding: '2px 8px',
-                                                fontSize: 11,
-                                                fontWeight: 700,
-                                            }}>
-                                                AI Action
-                                            </span>
-                                        </div>
-                                    )}
-                                    {!mobileChat && (
-                                        <Typography.Text style={{ color: 'var(--theme-button-text)', fontSize: 12 }}>
-                                            Chồn đến từ thế kỉ 22
-                                        </Typography.Text>
-                                    )}
+
                                 </div>
                                 <Space
                                     size={mobileChat ? 2 : 8}
@@ -1566,7 +1533,7 @@ export default function AiChatWidget() {
                                                 setSessionDrawerOpen(true)
                                             }}
                                         >
-                                            Phiên ({sessions.length})
+                                            {t('chat.session_button', { count: sessions.length })}
                                         </Button>
                                     )}
                                     {!compactChat && (
@@ -1607,7 +1574,7 @@ export default function AiChatWidget() {
                                                 gap: 8,
                                             }}
                                         >
-                                            <Typography.Text strong style={{ color: panelText }}>Phiên chat</Typography.Text>
+                                            <Typography.Text strong style={{ color: panelText }}>{t('chat.session_sidebar_title')}</Typography.Text>
                                             <Button
                                                 size="small"
                                                 type="text"
@@ -1666,8 +1633,8 @@ export default function AiChatWidget() {
                                                                         getPopupContainer={(trigger) => trigger.parentElement || document.body}
                                                                         menu={{
                                                                             items: [
-                                                                                { key: 'rename', icon: <EditOutlined />, label: 'Đổi tên' },
-                                                                                { key: 'delete', icon: <DeleteOutlined />, label: 'Xóa', danger: true },
+                                                                                { key: 'rename', icon: <EditOutlined />, label: t('chat.rename') },
+                                                                                { key: 'delete', icon: <DeleteOutlined />, label: t('chat.delete'), danger: true },
                                                                             ],
                                                                             onClick: ({ key, domEvent }) => {
                                                                                 domEvent.stopPropagation()
@@ -1689,7 +1656,7 @@ export default function AiChatWidget() {
                                                             )}
                                                         </div>
                                                         <Typography.Text style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
-                                                            {new Date(session.createdAt).toLocaleString('vi-VN')}
+                                                {new Date(session.createdAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}
                                                         </Typography.Text>
                                                     </div>
                                                 )
@@ -1714,19 +1681,22 @@ export default function AiChatWidget() {
                                     }}>
                                         <div style={{ minWidth: 0, flex: 1 }}>
                                             <Typography.Text strong style={{ color: panelText, fontSize: mobileChat ? 13 : 14, display: 'block' }}>
-                                                {activeSession?.title || 'New Chat'}
+                                                {activeSession?.title || t('chat.default_session_title')}
                                             </Typography.Text>
                                             <Typography.Text style={{ fontSize: 11, color: panelMutedText }}>
                                                 {activeSession?.messages.length
-                                                    ? `${activeSession.messages.length} tin nhắn`
-                                                    : 'Bắt đầu cuộc trò chuyện mới'}
+                                                    ? t('chat.session_count', { count: activeSession.messages.length })
+                                                    : t('chat.new_chat_empty')}
                                             </Typography.Text>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                                             <Segmented
                                                 value={mode}
                                                 onChange={(value) => setMode(value as AiMode)}
-                                                options={AI_MODE_OPTIONS}
+                                                options={[
+                                                    { label: 'Gym', value: 'gym' },
+                                                    { label: t('chat.mode_general'), value: 'general' },
+                                                ]}
                                                 size="small"
                                             />
                                             {!showSessionSidebar && !compactChat && (
@@ -1759,7 +1729,7 @@ export default function AiChatWidget() {
                                         {activeMessages.length === 0 ? (
                                             <div style={{ textAlign: 'center', marginTop: 32 }}>
                                                 <Typography.Text style={{ color: panelMutedText }}>
-                                                    Viết câu hỏi, sau đó nhấn gửi để bắt đầu.
+                                                    {t('chat.empty_state')}
                                                 </Typography.Text>
                                             </div>
                                         ) : (
@@ -1780,7 +1750,7 @@ export default function AiChatWidget() {
                                                         : extractSourceResultsFromText(messageContent))
                                                     : []
                                                 const safeAssistantContent = !isUser
-                                                    ? getSafeAssistantDisplayContent(messageContent, actionPayload)
+                                                    ? getSafeAssistantDisplayContent(messageContent, actionPayload, t)
                                                     : messageContent
                                                 const visibleContent = isUser
                                                     ? messageContent
@@ -1852,11 +1822,11 @@ export default function AiChatWidget() {
                                                                                         {item.name}
                                                                                     </Typography.Text>
                                                                                     <Typography.Text style={{ color: 'var(--theme-accent)' }}>
-                                                                                        {Number(item.price).toLocaleString('vi-VN')}đ
+                                                                                        {Number(item.price).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}đ
                                                                                     </Typography.Text>
                                                                                     {item.selectedVariant && (
                                                                                         <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
-                                                                                            Mức tạ tối đa: {item.selectedVariant}
+                                                                                            {t('chat.weight_label')}: {item.selectedVariant}
                                                                                         </Typography.Text>
                                                                                     )}
                                                                                 </div>
@@ -1907,10 +1877,10 @@ export default function AiChatWidget() {
                                                                                         {item.name}
                                                                                     </Typography.Text>
                                                                                     <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
-                                                                                        {item.specialty || 'Huấn luyện viên'}
+                                                                                        {item.specialty || t('chat.pt_fallback')}
                                                                                     </Typography.Text>
                                                                                     <Typography.Text style={{ color: panelMutedText, display: 'block', fontSize: 12 }}>
-                                                                                        {item.phone || 'Chưa có SĐT'} {item.email ? `• ${item.email}` : ''}
+                                                                                        {item.phone || t('chat.phone_fallback')} {item.email ? `• ${item.email}` : ''}
                                                                                     </Typography.Text>
                                                                                 </div>
                                                                             </div>
@@ -1920,9 +1890,9 @@ export default function AiChatWidget() {
                                                                 {!toolPayload && (
                                                                     visibleContent
                                                                         ? renderMarkdownText(visibleContent, bubbleColor)
-                                                                        : <Typography.Text style={{ color: panelMutedText }}>Đang trả lời...</Typography.Text>
+                                                                        : <Typography.Text style={{ color: panelMutedText }}>{t('chat.loading')}</Typography.Text>
                                                                 )}
-                                                                {!toolPayload && !actionPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark)}
+                                                                {!toolPayload && !actionPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark, t)}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1935,7 +1905,7 @@ export default function AiChatWidget() {
                                                 {aiActionLoading && (
                                                     <div style={{ marginTop: 8 }}>
                                                         <Typography.Text style={{ color: 'var(--theme-muted)', fontSize: 12 }}>
-                                                            AI Action đang gọi dữ liệu GymPro{activeAiTool ? `: ${activeAiTool}` : ''}
+                                                            {t('chat.ai_action_loading')}{activeAiTool ? `: ${activeAiTool}` : ''}
                                                         </Typography.Text>
                                                     </div>
                                                 )}
@@ -1971,7 +1941,7 @@ export default function AiChatWidget() {
                                                     onClick={handleRetry}
                                                     style={{ background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)', color: 'var(--theme-text)' }}
                                                 >
-                                                    {retryCountdown > 0 ? `Thử lại sau ${retryCountdown}s` : 'Thử lại'}
+                                                    {retryCountdown > 0 ? t('chat.retry_after', { count: retryCountdown }) : t('chat.retry')}
                                                 </Button>
                                             </div>
                                         )}
@@ -1981,7 +1951,7 @@ export default function AiChatWidget() {
                                             onPressEnter={(e) => {
                                                 if (!e.shiftKey) { e.preventDefault(); handleSend() }
                                             }}
-                                            placeholder="Nhập câu hỏi..."
+                                            placeholder={t('chat.input_placeholder')}
                                             rows={mobileChat ? 2 : 3}
                                             disabled={loading}
                                             style={{
@@ -2004,7 +1974,7 @@ export default function AiChatWidget() {
                                         }}>
                                             {!mobileChat && (
                                                 <Typography.Text style={{ fontSize: 12, color: panelMutedText }}>
-                                                    Enter để gửi · Shift+Enter xuống dòng
+                                                    {t('chat.input_helper')}
                                                 </Typography.Text>
                                             )}
                                             <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
@@ -2014,8 +1984,8 @@ export default function AiChatWidget() {
                                                     onClick={createNewChat}
                                                     style={{ color: panelText }}
                                                 >
-                                                    Mới
-                                                </Button>
+                                                {t('chat.new_chat')}
+                                            </Button>
                                                 <Button
                                                     icon={<SendOutlined />}
                                                     size={mobileChat ? 'small' : 'middle'}
@@ -2023,7 +1993,7 @@ export default function AiChatWidget() {
                                                     loading={loading}
                                                     style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)', border: 'none' }}
                                                 >
-                                                    Gửi
+                                                    {t('chat.send')}
                                                 </Button>
                                             </div>
                                         </div>
@@ -2042,7 +2012,7 @@ export default function AiChatWidget() {
                 className="ai-session-drawer"
                 title={
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <span>Phiên chat</span>
+                        <span>{t('chat.session_drawer_title')}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Badge count={sessions.length} color="var(--theme-accent)" />
                             <Button

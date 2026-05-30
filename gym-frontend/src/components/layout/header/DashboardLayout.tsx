@@ -24,6 +24,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeProvider'
 import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
+import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
 import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
 
 const { Sider, Content } = Layout
@@ -268,6 +269,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
 
+      <AdminAIChatWidget />
     </Layout>
   )
 }

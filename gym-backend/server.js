@@ -9,6 +9,7 @@ import { getMyProducts } from './src/controllers/productController.js'
 import { handleStripeWebhook } from './src/controllers/walletController.js'
 import { protect, sellerOnly } from './src/middlewares/authMiddleware.js'
 import addressRoutes from './src/routes/addressRoutes.js'
+import adminAiRoutes from './src/routes/adminAiRoutes.js'
 import aiRoutes from './src/routes/aiRoutes.js'
 import auditLogRoutes from './src/routes/auditLogRoutes.js'
 import authRoutes from './src/routes/authRoutes.js'
@@ -62,6 +63,7 @@ app.use('/api/seller', sellerRoutes)
 app.use('/api/memberships', membershipRoutes)
 app.use('/api/partnership-requests', partnershipRequestRoutes)
 app.use('/api/ai-assistant', aiRoutes)
+app.use('/api/admin/ai', adminAiRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', message: 'GymPro API is running' })
