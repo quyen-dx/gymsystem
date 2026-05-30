@@ -70,7 +70,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-y-auto px-4 py-6 pt-20 sm:overflow-hidden sm:p-0">
+    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-8 sm:overflow-hidden sm:p-0">
 
       {/* BACKGROUND */}
       <div
@@ -93,7 +93,7 @@ export default function RegisterPage() {
 
       {/* CARD */}
       <div
-        className={`relative z-10 w-full max-w-md rounded-2xl p-7 shadow-2xl transition-all
+        className={`relative z-10 my-auto w-full max-w-md rounded-2xl p-7 shadow-2xl transition-all
           ${dark ? 'bg-[#141414] text-white' : 'bg-[#484848] text-[#edebe6]'}
         `}
         style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a' }}
