@@ -28,7 +28,6 @@ const cardStyle = {
   style: {
     base: {
       color: '#ffffff',
-      fontFamily: 'Plus Jakarta Sans, sans-serif',
       fontSize: '14px',
       '::placeholder': { color: '#6b7280' },
     },

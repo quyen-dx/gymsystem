@@ -599,8 +599,6 @@ export default function AccountProfileModal({
     }
   }, [open])
 
-  if (!user) return null
-
   const profileThemeStyle = {
     '--profile-bg-layout': token.colorBgLayout,
     '--profile-bg-container': 'var(--theme-input-bg)',
@@ -763,6 +761,8 @@ export default function AccountProfileModal({
       commitPending()
     }
   }, [])
+
+  if (!user) return null
 
   const handleCopyContact = async () => {
     if (!user?.email && !user?.phone) return

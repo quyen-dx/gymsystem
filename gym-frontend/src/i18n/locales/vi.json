@@ -5,7 +5,7 @@
     "slogan2": "CHINH PHỤC TỪNG NGÀY",
     "subtitle": "Quản lý lịch tập, sức khoẻ và hành trình luyện tập của bạn trong một trải nghiệm hiện đại.",
     "cta_booking": "Đặt lịch tập ngay",
-    "cta_checkin": "Check-in ngay",
+    "cta_checkin": "Điểm danh ngay",
     "greeting_fallback": "bạn",
     "stats": {
       "members": "Thành viên",
@@ -16,7 +16,7 @@
     "services": {
       "overline": "Dịch vụ & tiện ích",
       "heading": "MỌI THỨ BẠN CẦN",
-      "qr_checkin": "QR Check-in",
+      "qr_checkin": "QR điểm danh",
       "qr_checkin_desc": "Vào phòng tập nhanh qua mã QR",
       "book_pt": "Đặt lịch PT",
       "book_pt_desc": "Chọn khung giờ cùng huấn luyện viên",
@@ -37,7 +37,7 @@
       "item_0_quote": "Lịch tập rõ ràng, PT theo sát và tôi duy trì được thói quen tập đều hơn trước.",
       "item_1_name": "Ngọc Hà",
       "item_1_duration": "Thành viên 6 tháng",
-      "item_1_quote": "Check-in nhanh, đặt lịch tiện, mọi chỉ số sức khoẻ đều được lưu lại rất dễ theo dõi.",
+      "item_1_quote": "Điểm danh nhanh, đặt lịch tiện, mọi chỉ số sức khoẻ đều được lưu lại rất dễ theo dõi.",
       "item_2_name": "Minh Quân",
       "item_2_duration": "Thành viên 12 tháng",
       "item_2_quote": "Không gian chuyên nghiệp và lộ trình cá nhân giúp tôi thấy tiến bộ qua từng tuần."
@@ -52,11 +52,31 @@
   },
   "nav": {
     "home": "Trang chủ",
+    "about": "Giới thiệu",
     "store": "Cửa hàng",
     "book_pt": "Đặt lịch PT",
     "health": "Sức khoẻ",
     "workout": "Lộ trình",
-    "checkin": "Checkin"
+    "checkin": "Điểm danh",
+    "help": "Trợ giúp",
+    "policies": "Chính sách",
+    "feedback": "Góp ý",
+    "more": "Thêm",
+    "website": "Trang web",
+    "overview": "Tổng quan",
+    "users": "Người dùng",
+    "plans": "Gói tập",
+    "partnerships": "Hợp tác",
+    "members": "Hội viên",
+    "trainers": "Huấn luyện viên",
+    "reports": "Báo cáo",
+    "system_settings": "Cài đặt hệ thống",
+    "faq_manager": "Quản lý FAQ",
+    "feedback_manager": "Quản lý góp ý",
+    "schedule": "Lịch hẹn",
+    "students": "Học viên",
+    "my_products": "Sản phẩm của tôi",
+    "orders": "Đơn hàng"
   },
   "wallet": {
     "label": "Ví:",
@@ -834,7 +854,7 @@
   "staff": {
     "checkin": {
       "overline": "Staff",
-      "title": "Check-in",
+      "title": "Điểm danh",
       "under_development": "Chức năng đang phát triển"
     },
     "members": {
@@ -921,9 +941,9 @@
     "identifier_type_phone": "số điện thoại"
   },
   "checkin_page": {
-    "overline": "QR Check-in",
-    "title": "Check-in hội viên",
-    "under_development": "Chức năng QR Check-in đang được phát triển."
+    "overline": "QR điểm danh",
+    "title": "Điểm danh hội viên",
+    "under_development": "Chức năng QR điểm danh đang được phát triển."
   },
   "booking": {
     "module": "Module 5",
@@ -1052,5 +1072,224 @@
     "action_search_web": "Mình đã tìm thông tin liên quan cho bạn.",
     "action_fallback": "Mình đã thực hiện yêu cầu của bạn.",
     "action_processed": "Mình đã xử lý xong yêu cầu của bạn."
+  },
+  "about": {
+    "nav": {
+      "login": "Đăng nhập",
+      "register": "Đăng ký"
+    },
+    "hero": {
+      "slide1": {
+        "title": "NƠI BẠN VƯỢT QUA GIỚI HẠN",
+        "subtitle": "Không gian luyện tập hiện đại, dữ liệu rõ ràng và cộng đồng luôn thúc đẩy bạn tiến lên.",
+        "cta": "Đăng ký ngay"
+      },
+      "slide2": {
+        "title": "HỆ THỐNG QUẢN LÝ HIỆN ĐẠI",
+        "subtitle": "Check-in QR, đặt lịch PT, theo dõi sức khoẻ và cửa hàng trong một trải nghiệm liền mạch.",
+        "cta": "Xem tính năng"
+      },
+      "slide3": {
+        "title": "ĐỘI NGŨ PT CHUYÊN NGHIỆP",
+        "subtitle": "Huấn luyện viên đồng hành theo mục tiêu, thể trạng và nhịp sống riêng của từng hội viên.",
+        "cta": "Đặt lịch ngay"
+      }
+    },
+    "stats": {
+      "members": "Thành viên",
+      "trainers": "Huấn luyện viên",
+      "branches": "Cơ sở",
+      "satisfaction": "Hài lòng"
+    },
+    "intro": {
+      "eyebrow": "Giới thiệu",
+      "titleFallback": "Về GymPro",
+      "contentFallback": "GymPro được xây dựng để hành trình luyện tập trở nên rõ ràng, hiện đại và truyền cảm hứng hơn. Chúng tôi kết hợp không gian phòng tập thực tế, đội ngũ huấn luyện viên cá nhân và công cụ số để mỗi hội viên có lộ trình tập luyện mạch lạc, theo dõi được tiến độ và luôn được kết nối."
+    },
+    "features": {
+      "eyebrow": "Tính năng nổi bật",
+      "title": "Mọi thứ trong một luồng",
+      "qr": {
+        "title": "QR Check-in",
+        "desc": "Điểm danh nhanh tại quầy hoặc cổng vào."
+      },
+      "booking": {
+        "title": "Đặt lịch PT",
+        "desc": "Chọn PT và khung giờ phù hợp với lịch cá nhân."
+      },
+      "health": {
+        "title": "Theo dõi sức khoẻ",
+        "desc": "Lưu chỉ số, mục tiêu và tiến độ luyện tập."
+      },
+      "roadmap": {
+        "title": "Lộ trình cá nhân",
+        "desc": "Kế hoạch tập luyện rõ ràng theo từng giai đoạn."
+      },
+      "store": {
+        "title": "Cửa hàng",
+        "desc": "Mua sản phẩm gym từ các đối tác trong hệ thống."
+      },
+      "notifications": {
+        "title": "Thông báo",
+        "desc": "Nhắc lịch tập, lịch PT và các cập nhật quan trọng."
+      }
+    },
+    "pts": {
+      "eyebrow": "Đội ngũ PT",
+      "title": "Người dẫn nhịp luyện tập",
+      "specialties": {
+        "strength": "Sức mạnh & tăng cơ",
+        "fatLoss": "Giảm mỡ & dinh dưỡng",
+        "mobility": "Mobility & phục hồi",
+        "hiit": "HIIT & thể lực"
+      }
+    },
+    "facilities": {
+      "eyebrow": "Tiện nghi phòng tập"
+    },
+    "testimonials": {
+      "eyebrow": "Đánh giá thành viên",
+      "items": {
+        "minhAnh": {
+          "duration": "Hội viên 2 năm",
+          "quote": "GymPro giúp tôi có lịch tập rõ ràng và duy trì thói quen đều đặn hơn."
+        },
+        "quocHuy": {
+          "duration": "Hội viên PT",
+          "quote": "Đặt lịch PT, theo dõi tiến độ và check-in đều rất nhanh."
+        },
+        "linhChi": {
+          "duration": "Hội viên mới",
+          "quote": "Không gian tập đẹp, PT nhiệt tình và hệ thống rất dễ dùng."
+        }
+      }
+    },
+    "cta": {
+      "title": "BẮT ĐẦU HÀNH TRÌNH CỦA BẠN",
+      "register": "Đăng ký miễn phí"
+    },
+    "footer": {
+      "description": "Trải nghiệm phòng gym hiện đại cho luyện tập, huấn luyện và quản lý hội viên.",
+      "home": "Trang chủ",
+      "about": "Về chúng tôi",
+      "contact": "Liên hệ",
+      "policies": "Chính sách",
+      "copyright": "Đã đăng ký bản quyền."
+    }
+  },
+  "system_experience": {
+    "admin": {
+      "system_settings": "Cài đặt hệ thống",
+      "faq_manager": "Quản lý FAQ",
+      "policy_manager": "Quản lý chính sách",
+      "feedback_manager": "Quản lý góp ý",
+      "add_faq": "Thêm FAQ",
+      "add_policy": "Thêm chính sách",
+      "edit_faq": "Sửa FAQ",
+      "edit_policy": "Sửa chính sách",
+      "question": "Câu hỏi",
+      "answer": "Câu trả lời",
+      "category": "Danh mục",
+      "published": "Đã xuất bản",
+      "hidden": "Đã ẩn",
+      "publish": "Xuất bản",
+      "actions": "Hành động",
+      "edit": "Sửa",
+      "delete": "Xóa",
+      "title": "Tiêu đề",
+      "slug": "Đường dẫn",
+      "content": "Nội dung",
+      "sender": "Người gửi",
+      "type": "Loại",
+      "priority": "Ưu tiên",
+      "status": "Trạng thái",
+      "reply": "Phản hồi",
+      "update_feedback": "Cập nhật góp ý",
+      "admin_reply": "Phản hồi admin"
+      ,"save": "Lưu",
+      "save_settings": "Lưu cài đặt",
+      "save_cms": "Lưu CMS",
+      "load_failed": "Không thể tải dữ liệu",
+      "save_success": "Đã lưu thành công",
+      "save_failed": "Lưu thất bại",
+      "gym_name": "Tên gym",
+      "gym_name_required": "Nhập tên gym",
+      "slogan": "Khẩu hiệu",
+      "slogans": "Danh sách khẩu hiệu",
+      "slogan_required": "Nhập khẩu hiệu hoặc xóa dòng này",
+      "add_slogan": "Thêm khẩu hiệu",
+      "delete_slogan": "Xóa khẩu hiệu",
+      "preview_home": "Xem trước trang chủ",
+      "preview_language": "Ngôn ngữ preview",
+      "logo_url": "URL logo",
+      "banner_url": "URL banner trang chủ",
+      "favicon_url": "URL favicon",
+      "hero_title": "Tiêu đề hero",
+      "hero_subtitle": "Mô tả hero",
+      "hero_image_url": "URL ảnh hero",
+      "cta_text": "Chữ nút CTA",
+      "cta_link": "Liên kết CTA",
+      "about_title": "Tiêu đề giới thiệu",
+      "about_content": "Nội dung giới thiệu",
+      "section": "Mục",
+      "image_url": "URL ảnh",
+      "order": "Thứ tự",
+      "add_section": "Thêm mục"
+      ,"preview_title": "Xem trước trang giới thiệu",
+      "preview_empty": "Chưa có nội dung",
+      "preview_about_fallback": "Về GymPro"
+    },
+    "help": {
+      "title": "Trung tâm trợ giúp",
+      "search_placeholder": "Tìm câu hỏi...",
+      "empty": "Chưa có FAQ phù hợp"
+    },
+    "policy": {
+      "title": "Chính sách GymPro",
+      "empty": "Chưa có chính sách"
+    },
+    "feedback": {
+      "form_title": "Gửi góp ý / báo lỗi",
+      "my_title": "Góp ý của tôi",
+      "title_label": "Tiêu đề",
+      "content_label": "Nội dung",
+      "type_label": "Loại",
+      "priority_label": "Ưu tiên",
+      "submit": "Gửi góp ý",
+      "success": "Đã gửi góp ý",
+      "failed": "Gửi thất bại",
+      "empty": "Bạn chưa gửi góp ý",
+      "admin_reply": "Admin",
+      "type": {
+        "suggestion": "Góp ý",
+        "bug": "Báo lỗi",
+        "complaint": "Khiếu nại",
+        "other": "Khác"
+      },
+      "priority": {
+        "low": "Thấp",
+        "medium": "Trung bình",
+        "high": "Cao",
+        "urgent": "Khẩn cấp"
+      },
+      "status": {
+        "pending": "Đang chờ",
+        "reviewing": "Đang xem xét",
+        "resolved": "Đã xử lý",
+        "rejected": "Từ chối"
+      }
+    },
+    "activity": {
+      "title": "Hoạt động gần đây",
+      "empty": "Chưa có hoạt động"
+    },
+    "about": {
+      "loading": "Đang tải nội dung giới thiệu...",
+      "empty_title": "Chưa có nội dung giới thiệu",
+      "empty_desc": "Admin có thể cập nhật nội dung tại Cài đặt hệ thống.",
+      "cta_fallback": "Bắt đầu ngay",
+      "sections_title": "Giới thiệu về gym",
+      "preview_about_fallback": "Về GymPro"
+    }
   }
 }

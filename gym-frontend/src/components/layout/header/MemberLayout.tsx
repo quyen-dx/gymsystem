@@ -1,11 +1,14 @@
 import {
   CalendarOutlined,
+  CommentOutlined,
   CreditCardOutlined,
   DashboardOutlined,
+  FileTextOutlined,
   FundOutlined,
   HeartOutlined,
   HomeOutlined,
   MenuOutlined,
+  QuestionCircleOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
 } from '@ant-design/icons'
@@ -19,7 +22,7 @@ import {
   Skeleton,
   Typography,
 } from 'antd'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useCart } from '../../../context/useCart'
@@ -27,6 +30,8 @@ import { useWallet } from '../../../context/WalletProvider'
 import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
 import { getShops } from '../../../services/shopService'
+import { systemExperienceService } from '../../../services/systemExperienceService'
+import { getLocalizedText } from '../../../utils/localization'
 import type { ProductShop } from '../../../types/member/product'
 import AiChatWidget from '../../chat/AiChatWidget'
 import MemberFooter from '../footer/MemberFooter'
@@ -49,6 +54,8 @@ const shouldLockMemberInteractions = (pathname: string) => (
   pathname.startsWith('/store')
 )
 
+const pickLocalized = (value: any, language: string) => getLocalizedText(value, language, '')
+
 export default function MemberLayout({
   children,
   hideFooter = false,
@@ -56,7 +63,7 @@ export default function MemberLayout({
   children: React.ReactNode
   hideFooter?: boolean
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user } = useAuth()
   const [accountOpen, setAccountOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -65,6 +72,9 @@ export default function MemberLayout({
   const [storeDropdownLoading, setStoreDropdownLoading] = useState(false)
   const [storeDropdownFetched, setStoreDropdownFetched] = useState(false)
   const [storeDropdownShops, setStoreDropdownShops] = useState<ProductShop[]>([])
+  const [moreDropdownOpen, setMoreDropdownOpen] = useState(false)
+  const moreDropdownRef = useRef<HTMLDivElement>(null)
+  const [branding, setBranding] = useState({ gymName: 'GymPro', logoUrl: '', slogan: '' })
   const { cartCount } = useCart()
   const { wallet } = useWallet()
   const navigate = useNavigate()
@@ -77,18 +87,26 @@ export default function MemberLayout({
     { key: '/workout', label: t('nav.workout'), icon: <FundOutlined /> },
     { key: '/checkin', label: t('nav.checkin'), icon: <CreditCardOutlined /> },
   ]
+  const moreNavItems = [
+    { key: '/help', label: t('nav.help'), icon: <QuestionCircleOutlined /> },
+    { key: '/policies', label: t('nav.policies'), icon: <FileTextOutlined /> },
+    { key: '/feedback', label: t('nav.feedback'), icon: <CommentOutlined /> },
+  ]
+  const drawerNavItems = [...navItems, ...moreNavItems]
 
   const selectedKey =
-    navItems
+    drawerNavItems
       .map((item) => item.key)
       .sort((a, b) => b.length - a.length)
       .find((key) => location.pathname === key || location.pathname.startsWith(`${key}/`)) ||
     '/'
+  const moreActive = moreNavItems.some((item) => selectedKey === item.key)
 
   const goTo = (path: string) => {
     navigate(path)
     setMenuOpen(false)
     setStoreDropdownOpen(false)
+    setMoreDropdownOpen(false)
   }
 
   const loadStoreDropdown = () => {
@@ -131,6 +149,39 @@ export default function MemberLayout({
     }
   }, [lockMemberInteractions])
 
+  useEffect(() => {
+    if (!moreDropdownOpen) return
+
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      if (!moreDropdownRef.current?.contains(event.target as Node)) {
+        setMoreDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown, { passive: true })
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+    }
+  }, [moreDropdownOpen])
+
+  useEffect(() => {
+    systemExperienceService.getSettings()
+      .then((res) => {
+        const settings = res.data.settings || {}
+        const firstSlogan = Array.isArray(settings.slogans) && settings.slogans.length > 0
+          ? pickLocalized(settings.slogans[0], i18n.language)
+          : settings.slogan || ''
+        setBranding({ gymName: settings.gymName || 'GymPro', logoUrl: settings.logoUrl || '', slogan: firstSlogan })
+        if (settings.faviconUrl) {
+          const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null
+          if (link) link.href = settings.faviconUrl
+        }
+      })
+      .catch(() => { })
+  }, [i18n.language])
+
   return (
     <Layout className="member-shell" style={{ minHeight: '100vh' }}>
       <Header
@@ -150,25 +201,29 @@ export default function MemberLayout({
             if (event.key === 'Enter') goTo('/')
           }}
         >
-          <div
-            className="member-shell-logo-mark"
-            style={{
-              background: 'var(--theme-accent)',
-              color: 'var(--theme-button-text)',
-              boxShadow: '0 0 12px var(--theme-accent-muted), 0 0 4px var(--theme-accent)',
-              borderRadius: 8,
-              width: 32,
-              height: 32,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 700,
-              fontSize: 14,
-            }}
-          >
-            GP
-          </div>
-          <div className="member-shell-brand" style={{ color: 'var(--theme-accent)' }}>GymPro</div>
+          {branding.logoUrl ? (
+            <img src={branding.logoUrl} alt={branding.gymName} style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover' }} />
+          ) : (
+            <div
+              className="member-shell-logo-mark"
+              style={{
+                background: 'var(--theme-accent)',
+                color: 'var(--theme-button-text)',
+                boxShadow: '0 0 12px var(--theme-accent-muted), 0 0 4px var(--theme-accent)',
+                borderRadius: 8,
+                width: 32,
+                height: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: 14,
+              }}
+            >
+              GP
+            </div>
+          )}
+          <div className="member-shell-brand" style={{ color: 'var(--theme-accent)' }}>{branding.gymName}</div>
         </div>
 
         <nav className="member-shell-desktop-nav" aria-label="Member navigation">
@@ -248,6 +303,35 @@ export default function MemberLayout({
               </button>
             )
           })}
+          <div className="member-more-nav-wrapper" ref={moreDropdownRef}>
+            <button
+              type="button"
+              className={`member-shell-nav-item${moreActive ? ' is-active' : ''}`}
+              onClick={() => setMoreDropdownOpen((open) => !open)}
+            >
+              <span>{t('nav.more')}</span>
+              <span aria-hidden="true">▾</span>
+            </button>
+
+            {moreDropdownOpen && (
+              <div className="member-more-dropdown">
+                {moreNavItems.map((item) => {
+                  const active = selectedKey === item.key
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={`member-more-dropdown-item${active ? ' is-active' : ''}`}
+                      onClick={() => goTo(item.key)}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </nav>
 
         {(user?.role === 'admin' || user?.role === 'pt' || user?.role === 'staff' || user?.role === 'seller') && (
@@ -394,7 +478,7 @@ export default function MemberLayout({
         <Menu
           mode="inline"
           selectedKeys={[selectedKey]}
-          items={navItems}
+          items={drawerNavItems}
           onClick={(event) => goTo(event.key)}
           style={{ borderInlineEnd: 0 }}
         />

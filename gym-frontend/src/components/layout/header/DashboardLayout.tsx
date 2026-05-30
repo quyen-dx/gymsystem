@@ -1,10 +1,14 @@
 import {
   BarChartOutlined,
   CalendarOutlined,
+  CommentOutlined,
   DashboardOutlined,
+  FileTextOutlined,
   HomeOutlined,
   LogoutOutlined,
   MenuOutlined,
+  QuestionCircleOutlined,
+  SettingOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
   TeamOutlined,
@@ -20,20 +24,24 @@ import {
   Typography,
 } from 'antd'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeProvider'
 import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
 import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
 import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
+import { systemExperienceService } from '../../../services/systemExperienceService'
 
 const { Sider, Content } = Layout
 const { Text } = Typography
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
+  const { t } = useTranslation()
   const [accountOpen, setAccountOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
+  const [branding, setBranding] = useState({ gymName: 'GymPro', logoUrl: '' })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
@@ -48,17 +56,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [user?.role])
 
+  useEffect(() => {
+    systemExperienceService.getSettings()
+      .then((res) => {
+        const settings = res.data.settings || {}
+        setBranding({ gymName: settings.gymName || 'GymPro', logoUrl: settings.logoUrl || '' })
+        if (settings.faviconUrl) {
+          const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null
+          if (link) link.href = settings.faviconUrl
+        }
+      })
+      .catch(() => { })
+  }, [])
+
   const roleMenus: Record<string, any[]> = {
     admin: [
-      { key: '/', label: 'Trang web', icon: <HomeOutlined /> },
-      { key: '/admin', label: 'Overview', icon: <DashboardOutlined /> },
-      { key: '/admin/users', label: 'Users', icon: <UserOutlined /> },
-      { key: '/admin/plans', label: 'Plans', icon: <CalendarOutlined /> },
+      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
+      { key: '/admin', label: t('nav.overview'), icon: <DashboardOutlined /> },
+      { key: '/admin/users', label: t('nav.users'), icon: <UserOutlined /> },
+      { key: '/admin/plans', label: t('nav.plans'), icon: <CalendarOutlined /> },
       {
         key: '/admin/partnerships',
         label: (
           <span style={{ position: 'relative', display: 'inline-block', paddingRight: 22 }}>
-            <span>Partnerships</span>
+            <span>{t('nav.partnerships')}</span>
             {pendingCount > 0 && (
               <span
                 style={{
@@ -86,24 +107,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         icon: <TeamOutlined />,
       },
 
-      { key: '/admin/members', label: 'Members', icon: <TeamOutlined /> },
-      { key: '/admin/pts', label: 'Trainers (PT)', icon: <UserOutlined /> },
-      { key: '/admin/reports', label: 'Reports', icon: <BarChartOutlined /> },
+      { key: '/admin/members', label: t('nav.members'), icon: <TeamOutlined /> },
+      { key: '/admin/pts', label: `${t('nav.trainers')} (PT)`, icon: <UserOutlined /> },
+      { key: '/admin/reports', label: t('nav.reports'), icon: <BarChartOutlined /> },
+      { key: '/admin/system-settings', label: t('nav.system_settings'), icon: <SettingOutlined /> },
+      { key: '/admin/faqs', label: t('nav.faq_manager'), icon: <QuestionCircleOutlined /> },
+      { key: '/admin/feedback', label: t('nav.feedback_manager'), icon: <CommentOutlined /> },
+      { key: '/admin/policies', label: t('nav.policies'), icon: <FileTextOutlined /> },
     ],
     staff: [
-      { key: '/', label: 'Trang web', icon: <HomeOutlined /> },
-      { key: '/staff/checkin', label: 'Check-in', icon: <DashboardOutlined /> },
-      { key: '/staff/members', label: 'Members', icon: <TeamOutlined /> },
+      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
+      { key: '/staff/checkin', label: t('nav.checkin'), icon: <DashboardOutlined /> },
+      { key: '/staff/members', label: t('nav.members'), icon: <TeamOutlined /> },
     ],
     pt: [
-      { key: '/', label: 'Trang web', icon: <HomeOutlined /> },
-      { key: '/pt/schedule', label: 'Schedule', icon: <CalendarOutlined /> },
-      { key: '/pt/student', label: 'Students', icon: <TeamOutlined /> },
+      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
+      { key: '/pt/schedule', label: t('nav.schedule'), icon: <CalendarOutlined /> },
+      { key: '/pt/student', label: t('nav.students'), icon: <TeamOutlined /> },
     ],
     seller: [
-      { key: '/', label: 'Trang web', icon: <HomeOutlined /> },
-      { key: '/seller/products', label: 'My Products', icon: <ShopOutlined /> },
-      { key: '/seller/orders', label: 'Đơn hàng', icon: <ShoppingCartOutlined /> },
+      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
+      { key: '/seller/products', label: t('nav.my_products'), icon: <ShopOutlined /> },
+      { key: '/seller/orders', label: t('nav.orders'), icon: <ShoppingCartOutlined /> },
     ],
     member: []
   }
@@ -127,7 +152,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         color: 'var(--theme-text)',
       }}
     >
-      GP DASHBOARD
+      {branding.logoUrl ? <img src={branding.logoUrl} alt={branding.gymName} style={{ maxHeight: 30 }} /> : `${branding.gymName} DASHBOARD`}
     </div>
   )
 

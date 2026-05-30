@@ -52,11 +52,31 @@
   },
   "nav": {
     "home": "Home",
+    "about": "About",
     "store": "Store",
     "book_pt": "Book PT",
     "health": "Health",
     "workout": "Workout",
-    "checkin": "Check-in"
+    "checkin": "Check-in",
+    "help": "Help",
+    "policies": "Policies",
+    "feedback": "Feedback",
+    "more": "More",
+    "website": "Website",
+    "overview": "Overview",
+    "users": "Users",
+    "plans": "Plans",
+    "partnerships": "Partnerships",
+    "members": "Members",
+    "trainers": "Trainers",
+    "reports": "Reports",
+    "system_settings": "System Settings",
+    "faq_manager": "FAQ Manager",
+    "feedback_manager": "Feedback Manager",
+    "schedule": "Schedule",
+    "students": "Students",
+    "my_products": "My Products",
+    "orders": "Orders"
   },
   "wallet": {
     "label": "Wallet:",
@@ -1051,5 +1071,224 @@
     "action_search_web": "I've found relevant information for you.",
     "action_fallback": "I've completed your request.",
     "action_processed": "I've processed your request successfully."
+  },
+  "about": {
+    "nav": {
+      "login": "Login",
+      "register": "Register"
+    },
+    "hero": {
+      "slide1": {
+        "title": "WHERE YOU BREAK YOUR LIMITS",
+        "subtitle": "Modern training space, clear progress data and a community that keeps you moving.",
+        "cta": "Join now"
+      },
+      "slide2": {
+        "title": "MODERN MANAGEMENT SYSTEM",
+        "subtitle": "QR check-in, PT booking, health tracking and store flows in one connected experience.",
+        "cta": "Explore features"
+      },
+      "slide3": {
+        "title": "PROFESSIONAL PT TEAM",
+        "subtitle": "Coaches who work with your goals, condition and personal training rhythm.",
+        "cta": "Book now"
+      }
+    },
+    "stats": {
+      "members": "Members",
+      "trainers": "Trainers",
+      "branches": "Branches",
+      "satisfaction": "Satisfaction"
+    },
+    "intro": {
+      "eyebrow": "About us",
+      "titleFallback": "About GymPro",
+      "contentFallback": "GymPro was created to make fitness operations and member journeys simpler, smarter and more inspiring. We combine real gym spaces, personal coaching and digital tools so every member can train with a clear plan, track progress and stay connected."
+    },
+    "features": {
+      "eyebrow": "Core features",
+      "title": "Everything runs in one flow",
+      "qr": {
+        "title": "QR Check-in",
+        "desc": "Fast attendance at reception or gate."
+      },
+      "booking": {
+        "title": "PT Booking",
+        "desc": "Choose trainers and time slots that fit your day."
+      },
+      "health": {
+        "title": "Health Tracking",
+        "desc": "Track metrics, goals and training progress."
+      },
+      "roadmap": {
+        "title": "Personal Roadmap",
+        "desc": "Clear training plans for each phase."
+      },
+      "store": {
+        "title": "Store",
+        "desc": "Buy gym products from connected partners."
+      },
+      "notifications": {
+        "title": "Notifications",
+        "desc": "Workout reminders, PT schedules and key updates."
+      }
+    },
+    "pts": {
+      "eyebrow": "PT Team",
+      "title": "Coaches who guide the work",
+      "specialties": {
+        "strength": "Strength & Hypertrophy",
+        "fatLoss": "Fat Loss & Nutrition",
+        "mobility": "Mobility & Recovery",
+        "hiit": "HIIT & Conditioning"
+      }
+    },
+    "facilities": {
+      "eyebrow": "Facilities"
+    },
+    "testimonials": {
+      "eyebrow": "Member reviews",
+      "items": {
+        "minhAnh": {
+          "duration": "Member for 2 years",
+          "quote": "GymPro gave me a clear routine and helped me stay consistent."
+        },
+        "quocHuy": {
+          "duration": "PT member",
+          "quote": "PT booking, progress tracking and check-in are all fast."
+        },
+        "linhChi": {
+          "duration": "New member",
+          "quote": "Great training space, helpful coaches and an easy system."
+        }
+      }
+    },
+    "cta": {
+      "title": "START YOUR JOURNEY",
+      "register": "Register for free"
+    },
+    "footer": {
+      "description": "A modern gym experience for training, coaching and member management.",
+      "home": "Home",
+      "about": "About us",
+      "contact": "Contact",
+      "policies": "Policies",
+      "copyright": "All rights reserved."
+    }
+  },
+  "system_experience": {
+    "admin": {
+      "system_settings": "System Settings",
+      "faq_manager": "FAQ Manager",
+      "policy_manager": "Policy Manager",
+      "feedback_manager": "Feedback Manager",
+      "add_faq": "Add FAQ",
+      "add_policy": "Add Policy",
+      "edit_faq": "Edit FAQ",
+      "edit_policy": "Edit Policy",
+      "question": "Question",
+      "answer": "Answer",
+      "category": "Category",
+      "published": "Published",
+      "hidden": "Hidden",
+      "publish": "Publish",
+      "actions": "Actions",
+      "edit": "Edit",
+      "delete": "Delete",
+      "title": "Title",
+      "slug": "Slug",
+      "content": "Content",
+      "sender": "Sender",
+      "type": "Type",
+      "priority": "Priority",
+      "status": "Status",
+      "reply": "Reply",
+      "update_feedback": "Update Feedback",
+      "admin_reply": "Admin Reply"
+      ,"save": "Save",
+      "save_settings": "Save Settings",
+      "save_cms": "Save CMS",
+      "load_failed": "Unable to load data",
+      "save_success": "Saved successfully",
+      "save_failed": "Save failed",
+      "gym_name": "Gym Name",
+      "gym_name_required": "Enter gym name",
+      "slogan": "Slogan",
+      "slogans": "Slogans",
+      "slogan_required": "Enter a slogan or remove this row",
+      "add_slogan": "Add Slogan",
+      "delete_slogan": "Delete Slogan",
+      "preview_home": "Homepage Preview",
+      "preview_language": "Preview Language",
+      "logo_url": "Logo URL",
+      "banner_url": "Homepage Banner URL",
+      "favicon_url": "Favicon URL",
+      "hero_title": "Hero Title",
+      "hero_subtitle": "Hero Subtitle",
+      "hero_image_url": "Hero Image URL",
+      "cta_text": "CTA Text",
+      "cta_link": "CTA Link",
+      "about_title": "About Title",
+      "about_content": "About Content",
+      "section": "Section",
+      "image_url": "Image URL",
+      "order": "Order",
+      "add_section": "Add Section"
+      ,"preview_title": "About Page Preview",
+      "preview_empty": "No content yet",
+      "preview_about_fallback": "About GymPro"
+    },
+    "help": {
+      "title": "Help Center",
+      "search_placeholder": "Search questions...",
+      "empty": "No matching FAQ found"
+    },
+    "policy": {
+      "title": "GymPro Policies",
+      "empty": "No policies yet"
+    },
+    "feedback": {
+      "form_title": "Send Feedback / Report Issue",
+      "my_title": "My Feedback",
+      "title_label": "Title",
+      "content_label": "Content",
+      "type_label": "Type",
+      "priority_label": "Priority",
+      "submit": "Send Feedback",
+      "success": "Feedback sent",
+      "failed": "Failed to send feedback",
+      "empty": "You have not sent any feedback yet",
+      "admin_reply": "Admin",
+      "type": {
+        "suggestion": "Suggestion",
+        "bug": "Bug report",
+        "complaint": "Complaint",
+        "other": "Other"
+      },
+      "priority": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "urgent": "Urgent"
+      },
+      "status": {
+        "pending": "Pending",
+        "reviewing": "Reviewing",
+        "resolved": "Resolved",
+        "rejected": "Rejected"
+      }
+    },
+    "activity": {
+      "title": "Recent Activity",
+      "empty": "No activity yet"
+    },
+    "about": {
+      "loading": "Loading about content...",
+      "empty_title": "No about content yet",
+      "empty_desc": "Admin can update this content in System Settings.",
+      "cta_fallback": "Get Started",
+      "sections_title": "About the gym",
+      "preview_about_fallback": "About GymPro"
+    }
   }
 }

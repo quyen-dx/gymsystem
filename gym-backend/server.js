@@ -13,6 +13,7 @@ import adminAiRoutes from './src/routes/adminAiRoutes.js'
 import aiRoutes from './src/routes/aiRoutes.js'
 import auditLogRoutes from './src/routes/auditLogRoutes.js'
 import authRoutes from './src/routes/authRoutes.js'
+import cmsRoutes from './src/routes/cmsRoutes.js'
 import membershipRoutes from './src/routes/membershipRoutes.js'
 import orderRoutes from './src/routes/orderRoutes.js'
 import partnershipRequestRoutes from './src/routes/partnershipRequestRoutes.js'
@@ -20,6 +21,7 @@ import planRoutes from './src/routes/planRoutes.js'
 import productRoutes from './src/routes/productRoutes.js'
 import sellerRoutes from './src/routes/sellerRoutes.js'
 import shopRoutes from './src/routes/shopRoutes.js'
+import systemExperienceRoutes from './src/routes/systemExperienceRoutes.js'
 import walletRoutes from './src/routes/walletRoutes.js'
 
 const app = express()
@@ -51,6 +53,7 @@ app.use(passport.initialize())
 app.use(passport.session())
 
 app.use('/api/auth', authRoutes)
+app.use('/api/cms', cmsRoutes)
 app.use('/api/audit-logs', auditLogRoutes)
 app.get('/api/my-products', protect, sellerOnly, getMyProducts)
 app.use('/api/plans', planRoutes)
@@ -64,6 +67,7 @@ app.use('/api/memberships', membershipRoutes)
 app.use('/api/partnership-requests', partnershipRequestRoutes)
 app.use('/api/ai-assistant', aiRoutes)
 app.use('/api/admin/ai', adminAiRoutes)
+app.use('/api/system-experience', systemExperienceRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', message: 'GymPro API is running' })

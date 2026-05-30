@@ -214,7 +214,7 @@ const splitAiAssistantResponse = (rawContent: unknown, currentContent = '', t: (
     }
 }
 
-const extractAiResponseContent = (response: unknown, fallback = '') => {
+const extractAiResponseContent = (response: unknown, fallback = '', t?: (key: string) => string) => {
     if (typeof response === 'string') return response
     if (!response || typeof response !== 'object') return fallback
 
@@ -224,13 +224,16 @@ const extractAiResponseContent = (response: unknown, fallback = '') => {
 
     if (typeof directContent === 'string') return directContent
 
-    const objectMessage = getAiObjectDisplayMessage(payload.answer ?? payload.message ?? payload.text ?? payload.content ?? payload)
+    const objectMessage = getAiObjectDisplayMessage(
+        payload.answer ?? payload.message ?? payload.text ?? payload.content ?? payload,
+        t || ((key: string) => key),
+    )
     return objectMessage || fallback
 }
 
-const normalizeChatContent = (content: unknown) => {
+const normalizeChatContent = (content: unknown, t?: (key: string) => string) => {
     if (typeof content === 'string') return content
-    return getAiObjectDisplayMessage(content) || ''
+    return getAiObjectDisplayMessage(content, t || ((key: string) => key)) || ''
 }
 
 const isPotentialJsonObjectResponse = (content: unknown) => {
@@ -379,7 +382,6 @@ const renderInlineMarkdown = (text: string, color: string): ReactNode[] => {
                         borderRadius: 5,
                         background: 'rgba(0,0,0,0.10)',
                         color,
-                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
                         fontSize: '0.92em',
                     }}
                 >
@@ -410,7 +412,6 @@ const renderMarkdownText = (text: string, color: string) => {
                                 overflowX: 'auto',
                                 background: 'rgba(0,0,0,0.14)',
                                 color,
-                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
                                 fontSize: 13,
                                 lineHeight: 1.55,
                             }}
