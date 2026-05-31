@@ -2,6 +2,7 @@ import {
   BarChartOutlined,
   CalendarOutlined,
   CommentOutlined,
+  CreditCardOutlined,
   DashboardOutlined,
   FileTextOutlined,
   HomeOutlined,
@@ -20,17 +21,17 @@ import {
   Divider,
   Drawer,
   Layout,
-  Menu,
   Typography,
 } from 'antd'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeProvider'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
 import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
+import LanguageSelect from '../../common/LanguageSelect'
 import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
 
 const { Sider, Content } = Layout
@@ -43,8 +44,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [accountOpen, setAccountOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const navigate = useNavigate()
-  const location = useLocation()
 
   const { dark } = useTheme()
 
@@ -95,7 +94,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       },
 
       { key: '/admin/members', label: t('nav.members'), icon: <TeamOutlined /> },
-      ...(isEnabled('pt.moduleEnabled') ? [{ key: '/admin/pts', label: `${t('nav.trainers')} (PT)`, icon: <UserOutlined /> }] : []),
+      ...(isEnabled('pt.moduleEnabled') ? [{ key: '/admin/trainers', label: `${t('nav.trainers')} (PT)`, icon: <UserOutlined /> }] : []),
       ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: t('nav.reports'), icon: <BarChartOutlined /> }] : []),
       { key: '/admin/faqs', label: t('nav.faq_manager'), icon: <QuestionCircleOutlined /> },
       { key: '/admin/feedback', label: t('nav.feedback_manager'), icon: <CommentOutlined /> },
@@ -106,17 +105,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
       ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/staff/checkin', label: t('nav.checkin'), icon: <DashboardOutlined /> }] : []),
       { key: '/staff/members', label: t('nav.members'), icon: <TeamOutlined /> },
+      { key: '/staff/payments', label: t('nav.payments'), icon: <CreditCardOutlined /> },
+      { key: '/staff/notifications', label: t('nav.notifications'), icon: <CommentOutlined /> },
     ],
     pt: [
       { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
       ...(isEnabled('pt.scheduleEnabled') ? [{ key: '/pt/schedule', label: t('nav.schedule'), icon: <CalendarOutlined /> }] : []),
-      ...(isEnabled('pt.moduleEnabled') ? [{ key: '/pt/student', label: t('nav.students'), icon: <TeamOutlined /> }] : []),
+      ...(isEnabled('pt.moduleEnabled') ? [
+        { key: '/pt/clients', label: t('nav.clients'), icon: <TeamOutlined /> },
+        { key: '/pt/workouts', label: t('nav.workout'), icon: <FileTextOutlined /> },
+        { key: '/pt/bookings', label: t('nav.bookings'), icon: <CalendarOutlined /> },
+      ] : []),
     ],
     seller: [
       { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
       ...(isEnabled('shop.productStoreEnabled') ? [
         { key: '/seller/products', label: t('nav.my_products'), icon: <ShopOutlined /> },
         { key: '/seller/orders', label: t('nav.orders'), icon: <ShoppingCartOutlined /> },
+        { key: '/seller/shop', label: t('nav.shop'), icon: <ShopOutlined /> },
+        { key: '/seller/revenue', label: t('nav.revenue'), icon: <BarChartOutlined /> },
       ] : []),
     ],
     member: []
@@ -125,11 +132,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const items = roleMenus[user?.role as string] || []
 
   const closeSidebar = () => setSidebarOpen(false)
-
-  const handleNavigate = (key: string) => {
-    navigate(key)
-    closeSidebar()
-  }
 
   const sidebarBranding = (
     <div
@@ -147,19 +149,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const sidebarMenu = (
     <>
-      <Menu
-        theme={dark ? 'dark' : 'light'}
-        mode="inline"
-        selectedKeys={[location.pathname]}
-        items={items.map((i) => ({
-          key: i.key,
-          icon: i.icon,
-          label: i.label,
-          onClick: () => handleNavigate(i.key),
-        }))}
-      />
+      <nav className="dashboard-sidebar-menu" aria-label="Dashboard navigation">
+        {items.map((item) => (
+          <NavLink
+            key={item.key}
+            to={item.key}
+            end={item.key === '/' || item.key === '/admin'}
+            className={({ isActive }) => `dashboard-sidebar-item${isActive ? ' is-active' : ''}`}
+            onClick={closeSidebar}
+          >
+            <span className="dashboard-sidebar-icon">{item.icon}</span>
+            <span className="dashboard-sidebar-label">{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
 
       <Divider />
+
+      <div style={{ padding: '0 16px 12px' }}>
+        <LanguageSelect />
+      </div>
 
       <div style={{ padding: 16 }}>
         <div

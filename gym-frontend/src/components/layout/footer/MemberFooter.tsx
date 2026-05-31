@@ -70,15 +70,11 @@ function MemberFooter() {
         key={item.label}
         to={item.to}
         className={({ isActive }) =>
-          [
-            'group flex items-center gap-2 text-sm transition-colors',
-            isRouteActive(location.pathname, item, isActive) ? 'font-semibold' : '',
-          ].join(' ')
+          `member-footer-link${isRouteActive(location.pathname, item, isActive) ? ' is-active' : ''}`
         }
-        style={{ color: 'var(--gs-text)' }}
       >
         {Icon ? (
-          <Icon className="h-4 w-4 shrink-0 transition-colors group-hover:text-[var(--gs-text)]" style={{ color: 'var(--gs-muted)' }} />
+          <Icon className="h-4 w-4 shrink-0" />
         ) : null}
         <span>{item.label}</span>
       </NavLink>

@@ -36,12 +36,18 @@ import OrderTrackingPage from './pages/dashboard/member/OrderTrackingPage'
 import ProductDetailPage from './pages/dashboard/member/ProductDetailPage'
 
 import WorkoutPage from './pages/dashboard/member/WorkoutPage'
+import PTBookingsPage from './pages/dashboard/pt/PTBookingsPage'
+import PTClientsPage from './pages/dashboard/pt/PTClientsPage'
 import PTSchedulePage from './pages/dashboard/pt/PTSchedulePage'
-import PTStudentPage from './pages/dashboard/pt/PTStudentPage'
+import PTWorkoutsPage from './pages/dashboard/pt/PTWorkoutsPage'
 import SellerOrdersPage from './pages/dashboard/seller/SellerOrdersPage'
 import SellerProductsPage from './pages/dashboard/seller/SellerProductsPage'
+import SellerRevenuePage from './pages/dashboard/seller/SellerRevenuePage'
+import SellerShopPage from './pages/dashboard/seller/SellerShopPage'
 import StaffCheckinPage from './pages/dashboard/staff/StaffCheckinPage'
 import StaffMemberPage from './pages/dashboard/staff/StaffMemberPage'
+import StaffNotificationsPage from './pages/dashboard/staff/StaffNotificationsPage'
+import StaffPaymentsPage from './pages/dashboard/staff/StaffPaymentsPage'
 import AboutPage from './pages/public/AboutPage'
 import HelpCenterPage from './pages/public/HelpCenterPage'
 import MaintenancePage from './pages/public/MaintenancePage'
@@ -132,6 +138,8 @@ function MemberCheckinPage() {
     </MemberLayout>
   )
 }
+
+
 
 function AppWithTheme() {
   const { tokens, dark } = useTheme()
@@ -256,7 +264,8 @@ function AppWithTheme() {
         <Route path="/admin/shop" element={<Navigate to="/admin/partnerships" />} />
         <Route path="/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
         <Route path="/admin/members" element={<PrivateRoute><AdminMembersPage /></PrivateRoute>} />
-        <Route path="/admin/pts" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersPage /></PrivateRoute>} />
+        <Route path="/admin/trainers" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersPage /></PrivateRoute>} />
+        <Route path="/admin/pts" element={<Navigate to="/admin/trainers" replace />} />
         <Route path="/admin/reports" element={<PrivateRoute feature="reports.revenueChartEnabled"><AdminReports /></PrivateRoute>} />
         <Route path="/admin/system-settings" element={<PrivateRoute><SystemSettingsPage /></PrivateRoute>} />
         <Route path="/admin/faqs" element={<PrivateRoute><FAQManagerPage /></PrivateRoute>} />
@@ -266,15 +275,22 @@ function AppWithTheme() {
         <Route path="/seller" element={<Navigate to="/seller/products" />} />
         <Route path="/seller/products" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerProductsPage /></PrivateRoute>} />
         <Route path="/seller/orders" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerOrdersPage /></PrivateRoute>} />
+        <Route path="/seller/shop" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerShopPage /></PrivateRoute>} />
+        <Route path="/seller/revenue" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerRevenuePage /></PrivateRoute>} />
         {/* STAFF */}
-        <Route path="/staff" element={<Navigate to="/staff/checkin" />} />
+        <Route path="/staff" element={<Navigate to="/staff/checkin" replace />} />
         <Route path="/staff/checkin" element={<PrivateRoute feature="checkin.qrCheckinEnabled"><StaffCheckinPage /></PrivateRoute>} />
         <Route path="/staff/members" element={<PrivateRoute><StaffMemberPage /></PrivateRoute>} />
+        <Route path="/staff/payments" element={<PrivateRoute><StaffPaymentsPage /></PrivateRoute>} />
+        <Route path="/staff/notifications" element={<PrivateRoute><StaffNotificationsPage /></PrivateRoute>} />
 
         {/* PT */}
-        <Route path="/pt" element={<Navigate to="/pt/schedule" />} />
+        <Route path="/pt" element={<Navigate to="/pt/schedule" replace />} />
         <Route path="/pt/schedule" element={<PrivateRoute feature="pt.scheduleEnabled"><PTSchedulePage /></PrivateRoute>} />
-        <Route path="/pt/student" element={<PrivateRoute feature="pt.moduleEnabled"><PTStudentPage /></PrivateRoute>} />
+        <Route path="/pt/clients" element={<PrivateRoute feature="pt.moduleEnabled"><PTClientsPage /></PrivateRoute>} />
+        <Route path="/pt/student" element={<Navigate to="/pt/clients" replace />} />
+        <Route path="/pt/workouts" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutsPage /></PrivateRoute>} />
+        <Route path="/pt/bookings" element={<PrivateRoute feature="pt.moduleEnabled"><PTBookingsPage /></PrivateRoute>} />
 
         {/* MEMBER */}
         <Route path="/" element={<HomeRoute />} />

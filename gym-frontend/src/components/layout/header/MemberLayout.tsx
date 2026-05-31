@@ -18,7 +18,6 @@ import {
   Button,
   Drawer,
   Layout,
-  Menu,
   Skeleton,
   Typography,
 } from 'antd'
@@ -464,30 +463,38 @@ export default function MemberLayout({
           </div>
         )}
 
-        <Menu
-          mode="inline"
-          selectedKeys={[selectedKey]}
-          items={drawerNavItems}
-          onClick={(event) => goTo(event.key)}
-          style={{ borderInlineEnd: 0 }}
-        />
+        <nav className="member-drawer-nav" aria-label="Member mobile navigation">
+          {drawerNavItems.map((item) => {
+            const active = selectedKey === item.key
+            return (
+              <button
+                key={item.key}
+                type="button"
+                className={`member-drawer-nav-item${active ? ' is-active' : ''}`}
+                onClick={() => goTo(item.key)}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </nav>
 
         {(user?.role === 'admin' || user?.role === 'pt' || user?.role === 'staff' || user?.role === 'seller') && (
           <>
             <div style={{ padding: '8px 16px 0' }}>
               <div style={{ height: 1, background: 'var(--theme-border)' }} />
             </div>
-            <Menu
-              mode="inline"
-              selectedKeys={[]}
-              items={[{
-                key: user?.role === 'pt' ? '/pt/schedule' : user?.role === 'staff' ? '/staff/checkin' : user?.role === 'seller' ? '/seller/products' : '/admin',
-                label: t('management', { role: t(`role.${user?.role}`) }),
-                icon: <DashboardOutlined />,
-              }]}
-              onClick={(event) => goTo(event.key)}
-              style={{ borderInlineEnd: 0 }}
-            />
+            <nav className="member-drawer-nav" aria-label="Management navigation">
+              <button
+                type="button"
+                className="member-drawer-nav-item"
+                onClick={() => goTo(user?.role === 'pt' ? '/pt/schedule' : user?.role === 'staff' ? '/staff/checkin' : user?.role === 'seller' ? '/seller/products' : '/admin')}
+              >
+                <DashboardOutlined />
+                <span>{t('management', { role: t(`role.${user?.role}`) })}</span>
+              </button>
+            </nav>
           </>
         )}
 
