@@ -1203,68 +1203,60 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
 }
 
 /* ===== Mobile full-screen sheet (<768px) ===== */
+.profile-mobile-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.profile-mobile-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  border: 0;
+  cursor: default;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.profile-mobile-sheet-content {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  background: var(--theme-bg);
+}
+
+.profile-mobile-sheet-close {
+  position: fixed !important;
+  top: 12px !important;
+  right: 12px !important;
+  z-index: 1002 !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 999px !important;
+  background: rgba(15, 23, 42, 0.72) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  color: #fff !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+
+.profile-mobile-sheet-close:hover {
+  background: rgba(15, 23, 42, 0.92) !important;
+}
+
 @media (max-width: 768px) {
-  /* ----- Kill wrap scroll — let content handle it ----- */
-  .profile-modal-wrap.ant-modal-wrap,
-  .profile-modal-wrap .ant-modal-wrap {
-    overflow: hidden !important;
-  }
-
-  .profile-modal-wrap .ant-modal-wrap {
-    overscroll-behavior: none;
-  }
-
-  /* ----- Modal shell full-screen ----- */
-  .profile-modal.ant-modal {
-    position: fixed !important;
-    top: 0 !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    margin: 0 !important;
-    width: 100vw !important;
-    max-width: none !important;
-    padding: 0 !important;
-  }
-
-  .profile-modal .ant-modal-content {
-    border-radius: 0 !important;
-    height: 100dvh !important;
-    width: 100% !important;
-    border: none !important;
-    box-shadow: none !important;
-    display: block !important;
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    touch-action: pan-y;
-  }
-
-  .profile-modal .ant-modal-body {
-    padding: 0 !important;
-    overflow: visible !important;
-    display: block !important;
-    flex: none !important;
-  }
-
-  .profile-modal-content-wrapper {
-    display: block !important;
-    flex: none !important;
-  }
-
-  /* Fixed close button — always visible */
-  .profile-modal .ant-modal-close {
-    position: fixed !important;
-    top: 12px !important;
-    right: 12px !important;
-    z-index: 100 !important;
-  }
-
-  /* ----- Header ----- */
-  .profile-modal-header {
-    flex-shrink: 0;
-  }
-
   .profile-cover {
     height: 92px;
     width: 100%;
@@ -1294,7 +1286,6 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
     font-size: 18px;
   }
 
-  /* ----- Tabs: hide sidebar, show mobile toggle ----- */
   .profile-desktop-tabs {
     display: none;
   }
@@ -1310,7 +1301,6 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
     z-index: 40;
   }
 
-  /* Dropdown grid when open (absolute within anchor) */
   .profile-mobile-menu-anchor .profile-mobile-grid {
     background: var(--theme-card);
     border: 1px solid var(--theme-border-strong);
@@ -1323,7 +1313,6 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
     z-index: 42;
   }
 
-  /* Inline grid (shown when dropdown closed) */
   .profile-mobile-grid {
     border-bottom: 1px solid var(--theme-border);
     display: grid;
@@ -1358,7 +1347,6 @@ html[data-theme="light"] .member-shell-content .ant-typography-secondary {
     color: var(--theme-button-text);
   }
 
-  /* ----- Body content — flows naturally in sheet scroll ----- */
   .profile-modal-main {
     display: block;
     flex: none;

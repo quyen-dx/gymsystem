@@ -17,6 +17,7 @@ import {
 } from '@ant-design/icons'
 import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, message, Modal, Space, theme } from 'antd'
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { generateTheme, PRESET_ACCENT_COLORS, useTheme } from '../../context/ThemeContext'
@@ -399,6 +400,31 @@ const TabContent = ({
   </div>
 )
 
+const MobileProfileSheet = ({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean
+  onClose: () => void
+  children: ReactNode
+}) => {
+  if (!open) return null
+
+  return createPortal(
+    <div className="profile-mobile-sheet">
+      <button className="profile-mobile-sheet-backdrop" onClick={onClose} type="button" aria-label="Close" />
+      <div className="profile-mobile-sheet-content" onClick={(e) => e.stopPropagation()}>
+        <button className="profile-mobile-sheet-close" onClick={onClose} type="button" aria-label="Close">
+          ✕
+        </button>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 export default function AccountProfileModal({
   open,
   onClose,
@@ -598,26 +624,6 @@ export default function AccountProfileModal({
       setAccentColor(savedAccentColor)
     }
   }, [open, savedAccentColor])
-
-  useEffect(() => {
-    if (!open) return
-
-    const scrollY = window.scrollY
-    document.body.style.position = 'fixed'
-    document.body.style.top = `-${scrollY}px`
-    document.body.style.width = '100%'
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.position = ''
-      document.body.style.top = ''
-      document.body.style.width = ''
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-      window.scrollTo(0, scrollY)
-    }
-  }, [open])
 
   const profileThemeStyle = {
     '--profile-bg-layout': token.colorBgLayout,
@@ -831,6 +837,471 @@ export default function AccountProfileModal({
     </button>
   )
 
+  const sharedContent = (
+    <>
+      <ProfileHeader
+        user={user}
+        avatarPreview={avatarPreview}
+        fileRef={fileRef}
+        coverPreview={coverPreview}
+        coverRef={coverRef}
+        contactText={contactText}
+        onCopyContact={handleCopyContact}
+        onAvatarChange={handleAvatarFileChange}
+        onCoverChange={handleCoverFileChange}
+        onCoverRemove={handleCoverRemove}
+        mediaUploading={mediaUploading}
+        isMobile={isProfileCompact}
+        t={t}
+      />
+
+      <div className="profile-modal-main">
+        <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+        <MobileMenuGrid
+          tabs={tabs}
+          activeTab={activeTab}
+          onChange={(tab) => {
+            setActiveTab(tab)
+            setMobileMenuOpen(false)
+          }}
+          mobileMenuOpen={mobileMenuOpen}
+          onToggle={() => setMobileMenuOpen(prev => !prev)}
+          hideBackdrop={isProfileMobile}
+        />
+
+        <div
+          className="profile-modal-scroll"
+          style={{
+            minHeight: 120,
+            padding: isProfileMobile ? '4px 4px 0' : '16px 20px',
+            paddingBottom: isProfileMobile ? '0' : '16px',
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'var(--theme-border) transparent',
+            overflowX: 'hidden',
+            overflowY: isProfileMobile ? 'visible' : 'auto',
+            width: '100%',
+            maxWidth: '100%',
+            flex: 1,
+          }}
+        >
+          <TabContent activeTab={activeTab}>
+            {activeTab === 'profile' && (
+              <div>
+                <div style={responsiveSectionCardStyle}>
+                  {renderSectionHeader(<UserOutlined />, t('profile.info_title'), t('profile.info_subtitle'))}
+
+                  <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
+                      <Form.Item label={t('profile.name')} name="name" rules={[{ required: true, message: t('profile.name_placeholder') }]}>
+                        <Input prefix={<UserOutlined />} placeholder={t('profile.your_name')} style={profileInputStyle} />
+                      </Form.Item>
+
+                      <Form.Item label={t('profile.phone')} name="phone">
+                        <Input prefix={<PhoneOutlined />} placeholder={t('profile.phone_placeholder')} style={profileInputStyle} />
+                      </Form.Item>
+
+                      <Form.Item
+                        label="Email"
+                        name="email"
+                        rules={[
+                          { type: 'email', message: t('profile.invalid_email') },
+                          { required: !user.email, message: t('profile.email_placeholder') },
+                        ]}
+                      >
+                        <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder={user.email ? t('profile.email_placeholder') : t('profile.add_email_placeholder')} style={user.email ? profileDisabledInputStyle : profileInputStyle} />
+                      </Form.Item>
+
+                      <Form.Item label="Username">
+                        <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} style={profileDisabledInputStyle} />
+                      </Form.Item>
+
+                      <Form.Item label={t('profile.dob')} name="dateOfBirth" className="col-span-full">
+                        <Input
+                          type="date"
+                          style={{
+                            ...profileInputStyle,
+                            width: '100%',
+                            maxWidth: '100%',
+                            boxSizing: 'border-box',
+                            minWidth: 0,
+                          }}
+                        />
+                      </Form.Item>
+                    </div>
+
+                    <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !mt-1 !h-12 !rounded-2xl !text-[15px]`}>
+                      {t('profile.save_changes')}
+                    </Button>
+                  </Form>
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  {renderActionItem(<ShoppingCartOutlined />, t('profile.orders_title'), t('profile.orders_subtitle'), goToOrders)}
+                  <Button
+                    block
+                    icon={<LogoutOutlined />}
+                    onClick={handleLogout}
+                    style={{
+                      marginTop: 8,
+                      height: 44,
+                      borderRadius: 10,
+                      background: 'transparent',
+                      border: '1px solid rgba(239,68,68,0.3)',
+                      color: '#ef4444',
+                      fontWeight: 500,
+                      fontSize: 14,
+                    }}
+                  >
+                    {t('profile.logout')}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'appearance' && (
+              <div style={responsiveSectionCardStyle}>
+                {renderSectionHeader(<BgColorsOutlined />, t('profile.appearance_title'), t('profile.appearance_subtitle'))}
+                <div className="mb-6 border-b border-[var(--theme-border)] pb-5">
+                  <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.personal_theme')}</div>
+                  <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
+                    {t('profile.personal_theme_subtitle')}
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {([
+                      { value: 'system', label: t('profile.theme_system') },
+                      { value: 'light', label: t('profile.theme_light') },
+                      { value: 'dark', label: t('profile.theme_dark') },
+                    ] as Array<{ value: 'system' | 'light' | 'dark'; label: string }>).map((item) => {
+                      const active = (user.themePreference || 'system') === item.value
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          disabled={loading}
+                          onClick={() => handleThemePreferenceChange(item.value)}
+                          className="rounded-xl border px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70"
+                          style={{
+                            background: active ? 'var(--theme-accent-muted)' : 'var(--theme-elevated)',
+                            borderColor: active ? 'var(--theme-accent)' : 'var(--theme-border-strong)',
+                            color: active ? 'var(--theme-accent)' : 'var(--theme-text)',
+                          }}
+                        >
+                          {item.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
+                  <div>
+                    <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.accent_color')}</div>
+                    <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
+                      {t('profile.accent_subtitle')}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {[
+                      { label: t('profile.bg_mode'), color: previewTheme.bg },
+                      { label: 'Card', color: previewTheme.card },
+                      { label: 'Text', color: previewTheme.text },
+                    ].map((item) => (
+                      <span
+                        key={item.label}
+                        className="h-8 w-8 rounded-lg border"
+                        title={item.label}
+                        style={{ backgroundColor: item.color, borderColor: 'var(--theme-border-strong)' }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5 flex items-center gap-3 max-[560px]:flex-wrap">
+                  <div
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ position: 'relative', zIndex: 9999 }}
+                  >
+                    <input
+                      type="color"
+                      value={accentColor}
+                      onChange={(event) => {
+                        const hex = event.target.value
+                        handleAccentPreview(hex)
+                      }}
+                      onBlur={(event) => handleAccentCommit(event.target.value)}
+                      onMouseUp={(event) => handleAccentCommit(event.currentTarget.value)}
+                      onPointerUp={(event) => handleAccentCommit(event.currentTarget.value)}
+                      onTouchEnd={(event) => handleAccentCommit(event.currentTarget.value)}
+                      className="h-11 w-16 cursor-pointer rounded-xl border bg-transparent p-1"
+                      style={{ borderColor: 'var(--theme-border-strong)' }}
+                      aria-label={t('profile.choose_accent')}
+                    />
+                  </div>
+                  <div className="font-semibold" style={{ color: token.colorText }}>{accentColor.toUpperCase()}</div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {PRESET_ACCENT_COLORS.map((item) => (
+                    <button
+                      key={item.color}
+                      type="button"
+                      onClick={() => handlePresetSelect(item.color)}
+                      className="h-8 w-8 cursor-pointer rounded-full border transition-transform duration-150 hover:scale-110"
+                      style={{
+                        backgroundColor: item.color,
+                        borderColor: accentColor === item.color ? '#ffffff' : token.colorBorder,
+                      }}
+                      aria-label={t('profile.choose_color', { label: item.label })}
+                      title={item.label}
+                    />
+                  ))}
+                </div>
+
+                <div className="mt-6 border-t border-[var(--theme-border)] pt-6">
+                  <div className="font-extrabold" style={{ color: token.colorText }}>Ngôn ngữ / Language</div>
+                  <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
+                    Chuyển đổi giữa Tiếng Việt và English
+                  </div>
+                  <div className="mt-4 flex items-center gap-3">
+                    <button
+                      onClick={() => i18n.changeLanguage('vi')}
+                      title="Tiếng Việt"
+                      style={{
+                        background: i18n.language === 'vi' ? 'var(--theme-accent-muted)' : 'transparent',
+                        border: i18n.language === 'vi' ? '1px solid var(--theme-accent)' : '1px solid var(--theme-border-strong)',
+                        borderRadius: 10,
+                        cursor: 'pointer',
+                        padding: '8px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        opacity: i18n.language === 'vi' ? 1 : 0.5,
+                        transition: 'all 0.2s',
+                        fontWeight: i18n.language === 'vi' ? 600 : 400,
+                        color: 'var(--theme-text)',
+                      }}
+                    >
+                      <img src="https://flagcdn.com/16x12/vn.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />
+                      Tiếng Việt
+                    </button>
+                    <button
+                      onClick={() => i18n.changeLanguage('en')}
+                      title="English"
+                      style={{
+                        background: i18n.language === 'en' ? 'var(--theme-accent-muted)' : 'transparent',
+                        border: i18n.language === 'en' ? '1px solid var(--theme-accent)' : '1px solid var(--theme-border-strong)',
+                        borderRadius: 10,
+                        cursor: 'pointer',
+                        padding: '8px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        opacity: i18n.language === 'en' ? 1 : 0.5,
+                        transition: 'all 0.2s',
+                        fontWeight: i18n.language === 'en' ? 600 : 400,
+                        color: 'var(--theme-text)',
+                      }}
+                    >
+                      <img src="https://flagcdn.com/16x12/us.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />
+                      English
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'address' && (
+              <div
+                className={profileFormClass}
+                style={responsiveSectionCardStyle}
+              >
+                {renderSectionHeader(<EnvironmentOutlined />, t('profile.address_title'), t('profile.address_subtitle'))}
+                <div className="flex items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
+                  <Button type="primary" icon={<PlusOutlined />} onClick={openCreateAddress} loading={loading} className="!rounded-lg !border-0 !bg-[var(--profile-accent)] !font-bold !text-[var(--theme-button-text)] hover:!bg-[var(--profile-accent-hover)]">
+                    {t('profile.add_address')}
+                  </Button>
+                </div>
+
+                <div className="mt-4">
+                  {addresses.length === 0 ? (
+                    <Empty description={t('profile.no_address')} />
+                  ) : addresses.map((address) => {
+                    const fullAddress = [
+                      address.street,
+                      address.ward,
+                      address.district,
+                      address.city,
+                    ].filter(Boolean).join(', ')
+
+                    return (
+                      <div
+                        className="mb-2.5 flex items-start gap-3 rounded-xl border p-[14px_16px] max-[480px]:gap-2.5 max-[480px]:p-3"
+                        key={address._id}
+                        style={{
+                          backgroundColor: token.colorBgElevated,
+                          borderColor: address.isDefault ? 'var(--profile-accent-border)' : 'var(--theme-border-strong)',
+                        }}
+                      >
+                        <div className="grid h-9 w-9 flex-none place-items-center rounded-[9px]" style={{ backgroundColor: token.colorBgContainer, color: 'var(--profile-accent)' }}>
+                          <EnvironmentOutlined />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-extrabold" style={{ color: token.colorText }}>{address.fullName}</span>
+                            {address.isDefault && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                                style={{
+                                  backgroundColor: 'var(--profile-accent-bg)',
+                                  borderColor: 'var(--profile-accent-border)',
+                                  color: 'var(--profile-accent)',
+                                }}
+                              >
+                                <StarFilled />
+                                {t('profile.default')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-[7px] inline-flex items-center gap-1.5 text-[13px]" style={{ color: token.colorTextSecondary }}>
+                            <PhoneOutlined />
+                            <span>{address.phone}</span>
+                          </div>
+                          <div className="mt-1.5 text-xs leading-[1.45]" style={{ color: token.colorTextSecondary }}>{fullAddress}</div>
+                        </div>
+                        <div className="ml-auto flex items-center gap-1.5 max-[480px]:flex-col max-[480px]:gap-1">
+                          {!address.isDefault && (
+                            <button
+                              className={addressActionButtonClass}
+                              type="button"
+                              title={t('profile.set_default')}
+                              onClick={() => handleSetDefault(address._id)}
+                            >
+                              <StarOutlined />
+                            </button>
+                          )}
+                          <button
+                            className={addressActionButtonClass}
+                            type="button"
+                            title={t('profile.edit_address')}
+                            onClick={() => openEditAddress(address)}
+                          >
+                            <EditOutlined />
+                          </button>
+                          <button
+                            className={`${addressActionButtonClass} hover:!border-[var(--profile-accent-border)] hover:!bg-[var(--profile-accent-bg)] hover:!text-[var(--profile-accent)]`}
+                            type="button"
+                            title={t('profile.delete_address')}
+                            onClick={() => handleDeleteAddress(address._id)}
+                          >
+                            <DeleteOutlined />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <Modal
+                  title={editAddress ? t('profile.address_modal_edit') : t('profile.address_modal_create')}
+                  open={addressModalOpen}
+                  onCancel={() => setAddressModalOpen(false)}
+                  footer={null}
+                  destroyOnClose
+                  className={addressEditModalClass}
+                  style={profileThemeStyle}
+                >
+                  <Form form={addressForm} layout="vertical" onFinish={handleSaveAddress} initialValues={{ isDefault: false }} className={profileFormClass}>
+                    <Form.Item name="fullName" label={t('profile.form_recipient')} rules={[{ required: true, message: t('profile.form_recipient_required') }]}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="phone" label={t('profile.form_phone')} rules={[{ required: true, message: t('profile.form_phone_required') }, { pattern: /^0\d{9,10}$/, message: t('profile.form_phone_invalid') }]}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="street" label={t('profile.form_street')} rules={[{ required: true, message: t('profile.form_street_required') }]}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="ward" label={t('profile.form_ward')}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="district" label={t('profile.form_district')} rules={[{ required: true, message: t('profile.form_district_required') }]}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="city" label={t('profile.form_city')} rules={[{ required: true, message: t('profile.form_city_required') }]}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="isDefault" valuePropName="checked">
+                      <Checkbox>{t('profile.form_is_default')}</Checkbox>
+                    </Form.Item>
+                    <Form.Item>
+                      <Space>
+                        <Button type="primary" htmlType="submit" loading={loading}>{t('profile.form_save')}</Button>
+                        <Button onClick={() => setAddressModalOpen(false)}>{t('profile.form_cancel')}</Button>
+                      </Space>
+                    </Form.Item>
+                  </Form>
+                </Modal>
+              </div>
+            )}
+
+            {activeTab === 'password' && !hasPassword && (
+              <div style={responsiveSectionCardStyle}>
+                {renderSectionHeader(<LockOutlined />, t('profile.set_password_title'), t('profile.set_password_subtitle'))}
+
+                <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
+                  <Form.Item label={t('profile.new_password')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Form.Item label={t('profile.confirm_password')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.confirm_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
+                    {t('profile.set_password_btn')}
+                  </Button>
+                </Form>
+              </div>
+            )}
+
+            {activeTab === 'password' && hasPassword && (
+              <div style={responsiveSectionCardStyle}>
+                {renderSectionHeader(<LockOutlined />, t('profile.change_password_title'), t('profile.change_password_subtitle'))}
+
+                <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
+                  <Form.Item label={t('profile.current_password')} name="currentPassword" rules={[{ required: true, message: t('profile.current_password_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.current_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Form.Item label={t('profile.new_password_change')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_change_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Form.Item label={t('profile.confirm_password_change')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_change_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.confirm_password_change_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
+                    {t('profile.change_password_btn')}
+                  </Button>
+                </Form>
+              </div>
+            )}
+          </TabContent>
+        </div>
+      </div>
+    </>
+  )
+
+  if (isProfileMobile) {
+    return (
+      <MobileProfileSheet open={open} onClose={handleClose}>
+        <div style={{ ...profileThemeStyle, color: token.colorText }}>
+          {sharedContent}
+        </div>
+      </MobileProfileSheet>
+    )
+  }
+
   return (
     <Modal
       title={null}
@@ -839,13 +1310,13 @@ export default function AccountProfileModal({
       footer={null}
       maskClosable
       destroyOnClose
-      width={isProfileDesktop ? 760 : isProfileMobile ? 'calc(100vw - 8px)' : 680}
+      width={isProfileDesktop ? 760 : 680}
       className={`profile-modal ${profileModalClass}`}
       wrapClassName={profileModalWrapClass}
       style={{
         ...profileThemeStyle,
         top: 20,
-        margin: isProfileMobile ? 0 : 'auto',
+        margin: 'auto',
         padding: 0,
         maxWidth: '100vw',
       }}
@@ -868,7 +1339,7 @@ export default function AccountProfileModal({
       } as any}
     >
       <div
-        ref={isProfileMobile ? undefined : profileScrollRef}
+        ref={profileScrollRef}
         className="profile-modal-content-wrapper"
         data-profile-scroll-container="account-profile-modal"
         style={{
@@ -881,456 +1352,7 @@ export default function AccountProfileModal({
           flex: 1,
         }}
       >
-        <ProfileHeader
-          user={user}
-          avatarPreview={avatarPreview}
-          fileRef={fileRef}
-          coverPreview={coverPreview}
-          coverRef={coverRef}
-          contactText={contactText}
-          onCopyContact={handleCopyContact}
-          onAvatarChange={handleAvatarFileChange}
-          onCoverChange={handleCoverFileChange}
-          onCoverRemove={handleCoverRemove}
-          mediaUploading={mediaUploading}
-          isMobile={isProfileCompact}
-          t={t}
-        />
-
-        <div className="profile-modal-main">
-          <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-          <MobileMenuGrid
-            tabs={tabs}
-            activeTab={activeTab}
-            onChange={(tab) => {
-              setActiveTab(tab)
-              setMobileMenuOpen(false)
-            }}
-            mobileMenuOpen={mobileMenuOpen}
-            onToggle={() => setMobileMenuOpen(prev => !prev)}
-            hideBackdrop={isProfileMobile}
-          />
-
-          <div
-            className="profile-modal-scroll"
-            style={{
-              minHeight: 120,
-              padding: isProfileMobile ? '4px 4px 0' : '16px 20px',
-              paddingBottom: isProfileMobile ? '0' : '16px',
-              scrollbarWidth: 'thin',
-              scrollbarColor: 'var(--theme-border) transparent',
-              overflowX: 'hidden',
-              overflowY: isProfileMobile ? 'visible' : 'auto',
-              width: '100%',
-              maxWidth: '100%',
-              flex: 1,
-            }}
-          >
-            <TabContent activeTab={activeTab}>
-              {activeTab === 'profile' && (
-                <div>
-                  <div style={responsiveSectionCardStyle}>
-                    {renderSectionHeader(<UserOutlined />, t('profile.info_title'), t('profile.info_subtitle'))}
-
-                    <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                        <Form.Item label={t('profile.name')} name="name" rules={[{ required: true, message: t('profile.name_placeholder') }]}>
-                          <Input prefix={<UserOutlined />} placeholder={t('profile.your_name')} style={profileInputStyle} />
-                        </Form.Item>
-
-                        <Form.Item label={t('profile.phone')} name="phone">
-                          <Input prefix={<PhoneOutlined />} placeholder={t('profile.phone_placeholder')} style={profileInputStyle} />
-                        </Form.Item>
-
-                        <Form.Item
-                          label="Email"
-                          name="email"
-                          rules={[
-                            { type: 'email', message: t('profile.invalid_email') },
-                            { required: !user.email, message: t('profile.email_placeholder') },
-                          ]}
-                        >
-                          <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder={user.email ? t('profile.email_placeholder') : t('profile.add_email_placeholder')} style={user.email ? profileDisabledInputStyle : profileInputStyle} />
-                        </Form.Item>
-
-                        <Form.Item label="Username">
-                          <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} style={profileDisabledInputStyle} />
-                        </Form.Item>
-
-                        <Form.Item label={t('profile.dob')} name="dateOfBirth" className="col-span-full">
-                          <Input
-                            type="date"
-                            style={{
-                              ...profileInputStyle,
-                              width: '100%',
-                              maxWidth: '100%',
-                              boxSizing: 'border-box',
-                              minWidth: 0,
-                            }}
-                          />
-                        </Form.Item>
-                      </div>
-
-                      <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !mt-1 !h-12 !rounded-2xl !text-[15px]`}>
-                        {t('profile.save_changes')}
-                      </Button>
-                    </Form>
-                  </div>
-
-                  <div style={{ marginBottom: 12 }}>
-                    {renderActionItem(<ShoppingCartOutlined />, t('profile.orders_title'), t('profile.orders_subtitle'), goToOrders)}
-                    <Button
-                      block
-                      icon={<LogoutOutlined />}
-                      onClick={handleLogout}
-                      style={{
-                        marginTop: 8,
-                        height: 44,
-                        borderRadius: 10,
-                        background: 'transparent',
-                        border: '1px solid rgba(239,68,68,0.3)',
-                        color: '#ef4444',
-                        fontWeight: 500,
-                        fontSize: 14,
-                      }}
-                    >
-                      {t('profile.logout')}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'appearance' && (
-                <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<BgColorsOutlined />, t('profile.appearance_title'), t('profile.appearance_subtitle'))}
-                  <div className="mb-6 border-b border-[var(--theme-border)] pb-5">
-                    <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.personal_theme')}</div>
-                    <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                      {t('profile.personal_theme_subtitle')}
-                    </div>
-                    <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      {([
-                        { value: 'system', label: t('profile.theme_system') },
-                        { value: 'light', label: t('profile.theme_light') },
-                        { value: 'dark', label: t('profile.theme_dark') },
-                      ] as Array<{ value: 'system' | 'light' | 'dark'; label: string }>).map((item) => {
-                        const active = (user.themePreference || 'system') === item.value
-                        return (
-                          <button
-                            key={item.value}
-                            type="button"
-                            disabled={loading}
-                            onClick={() => handleThemePreferenceChange(item.value)}
-                            className="rounded-xl border px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70"
-                            style={{
-                              background: active ? 'var(--theme-accent-muted)' : 'var(--theme-elevated)',
-                              borderColor: active ? 'var(--theme-accent)' : 'var(--theme-border-strong)',
-                              color: active ? 'var(--theme-accent)' : 'var(--theme-text)',
-                            }}
-                          >
-                            {item.label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                  <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
-                    <div>
-                      <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.accent_color')}</div>
-                      <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                        {t('profile.accent_subtitle')}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {[
-                        { label: t('profile.bg_mode'), color: previewTheme.bg },
-                        { label: 'Card', color: previewTheme.card },
-                        { label: 'Text', color: previewTheme.text },
-                      ].map((item) => (
-                        <span
-                          key={item.label}
-                          className="h-8 w-8 rounded-lg border"
-                          title={item.label}
-                          style={{ backgroundColor: item.color, borderColor: 'var(--theme-border-strong)' }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex items-center gap-3 max-[560px]:flex-wrap">
-                    <div
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ position: 'relative', zIndex: 9999 }}
-                    >
-                      <input
-                        type="color"
-                        value={accentColor}
-                        onChange={(event) => {
-                          const hex = event.target.value
-                          handleAccentPreview(hex)
-                        }}
-                        onBlur={(event) => handleAccentCommit(event.target.value)}
-                        onMouseUp={(event) => handleAccentCommit(event.currentTarget.value)}
-                        onPointerUp={(event) => handleAccentCommit(event.currentTarget.value)}
-                        onTouchEnd={(event) => handleAccentCommit(event.currentTarget.value)}
-                        className="h-11 w-16 cursor-pointer rounded-xl border bg-transparent p-1"
-                        style={{ borderColor: 'var(--theme-border-strong)' }}
-                        aria-label={t('profile.choose_accent')}
-                      />
-                    </div>
-                    <div className="font-semibold" style={{ color: token.colorText }}>{accentColor.toUpperCase()}</div>
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {PRESET_ACCENT_COLORS.map((item) => (
-                      <button
-                        key={item.color}
-                        type="button"
-                        onClick={() => handlePresetSelect(item.color)}
-                        className="h-8 w-8 cursor-pointer rounded-full border transition-transform duration-150 hover:scale-110"
-                        style={{
-                          backgroundColor: item.color,
-                          borderColor: accentColor === item.color ? '#ffffff' : token.colorBorder,
-                        }}
-                        aria-label={t('profile.choose_color', { label: item.label })}
-                        title={item.label}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="mt-6 border-t border-[var(--theme-border)] pt-6">
-                    <div className="font-extrabold" style={{ color: token.colorText }}>Ngôn ngữ / Language</div>
-                    <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                      Chuyển đổi giữa Tiếng Việt và English
-                    </div>
-                    <div className="mt-4 flex items-center gap-3">
-                      <button
-                        onClick={() => i18n.changeLanguage('vi')}
-                        title="Tiếng Việt"
-                        style={{
-                          background: i18n.language === 'vi' ? 'var(--theme-accent-muted)' : 'transparent',
-                          border: i18n.language === 'vi' ? '1px solid var(--theme-accent)' : '1px solid var(--theme-border-strong)',
-                          borderRadius: 10,
-                          cursor: 'pointer',
-                          padding: '8px 16px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          opacity: i18n.language === 'vi' ? 1 : 0.5,
-                          transition: 'all 0.2s',
-                          fontWeight: i18n.language === 'vi' ? 600 : 400,
-                          color: 'var(--theme-text)',
-                        }}
-                      >
-                        <img src="https://flagcdn.com/16x12/vn.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />
-                        Tiếng Việt
-                      </button>
-                      <button
-                        onClick={() => i18n.changeLanguage('en')}
-                        title="English"
-                        style={{
-                          background: i18n.language === 'en' ? 'var(--theme-accent-muted)' : 'transparent',
-                          border: i18n.language === 'en' ? '1px solid var(--theme-accent)' : '1px solid var(--theme-border-strong)',
-                          borderRadius: 10,
-                          cursor: 'pointer',
-                          padding: '8px 16px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          opacity: i18n.language === 'en' ? 1 : 0.5,
-                          transition: 'all 0.2s',
-                          fontWeight: i18n.language === 'en' ? 600 : 400,
-                          color: 'var(--theme-text)',
-                        }}
-                      >
-                        <img src="https://flagcdn.com/16x12/us.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />
-                        English
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'address' && (
-                <div
-                  className={profileFormClass}
-                  style={responsiveSectionCardStyle}
-                >
-                  {renderSectionHeader(<EnvironmentOutlined />, t('profile.address_title'), t('profile.address_subtitle'))}
-                  <div className="flex items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
-                    <Button type="primary" icon={<PlusOutlined />} onClick={openCreateAddress} loading={loading} className="!rounded-lg !border-0 !bg-[var(--profile-accent)] !font-bold !text-[var(--theme-button-text)] hover:!bg-[var(--profile-accent-hover)]">
-                      {t('profile.add_address')}
-                    </Button>
-                  </div>
-
-                  <div className="mt-4">
-                    {addresses.length === 0 ? (
-                      <Empty description={t('profile.no_address')} />
-                    ) : addresses.map((address) => {
-                      const fullAddress = [
-                        address.street,
-                        address.ward,
-                        address.district,
-                        address.city,
-                      ].filter(Boolean).join(', ')
-
-                      return (
-                        <div
-                          className="mb-2.5 flex items-start gap-3 rounded-xl border p-[14px_16px] max-[480px]:gap-2.5 max-[480px]:p-3"
-                          key={address._id}
-                          style={{
-                            backgroundColor: token.colorBgElevated,
-                            borderColor: address.isDefault ? 'var(--profile-accent-border)' : 'var(--theme-border-strong)',
-                          }}
-                        >
-                          <div className="grid h-9 w-9 flex-none place-items-center rounded-[9px]" style={{ backgroundColor: token.colorBgContainer, color: 'var(--profile-accent)' }}>
-                            <EnvironmentOutlined />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-extrabold" style={{ color: token.colorText }}>{address.fullName}</span>
-                              {address.isDefault && (
-                                <span
-                                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
-                                  style={{
-                                    backgroundColor: 'var(--profile-accent-bg)',
-                                    borderColor: 'var(--profile-accent-border)',
-                                    color: 'var(--profile-accent)',
-                                  }}
-                                >
-                                  <StarFilled />
-                                  {t('profile.default')}
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-[7px] inline-flex items-center gap-1.5 text-[13px]" style={{ color: token.colorTextSecondary }}>
-                              <PhoneOutlined />
-                              <span>{address.phone}</span>
-                            </div>
-                            <div className="mt-1.5 text-xs leading-[1.45]" style={{ color: token.colorTextSecondary }}>{fullAddress}</div>
-                          </div>
-                          <div className="ml-auto flex items-center gap-1.5 max-[480px]:flex-col max-[480px]:gap-1">
-                            {!address.isDefault && (
-                              <button
-                                className={addressActionButtonClass}
-                                type="button"
-                                title={t('profile.set_default')}
-                                onClick={() => handleSetDefault(address._id)}
-                              >
-                                <StarOutlined />
-                              </button>
-                            )}
-                            <button
-                              className={addressActionButtonClass}
-                              type="button"
-                              title={t('profile.edit_address')}
-                              onClick={() => openEditAddress(address)}
-                            >
-                              <EditOutlined />
-                            </button>
-                            <button
-                              className={`${addressActionButtonClass} hover:!border-[var(--profile-accent-border)] hover:!bg-[var(--profile-accent-bg)] hover:!text-[var(--profile-accent)]`}
-                              type="button"
-                              title={t('profile.delete_address')}
-                              onClick={() => handleDeleteAddress(address._id)}
-                            >
-                              <DeleteOutlined />
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  <Modal
-                    title={editAddress ? t('profile.address_modal_edit') : t('profile.address_modal_create')}
-                    open={addressModalOpen}
-                    onCancel={() => setAddressModalOpen(false)}
-                    footer={null}
-                    destroyOnClose
-                    className={addressEditModalClass}
-                    style={profileThemeStyle}
-                  >
-                    <Form form={addressForm} layout="vertical" onFinish={handleSaveAddress} initialValues={{ isDefault: false }} className={profileFormClass}>
-                      <Form.Item name="fullName" label={t('profile.form_recipient')} rules={[{ required: true, message: t('profile.form_recipient_required') }]}>
-                        <Input style={profileInputStyle} />
-                      </Form.Item>
-                      <Form.Item name="phone" label={t('profile.form_phone')} rules={[{ required: true, message: t('profile.form_phone_required') }, { pattern: /^0\d{9,10}$/, message: t('profile.form_phone_invalid') }]}>
-                        <Input style={profileInputStyle} />
-                      </Form.Item>
-                      <Form.Item name="street" label={t('profile.form_street')} rules={[{ required: true, message: t('profile.form_street_required') }]}>
-                        <Input style={profileInputStyle} />
-                      </Form.Item>
-                      <Form.Item name="ward" label={t('profile.form_ward')}>
-                        <Input style={profileInputStyle} />
-                      </Form.Item>
-                      <Form.Item name="district" label={t('profile.form_district')} rules={[{ required: true, message: t('profile.form_district_required') }]}>
-                        <Input style={profileInputStyle} />
-                      </Form.Item>
-                      <Form.Item name="city" label={t('profile.form_city')} rules={[{ required: true, message: t('profile.form_city_required') }]}>
-                        <Input style={profileInputStyle} />
-                      </Form.Item>
-                      <Form.Item name="isDefault" valuePropName="checked">
-                        <Checkbox>{t('profile.form_is_default')}</Checkbox>
-                      </Form.Item>
-                      <Form.Item>
-                        <Space>
-                          <Button type="primary" htmlType="submit" loading={loading}>{t('profile.form_save')}</Button>
-                          <Button onClick={() => setAddressModalOpen(false)}>{t('profile.form_cancel')}</Button>
-                        </Space>
-                      </Form.Item>
-                    </Form>
-                  </Modal>
-                </div>
-              )}
-
-              {activeTab === 'password' && !hasPassword && (
-                <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<LockOutlined />, t('profile.set_password_title'), t('profile.set_password_subtitle'))}
-
-                  <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
-                    <Form.Item label={t('profile.new_password')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_placeholder') }]}>
-                      <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
-                    </Form.Item>
-
-                    <Form.Item label={t('profile.confirm_password')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_placeholder') }]}>
-                      <Input.Password placeholder={t('profile.confirm_password_hint')} style={profilePasswordInputStyle} />
-                    </Form.Item>
-
-                    <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                      {t('profile.set_password_btn')}
-                    </Button>
-                  </Form>
-                </div>
-              )}
-
-              {activeTab === 'password' && hasPassword && (
-                <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<LockOutlined />, t('profile.change_password_title'), t('profile.change_password_subtitle'))}
-
-                  <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
-                    <Form.Item label={t('profile.current_password')} name="currentPassword" rules={[{ required: true, message: t('profile.current_password_placeholder') }]}>
-                      <Input.Password placeholder={t('profile.current_password_hint')} style={profilePasswordInputStyle} />
-                    </Form.Item>
-
-                    <Form.Item label={t('profile.new_password_change')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_change_placeholder') }]}>
-                      <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
-                    </Form.Item>
-
-                    <Form.Item label={t('profile.confirm_password_change')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_change_placeholder') }]}>
-                      <Input.Password placeholder={t('profile.confirm_password_change_hint')} style={profilePasswordInputStyle} />
-                    </Form.Item>
-
-                    <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                      {t('profile.change_password_btn')}
-                    </Button>
-                  </Form>
-                </div>
-              )}
-            </TabContent>
-          </div>
-        </div>
+        {sharedContent}
       </div>
     </Modal>
   )
