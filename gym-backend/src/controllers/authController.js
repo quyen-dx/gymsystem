@@ -23,6 +23,7 @@ import {
   normalizePhone,
 } from '../utils/identifier.js'
 import { buildClientUrl } from '../config/appUrls.js'
+import { assertFeatureEnabled, getSystemSettingsValue } from '../services/systemSettingsService.js'
 
 const sendError = (res, error) => {
   console.error(error)
@@ -142,10 +143,18 @@ export const buildFacebookOauthRedirect = async (user, res) => {
 }
 export const sendRegisterOtp = async (req, res) => {
   try {
+    const settings = await getSystemSettingsValue()
+    await assertFeatureEnabled('auth.allowRegistration')
     const { provider, name, phone, password } = req.body
 
     if (provider !== 'phone' && provider !== 'email') {
       throw new AppError('Chỉ đăng ký bằng số điện thoại hoặc email mới cần OTP', 400)
+    }
+    if (provider === 'phone' && !settings.auth.allowPhoneLogin) {
+      await assertFeatureEnabled('auth.allowPhoneLogin')
+    }
+    if (provider === 'email' && !settings.auth.allowEmailUsernameLogin) {
+      await assertFeatureEnabled('auth.allowEmailUsernameLogin')
     }
 
     if (!name?.trim()) {
@@ -187,6 +196,8 @@ export const sendRegisterOtp = async (req, res) => {
       purpose: 'register',
       channel: isEmail ? 'email' : 'sms',
       provider: isEmail ? 'email' : 'phone',
+      ttlSeconds: settings.auth.otpExpiresInSeconds,
+      exposePreview: settings.auth.demoOtpEnabled,
       payload: {
         name: name.trim(),
         ...(isEmail ? { email: normalizedIdentifier } : { phone: normalizedIdentifier }),
@@ -208,6 +219,7 @@ export const sendRegisterOtp = async (req, res) => {
 
 export const verifyRegisterOtp = async (req, res) => {
   try {
+    await assertFeatureEnabled('auth.allowRegistration')
     const { identifier, otp } = req.body
     const normalizedIdentifier = normalizeIdentifier(identifier)
 
@@ -252,6 +264,8 @@ export const verifyRegisterOtp = async (req, res) => {
 
 export const registerFacebook = async (req, res) => {
   try {
+    await assertFeatureEnabled('auth.allowRegistration')
+    await assertFeatureEnabled('auth.facebookOAuthEnabled')
     const { name, email, password, oauthToken } = req.body
     const normalizedEmail = email?.trim().toLowerCase()
 
@@ -296,6 +310,7 @@ export const registerFacebook = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
+    const settings = await getSystemSettingsValue()
     const { identifier, password, oauthToken, provider } = req.body
 
     if (!identifier) {
@@ -303,13 +318,23 @@ export const login = async (req, res) => {
     }
 
     const trimmed = identifier.trim()
+    const isPhoneLogin = /^(0|\+84)\d{9}$/.test(trimmed.replace(/\s/g, ''))
+    if (isPhoneLogin && !settings.auth.allowPhoneLogin) {
+      await assertFeatureEnabled('auth.allowPhoneLogin')
+    }
+    if (!isPhoneLogin && !settings.auth.allowEmailUsernameLogin) {
+      await assertFeatureEnabled('auth.allowEmailUsernameLogin')
+    }
+    if (oauthToken) {
+      await assertFeatureEnabled(provider === 'facebook' ? 'auth.facebookOAuthEnabled' : 'auth.googleOAuthEnabled')
+    }
 
     // Tự detect loại identifier
     let query
     if (trimmed.includes('@')) {
       // Email đầy đủ hoặc username dạng xxx@gmail.com
       query = { email: trimmed.toLowerCase() }
-    } else if (/^(0|\+84)\d{9}$/.test(trimmed.replace(/\s/g, ''))) {
+    } else if (isPhoneLogin) {
       // Số điện thoại
       query = { phone: normalizePhone(trimmed) }
     } else {
@@ -444,6 +469,7 @@ export const hasPassword = async (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
+    await assertFeatureEnabled('members.allowProfileUpdate')
     const { name, phone, email, dateOfBirth } = req.body
     const updateData = {}
 
@@ -487,8 +513,10 @@ export const updateProfile = async (req, res) => {
     }
 
     if (req.files?.avatar?.[0]) {
+      await assertFeatureEnabled('members.allowAvatarUpload')
       updateData.avatar = req.files.avatar[0].path
     } else if (req.file) {
+      await assertFeatureEnabled('members.allowAvatarUpload')
       updateData.avatar = req.file.path
     }
 
@@ -572,6 +600,7 @@ export const changePassword = async (req, res) => {
 
 export const sendForgotPasswordOtp = async (req, res) => {
   try {
+    const settings = await getSystemSettingsValue()
     const { identifier } = req.body
     const type = detectIdentifierType(identifier)
     const normalizedIdentifier = normalizeIdentifier(identifier)
@@ -579,9 +608,15 @@ export const sendForgotPasswordOtp = async (req, res) => {
     if (type === 'email' && !isValidEmail(normalizedIdentifier)) {
       throw new AppError('Email không hợp lệ', 400)
     }
+    if (type === 'email' && !settings.auth.forgotPasswordEmailEnabled) {
+      await assertFeatureEnabled('auth.forgotPasswordEmailEnabled')
+    }
 
     if (type === 'phone' && !isValidPhone(normalizedIdentifier)) {
       throw new AppError('Số điện thoại không hợp lệ', 400)
+    }
+    if (type === 'phone' && !settings.auth.forgotPasswordSmsOtpEnabled) {
+      await assertFeatureEnabled('auth.forgotPasswordSmsOtpEnabled')
     }
 
     const user = await User.findOne(
@@ -601,6 +636,8 @@ export const sendForgotPasswordOtp = async (req, res) => {
       purpose: 'forgot_password',
       channel: type === 'email' ? 'email' : 'sms',
       provider: user.provider,
+      ttlSeconds: settings.auth.otpExpiresInSeconds,
+      exposePreview: settings.auth.demoOtpEnabled,
       payload: {
         userId: user._id.toString(),
       },
@@ -733,7 +770,8 @@ const findEditableUserById = async (id) => {
     throw new AppError('Không tìm thấy người dùng', 404)
   }
 
-  if (user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL) {
+  const settings = await getSystemSettingsValue()
+  if (settings.members.protectPrimaryAdmin && user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL) {
     throw new AppError('Tài khoản admin này được bảo vệ và không thể chỉnh sửa', 403)
   }
 
@@ -792,6 +830,7 @@ export const updateUserRole = async (req, res) => {
 
 export const toggleUserStatus = async (req, res) => {
   try {
+    await assertFeatureEnabled('members.allowAccountLockToggle')
     if (isCurrentUser(req)) {
       throw new AppError('Bạn không thể khóa hoặc mở khóa chính tài khoản của mình', 403)
     }

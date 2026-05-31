@@ -11,6 +11,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import LanguageSelect from '../../components/common/LanguageSelect'
 import { API_URL } from '../../config/env'
 import { useTheme } from '../../context/ThemeProvider'
+import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { useAuth } from '../../hooks/useAuth'
 import { getErrorMessage } from '../../utils/errorMessages'
 
@@ -29,6 +30,7 @@ export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const { dark } = useTheme()
+  const { settings } = useSystemSettings()
 
   const [loading, setLoading] = useState(false)
 
@@ -133,46 +135,54 @@ export default function LoginPage() {
             {t('login.submit')}
           </Button>
 
-          <div className="text-right mt-2">
-            <Link to="/forgot-password" className="text-sm" style={{ color: '#ffffff' }}>
-              {t('login.forgot_password')}
-            </Link>
-          </div>
+          {(settings.auth.forgotPasswordEmailEnabled || settings.auth.forgotPasswordSmsOtpEnabled) && (
+            <div className="text-right mt-2">
+              <Link to="/forgot-password" className="text-sm" style={{ color: '#ffffff' }}>
+                {t('login.forgot_password')}
+              </Link>
+            </div>
+          )}
 
         </Form>
 
-        <Divider>{t('login.divider')}</Divider>
+        {(settings.auth.googleOAuthEnabled || settings.auth.facebookOAuthEnabled) && <Divider>{t('login.divider')}</Divider>}
 
         {/* SOCIAL */}
-        <Button
-          icon={<GoogleOutlined />}
-          block
-          size="large"
-          onClick={handleGoogle}
-        >
-          Google
-        </Button>
+        {settings.auth.googleOAuthEnabled && (
+          <Button
+            icon={<GoogleOutlined />}
+            block
+            size="large"
+            onClick={handleGoogle}
+          >
+            Google
+          </Button>
+        )}
 
-        <Button
-          icon={<FacebookFilled />}
-          block
-          size="large"
-          className="mt-3"
-          onClick={handleFacebook}
-        >
-          Facebook
-        </Button>
+        {settings.auth.facebookOAuthEnabled && (
+          <Button
+            icon={<FacebookFilled />}
+            block
+            size="large"
+            className="mt-3"
+            onClick={handleFacebook}
+          >
+            Facebook
+          </Button>
+        )}
 
         {/* REGISTER */}
-        <div
-          className={`text-center mt-6 text-sm ${dark ? 'text-gray-300' : 'text-[rgba(237,235,230,0.65)]'
-            }`}
-        >
-          {t('login.no_account')}{' '}
-          <Link to="/register" className="font-semibold" style={{ color: 'var(--theme-accent)' }}>
-            {t('login.register')}
-          </Link>
-        </div>
+        {settings.auth.allowRegistration && (
+          <div
+            className={`text-center mt-6 text-sm ${dark ? 'text-gray-300' : 'text-[rgba(237,235,230,0.65)]'
+              }`}
+          >
+            {t('login.no_account')}{' '}
+            <Link to="/register" className="font-semibold" style={{ color: 'var(--theme-accent)' }}>
+              {t('login.register')}
+            </Link>
+          </div>
+        )}
 
       </div>
     </div>

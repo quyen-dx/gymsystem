@@ -24,6 +24,7 @@ interface ThemeContextType {
   applyTheme: (hex: string) => void
   applyAccentFast: (hex: string) => void
   applyThemeFull: (hex: string) => void
+  applyThemeMode: (mode: 'dark' | 'light') => void
   commitPending: () => void
   themeKey: number
   dark: boolean
@@ -43,7 +44,7 @@ export const PRESET_ACCENT_COLORS = [
 
 const ThemeContext = createContext<ThemeContextType | null>(null)
 
-const FIXED = {
+const DARK_FIXED = {
   bg: '#09090b',
   card: '#111115',
   elevated: '#1a1a1f',
@@ -54,7 +55,20 @@ const FIXED = {
   inputBg: '#1a1a1f',
 }
 
-export const generateTheme = (hex: string): ThemeTokens => {
+const LIGHT_FIXED = {
+  bg: '#f5f3ef',
+  card: '#ffffff',
+  elevated: '#f0ede8',
+  border: 'rgba(17,24,39,0.12)',
+  text: '#171717',
+  muted: 'rgba(23,23,23,0.58)',
+  placeholder: 'rgba(23,23,23,0.38)',
+  inputBg: '#ffffff',
+}
+
+const getFixedPalette = (mode: 'dark' | 'light') => (mode === 'light' ? LIGHT_FIXED : DARK_FIXED)
+
+export const generateTheme = (hex: string, mode: 'dark' | 'light' = 'dark'): ThemeTokens => {
   const accent = new TinyColor(hex)
   const lightness = accent.toHsl().l
   const safeAccent = lightness < 0.2
@@ -68,8 +82,10 @@ export const generateTheme = (hex: string): ThemeTokens => {
   const accentMuted = safeAccentColor.clone().setAlpha(0.15).toRgbString()
   const accentBorder = safeAccentColor.clone().setAlpha(0.3).toRgbString()
 
+  const fixed = getFixedPalette(mode)
+
   return {
-    ...FIXED,
+    ...fixed,
     accent: safeAccent,
     safeAccent,
     accentHover,
@@ -87,30 +103,30 @@ const setThemeVariables = (tokens: ThemeTokens) => {
   r.setProperty('--theme-button-text', tokens.buttonText)
   r.setProperty('--theme-accent-muted', tokens.accentMuted)
   r.setProperty('--theme-accent-border', tokens.accentBorder)
-  r.setProperty('--theme-bg', FIXED.bg)
-  r.setProperty('--theme-card', FIXED.card)
-  r.setProperty('--theme-elevated', FIXED.elevated)
-  r.setProperty('--theme-border', FIXED.border)
-  r.setProperty('--theme-border-strong', FIXED.border)
-  r.setProperty('--theme-text', FIXED.text)
-  r.setProperty('--theme-muted', FIXED.muted)
-  r.setProperty('--theme-placeholder', FIXED.placeholder)
-  r.setProperty('--theme-input-bg', FIXED.inputBg)
-  r.setProperty('--gs-bg', FIXED.bg)
-  r.setProperty('--gs-bg-elevated', FIXED.elevated)
-  r.setProperty('--gs-bg-soft', FIXED.card)
-  r.setProperty('--gs-panel', FIXED.card)
-  r.setProperty('--gs-panel-strong', FIXED.elevated)
-  r.setProperty('--gs-border', FIXED.border)
-  r.setProperty('--gs-border-strong', FIXED.border)
-  r.setProperty('--gs-text', FIXED.text)
-  r.setProperty('--gs-text-muted', FIXED.muted)
-  r.setProperty('--gs-text-soft', FIXED.muted)
+  r.setProperty('--theme-bg', tokens.bg)
+  r.setProperty('--theme-card', tokens.card)
+  r.setProperty('--theme-elevated', tokens.elevated)
+  r.setProperty('--theme-border', tokens.border)
+  r.setProperty('--theme-border-strong', tokens.border)
+  r.setProperty('--theme-text', tokens.text)
+  r.setProperty('--theme-muted', tokens.muted)
+  r.setProperty('--theme-placeholder', tokens.placeholder)
+  r.setProperty('--theme-input-bg', tokens.inputBg)
+  r.setProperty('--gs-bg', tokens.bg)
+  r.setProperty('--gs-bg-elevated', tokens.elevated)
+  r.setProperty('--gs-bg-soft', tokens.card)
+  r.setProperty('--gs-panel', tokens.card)
+  r.setProperty('--gs-panel-strong', tokens.elevated)
+  r.setProperty('--gs-border', tokens.border)
+  r.setProperty('--gs-border-strong', tokens.border)
+  r.setProperty('--gs-text', tokens.text)
+  r.setProperty('--gs-text-muted', tokens.muted)
+  r.setProperty('--gs-text-soft', tokens.muted)
   r.setProperty('--gs-accent', tokens.accent)
-  document.body.style.backgroundColor = FIXED.bg
-  document.body.style.color = FIXED.text
-  document.getElementById('root')?.style.setProperty('background-color', FIXED.bg)
-  document.getElementById('root')?.style.setProperty('color', FIXED.text)
+  document.body.style.backgroundColor = tokens.bg
+  document.body.style.color = tokens.text
+  document.getElementById('root')?.style.setProperty('background-color', tokens.bg)
+  document.getElementById('root')?.style.setProperty('color', tokens.text)
 }
 
 const applyAccentVariablesFast = (hex: string) => {
@@ -139,11 +155,14 @@ const applyAccentVariablesFast = (hex: string) => {
 
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   const saved = localStorage.getItem('gymAccentColor') || DEFAULT_ACCENT_COLOR
+  const savedMode = localStorage.getItem('theme') === 'light' ? 'light' : 'dark'
   const [accentColor, setAccentColor] = useState(saved)
-  const [tokens, setTokens] = useState<ThemeTokens>(generateTheme(saved))
-  const [themeKey] = useState(0)
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>(savedMode)
+  const [tokens, setTokens] = useState<ThemeTokens>(generateTheme(saved, savedMode))
+  const [themeKey, setThemeKey] = useState(0)
   const pendingAccentRef = useRef(saved)
   const accentColorRef = useRef(saved)
+  const themeModeRef = useRef<'dark' | 'light'>(savedMode)
 
   const applyAccentFast = (hex: string) => {
     pendingAccentRef.current = hex
@@ -154,16 +173,26 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   const applyThemeFull = (hex: string) => {
     const nextAccent = new TinyColor(hex).isValid ? new TinyColor(hex).toHexString() : DEFAULT_ACCENT_COLOR
     applyAccentFast(nextAccent)
-    const nextTokens = generateTheme(nextAccent)
+    const nextTokens = generateTheme(nextAccent, themeModeRef.current)
     setTokens(nextTokens)
     setAccentColor(nextAccent)
     accentColorRef.current = nextAccent
     localStorage.setItem('gymAccentColor', nextAccent)
-    localStorage.setItem('theme', 'dark')
+    localStorage.setItem('theme', themeModeRef.current)
     setThemeVariables(nextTokens)
   }
 
   const applyTheme = applyThemeFull
+
+  const applyThemeMode = (mode: 'dark' | 'light') => {
+    themeModeRef.current = mode
+    setThemeMode(mode)
+    localStorage.setItem('theme', mode)
+    const nextTokens = generateTheme(accentColorRef.current, mode)
+    setTokens(nextTokens)
+    setThemeVariables(nextTokens)
+    setThemeKey((key) => key + 1)
+  }
 
   const commitPending = () => {
     const hex = pendingAccentRef.current
@@ -172,7 +201,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const toggleTheme = () => {
-    applyTheme(accentColor === DEFAULT_ACCENT_COLOR ? '#3e3e3e' : DEFAULT_ACCENT_COLOR)
+    applyThemeMode(themeModeRef.current === 'dark' ? 'light' : 'dark')
   }
 
   useEffect(() => {
@@ -180,7 +209,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   }, [])
 
   return (
-    <ThemeContext.Provider value={{ tokens, accentColor, applyTheme, applyAccentFast, applyThemeFull, commitPending, themeKey, dark: true, toggleTheme }}>
+    <ThemeContext.Provider value={{ tokens, accentColor, applyTheme, applyAccentFast, applyThemeFull, applyThemeMode, commitPending, themeKey, dark: themeMode === 'dark', toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   )

@@ -4,12 +4,12 @@ import AppError from '../utils/appError.js'
 import { sendOtpEmail } from './emailService.js'
 import { sendOtpSms } from './smsService.js'
 
-const OTP_TTL_MS = 5 * 60 * 1000
+const DEFAULT_OTP_TTL_MS = 5 * 60 * 1000
 const RESEND_COOLDOWN_MS = 60 * 1000
 
 const generateOtpCode = () => Math.floor(100000 + Math.random() * 900000).toString()
 
-export const sendOtp = async ({ identifier, purpose, channel, provider = null, payload = {} }) => {
+export const sendOtp = async ({ identifier, purpose, channel, provider = null, payload = {}, ttlSeconds, exposePreview }) => {
   const existingOtp = await Otp.findOne({ identifier, purpose })
   const now = Date.now()
 
@@ -19,7 +19,8 @@ export const sendOtp = async ({ identifier, purpose, channel, provider = null, p
   }
 
   const otp = generateOtpCode()
-  const expiresAt = new Date(now + OTP_TTL_MS)
+  const otpTtlMs = Math.max(30, Number(ttlSeconds) || DEFAULT_OTP_TTL_MS / 1000) * 1000
+  const expiresAt = new Date(now + otpTtlMs)
   const resendAvailableAt = new Date(now + RESEND_COOLDOWN_MS)
 
   const record = await Otp.findOneAndUpdate(
@@ -50,9 +51,9 @@ export const sendOtp = async ({ identifier, purpose, channel, provider = null, p
 
   return {
     message: 'Mã OTP đã được gửi thành công',
-    expiresIn: OTP_TTL_MS / 1000,
+    expiresIn: otpTtlMs / 1000,
     resendAfter: RESEND_COOLDOWN_MS / 1000,
-    ...(process.env.NODE_ENV !== 'production' ? { otpPreview: otp } : {}),
+    ...(exposePreview && process.env.NODE_ENV !== 'production' ? { otpPreview: otp } : {}),
     record,
   }
 }

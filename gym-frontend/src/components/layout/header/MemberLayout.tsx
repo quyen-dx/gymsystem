@@ -26,6 +26,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useCart } from '../../../context/useCart'
+import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useWallet } from '../../../context/WalletProvider'
 import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
@@ -65,6 +66,7 @@ export default function MemberLayout({
 }) {
   const { t, i18n } = useTranslation()
   const { user } = useAuth()
+  const { settings, isEnabled } = useSystemSettings()
   const [accountOpen, setAccountOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [hovered, setHovered] = useState(false)
@@ -81,11 +83,11 @@ export default function MemberLayout({
   const location = useLocation()
   const navItems = [
     { key: '/', label: t('nav.home'), icon: <HomeOutlined /> },
-    { key: '/store', label: t('nav.store'), icon: <ShopOutlined /> },
-    { key: '/booking', label: t('nav.book_pt'), icon: <CalendarOutlined /> },
-    { key: '/health', label: t('nav.health'), icon: <HeartOutlined /> },
-    { key: '/workout', label: t('nav.workout'), icon: <FundOutlined /> },
-    { key: '/checkin', label: t('nav.checkin'), icon: <CreditCardOutlined /> },
+    ...(isEnabled('shop.productStoreEnabled') ? [{ key: '/store', label: t('nav.store'), icon: <ShopOutlined /> }] : []),
+    ...(isEnabled('pt.memberBookingEnabled') ? [{ key: '/booking', label: t('nav.book_pt'), icon: <CalendarOutlined /> }] : []),
+    ...(isEnabled('workout.healthLogEnabled') ? [{ key: '/health', label: t('nav.health'), icon: <HeartOutlined /> }] : []),
+    ...(isEnabled('workout.workoutPlanEnabled') ? [{ key: '/workout', label: t('nav.workout'), icon: <FundOutlined /> }] : []),
+    ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/checkin', label: t('nav.checkin'), icon: <CreditCardOutlined /> }] : []),
   ]
   const moreNavItems = [
     { key: '/help', label: t('nav.help'), icon: <QuestionCircleOutlined /> },
@@ -351,34 +353,38 @@ export default function MemberLayout({
 
         <div className="member-shell-desktop-actions">
 
-          <div
-            className="member-shell-wallet-pill"
-            style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
-          >
-            <Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>{t('wallet.label')}</Text>
-            <Text strong style={{ fontSize: 14 }}>
-              {walletText}
-            </Text>
-            <Button
-              type="link"
-              size="small"
-              onClick={() => goTo('/deposit')}
-              style={{ padding: 0, height: 'auto', fontSize: 12, marginLeft: 4 }}
+          {isEnabled('billing.qrPaymentEnabled') && (
+            <div
+              className="member-shell-wallet-pill"
+              style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
             >
-              {t('wallet.deposit')}
-            </Button>
-          </div>
+              <Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>{t('wallet.label')}</Text>
+              <Text strong style={{ fontSize: 14 }}>
+                {walletText}
+              </Text>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => goTo('/deposit')}
+                style={{ padding: 0, height: 'auto', fontSize: 12, marginLeft: 4 }}
+              >
+                {t('wallet.deposit')}
+              </Button>
+            </div>
+          )}
 
-          <Badge count={cartCount} size="small">
-            <Button
-              type="text"
-              icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
-              onClick={() => goTo('/cart')}
-              style={navbarIconButtonStyle}
-              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
-              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
-            />
-          </Badge>
+          {isEnabled('shop.cartEnabled') && (
+            <Badge count={cartCount} size="small">
+              <Button
+                type="text"
+                icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
+                onClick={() => goTo('/cart')}
+                style={navbarIconButtonStyle}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
+              />
+            </Badge>
+          )}
 
           <div
             className="member-shell-user"
@@ -409,16 +415,18 @@ export default function MemberLayout({
         </div>
 
         <div className="member-shell-mobile-actions">
-          <Badge count={cartCount} size="small">
-            <Button
-              type="text"
-              icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
-              onClick={() => goTo('/cart')}
-              style={navbarIconButtonStyle}
-              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
-              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
-            />
-          </Badge>
+          {isEnabled('shop.cartEnabled') && (
+            <Badge count={cartCount} size="small">
+              <Button
+                type="text"
+                icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
+                onClick={() => goTo('/cart')}
+                style={navbarIconButtonStyle}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
+              />
+            </Badge>
+          )}
           <Button
             type="text"
             icon={<MenuOutlined />}
@@ -465,15 +473,17 @@ export default function MemberLayout({
           </button>
         </div>
 
-        <div className="member-shell-drawer-wallet">
-          <Text type="secondary">{t('wallet.current')}</Text>
-          <Text strong style={{ fontSize: 18 }}>
-            {walletText}
-          </Text>
-          <Button type="primary" block onClick={() => goTo('/deposit')}>
-            {t('wallet.deposit')}
-          </Button>
-        </div>
+        {isEnabled('billing.qrPaymentEnabled') && (
+          <div className="member-shell-drawer-wallet">
+            <Text type="secondary">{t('wallet.current')}</Text>
+            <Text strong style={{ fontSize: 18 }}>
+              {walletText}
+            </Text>
+            <Button type="primary" block onClick={() => goTo('/deposit')}>
+              {t('wallet.deposit')}
+            </Button>
+          </div>
+        )}
 
         <Menu
           mode="inline"
@@ -505,7 +515,7 @@ export default function MemberLayout({
       </Drawer>
 
       <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
-      {!accountOpen && !menuOpen && <AiChatWidget />}
+      {!accountOpen && !menuOpen && settings.ai.floatingChatbotEnabled && <AiChatWidget />}
     </Layout >
   )
 }

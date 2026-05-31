@@ -27,6 +27,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeProvider'
+import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
 import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
@@ -39,6 +40,7 @@ const { Text } = Typography
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
   const { t } = useTranslation()
+  const { settings, isEnabled } = useSystemSettings()
   const [accountOpen, setAccountOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
   const [branding, setBranding] = useState({ gymName: 'GymPro', logoUrl: '' })
@@ -74,7 +76,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
       { key: '/admin', label: t('nav.overview'), icon: <DashboardOutlined /> },
       { key: '/admin/users', label: t('nav.users'), icon: <UserOutlined /> },
-      { key: '/admin/plans', label: t('nav.plans'), icon: <CalendarOutlined /> },
+      ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/admin/plans', label: t('nav.plans'), icon: <CalendarOutlined /> }] : []),
       {
         key: '/admin/partnerships',
         label: (
@@ -108,27 +110,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       },
 
       { key: '/admin/members', label: t('nav.members'), icon: <TeamOutlined /> },
-      { key: '/admin/pts', label: `${t('nav.trainers')} (PT)`, icon: <UserOutlined /> },
-      { key: '/admin/reports', label: t('nav.reports'), icon: <BarChartOutlined /> },
-      { key: '/admin/system-settings', label: t('nav.system_settings'), icon: <SettingOutlined /> },
+      ...(isEnabled('pt.moduleEnabled') ? [{ key: '/admin/pts', label: `${t('nav.trainers')} (PT)`, icon: <UserOutlined /> }] : []),
+      ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: t('nav.reports'), icon: <BarChartOutlined /> }] : []),
       { key: '/admin/faqs', label: t('nav.faq_manager'), icon: <QuestionCircleOutlined /> },
       { key: '/admin/feedback', label: t('nav.feedback_manager'), icon: <CommentOutlined /> },
       { key: '/admin/policies', label: t('nav.policies'), icon: <FileTextOutlined /> },
+      { key: '/admin/system-settings', label: t('nav.system_settings'), icon: <SettingOutlined /> },
     ],
     staff: [
       { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
-      { key: '/staff/checkin', label: t('nav.checkin'), icon: <DashboardOutlined /> },
+      ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/staff/checkin', label: t('nav.checkin'), icon: <DashboardOutlined /> }] : []),
       { key: '/staff/members', label: t('nav.members'), icon: <TeamOutlined /> },
     ],
     pt: [
       { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
-      { key: '/pt/schedule', label: t('nav.schedule'), icon: <CalendarOutlined /> },
-      { key: '/pt/student', label: t('nav.students'), icon: <TeamOutlined /> },
+      ...(isEnabled('pt.scheduleEnabled') ? [{ key: '/pt/schedule', label: t('nav.schedule'), icon: <CalendarOutlined /> }] : []),
+      ...(isEnabled('pt.moduleEnabled') ? [{ key: '/pt/student', label: t('nav.students'), icon: <TeamOutlined /> }] : []),
     ],
     seller: [
       { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
-      { key: '/seller/products', label: t('nav.my_products'), icon: <ShopOutlined /> },
-      { key: '/seller/orders', label: t('nav.orders'), icon: <ShoppingCartOutlined /> },
+      ...(isEnabled('shop.productStoreEnabled') ? [
+        { key: '/seller/products', label: t('nav.my_products'), icon: <ShopOutlined /> },
+        { key: '/seller/orders', label: t('nav.orders'), icon: <ShoppingCartOutlined /> },
+      ] : []),
     ],
     member: []
   }
@@ -294,7 +298,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
 
-      <AdminAIChatWidget />
+      {settings.ai.floatingChatbotEnabled && settings.ai.adminAiEnabled && <AdminAIChatWidget />}
     </Layout>
   )
 }

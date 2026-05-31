@@ -1,5 +1,7 @@
 import axios from 'axios'
+import { message } from 'antd'
 import { API_URL } from '../config/env'
+import i18n from '../i18n'
 
 const api = axios.create({
   baseURL: API_URL,
@@ -7,6 +9,7 @@ const api = axios.create({
 })
 
 let refreshPromise: Promise<string | null> | null = null
+let lastFeatureDisabledToastAt = 0
 
 export const clearAuthSession = () => {
   localStorage.removeItem('token')
@@ -53,6 +56,20 @@ api.interceptors.response.use(
 
     if (errorCode === 'ACCOUNT_LOCKED') {
       clearAuthSession()
+      return Promise.reject(error)
+    }
+
+    if (errorCode === 'FEATURE_DISABLED' || errorCode === 'MAINTENANCE_MODE') {
+      const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en'
+      const translatedMessage = errorCode === 'MAINTENANCE_MODE'
+        ? (error.response?.data?.maintenanceMessage?.[lang] || i18n.t('system_settings.maintenance.default_message'))
+        : i18n.t('system_settings.disabled_message')
+      error.response.data.message = translatedMessage
+      const now = Date.now()
+      if (now - lastFeatureDisabledToastAt > 1200) {
+        lastFeatureDisabledToastAt = now
+        message.warning(translatedMessage)
+      }
       return Promise.reject(error)
     }
 

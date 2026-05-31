@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import LanguageSelect from '../../components/common/LanguageSelect'
+import FeatureDisabled from '../../components/system/FeatureDisabled'
 import { useTheme } from '../../context/ThemeProvider'
+import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { useAuth } from '../../hooks/useAuth'
 import { authService } from '../../services/authService'
 import { getErrorMessage } from '../../utils/errorMessages'
@@ -18,12 +20,15 @@ export default function RegisterPage() {
   const navigate = useNavigate()
   const { dark } = useTheme()
   const { updateUser } = useAuth()
+  const { settings } = useSystemSettings()
 
   const [step, setStep] = useState<'form' | 'otp'>('form')
   const [loading, setLoading] = useState(false)
 
   const [form] = Form.useForm()
   const [otpPreview, setOtpPreview] = useState('')
+
+  if (!settings.auth.allowRegistration) return <FeatureDisabled />
 
   const handleSendOtp = async (values: any) => {
     if (loading) return
@@ -186,7 +191,7 @@ export default function RegisterPage() {
         {step === 'otp' && (
           <Form layout="vertical" onFinish={handleVerifyOtp}>
 
-            {otpPreview && (
+            {settings.auth.demoOtpEnabled && otpPreview && (
               <div className="mb-3 text-center text-orange-500">
                 OTP demo: <b>{otpPreview}</b>
               </div>

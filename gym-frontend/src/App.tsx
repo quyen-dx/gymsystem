@@ -1,7 +1,9 @@
 import { ConfigProvider, theme } from 'antd'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import MemberLayout from './components/layout/header/MemberLayout'
+import FeatureDisabled from './components/system/FeatureDisabled'
+import { SystemSettingsProvider, useSystemSettings } from './context/SystemSettingsContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { useAuth } from './hooks/useAuth'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
@@ -42,6 +44,7 @@ import StaffMemberPage from './pages/dashboard/staff/StaffMemberPage'
 import AboutPage from './pages/public/AboutPage'
 import PartnershipPage from './pages/public/PartnershipPage'
 import HelpCenterPage from './pages/public/HelpCenterPage'
+import MaintenancePage from './pages/public/MaintenancePage'
 import PolicyPage from './pages/public/PolicyPage'
 
 {/* ADMIN */ }
@@ -56,32 +59,49 @@ import PolicyPage from './pages/public/PolicyPage'
 
 {/* Seller */ }
 
-function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
+function LoadingScreen() {
+  const { t } = useTranslation()
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {t('common.loading')}
+    </div>
+  )
+}
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        Đang tải...
-      </div>
-    )
+function PrivateRoute({ children, feature }: { children: React.ReactNode; feature?: string | string[] }) {
+  const { user, loading } = useAuth()
+  const { settings, loading: settingsLoading, isEnabled } = useSystemSettings()
+
+  if (loading || settingsLoading) {
+    return <LoadingScreen />
   }
 
-  return user ? <>{children}</> : <Navigate to="/login" />
+  if (!user) return <Navigate to="/login" />
+  if (settings.general.maintenanceMode && user.role !== 'admin') return <Navigate to="/maintenance" replace />
+  const requiredFeatures = Array.isArray(feature) ? feature : feature ? [feature] : []
+  if (requiredFeatures.some((featurePath) => !isEnabled(featurePath))) return <FeatureDisabled />
+  return <>{children}</>
 }
 
 function HomeRoute() {
   const { user, loading } = useAuth()
+  const { settings, loading: settingsLoading } = useSystemSettings()
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        Đang tải...
-      </div>
-    )
+  if (loading || settingsLoading) {
+    return <LoadingScreen />
   }
 
+  if (settings.general.maintenanceMode && user?.role !== 'admin') return <Navigate to="/maintenance" replace />
   return user ? <MemberDashboard /> : <Navigate to="/about" replace />
+}
+
+function MaintenanceRoute() {
+  const { user, loading } = useAuth()
+  const { loading: settingsLoading } = useSystemSettings()
+
+  if (loading || settingsLoading) return <LoadingScreen />
+  if (user?.role === 'admin') return <Navigate to="/admin/system-settings" replace />
+  return <MaintenancePage />
 }
 
 function MemberCheckinPage() {
@@ -104,13 +124,20 @@ function MemberCheckinPage() {
 }
 
 function AppWithTheme() {
-  const { tokens, themeKey } = useTheme()
+  const { tokens, themeKey, dark } = useTheme()
+  const { user, loading } = useAuth()
+  const { settings, loading: settingsLoading } = useSystemSettings()
+  const location = useLocation()
+
+  if (!loading && !settingsLoading && user && user.role !== 'admin' && settings.general.maintenanceMode && location.pathname !== '/maintenance') {
+    return <Navigate to="/maintenance" replace />
+  }
 
   return (
     <ConfigProvider
       key={themeKey}
       theme={{
-        algorithm: theme.darkAlgorithm,
+        algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
           colorBgBase: tokens.bg,
           colorBgContainer: tokens.card,
@@ -202,6 +229,7 @@ function AppWithTheme() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/oauth-success" element={<OauthSuccessPage />} />
+        <Route path="/maintenance" element={<MaintenanceRoute />} />
         <Route path="/hop-tac" element={<PartnershipPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/gioi-thieu" element={<AboutPage />} />
@@ -211,46 +239,46 @@ function AppWithTheme() {
 
         {/* ADMIN */}
         <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
-        <Route path="/admin/plans" element={<PrivateRoute><AdminPlansPage /></PrivateRoute>} />
+        <Route path="/admin/plans" element={<PrivateRoute feature="billing.allowPlanPurchase"><AdminPlansPage /></PrivateRoute>} />
         <Route path="/admin/partnerships" element={<PrivateRoute><AdminPartnershipRequestsPage /></PrivateRoute>} />
         <Route path="/admin/shop" element={<Navigate to="/admin/partnerships" />} />
         <Route path="/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
         <Route path="/admin/members" element={<PrivateRoute><AdminMembersPage /></PrivateRoute>} />
-        <Route path="/admin/pts" element={<PrivateRoute><AdminTrainersPage /></PrivateRoute>} />
-        <Route path="/admin/reports" element={<PrivateRoute><AdminReports /></PrivateRoute>} />
+        <Route path="/admin/pts" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersPage /></PrivateRoute>} />
+        <Route path="/admin/reports" element={<PrivateRoute feature="reports.revenueChartEnabled"><AdminReports /></PrivateRoute>} />
         <Route path="/admin/system-settings" element={<PrivateRoute><SystemSettingsPage /></PrivateRoute>} />
         <Route path="/admin/faqs" element={<PrivateRoute><FAQManagerPage /></PrivateRoute>} />
         <Route path="/admin/feedback" element={<PrivateRoute><FeedbackManagerPage /></PrivateRoute>} />
         <Route path="/admin/policies" element={<PrivateRoute><PolicyManagerPage /></PrivateRoute>} />
         {/* SELLER */}
         <Route path="/seller" element={<Navigate to="/seller/products" />} />
-        <Route path="/seller/products" element={<PrivateRoute><SellerProductsPage /></PrivateRoute>} />
-        <Route path="/seller/orders" element={<PrivateRoute><SellerOrdersPage /></PrivateRoute>} />
+        <Route path="/seller/products" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerProductsPage /></PrivateRoute>} />
+        <Route path="/seller/orders" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerOrdersPage /></PrivateRoute>} />
         {/* STAFF */}
         <Route path="/staff" element={<Navigate to="/staff/checkin" />} />
-        <Route path="/staff/checkin" element={<PrivateRoute><StaffCheckinPage /></PrivateRoute>} />
+        <Route path="/staff/checkin" element={<PrivateRoute feature="checkin.qrCheckinEnabled"><StaffCheckinPage /></PrivateRoute>} />
         <Route path="/staff/members" element={<PrivateRoute><StaffMemberPage /></PrivateRoute>} />
 
         {/* PT */}
         <Route path="/pt" element={<Navigate to="/pt/schedule" />} />
-        <Route path="/pt/schedule" element={<PrivateRoute><PTSchedulePage /></PrivateRoute>} />
-        <Route path="/pt/student" element={<PrivateRoute><PTStudentPage /></PrivateRoute>} />
+        <Route path="/pt/schedule" element={<PrivateRoute feature="pt.scheduleEnabled"><PTSchedulePage /></PrivateRoute>} />
+        <Route path="/pt/student" element={<PrivateRoute feature="pt.moduleEnabled"><PTStudentPage /></PrivateRoute>} />
 
         {/* MEMBER */}
         <Route path="/" element={<HomeRoute />} />
         <Route path="/dashboard" element={<PrivateRoute><MemberDashboard /></PrivateRoute>} />
-        <Route path="/deposit" element={<PrivateRoute><DepositPage /></PrivateRoute>} />
-        <Route path="/checkout" element={<PrivateRoute><CheckoutPage /></PrivateRoute>} />
+        <Route path="/deposit" element={<PrivateRoute feature="billing.qrPaymentEnabled"><DepositPage /></PrivateRoute>} />
+        <Route path="/checkout" element={<PrivateRoute feature="shop.cartEnabled"><CheckoutPage /></PrivateRoute>} />
         <Route path="/orders" element={<PrivateRoute><OrderHistoryPage /></PrivateRoute>} />
         <Route path="/track/:id" element={<PrivateRoute><OrderTrackingPage /></PrivateRoute>} />
-        <Route path="/store" element={<PrivateRoute><MemberStorePage /></PrivateRoute>} />
-        <Route path="/store/:storeId" element={<PrivateRoute><MemberStorePage /></PrivateRoute>} />
-        <Route path="/cart" element={<PrivateRoute><CartPage /></PrivateRoute>} />
-        <Route path="/product/:id" element={<PrivateRoute><ProductDetailPage /></PrivateRoute>} />
-        <Route path="/booking" element={<PrivateRoute><BookingPage /></PrivateRoute>} />
-        <Route path="/health" element={<PrivateRoute><HealthPage /></PrivateRoute>} />
-        <Route path="/workout" element={<PrivateRoute><WorkoutPage /></PrivateRoute>} />
-        <Route path="/checkin" element={<PrivateRoute><MemberCheckinPage /></PrivateRoute>} />
+        <Route path="/store" element={<PrivateRoute feature="shop.productStoreEnabled"><MemberStorePage /></PrivateRoute>} />
+        <Route path="/store/:storeId" element={<PrivateRoute feature="shop.productStoreEnabled"><MemberStorePage /></PrivateRoute>} />
+        <Route path="/cart" element={<PrivateRoute feature="shop.cartEnabled"><CartPage /></PrivateRoute>} />
+        <Route path="/product/:id" element={<PrivateRoute feature={['shop.productStoreEnabled', 'shop.productDetailPageEnabled']}><ProductDetailPage /></PrivateRoute>} />
+        <Route path="/booking" element={<PrivateRoute feature="pt.memberBookingEnabled"><BookingPage /></PrivateRoute>} />
+        <Route path="/health" element={<PrivateRoute feature="workout.healthLogEnabled"><HealthPage /></PrivateRoute>} />
+        <Route path="/workout" element={<PrivateRoute feature="workout.workoutPlanEnabled"><WorkoutPage /></PrivateRoute>} />
+        <Route path="/checkin" element={<PrivateRoute feature="checkin.qrCheckinEnabled"><MemberCheckinPage /></PrivateRoute>} />
         <Route path="/feedback" element={<PrivateRoute><MyFeedbackPage /></PrivateRoute>} />
         <Route path="/my-feedback" element={<PrivateRoute><MyFeedbackPage /></PrivateRoute>} />
         <Route path="/my-activity" element={<PrivateRoute><MyActivityPage /></PrivateRoute>} />
@@ -262,7 +290,9 @@ function AppWithTheme() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppWithTheme />
+      <SystemSettingsProvider>
+        <AppWithTheme />
+      </SystemSettingsProvider>
     </ThemeProvider>
   )
 }

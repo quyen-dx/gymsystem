@@ -3,7 +3,9 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import LanguageSelect from '../../components/common/LanguageSelect'
+import FeatureDisabled from '../../components/system/FeatureDisabled'
 import { useTheme } from '../../context/ThemeProvider'
+import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { authService } from '../../services/authService'
 import { getErrorMessage } from '../../utils/errorMessages'
 
@@ -15,6 +17,7 @@ export default function ForgotPasswordPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { dark } = useTheme()
+  const { settings } = useSystemSettings()
 
   const [step, setStep] = useState<Step>('identifier')
   const [loading, setLoading] = useState(false)
@@ -22,6 +25,8 @@ export default function ForgotPasswordPage() {
   const [identifier, setIdentifier] = useState('')
   const [otpPreview, setOtpPreview] = useState('')
   const [resetToken, setResetToken] = useState('')
+
+  if (!settings.auth.forgotPasswordEmailEnabled && !settings.auth.forgotPasswordSmsOtpEnabled) return <FeatureDisabled />
 
   const identifierType = useMemo(
     () => (identifier.includes('@')
@@ -140,7 +145,7 @@ export default function ForgotPasswordPage() {
           className="mb-6"
         />
 
-        {!!otpPreview && (
+        {settings.auth.demoOtpEnabled && !!otpPreview && (
           <div
             className="mb-4 rounded-lg p-2 text-center"
             style={{

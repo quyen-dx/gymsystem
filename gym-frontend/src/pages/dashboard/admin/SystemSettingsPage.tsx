@@ -1,234 +1,336 @@
-import { SaveOutlined } from '@ant-design/icons'
-import { Button, Segmented, Spin, message } from 'antd'
-import { useCallback, useEffect, useState } from 'react'
+import { ReloadOutlined, SaveOutlined, SearchOutlined } from '@ant-design/icons'
+import { Button, Card, Input, InputNumber, Select, Space, Spin, Switch, Typography, message } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
-import InlineEditModal, { type EditTarget } from '../../../components/system/InlineEditModal'
-import InlineEditPreview from '../../../components/system/InlineEditPreview'
-import {
-  BUTTON_LINK_FIELDS,
-  normalizeSlogan,
-  seedLandingForEditor,
-  seedSettingsForEditor,
-} from '../../../components/system/inlineHomeDefaults'
-import { systemExperienceService } from '../../../services/systemExperienceService'
-import { normalizeForStorage, normalizeLandingData, normalizeLandingForStorage } from '../../../utils/localization'
+import { SYSTEM_SETTINGS_DEFAULTS, useSystemSettings } from '../../../context/SystemSettingsContext'
+import { systemSettingsService } from '../../../services/systemSettingsService'
+
+const { Text } = Typography
+
+type SettingType = 'switch' | 'text' | 'select' | 'number'
+
+type SettingItem = {
+  path: string
+  type: SettingType
+  options?: { labelKey: string; value: string }[]
+  min?: number
+  max?: number
+}
+
+type SettingGroup = {
+  key: string
+  items: SettingItem[]
+}
+
+const langOptions = [
+  { labelKey: 'system_settings.options.vi', value: 'vi' },
+  { labelKey: 'system_settings.options.en', value: 'en' },
+]
+
+const themeOptions = [
+  { labelKey: 'system_settings.options.dark', value: 'dark' },
+  { labelKey: 'system_settings.options.light', value: 'light' },
+]
+
+const SETTING_GROUPS: SettingGroup[] = [
+  {
+    key: 'general',
+    items: [
+      { path: 'general.siteName', type: 'text' },
+      { path: 'general.logoUrl', type: 'text' },
+      { path: 'general.defaultLanguage', type: 'select', options: langOptions },
+      { path: 'general.defaultTheme', type: 'select', options: themeOptions },
+      { path: 'general.maintenanceMode', type: 'switch' },
+      { path: 'general.maintenanceMessage.vi', type: 'text' },
+      { path: 'general.maintenanceMessage.en', type: 'text' },
+    ],
+  },
+  {
+    key: 'auth',
+    items: [
+      { path: 'auth.allowRegistration', type: 'switch' },
+      { path: 'auth.allowPhoneLogin', type: 'switch' },
+      { path: 'auth.allowEmailUsernameLogin', type: 'switch' },
+      { path: 'auth.googleOAuthEnabled', type: 'switch' },
+      { path: 'auth.facebookOAuthEnabled', type: 'switch' },
+      { path: 'auth.demoOtpEnabled', type: 'switch' },
+      { path: 'auth.otpExpiresInSeconds', type: 'number', min: 30, max: 3600 },
+      { path: 'auth.forgotPasswordSmsOtpEnabled', type: 'switch' },
+      { path: 'auth.forgotPasswordEmailEnabled', type: 'switch' },
+    ],
+  },
+  {
+    key: 'members',
+    items: [
+      { path: 'members.allowProfileUpdate', type: 'switch' },
+      { path: 'members.allowAvatarUpload', type: 'switch' },
+      { path: 'members.allowAccountLockToggle', type: 'switch' },
+      { path: 'members.protectPrimaryAdmin', type: 'switch' },
+      { path: 'members.allowBulkActions', type: 'switch' },
+    ],
+  },
+  {
+    key: 'billing',
+    items: [
+      { path: 'billing.allowPlanPurchase', type: 'switch' },
+      { path: 'billing.allowAssignPlanToMember', type: 'switch' },
+      { path: 'billing.allowPlanRenewal', type: 'switch' },
+      { path: 'billing.allowAutoRenewal', type: 'switch' },
+      { path: 'billing.discountCodesEnabled', type: 'switch' },
+      { path: 'billing.qrPaymentEnabled', type: 'switch' },
+      { path: 'billing.planMemberCountEnabled', type: 'switch' },
+    ],
+  },
+  {
+    key: 'checkin',
+    items: [
+      { path: 'checkin.qrCheckinEnabled', type: 'switch' },
+      { path: 'checkin.qrTokenTtlSeconds', type: 'number', min: 5, max: 600 },
+      { path: 'checkin.preventDuplicateWithinHour', type: 'switch' },
+      { path: 'checkin.selfieRequired', type: 'switch' },
+      { path: 'checkin.streakEnabled', type: 'switch' },
+      { path: 'checkin.successSoundEnabled', type: 'switch' },
+    ],
+  },
+  {
+    key: 'pt',
+    items: [
+      { path: 'pt.moduleEnabled', type: 'switch' },
+      { path: 'pt.scheduleEnabled', type: 'switch' },
+      { path: 'pt.memberBookingEnabled', type: 'switch' },
+      { path: 'pt.weeklyRecurringBookingEnabled', type: 'switch' },
+      { path: 'pt.waitlistEnabled', type: 'switch' },
+      { path: 'pt.reviewAfterSessionEnabled', type: 'switch' },
+    ],
+  },
+  {
+    key: 'workout',
+    items: [
+      { path: 'workout.workoutPlanEnabled', type: 'switch' },
+      { path: 'workout.workoutTimerEnabled', type: 'switch' },
+      { path: 'workout.healthLogEnabled', type: 'switch' },
+      { path: 'workout.bmiHistoryEnabled', type: 'switch' },
+      { path: 'workout.progressPhotoUploadEnabled', type: 'switch' },
+      { path: 'workout.healthChartEnabled', type: 'switch' },
+    ],
+  },
+  {
+    key: 'reports',
+    items: [
+      { path: 'reports.revenueChartEnabled', type: 'switch' },
+      { path: 'reports.checkinHeatmapEnabled', type: 'switch' },
+      { path: 'reports.revenueForecastEnabled', type: 'switch' },
+      { path: 'reports.churnRiskEnabled', type: 'switch' },
+      { path: 'reports.excelExportEnabled', type: 'switch' },
+      { path: 'reports.pdfExportEnabled', type: 'switch' },
+      { path: 'reports.auditLogEnabled', type: 'switch' },
+    ],
+  },
+  {
+    key: 'notifications',
+    items: [
+      { path: 'notifications.systemNotificationsEnabled', type: 'switch' },
+      { path: 'notifications.roleGroupNotificationsEnabled', type: 'switch' },
+      { path: 'notifications.emailNotificationsEnabled', type: 'switch' },
+      { path: 'notifications.readUnreadStatusEnabled', type: 'switch' },
+    ],
+  },
+  {
+    key: 'shop',
+    items: [
+      { path: 'shop.productStoreEnabled', type: 'switch' },
+      { path: 'shop.cartEnabled', type: 'switch' },
+      { path: 'shop.productReviewsEnabled', type: 'switch' },
+      { path: 'shop.productDetailPageEnabled', type: 'switch' },
+    ],
+  },
+  {
+    key: 'ai',
+    items: [
+      { path: 'ai.floatingChatbotEnabled', type: 'switch' },
+      { path: 'ai.planConsultingAiEnabled', type: 'switch' },
+      { path: 'ai.adminAiEnabled', type: 'switch' },
+    ],
+  },
+  {
+    key: 'landing',
+    items: [
+      { path: 'landing.statsSectionEnabled', type: 'switch' },
+      { path: 'landing.servicesSectionEnabled', type: 'switch' },
+      { path: 'landing.feedbackSectionEnabled', type: 'switch' },
+      { path: 'landing.partnersSectionEnabled', type: 'switch' },
+      { path: 'landing.startNowButtonEnabled', type: 'switch' },
+      { path: 'landing.checkinNowButtonEnabled', type: 'switch' },
+    ],
+  },
+]
+
+const clone = (value: any) => JSON.parse(JSON.stringify(value))
+
+const getByPath = (source: any, path: string) => path.split('.').reduce((value, key) => value?.[key], source)
+
+const setByPath = (source: any, path: string, value: any) => {
+  const next = clone(source)
+  const keys = path.split('.')
+  let cursor = next
+  keys.slice(0, -1).forEach((key) => {
+    cursor[key] = cursor[key] || {}
+    cursor = cursor[key]
+  })
+  cursor[keys[keys.length - 1]] = value
+  return next
+}
 
 export default function SystemSettingsPage() {
   const { t } = useTranslation()
-  const [loading, setLoading] = useState(true)
+  const { settings, loading, refresh } = useSystemSettings()
+  const [draft, setDraft] = useState<any>(SYSTEM_SETTINGS_DEFAULTS)
   const [saving, setSaving] = useState(false)
-  const [previewLang, setPreviewLang] = useState<'vi' | 'en'>('vi')
-  const [landingData, setLandingData] = useState<any>({})
-  const [settingsData, setSettingsData] = useState<any>({})
-  const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [search, setSearch] = useState('')
+  const [groupFilter, setGroupFilter] = useState('all')
 
   useEffect(() => {
-    Promise.all([
-      systemExperienceService.getSettings(),
-      systemExperienceService.getCmsPage('home'),
-    ])
-      .then(([settingsRes, landingRes]) => {
-        const settings = seedSettingsForEditor(settingsRes.data.settings || {}, t)
-        const landing = seedLandingForEditor(normalizeLandingData(landingRes.data.landing || {}), t)
-        setSettingsData(settings)
-        setLandingData(landing)
-      })
-      .catch(() => message.error(t('system_experience.admin.load_failed')))
-      .finally(() => setLoading(false))
-  }, [t])
+    setDraft(clone(settings))
+  }, [settings])
 
-  const handleEdit = useCallback((target: EditTarget) => {
-    setEditTarget(target)
-    setModalOpen(true)
-  }, [])
+  const groups = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return SETTING_GROUPS
+      .filter((group) => groupFilter === 'all' || group.key === groupFilter)
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => {
+          if (!query) return true
+          const label = t(`system_settings.items.${item.path}.label`).toLowerCase()
+          const description = t(`system_settings.items.${item.path}.description`).toLowerCase()
+          return label.includes(query) || description.includes(query) || item.path.toLowerCase().includes(query)
+        }),
+      }))
+      .filter((group) => group.items.length > 0)
+  }, [groupFilter, search, t])
 
-  const getEditValue = useCallback(() => {
-    if (!editTarget) return null
-
-    if (editTarget.field === 'slogans') {
-      return (settingsData.slogans || []).map(normalizeSlogan)
-    }
-
-    if (editTarget.index != null) {
-      const list = landingData?.[editTarget.field]
-      return Array.isArray(list) ? list[editTarget.index] : null
-    }
-
-    if (editTarget.sub === 'button') {
-      const linkField = BUTTON_LINK_FIELDS[editTarget.field]
-      return {
-        text: normalizeForStorage(landingData?.[editTarget.field]),
-        link: landingData?.[linkField] || '',
-        variant: 'primary',
-      }
-    }
-
-    return normalizeForStorage(landingData?.[editTarget.field])
-  }, [editTarget, landingData, settingsData])
-
-  const handleEditChange = useCallback((newVal: any) => {
-    if (!editTarget) return
-
-    if (editTarget.field === 'slogans') {
-      const slogans = (newVal || []).map(normalizeSlogan)
-      setSettingsData((prev: any) => ({ ...prev, slogans }))
-      return
-    }
-
-    setLandingData((prev: any) => {
-      const next = { ...prev }
-
-      if (editTarget.index != null) {
-        const list = Array.isArray(next[editTarget.field]) ? [...next[editTarget.field]] : []
-        list[editTarget.index] = { ...list[editTarget.index], ...newVal }
-        next[editTarget.field] = list
-        return next
-      }
-
-      if (editTarget.sub === 'button') {
-        next[editTarget.field] = normalizeForStorage(newVal?.text)
-        const linkField = BUTTON_LINK_FIELDS[editTarget.field]
-        if (linkField && newVal?.link !== undefined) next[linkField] = newVal.link
-        return next
-      }
-
-      next[editTarget.field] = normalizeForStorage(newVal)
-      return next
-    })
-  }, [editTarget])
-
-  const handleAdd = useCallback((field: 'stats' | 'services' | 'testimonials') => {
-    setLandingData((prev: any) => {
-      const next = { ...prev }
-      if (field === 'stats') {
-        next.stats = [...(prev.stats || []), { value: '0', label: normalizeForStorage('Mới') }]
-      } else if (field === 'services') {
-        next.services = [...(prev.services || []), {
-          icon: '★',
-          title: normalizeForStorage('Dịch vụ mới'),
-          description: normalizeForStorage('Mô tả dịch vụ'),
-          color: '#e05a30',
-          link: '/',
-        }]
-      } else {
-        next.testimonials = [...(prev.testimonials || []), {
-          rating: 5,
-          content: normalizeForStorage('Nội dung đánh giá'),
-          userName: 'Khách hàng',
-          userSubtitle: normalizeForStorage('Hội viên'),
-        }]
-      }
-      return next
-    })
-  }, [])
-
-  const handleDelete = useCallback((field: 'stats' | 'services' | 'testimonials', index: number) => {
-    setLandingData((prev: any) => {
-      const list = [...(prev[field] || [])]
-      if (list.length <= 1) return prev
-      list.splice(index, 1)
-      return { ...prev, [field]: list }
-    })
-  }, [])
-
-  const handleMove = useCallback((field: 'stats' | 'services' | 'testimonials', index: number, direction: 'up' | 'down') => {
-    setLandingData((prev: any) => {
-      const list = [...(prev[field] || [])]
-      const targetIndex = direction === 'up' ? index - 1 : index + 1
-      if (targetIndex < 0 || targetIndex >= list.length) return prev
-      const temp = list[index]
-      list[index] = list[targetIndex]
-      list[targetIndex] = temp
-      return { ...prev, [field]: list }
-    })
-  }, [])
-
-  const submit = async () => {
-    const slogans = (settingsData.slogans || [])
-      .map(normalizeSlogan)
-      .filter((item: any) => item.vi || item.en)
-
-    if (slogans.length === 0) {
-      message.error(t('system_experience.admin.slogan_required'))
-      return
-    }
-
+  const save = async () => {
     setSaving(true)
     try {
-      const normalizedLanding = normalizeLandingForStorage(landingData || {})
-      const [settingsRes, landingRes] = await Promise.all([
-        systemExperienceService.updateSettings({
-          ...settingsData,
-          slogans,
-          slogan: slogans[0]?.vi || slogans[0]?.en || '',
-        }),
-        systemExperienceService.saveCmsPage('home', normalizedLanding),
-      ])
-
-      const savedSettings = seedSettingsForEditor(settingsRes.data.settings || {}, t)
-      const savedLanding = seedLandingForEditor(
-        normalizeLandingData(landingRes.data.landing || normalizedLanding),
-        t,
-      )
-
-      setSettingsData(savedSettings)
-      setLandingData(savedLanding)
-      message.success(t('system_experience.admin.save_success'))
+      const response = await systemSettingsService.update(draft)
+      setDraft(response.data.settings)
+      await refresh()
+      message.success(t('system_settings.save_success'))
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('system_experience.admin.save_failed'))
+      message.error(t(error.response?.data?.code === 'FEATURE_DISABLED' ? 'system_settings.disabled_message' : 'system_settings.save_failed'))
     } finally {
       setSaving(false)
     }
   }
 
+  const resetDefault = async () => {
+    setResetting(true)
+    try {
+      const response = await systemSettingsService.resetDefault()
+      setDraft(response.data.settings)
+      await refresh()
+      message.success(t('system_settings.reset_success'))
+    } catch (error: any) {
+      message.error(t(error.response?.data?.code === 'FEATURE_DISABLED' ? 'system_settings.disabled_message' : 'system_settings.reset_failed'))
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  const renderControl = (item: SettingItem) => {
+    const value = getByPath(draft, item.path)
+    if (item.type === 'switch') {
+      return <Switch checked={Boolean(value)} onChange={(checked) => setDraft(setByPath(draft, item.path, checked))} />
+    }
+    if (item.type === 'select') {
+      return (
+        <Select
+          value={value}
+          style={{ minWidth: 160 }}
+          options={(item.options || []).map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+          onChange={(nextValue) => setDraft(setByPath(draft, item.path, nextValue))}
+        />
+      )
+    }
+    if (item.type === 'number') {
+      return (
+        <InputNumber
+          value={Number(value)}
+          min={item.min}
+          max={item.max}
+          onChange={(nextValue) => setDraft(setByPath(draft, item.path, Number(nextValue) || item.min || 0))}
+        />
+      )
+    }
+    return <Input value={value || ''} onChange={(event) => setDraft(setByPath(draft, item.path, event.target.value))} />
+  }
+
   return (
     <DashboardLayout>
-      {loading ? (
-        <div className="flex min-h-[420px] items-center justify-center"><Spin /></div>
-      ) : (
-        <div className="flex flex-col gap-0">
-          <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--theme-border)] bg-[var(--theme-bg)]/95 px-1 py-3 backdrop-blur-md">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
+        <div className="sticky top-0 z-20 -mx-4 border-b border-[var(--theme-border)] bg-[var(--theme-bg)]/95 px-4 py-4 backdrop-blur-md sm:-mx-6 sm:px-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="text-lg font-bold text-[var(--theme-text)]">Inline Home Editor</h1>
-              <p className="text-xs text-[var(--theme-muted)]">Click vào phần tử trên preview để chỉnh sửa</p>
+              <h1 className="m-0 text-2xl font-bold text-[var(--theme-text)]">{t('system_settings.title')}</h1>
+              <p className="m-0 mt-1 text-sm text-[var(--theme-muted)]">{t('system_settings.subtitle')}</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Segmented
-                size="small"
-                value={previewLang}
-                onChange={(value) => setPreviewLang(value as 'vi' | 'en')}
-                options={[{ label: 'VI', value: 'vi' }, { label: 'EN', value: 'en' }]}
-              />
-              <Button onClick={() => window.open('/', '_blank')}>Mở trang chủ</Button>
-              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={submit}>
-                Lưu thay đổi
+            <Space wrap>
+              <Button icon={<ReloadOutlined />} loading={resetting} onClick={resetDefault}>
+                {t('system_settings.reset_default')}
               </Button>
-            </div>
+              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
+                {t('system_settings.save_changes')}
+              </Button>
+            </Space>
           </div>
 
-          <div className="w-full overflow-x-hidden">
-            <InlineEditPreview
-              landing={landingData}
-              settings={settingsData}
-              language={previewLang}
-              onEdit={handleEdit}
-              onAdd={handleAdd}
-              onDelete={handleDelete}
-              onMove={handleMove}
+          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_260px]">
+            <Input
+              prefix={<SearchOutlined />}
+              value={search}
+              placeholder={t('system_settings.search_placeholder')}
+              onChange={(event) => setSearch(event.target.value)}
+              allowClear
+            />
+            <Select
+              value={groupFilter}
+              onChange={setGroupFilter}
+              options={[
+                { value: 'all', label: t('system_settings.all_groups') },
+                ...SETTING_GROUPS.map((group) => ({ value: group.key, label: t(`system_settings.groups.${group.key}`) })),
+              ]}
             />
           </div>
-
-          <InlineEditModal
-            open={modalOpen}
-            onClose={() => setModalOpen(false)}
-            field={editTarget}
-            value={getEditValue()}
-            onChange={handleEditChange}
-          />
         </div>
-      )}
+
+        {loading ? (
+          <div className="flex min-h-[420px] items-center justify-center"><Spin /></div>
+        ) : (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {groups.map((group) => (
+              <Card
+                key={group.key}
+                title={<span className="text-[var(--theme-text)]">{t(`system_settings.groups.${group.key}`)}</span>}
+                className="border border-[var(--theme-border)] bg-[var(--theme-card)]"
+              >
+                <div className="flex flex-col divide-y divide-[var(--theme-border)]">
+                  {group.items.map((item) => (
+                    <div key={item.path} className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                      <div className="min-w-0">
+                        <div className="font-medium text-[var(--theme-text)]">{t(`system_settings.items.${item.path}.label`)}</div>
+                        <Text className="text-sm text-[var(--theme-muted)]">{t(`system_settings.items.${item.path}.description`)}</Text>
+                      </div>
+                      <div className="sm:justify-self-end">{renderControl(item)}</div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </DashboardLayout>
   )
 }

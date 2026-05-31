@@ -1,6 +1,7 @@
 import { Button, theme } from 'antd'
 import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { getLocalizedText, normalizeForStorage, normalizeLandingData } from '../../utils/localization'
 import EditableHeroSlogans from './EditableHeroSlogans'
 
@@ -31,6 +32,9 @@ type HomeHeroProps = {
   primaryText: string
   secondaryText: string
   stats: Array<{ value: string; label: string }>
+  showStats?: boolean
+  showPrimaryCta?: boolean
+  showSecondaryCta?: boolean
   landing?: any
   previewVariant?: 'compact' | 'full'
   onNavigate?: (path: string) => void
@@ -48,6 +52,9 @@ function HomeHero({
   primaryText,
   secondaryText,
   stats,
+  showStats = true,
+  showPrimaryCta = true,
+  showSecondaryCta = true,
   landing,
   previewVariant = 'compact',
   onNavigate,
@@ -102,27 +109,31 @@ function HomeHero({
           />
         </h1>
         <p className={`${isPreview ? 'max-w-full text-[15px]' : 'max-w-[720px] text-[15px] md:text-[17px]'} mt-5 leading-7`} style={{ color: token.colorTextSecondary }}>{heroSubtitle}</p>
-        <div className="mt-8 flex flex-col flex-wrap gap-3 min-[421px]:flex-row">
-          <Button size="large" className="!h-[46px] !rounded-full !px-6 !font-extrabold" type="primary" onClick={() => onNavigate?.(landing?.ctaLink || '/booking')}>{primaryText}</Button>
-          <Button size="large" className="!h-[46px] !rounded-full !bg-transparent !px-6 !font-extrabold" style={{ borderColor: 'var(--theme-accent)', color: 'var(--theme-accent)' }} onClick={() => onNavigate?.(landing?.secondaryCtaLink || '/checkin')}>{secondaryText}</Button>
-        </div>
-        <div
-          className={statsGridClass}
-          style={{ borderColor: token.colorBorder, backgroundColor: token.colorBorder }}
-        >
-          {stats.map((item, idx) => (
-            <div
-              key={`stat-${idx}`}
-              className="flex min-h-[88px] min-w-0 flex-col justify-center p-4"
-              style={{ backgroundColor: token.colorBgContainer }}
-            >
-              <strong className="mb-2 block text-2xl leading-none">{item.value}</strong>
-              <span className="block break-words text-[13px]" style={{ color: token.colorTextSecondary }}>
-                {item.label}
-              </span>
-            </div>
-          ))}
-        </div>
+        {(showPrimaryCta || showSecondaryCta) && (
+          <div className="mt-8 flex flex-col flex-wrap gap-3 min-[421px]:flex-row">
+            {showPrimaryCta && <Button size="large" className="!h-[46px] !rounded-full !px-6 !font-extrabold" type="primary" onClick={() => onNavigate?.(landing?.ctaLink || '/booking')}>{primaryText}</Button>}
+            {showSecondaryCta && <Button size="large" className="!h-[46px] !rounded-full !bg-transparent !px-6 !font-extrabold" style={{ borderColor: 'var(--theme-accent)', color: 'var(--theme-accent)' }} onClick={() => onNavigate?.(landing?.secondaryCtaLink || '/checkin')}>{secondaryText}</Button>}
+          </div>
+        )}
+        {showStats && (
+          <div
+            className={statsGridClass}
+            style={{ borderColor: token.colorBorder, backgroundColor: token.colorBorder }}
+          >
+            {stats.map((item, idx) => (
+              <div
+                key={`stat-${idx}`}
+                className="flex min-h-[88px] min-w-0 flex-col justify-center p-4"
+                style={{ backgroundColor: token.colorBgContainer }}
+              >
+                <strong className="mb-2 block text-2xl leading-none">{item.value}</strong>
+                <span className="block break-words text-[13px]" style={{ color: token.colorTextSecondary }}>
+                  {item.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )
@@ -141,6 +152,7 @@ function HomeLandingSectionInner({
   onSettingsChange,
 }: HomeLandingSectionProps) {
   const { t, i18n } = useTranslation()
+  const { settings: systemSettings } = useSystemSettings()
   const { token } = theme.useToken()
   const lang = language || i18n.language
   const renderMode = mode ?? (preview ? 'preview' : 'page')
@@ -205,6 +217,7 @@ function HomeLandingSectionInner({
   const finalPrimaryText = pickLocalized(safeLanding.finalCtaPrimaryText, lang, t('dashboard.cta.book_pt'))
   const finalSecondaryText = pickLocalized(safeLanding.finalCtaSecondaryText, lang, t('dashboard.cta.view_health'))
   const widthClass = preview ? 'w-full' : 'w-[calc(100%-40px)] md:w-[calc(100%-64px)]'
+  const landingFlags = systemSettings.landing
 
   return (
     <main className="min-h-screen " style={{ backgroundColor: token.colorBgLayout, color: token.colorText }}>
@@ -219,12 +232,15 @@ function HomeLandingSectionInner({
         primaryText={primaryText}
         secondaryText={secondaryText}
         stats={stats}
+        showStats={landingFlags.statsSectionEnabled}
+        showPrimaryCta={landingFlags.startNowButtonEnabled}
+        showSecondaryCta={landingFlags.checkinNowButtonEnabled}
         landing={safeLanding}
         onNavigate={onNavigate}
         editable={editable}
         onSettingsChange={onSettingsChange}
       />
-      <section className={`mx-auto ${widthClass} max-w-6xl pt-14 md:pt-[74px]`}>
+      {landingFlags.servicesSectionEnabled && <section className={`mx-auto ${widthClass} max-w-6xl pt-14 md:pt-[74px]`}>
         <p className="mb-2.5 text-xs font-black uppercase tracking-[0.14em] text-[var(--theme-accent)]">{servicesEyebrow}</p>
         <h2 className="text-[44px] font-extrabold leading-none">{servicesTitle}</h2>
         <div className="mt-7 grid grid-cols-1 gap-4 min-[421px]:grid-cols-2 md:grid-cols-[repeat(auto-fit,minmax(170px,1fr))]">
@@ -242,8 +258,8 @@ function HomeLandingSectionInner({
             </button>
           ))}
         </div>
-      </section>
-      <section className={`mx-auto ${widthClass} max-w-6xl pt-14 md:pt-[74px]`}>
+      </section>}
+      {landingFlags.feedbackSectionEnabled && <section className={`mx-auto ${widthClass} max-w-6xl pt-14 md:pt-[74px]`}>
         <p className="mb-2.5 text-xs font-black uppercase tracking-[0.14em] text-[var(--theme-accent)]">{testimonialsEyebrow}</p>
         <h2 className="text-[44px] font-extrabold leading-none">{testimonialsTitle}</h2>
         <div className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-3 items-start">
@@ -263,13 +279,13 @@ function HomeLandingSectionInner({
             </article>
           ))}
         </div>
-      </section>
+      </section>}
       <section className={`mx-auto ${widthClass} max-w-[900px] py-[74px] text-center md:pt-[88px]`}>
         <h2 className="grid whitespace-pre-line text-5xl font-black leading-[0.95] md:text-[64px]">{finalTitle}</h2>
         <p className="mx-auto mt-[18px] max-w-[560px] text-base leading-7" style={{ color: token.colorTextSecondary }}>{finalSubtitle.replace('{{firstName}}', firstName)}</p>
         <div className="mt-8 flex flex-col flex-wrap justify-center gap-3 min-[421px]:flex-row">
-          <Button size="large" className="!h-[46px] !rounded-full !px-6 !font-extrabold" type="primary" onClick={() => onNavigate?.(safeLanding.finalCtaPrimaryLink || '/booking')}>{finalPrimaryText}</Button>
-          <Button size="large" className="!h-[46px] !rounded-full !bg-transparent !px-6 !font-extrabold" onClick={() => onNavigate?.(safeLanding.finalCtaSecondaryLink || '/health')}>{finalSecondaryText}</Button>
+          {landingFlags.startNowButtonEnabled && <Button size="large" className="!h-[46px] !rounded-full !px-6 !font-extrabold" type="primary" onClick={() => onNavigate?.(safeLanding.finalCtaPrimaryLink || '/booking')}>{finalPrimaryText}</Button>}
+          {landingFlags.checkinNowButtonEnabled && <Button size="large" className="!h-[46px] !rounded-full !bg-transparent !px-6 !font-extrabold" onClick={() => onNavigate?.(safeLanding.finalCtaSecondaryLink || '/health')}>{finalSecondaryText}</Button>}
         </div>
       </section>
     </main>

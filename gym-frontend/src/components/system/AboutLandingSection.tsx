@@ -9,6 +9,7 @@ import { Button } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import LanguageSelect from '../common/LanguageSelect'
+import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { getLocalizedText } from '../../utils/localization'
 import { getShops } from '../../services/shopService'
 import useScrollReveal from '../../hooks/useScrollReveal'
@@ -83,6 +84,7 @@ const pick = (value: any, lang: string, fallback = '') => getLocalizedText(value
 
 export default function AboutLandingSection({ landing, settings, onCtaClick }: AboutLandingSectionProps) {
   const { t, i18n } = useTranslation()
+  const { settings: systemSettings } = useSystemSettings()
   const lang = i18n.language
   const [activeSlide, setActiveSlide] = useState(0)
   const [navSolid, setNavSolid] = useState(false)
@@ -97,6 +99,7 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
     lang,
     t('about.intro.contentFallback'),
   )
+  const landingFlags = systemSettings.landing
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -204,9 +207,11 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
                 {t('about.nav.login')}
               </Button>
             </div>
-            <Button type="primary" className="!rounded-full !px-5 !font-bold" icon={<UserAddOutlined />} onClick={() => goTo('/register')}>
-              {t('about.nav.register')}
-            </Button>
+            {systemSettings.auth.allowRegistration && (
+              <Button type="primary" className="!rounded-full !px-5 !font-bold" icon={<UserAddOutlined />} onClick={() => goTo('/register')}>
+                {t('about.nav.register')}
+              </Button>
+            )}
             <LanguageSelect />
           </div>
           <div ref={mobileMenuRef} className="relative md:hidden">
@@ -276,16 +281,18 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
                 >
                   {t('about.nav.login')}
                 </button>
-                <button
-                  type="button"
-                  className="block w-full rounded-lg px-4 py-3 text-left text-sm font-bold text-white transition hover:bg-white/10"
-                  onClick={() => {
-                    setIsMenuOpen(false)
-                    goTo('/register')
-                  }}
-                >
-                  {t('about.nav.register')}
-                </button>
+                {systemSettings.auth.allowRegistration && (
+                  <button
+                    type="button"
+                    className="block w-full rounded-lg px-4 py-3 text-left text-sm font-bold text-white transition hover:bg-white/10"
+                    onClick={() => {
+                      setIsMenuOpen(false)
+                      goTo('/register')
+                    }}
+                  >
+                    {t('about.nav.register')}
+                  </button>
+                )}
                 <div className="flex flex-row gap-3 border-t border-white/10 pt-2">
                   <button
                     type="button"
@@ -330,9 +337,11 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
               {t(heroSlides[activeSlide].titleKey)}
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-8 text-white/78 md:text-xl">{t(heroSlides[activeSlide].subtitleKey)}</p>
-            <Button type="primary" className="mt-8 !h-13 !rounded-full !px-8 !font-extrabold" onClick={() => goTo(heroSlides[activeSlide].link)}>
-              {t(heroSlides[activeSlide].ctaKey)}
-            </Button>
+            {landingFlags.startNowButtonEnabled && (
+              <Button type="primary" className="mt-8 !h-13 !rounded-full !px-8 !font-extrabold" onClick={() => goTo(heroSlides[activeSlide].link)}>
+                {t(heroSlides[activeSlide].ctaKey)}
+              </Button>
+            )}
           </div>
         </div>
         <button type="button" className="absolute top-1/2 left-2 z-20 hidden h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/30 text-white backdrop-blur hover:border-[var(--theme-accent)] md:left-4 md:flex md:h-10 md:w-10" onClick={prevSlide}>
@@ -354,7 +363,7 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
         </div>
       </section>
 
-      <section ref={statsReveal.ref} className="border-y border-white/10 bg-[#0d0d0d]">
+      {landingFlags.statsSectionEnabled && <section ref={statsReveal.ref} className="border-y border-white/10 bg-[#0d0d0d]">
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-px px-5 py-8 md:grid-cols-4 md:px-8">
           {stats.map((item, i) => (
             <div key={item.value} className={`reveal text-center ${statsReveal.visible ? 'visible' : ''}`} style={{ transitionDelay: `${i * 100}ms` }}>
@@ -363,9 +372,9 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
             </div>
           ))}
         </div>
-      </section>
+      </section>}
 
-      {shops.length >= 3 && (
+      {landingFlags.partnersSectionEnabled && shops.length >= 3 && (
         <section ref={brandsReveal.ref} id="brands" className="bg-[#0d0d0d] px-5 py-18 md:px-8 md:py-24">
           <div className="mx-auto max-w-7xl">
             <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.partners.title')}</p>
@@ -411,7 +420,7 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
         <img className={`reveal-right h-[420px] w-full rounded-lg border border-white/10 object-cover ${introReveal.visible ? 'visible' : ''}`} src="https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=1200&q=86" alt={aboutTitle} />
       </section>
 
-      <section ref={featuresReveal.ref} id="features" className="bg-[#0d0d0d] px-5 py-18 md:px-8 md:py-24">
+      {landingFlags.servicesSectionEnabled && <section ref={featuresReveal.ref} id="features" className="bg-[#0d0d0d] px-5 py-18 md:px-8 md:py-24">
         <div className="mx-auto max-w-7xl">
           <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.features.eyebrow')}</p>
           <h2 className="mt-4 text-4xl font-black leading-none md:text-6xl lg:text-7xl" style={{ wordBreak: 'keep-all' }}>{t('about.features.title')}</h2>
@@ -425,7 +434,7 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
             ))}
           </div>
         </div>
-      </section>
+      </section>}
 
       <section ref={ptReveal.ref} id="trainers" className="mx-auto max-w-7xl px-5 py-18 md:px-8 md:py-24">
         <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.pts.eyebrow')}</p>
@@ -455,7 +464,7 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
         </div>
       </section>
 
-      <section ref={testimonialsReveal.ref} className="mx-auto max-w-7xl px-5 py-18 md:px-8 md:py-24">
+      {landingFlags.feedbackSectionEnabled && <section ref={testimonialsReveal.ref} className="mx-auto max-w-7xl px-5 py-18 md:px-8 md:py-24">
         <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.testimonials.eyebrow')}</p>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {testimonialItems.map((item, i) => (
@@ -468,9 +477,9 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
             </article>
           ))}
         </div>
-      </section>
+      </section>}
 
-      <section
+      {landingFlags.startNowButtonEnabled && <section
         ref={ctaReveal.ref}
         className="flex min-h-[620px] items-center justify-center px-5 py-20 text-center md:px-8"
         style={{ background: 'linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.82)), url(https://images.unsplash.com/photo-1517963879433-6ad2b056d712?auto=format&fit=crop&w=1900&q=88) center/cover' }}
@@ -481,7 +490,7 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
             {t('about.cta.register')}
           </Button>
         </div>
-      </section>
+      </section>}
 
       <footer id="footer" className="border-t border-white/[0.07] bg-[#0a0a0a] px-5 py-16 md:px-8">
         <div className="mx-auto grid max-w-7xl gap-10 sm:grid-cols-2 lg:grid-cols-4">
