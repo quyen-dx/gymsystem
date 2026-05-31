@@ -505,8 +505,9 @@ export const hasPassword = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     await assertFeatureEnabled('members.allowProfileUpdate')
-    const { name, phone, email, dateOfBirth, themePreference } = req.body
+    const { name, phone, email, dateOfBirth, themePreference, accentColor } = req.body
     const updateData = {}
+    console.debug('[profile-theme] update-profile payload', req.body)
 
     if (name) updateData.name = name.trim()
 
@@ -554,6 +555,14 @@ export const updateProfile = async (req, res) => {
       updateData.themePreference = themePreference
     }
 
+    if (accentColor !== undefined) {
+      const normalizedAccent = String(accentColor).trim()
+      if (!/^#[0-9A-Fa-f]{6}$/.test(normalizedAccent)) {
+        throw new AppError('Màu chủ đạo không hợp lệ', 400)
+      }
+      updateData.accentColor = normalizedAccent.toUpperCase()
+    }
+
     if (req.files?.avatar?.[0]) {
       await assertFeatureEnabled('members.allowAvatarUpload')
       updateData.avatar = req.files.avatar[0].path
@@ -574,6 +583,10 @@ export const updateProfile = async (req, res) => {
       new: true,
       runValidators: true,
     })
+    if (!user) {
+      throw new AppError('Không tìm thấy người dùng để cập nhật', 404)
+    }
+    console.debug('[profile-theme] update-profile response user', user)
 
     return res.json({ message: 'Cập nhật thông tin thành công', user })
   } catch (error) {

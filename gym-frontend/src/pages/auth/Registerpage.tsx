@@ -6,7 +6,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import LanguageSelect from '../../components/common/LanguageSelect'
 import FeatureDisabled from '../../components/system/FeatureDisabled'
 import TypewriterSlogans from '../../components/system/TypewriterSlogans'
-import { useTheme } from '../../context/ThemeProvider'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { useAuth } from '../../hooks/useAuth'
 import { authService } from '../../services/authService'
@@ -26,7 +25,6 @@ const pickLocalizedSlogans = (slogans: Array<{ vi?: string; en?: string }> = [],
 export default function RegisterPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { dark } = useTheme()
   const { updateUser } = useAuth()
   const { settings } = useSystemSettings()
 
@@ -114,22 +112,32 @@ export default function RegisterPage() {
 
       {/* CARD */}
       <div
-        className={`relative z-10 my-auto w-full max-w-sm rounded-2xl p-7 shadow-2xl transition-all
-          ${dark ? 'bg-[#141414] text-white' : 'bg-[#484848] text-[#edebe6]'}
-        `}
-        style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a' }}
+        className="relative z-10 my-auto w-full max-w-sm rounded-2xl p-7 shadow-2xl transition-all"
+        style={{
+          background: 'var(--gs-card)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: '1px solid var(--gs-border-strong)',
+        }}
       >
         <div className="mb-5 text-center">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center overflow-hidden rounded-xl bg-[var(--theme-accent)] font-black text-[var(--theme-button-text)]">
-            {settings.general.logoUrl ? <img src={settings.general.logoUrl} alt={settings.general.siteName} className="h-full w-full object-cover" /> : 'GP'}
+          <div
+            className="mx-auto mb-3 grid h-12 w-12 place-items-center overflow-hidden rounded-xl bg-[var(--theme-button-bg)] font-black text-[var(--theme-button-text)]"
+            style={{ border: '1px solid var(--theme-button-border)' }}
+          >
+            {settings.general.logoUrl
+              ? <img src={settings.general.logoUrl} alt={settings.general.siteName} className="h-full w-full object-cover" />
+              : <span className="text-base font-black">GP</span>
+            }
           </div>
-          <div className="text-lg font-black tracking-wide text-[var(--theme-text)]">{settings.general.siteName}</div>
           {slogans.length > 0 && (
-            <TypewriterSlogans
-              slogans={slogans}
-              language={i18n.language}
-              className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--theme-accent)]"
-            />
+            <div style={{ color: 'var(--gs-text)' }}>
+              <TypewriterSlogans
+                slogans={slogans}
+                language={i18n.language}
+                className="mt-1 text-xs font-semibold uppercase tracking-[0.18em]"
+              />
+            </div>
           )}
         </div>
 
@@ -143,7 +151,7 @@ export default function RegisterPage() {
               onClick={() => setStep('form')}
               disabled={loading}
               className="!absolute !left-5"
-              style={{ color: dark ? '#fff' : '#edebe6' }}
+              style={{ color: 'var(--gs-text)' }}
             />
           )}
 
@@ -152,7 +160,7 @@ export default function RegisterPage() {
             style={{
               margin: 0,
               textAlign: 'center',
-              color: dark ? '#fff' : '#edebe6',
+              color: 'var(--gs-text)',
             }}
           >
             {t('register.title')}
@@ -163,27 +171,27 @@ export default function RegisterPage() {
           <Form layout="vertical" form={form} onFinish={handleSendOtp}>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>{t('register.fullname')}</span>}
+              label={<span style={{ color: 'var(--gs-text)' }}>{t('register.fullname')}</span>}
               name="name"
               rules={[{ required: true, message: t('register.fullname_required') }]}
             >
-              <Input size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
+              <Input size="large" style={{ background: 'var(--gs-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }} />
             </Form.Item>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>{t('register.phone')}</span>}
+              label={<span style={{ color: 'var(--gs-text)' }}>{t('register.phone')}</span>}
               name="phone"
               rules={[{ required: true, message: t('register.phone_required') }]}
             >
-              <Input size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
+              <Input size="large" style={{ background: 'var(--gs-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }} />
             </Form.Item>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>{t('register.password')}</span>}
+              label={<span style={{ color: 'var(--gs-text)' }}>{t('register.password')}</span>}
               name="password"
               rules={[{ required: true, message: t('register.password_required') }]}
             >
-              <Input.Password size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
+              <Input.Password size="large" style={{ background: 'var(--gs-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }} />
             </Form.Item>
 
             <Button
@@ -197,14 +205,14 @@ export default function RegisterPage() {
               {t('register.send_otp')}
             </Button>
 
-            <Divider />
+            <Divider style={{ borderColor: 'var(--gs-border)' }} />
 
             <div
               className="text-center text-sm"
-              style={{ color: dark ? '#ccc' : 'rgba(237,235,230,0.65)' }}
+              style={{ color: 'var(--gs-muted)' }}
             >
               {t('register.has_account')}{' '}
-              <Link to="/login" className="font-semibold" style={{ color: 'var(--theme-accent)' }}>
+              <Link to="/login" className="auth-link-action ml-2">
                 {t('register.login')}
               </Link>
             </div>
@@ -222,7 +230,7 @@ export default function RegisterPage() {
               </div>
             )}
 
-            <Text style={{ color: dark ? '#fff' : '#edebe6' }}>
+            <Text style={{ color: 'var(--gs-text)' }}>
               {t('register.otp_label')}
             </Text>
 
@@ -230,7 +238,7 @@ export default function RegisterPage() {
               name="otp"
               rules={[{ required: true, message: t('register.otp_required') }]}
             >
-              <Input.OTP length={6} />
+              <Input.OTP length={6} style={{ color: 'var(--gs-text)' }} />
             </Form.Item>
 
             <Button

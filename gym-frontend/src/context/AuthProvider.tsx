@@ -23,6 +23,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         const { data } = await authService.getProfile()
+        console.debug('[profile-theme] user fetch after modal close/reload', data.user)
         if (!cancelled) setUser(data.user)
       } catch {
         clearAuthSession()

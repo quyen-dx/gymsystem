@@ -169,10 +169,10 @@ export default function ProductDetailPage() {
   const rating = product.rating ?? 0
   const reviewCount = product.reviewCount ?? reviews.length
   const inStock = stock > 0
-  const panelBg = 'var(--theme-card)'
-  const borderColor = 'var(--theme-border)'
-  const mutedText = 'var(--theme-muted)'
-  const softText = 'var(--theme-muted)'
+  const panelBg = 'var(--gs-card)'
+  const borderColor = 'var(--gs-border)'
+  const mutedText = 'var(--gs-text-muted)'
+  const softText = 'var(--gs-text-muted)'
   const thumbBg = dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'
   const thumbBorder = dark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,0,0,0.12)'
   const shop = typeof product.shop_id === 'object' ? product.shop_id : null
@@ -267,18 +267,18 @@ export default function ProductDetailPage() {
 
             {/* CỘT THÔNG TIN */}
             <Col xs={24} md={14}>
-              <h1 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 700, lineHeight: 1.4 }}>
+              <h1 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 700, lineHeight: 1.4, color: 'var(--gs-text)' }}>
                 {product.name}
               </h1>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
                 <Rate disabled defaultValue={rating} allowHalf style={{ fontSize: 16 }} />
-                <span style={{ color: 'var(--theme-accent)', fontWeight: 600 }}>{rating.toFixed(1)}</span>
+                <span style={{ color: 'var(--gs-text)', fontWeight: 600 }}>{rating.toFixed(1)}</span>
                 <span style={{ color: mutedText }}>({reviewCount} đánh giá)</span>
               </div>
 
               <div style={{
-                fontSize: 32, fontWeight: 800, color: 'var(--theme-accent)', marginBottom: 24,
+                fontSize: 32, fontWeight: 800, color: 'var(--gs-text)', marginBottom: 24,
                 padding: '16px 0', borderTop: `1px solid ${borderColor}`, borderBottom: `1px solid ${borderColor}`,
               }}>
                 {dynamicPrice.toLocaleString('vi-VN')}đ
@@ -353,14 +353,20 @@ export default function ProductDetailPage() {
                   icon={<ShoppingCartOutlined />}
                   disabled={!inStock}
                   onClick={handleAddToCart}
-                  style={{ flex: '1 1 220px', background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)' }}
+                  style={{ flex: '1 1 220px', background: 'var(--theme-button-bg)', borderColor: 'var(--theme-button-border)', color: 'var(--theme-button-text)' }}
                 >
                   Thêm vào giỏ
                 </Button>
                 <Button
                   size="large"
                   onClick={() => navigate('/cart')}
-                  style={{ flex: '1 1 180px' }}
+                  className="btn-view-cart"
+                  style={{
+                    flex: '1 1 180px',
+                    '--btn-cart-color': dark ? '#ffffff' : '#111111',
+                    '--btn-cart-border': dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.18)',
+                    '--btn-cart-hover-bg': dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.05)',
+                  } as React.CSSProperties}
                 >
                   Xem giỏ hàng
                 </Button>
@@ -383,7 +389,7 @@ export default function ProductDetailPage() {
               size={56}
               src={shopAvatar}
               icon={<UserOutlined />}
-              style={{ background: 'var(--theme-accent)' }}
+              style={{ background: 'var(--theme-button-bg)', color: 'var(--theme-button-text)' }}
               onClick={() => shopId && navigate(`/store/${shopId}`)}
             />
             <div onClick={() => shopId && navigate(`/store/${shopId}`)}>
@@ -412,7 +418,7 @@ export default function ProductDetailPage() {
               size={56}
               src={product.partner.avatar}
               icon={<UserOutlined />}
-              style={{ background: 'var(--theme-accent)' }}
+              style={{ background: 'var(--theme-button-bg)', color: 'var(--theme-button-text)' }}
             />
             <div>
               <div style={{ fontWeight: 700, fontSize: 16 }}>{product.partner.name}</div>
@@ -455,7 +461,7 @@ export default function ProductDetailPage() {
 
           <div style={{ display: 'flex', gap: 40, alignItems: 'center', marginBottom: 24, flexWrap: 'wrap' }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 48, fontWeight: 800, color: 'var(--theme-accent)' }}>{rating.toFixed(1)}</div>
+              <div style={{ fontSize: 48, fontWeight: 800, color: 'var(--gs-text)' }}>{rating.toFixed(1)}</div>
               <Rate disabled value={rating} allowHalf style={{ fontSize: 18 }} />
               <div style={{ color: mutedText, marginTop: 4 }}>{reviewCount} đánh giá</div>
             </div>
@@ -463,15 +469,15 @@ export default function ProductDetailPage() {
             <div style={{ flex: 1, minWidth: 200 }}>
               {starDist.map(({ star, count }) => (
                 <div key={star} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{ width: 40, color: mutedText, fontSize: 13 }}>{star} sao</span>
+                  <span style={{ width: 40, color: 'var(--gs-text)', fontSize: 13 }}>{star} sao</span>
                   <div style={{
                     flex: 1, height: 8,
-                    background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                    background: dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)',
                     borderRadius: 4, overflow: 'hidden',
                   }}>
                     <div style={{
                       width: reviewCount > 0 ? `${(count / reviewCount) * 100}%` : '0%',
-                      height: '100%', background: 'var(--theme-accent)', borderRadius: 4,
+                      height: '100%', background: 'var(--theme-accent-fill)', borderRadius: 4,
                     }} />
                   </div>
                   <span style={{ width: 24, color: mutedText, fontSize: 13 }}>{count}</span>
@@ -486,7 +492,10 @@ export default function ProductDetailPage() {
               size="small"
               type={ratingFilter === null ? 'primary' : 'default'}
               onClick={() => setRatingFilter(null)}
-              style={ratingFilter === null ? { background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)' } : {}}
+              style={ratingFilter === null
+                ? { background: 'var(--theme-active-bg)', borderColor: 'var(--theme-active-bg)', color: 'var(--theme-active-text)' }
+                : { color: 'var(--gs-text)', borderColor: 'var(--gs-border)' }
+              }
             >
               Tất cả
             </Button>
@@ -496,7 +505,10 @@ export default function ProductDetailPage() {
                 size="small"
                 type={ratingFilter === s ? 'primary' : 'default'}
                 onClick={() => setRatingFilter(ratingFilter === s ? null : s)}
-                style={ratingFilter === s ? { background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)' } : {}}
+                style={ratingFilter === s
+                  ? { background: 'var(--theme-active-bg)', borderColor: 'var(--theme-active-bg)', color: 'var(--theme-active-text)' }
+                  : { color: 'var(--gs-text)', borderColor: 'var(--gs-border)' }
+                }
               >
                 {s} Sao ({starDist.find(d => d.star === s)?.count || 0})
               </Button>
@@ -515,7 +527,7 @@ export default function ProductDetailPage() {
                 borderBottom: `1px solid ${borderColor}`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                  <Avatar src={review.avatar} icon={<UserOutlined />} style={{ background: 'var(--theme-accent)' }} />
+                  <Avatar src={review.avatar} icon={<UserOutlined />} style={{ background: 'var(--theme-button-bg)', color: 'var(--theme-button-text)' }} />
                   <div>
                     <div style={{ fontWeight: 600 }}>{review.name}</div>
                     <div style={{ fontSize: 12, color: mutedText }}>
@@ -560,7 +572,7 @@ export default function ProductDetailPage() {
                   type="primary"
                   loading={submittingReview}
                   onClick={handleSubmitReview}
-                  style={{ width: 'fit-content', maxWidth: '100%', background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)' }}
+                  style={{ width: 'fit-content', maxWidth: '100%', background: 'var(--theme-button-bg)', borderColor: 'var(--theme-button-border)', color: 'var(--theme-button-text)' }}
                 >
                   Gửi đánh giá
                 </Button>
@@ -585,10 +597,10 @@ export default function ProductDetailPage() {
                       alt={p.name}
                       style={{ width: '100%', height: 140, objectFit: 'cover', borderRadius: 8, marginBottom: 8 }}
                     />
-                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, color: 'var(--gs-text)' }}>
                       {p.name?.slice(0, 40)}{p.name?.length > 40 ? '...' : ''}
                     </div>
-                    <div style={{ color: 'var(--theme-accent)', fontWeight: 700 }}>
+                    <div style={{ color: 'var(--gs-text)', fontWeight: 700 }}>
                       {p.price?.toLocaleString('vi-VN')}đ
                     </div>
                     {(p.rating ?? 0) > 0 && (

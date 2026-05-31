@@ -17,7 +17,6 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { useTheme } from '../../../context/ThemeProvider'
 import { useAuth } from '../../../hooks/useAuth'
 
 type FooterLink = {
@@ -45,7 +44,6 @@ function MemberFooter() {
   const location = useLocation()
   const navigate = useNavigate()
   const { logout } = useAuth()
-  const { dark } = useTheme()
 
   const serviceLinks: FooterLink[] = [
     { label: t('footer.member.services.packages'), to: '/health', icon: Dumbbell },
@@ -74,19 +72,13 @@ function MemberFooter() {
         className={({ isActive }) =>
           [
             'group flex items-center gap-2 text-sm transition-colors',
-            isRouteActive(location.pathname, item, isActive)
-              ? dark
-                ? 'text-white'
-                : 'text-[#edebe6]'
-              : dark
-                ? 'text-zinc-300 hover:text-white'
-                : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]',
+            isRouteActive(location.pathname, item, isActive) ? 'font-semibold' : '',
           ].join(' ')
         }
-        style={{ color: 'var(--theme-text)' }}
+        style={{ color: 'var(--gs-text)' }}
       >
         {Icon ? (
-          <Icon className={['h-4 w-4 shrink-0 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-[rgba(237,235,230,0.5)] group-hover:text-[#edebe6]'].join(' ')} style={{ color: 'var(--theme-muted)' }} />
+          <Icon className="h-4 w-4 shrink-0 transition-colors group-hover:text-[var(--gs-text)]" style={{ color: 'var(--gs-muted)' }} />
         ) : null}
         <span>{item.label}</span>
       </NavLink>
@@ -96,12 +88,7 @@ function MemberFooter() {
   return (
     <>
       <footer
-        className={[
-          'border-t',
-          dark
-            ? 'border-zinc-800 bg-zinc-950 text-white'
-            : 'border-[#5a5a5a] bg-[#3e3e3e] text-[#edebe6]',
-        ].join(' ')}
+        className="border-t"
         style={{ background: 'var(--theme-card)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
       >
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-4 py-8 sm:px-6 sm:gap-8 md:px-8 md:py-10 lg:grid-cols-4 lg:gap-10 lg:py-12">
@@ -113,25 +100,25 @@ function MemberFooter() {
             >
               <span
                 className="flex h-11 w-11 items-center justify-center rounded-lg text-sm font-black"
-                style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)' }}
+                style={{ background: 'var(--theme-button-bg)', color: 'var(--theme-button-text)' }}
               >
                 GP
               </span>
               <span>
                 <span className="block text-lg font-bold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymPro</span>
-                <span className={['block text-sm', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
+                <span className="block text-sm" style={{ color: 'var(--gs-muted)' }}>
                   {t('footer.member.tagline')}
                 </span>
               </span>
             </button>
-            <p className={['mt-5 max-w-full text-sm leading-6 lg:max-w-xs', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
+            <p className="mt-5 max-w-full text-sm leading-6 lg:max-w-xs" style={{ color: 'var(--gs-muted)' }}>
               {t('footer.member.description')}
             </p>
-            <div className={['mt-5 flex items-start gap-2 text-sm', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-              <Clock3 className={['mt-0.5 h-4 w-4 shrink-0', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
+            <div className="mt-5 flex items-start gap-2 text-sm" style={{ color: 'var(--gs-muted)' }}>
+              <Clock3 className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--gs-muted)' }} />
               <span>
                 {t('footer.member.hours_label')}
-                <span className={['block font-medium', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
+                <span className="block font-medium" style={{ color: 'var(--gs-text)' }}>
                   {t('footer.member.hours_value')}
                 </span>
               </span>
@@ -139,14 +126,14 @@ function MemberFooter() {
           </div>
 
           <div>
-            <h2 className={['text-sm font-semibold uppercase tracking-wide', dark ? 'text-zinc-100' : 'text-[#edebe6]'].join(' ')}>
+            <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--gs-text)' }}>
               {t('footer.member.section.services')}
             </h2>
             <div className="mt-5 space-y-3">{serviceLinks.map(renderDesktopLink)}</div>
           </div>
 
           <div>
-            <h2 className={['text-sm font-semibold uppercase tracking-wide', dark ? 'text-zinc-100' : 'text-[#edebe6]'].join(' ')}>
+            <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--gs-text)' }}>
               {t('footer.member.section.account')}
             </h2>
             <div className="mt-5 space-y-3">
@@ -154,31 +141,32 @@ function MemberFooter() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className={['group flex items-center gap-2 text-sm transition-colors', dark ? 'text-zinc-300 hover:text-white' : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]'].join(' ')}
+                className="group flex items-center gap-2 text-sm transition-colors hover:text-[var(--gs-text)]"
+                style={{ color: 'var(--gs-muted)' }}
               >
-                <LogOut className={['h-4 w-4 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-[rgba(237,235,230,0.5)] group-hover:text-[#edebe6]'].join(' ')} />
+                <LogOut className="h-4 w-4 transition-colors group-hover:text-[var(--gs-text)]" style={{ color: 'var(--gs-muted)' }} />
                 <span>{t('footer.member.logout')}</span>
               </button>
             </div>
           </div>
 
           <div className="col-span-2 lg:col-span-1">
-            <h2 className={['text-sm font-semibold uppercase tracking-wide', dark ? 'text-zinc-100' : 'text-[#edebe6]'].join(' ')}>
+            <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--gs-text)' }}>
               {t('footer.member.section.contact')}
             </h2>
-            <div className={['mt-5 space-y-3 text-sm', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
+            <div className="mt-5 space-y-3 text-sm" style={{ color: 'var(--gs-muted)' }}>
               <a
                 href="tel:19006868"
-                className={['flex items-center gap-2 transition-colors', dark ? 'hover:text-white' : 'hover:text-[#edebe6]'].join(' ')}
+                className="flex items-center gap-2 transition-colors hover:text-[var(--gs-text)]"
               >
-                <Phone className={['h-4 w-4', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
+                <Phone className="h-4 w-4" style={{ color: 'var(--gs-muted)' }} />
                 <span>1900 6868</span>
               </a>
               <a
                 href="mailto:support@gympro.vn"
-                className={['flex items-center gap-2 transition-colors', dark ? 'hover:text-white' : 'hover:text-[#edebe6]'].join(' ')}
+                className="flex items-center gap-2 transition-colors hover:text-[var(--gs-text)]"
               >
-                <Mail className={['h-4 w-4', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
+                <Mail className="h-4 w-4" style={{ color: 'var(--gs-muted)' }} />
                 <span>support@gympro.vn</span>
               </a>
               <div className="flex items-center gap-3 pt-2">
@@ -222,26 +210,26 @@ function MemberFooter() {
               <div className="mt-4 space-y-2 lg:hidden">
                 <a
                   href="#"
-                  className={['flex items-center gap-3 rounded-lg px-3 py-2 transition-colors', dark ? 'bg-zinc-900 hover:bg-zinc-800' : 'bg-[#484848] hover:bg-[#525252]'].join(' ')}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors"
                   style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
                 >
-                  <Smartphone className={['h-5 w-5', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
+                  <Smartphone className="h-5 w-5" style={{ color: 'var(--gs-muted)' }} />
                   <span>
-                    <span className="block text-[10px] text-zinc-400">{t('footer.member.download.download_on')}</span>
-                    <span className={['block text-sm font-semibold', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
+                    <span className="block text-[10px]" style={{ color: 'var(--gs-muted)' }}>{t('footer.member.download.download_on')}</span>
+                    <span className="block text-sm font-semibold" style={{ color: 'var(--gs-text)' }}>
                       {t('footer.member.download.app_store')}
                     </span>
                   </span>
                 </a>
                 <a
                   href="#"
-                  className={['flex items-center gap-3 rounded-lg px-3 py-2 transition-colors', dark ? 'bg-zinc-900 hover:bg-zinc-800' : 'bg-[#484848] hover:bg-[#525252]'].join(' ')}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors"
                   style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
                 >
-                  <PlayCircle className={['h-5 w-5', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
+                  <PlayCircle className="h-5 w-5" style={{ color: 'var(--gs-muted)' }} />
                   <span>
-                    <span className="block text-[10px] text-zinc-400">{t('footer.member.download.download_on')}</span>
-                    <span className={['block text-sm font-semibold', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
+                    <span className="block text-[10px]" style={{ color: 'var(--gs-muted)' }}>{t('footer.member.download.download_on')}</span>
+                    <span className="block text-sm font-semibold" style={{ color: 'var(--gs-text)' }}>
                       {t('footer.member.download.ch_play')}
                     </span>
                   </span>
@@ -254,12 +242,12 @@ function MemberFooter() {
                   rel="noopener noreferrer"
                   download
                   className={[
-                    'group flex w-fit min-w-[170px] items-center gap-3 rounded-xl px-3 py-2 no-underline shadow-sm transition-opacity duration-200 hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e05a30]',
-                    'bg-[#e05a30] text-white shadow-[0_10px_24px_rgba(224,90,48,0.22)] hover:bg-[#c94d26]',
+                    'group flex w-fit min-w-[170px] items-center gap-3 rounded-xl px-3 py-2 no-underline shadow-sm transition-opacity duration-200 hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]',
+                    'bg-[var(--theme-button-bg)] text-[var(--theme-button-text)] shadow-[0_10px_24px_rgba(0,0,0,0.18)] hover:bg-[var(--theme-accent-hover)]',
                   ].join(' ')}
                   style={{
-                    background: 'var(--theme-accent)',
-                    borderColor: 'var(--theme-accent)',
+                    background: 'var(--theme-button-bg)',
+                    borderColor: 'var(--theme-button-border)',
                     color: 'var(--theme-button-text)',
                   }}
                 >
@@ -272,10 +260,10 @@ function MemberFooter() {
         </div>
 
         <div
-          className={['border-t px-4 py-4 sm:px-6 md:px-8', dark ? 'border-zinc-800' : 'border-[#5a5a5a]'].join(' ')}
+          className="border-t px-4 py-4 sm:px-6 md:px-8"
           style={{ borderColor: 'var(--theme-border)' }}
         >
-          <p className={['mx-auto max-w-7xl text-sm', dark ? 'text-zinc-500' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
+          <p className="mx-auto max-w-7xl text-sm" style={{ color: 'var(--gs-muted)' }}>
             {t('footer.member.copyright', { year: new Date().getFullYear() })}
           </p>
         </div>

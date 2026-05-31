@@ -301,7 +301,7 @@ export default function AdminUsersPage() {
         </p>
       </div>
 
-      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
         <div className="dashboard-filter-bar">
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', flex: 1 }}>
             <Input.Search

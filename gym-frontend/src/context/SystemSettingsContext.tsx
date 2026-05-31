@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useAuth } from '../hooks/useAuth'
 import i18n from '../i18n'
 import { systemSettingsService } from '../services/systemSettingsService'
-import { useAuth } from '../hooks/useAuth'
-import { useTheme } from './ThemeContext'
+import { resolveEffectiveTheme, useTheme } from './ThemeContext'
 
 export const SYSTEM_SETTINGS_DEFAULTS = {
   general: {
@@ -85,7 +85,7 @@ const normalizeSettings = (settings: any): SystemSettings => {
 const getByPath = (value: any, path: string) => path.split('.').reduce((current, key) => current?.[key], value)
 
 export function SystemSettingsProvider({ children }: { children: ReactNode }) {
-  const { applyThemeMode } = useTheme()
+  const { applyThemeFull, applyThemeMode } = useTheme()
   const { user } = useAuth()
   const [settings, setSettings] = useState<SystemSettings>(SYSTEM_SETTINGS_DEFAULTS)
   const [loading, setLoading] = useState(true)
@@ -114,14 +114,13 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    const personalTheme = user?.themePreference
-    const resolvedTheme = personalTheme === 'light' || personalTheme === 'dark'
-      ? personalTheme
-      : settings.general.defaultTheme === 'light'
-        ? 'light'
-        : 'dark'
-    applyThemeMode(resolvedTheme)
-  }, [applyThemeMode, settings.general.defaultTheme, user?.themePreference])
+    const systemTheme = settings.general.defaultTheme === 'light' ? 'light' : 'dark'
+    const effectiveTheme = resolveEffectiveTheme(systemTheme, user?.themePreference)
+    applyThemeMode(effectiveTheme)
+    if (user?.accentColor) {
+      applyThemeFull(user.accentColor)
+    }
+  }, [settings.general.defaultTheme, user?.themePreference, user?.accentColor])
 
   useEffect(() => {
     refresh().finally(() => setLoading(false))

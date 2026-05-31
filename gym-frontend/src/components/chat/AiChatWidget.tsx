@@ -1374,12 +1374,12 @@ export default function AiChatWidget() {
                     color: var(--theme-muted) !important;
                 }
                 .ai-chat-panel .ant-segmented-item-selected {
-                    background: var(--theme-accent) !important;
-                    color: var(--theme-button-text) !important;
+                    background: var(--theme-active-bg) !important;
+                    color: var(--theme-active-text) !important;
                     border: none !important;
                 }
                 .ai-chat-panel .ant-segmented-thumb {
-                    background: var(--theme-accent) !important;
+                    background: var(--theme-active-bg) !important;
                 }
 
             `}</style>
@@ -1503,7 +1503,7 @@ export default function AiChatWidget() {
                                     justifyContent: 'space-between',
                                     gap: 12,
                                     padding: mobileChat ? '12px 14px' : '16px 18px',
-                                    background: 'var(--theme-accent)',
+                                    background: 'var(--theme-button-bg)',
                                     backdropFilter: 'blur(10px)',
                                     WebkitBackdropFilter: 'blur(10px)',
                                     color: 'var(--theme-button-text)',
@@ -1940,7 +1940,7 @@ export default function AiChatWidget() {
                                                     size="small"
                                                     disabled={retryCountdown > 0}
                                                     onClick={handleRetry}
-                                                    style={{ background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)', color: 'var(--theme-text)' }}
+                                                    style={{ background: 'var(--theme-button-bg)', borderColor: 'var(--theme-button-border)', color: 'var(--theme-button-text)' }}
                                                 >
                                                     {retryCountdown > 0 ? t('chat.retry_after', { count: retryCountdown }) : t('chat.retry')}
                                                 </Button>
@@ -1992,7 +1992,7 @@ export default function AiChatWidget() {
                                                     size={mobileChat ? 'small' : 'middle'}
                                                     onClick={() => handleSend()}
                                                     loading={loading}
-                                                    style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)', border: 'none' }}
+                                                    style={{ background: 'var(--theme-button-bg)', color: 'var(--theme-button-text)', border: 'none' }}
                                                 >
                                                     {t('chat.send')}
                                                 </Button>

@@ -28,7 +28,7 @@ export default function MaintenancePage() {
           {settings.general.logoUrl ? (
             <img src={settings.general.logoUrl} alt={siteName} className="h-11 w-11 rounded-xl object-cover" />
           ) : (
-            <div className="grid h-11 w-11 place-items-center rounded-xl bg-[var(--theme-accent)] font-black text-[var(--theme-button-text)]">
+            <div className="grid h-11 w-11 place-items-center rounded-xl bg-[var(--theme-button-bg)] font-black text-[var(--theme-button-text)]">
               GP
             </div>
           )}

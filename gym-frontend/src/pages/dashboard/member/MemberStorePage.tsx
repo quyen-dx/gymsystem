@@ -6,6 +6,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import SellerFooter from '../../../components/layout/footer/SellerFooter'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import PartnershipRequestForm from '../../../components/partnership/PartnershipRequestForm'
+import { useTheme } from '../../../context/ThemeProvider'
 import { useAuth } from '../../../hooks/useAuth'
 import { getShopProducts } from '../../../services/productService'
 import { addShopReview, getShop, getShops } from '../../../services/shopService'
@@ -13,6 +14,7 @@ import type { MemberProduct, ProductShop } from '../../../types/member/product'
 
 export default function MemberStorePage() {
   const { t } = useTranslation()
+  const { dark } = useTheme()
   const { storeId } = useParams()
   const [shops, setShops] = useState<ProductShop[]>([])
   const [products, setProducts] = useState<MemberProduct[]>([])
@@ -319,17 +321,18 @@ export default function MemberStorePage() {
                 hoverable
                 onClick={() => navigate(`/product/${product._id}`)}
                 className="rounded-xl overflow-hidden"
+                style={{ background: 'var(--gs-card)', borderColor: 'var(--gs-border)' }}
                 cover={
                   product.image ? (
                     <img src={product.image} className="h-[200px] w-full object-cover" alt={product.name} />
                   ) : (
-                    <div className="h-[200px] flex items-center justify-center text-gray-400" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-muted)' }}>
+                    <div className="h-[200px] flex items-center justify-center" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--gs-text-muted)' }}>
                       {t('store.no_image')}
                     </div>
                   )
                 }
               >
-                <div className="font-bold text-base mb-1">{product.name}</div>
+                <div className="font-bold text-base mb-1 text-[var(--gs-text)]">{product.name}</div>
 
                 {product.rating && product.rating > 0 ? (
                   <div className="flex items-center gap-2 mb-1">
@@ -337,18 +340,18 @@ export default function MemberStorePage() {
                     <span className="text-[var(--theme-accent)] text-sm font-medium">
                       {product.rating.toFixed(1)}
                     </span>
-                    <span className="text-gray-400 text-xs" style={{ color: 'var(--theme-muted)' }}>
+                    <span className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>
                       ({product.reviewCount || 0})
                     </span>
                   </div>
                 ) : (
-                  <div className="text-gray-400 text-xs mb-1" style={{ color: 'var(--theme-muted)' }}>
+                  <div className="text-xs mb-1" style={{ color: 'var(--gs-text-muted)' }}>
                     {t('store.no_reviews')}
                   </div>
                 )}
 
                 <div className="flex justify-between items-center">
-                  <span className="text-[var(--theme-accent)] font-bold text-lg">
+                  <span className="text-[var(--gs-text)] font-bold text-lg">
                     {product.price?.toLocaleString('vi-VN')}đ
                   </span>
                   <Tag color={product.stock && product.stock > 0 ? 'green' : 'red'}>
@@ -385,7 +388,7 @@ export default function MemberStorePage() {
             type="primary"
             loading={submittingReview}
             onClick={handleSubmitShopReview}
-            className="w-fit !bg-[var(--theme-accent)] border-none"
+            className="w-fit !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] border-none"
           >
             {t('store.submit_review')}
           </Button>
@@ -462,7 +465,14 @@ export default function MemberStorePage() {
                     bodyStyle={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: 24 }}
                   >
                     <div className="absolute left-0 top-0 h-1 w-full bg-[var(--theme-accent)]" />
-                    <div className="absolute right-3 top-3 rounded-full bg-[var(--theme-accent-muted)] px-2 py-1 text-[11px] font-medium leading-none text-[var(--theme-accent)]">
+                    <div
+                      className="absolute right-3 top-3 rounded-full px-2 py-1 text-[11px] font-medium leading-none"
+                      style={{
+                        background: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
+                        color: dark ? '#ffffff' : '#111111',
+                        border: `1px solid ${dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)'}`,
+                      }}
+                    >
                       {t('store.product_count', { count: productCount })}
                     </div>
                     <Avatar size={72} src={avatar} icon={<ShopOutlined />} className="mb-4 shrink-0">
@@ -515,7 +525,7 @@ export default function MemberStorePage() {
                             key={product._id}
                             type="button"
                             onClick={() => navigate(`/product/${product._id}`)}
-                            className="group overflow-hidden rounded-[10px] border border-[var(--gs-border)] bg-[var(--theme-card)] p-0 text-left transition-all hover:border-[var(--theme-accent-border)] hover:-translate-y-0.5"
+                            className="group overflow-hidden rounded-[10px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-0 text-left transition-all hover:border-[var(--theme-accent-border)] hover:-translate-y-0.5"
                           >
                             {image ? (
                               <img
@@ -524,15 +534,15 @@ export default function MemberStorePage() {
                                 className="aspect-square w-full object-cover"
                               />
                             ) : (
-                              <div className="flex aspect-square w-full items-center justify-center bg-[var(--theme-bg)] text-xs text-[var(--theme-muted)]">
+                              <div className="flex aspect-square w-full items-center justify-center bg-[var(--theme-bg)] text-xs text-[var(--gs-text-muted)]">
                                 {t('store.no_image')}
                               </div>
                             )}
                             <div className="p-3 max-[640px]:p-2">
-                              <div className="line-clamp-2 min-h-[40px] text-sm font-medium leading-5 text-[var(--theme-text)] group-hover:text-[var(--theme-accent)] max-[640px]:text-xs max-[640px]:leading-4">
+                              <div className="line-clamp-2 min-h-[40px] text-sm font-medium leading-5 text-[var(--gs-text)] max-[640px]:text-xs max-[640px]:leading-4">
                                 {product.name}
                               </div>
-                              <div className="mt-2 text-sm font-semibold text-[var(--theme-accent)] max-[640px]:text-xs">
+                              <div className="mt-2 text-sm font-semibold text-[var(--gs-text)] max-[640px]:text-xs">
                                 {formatProductPrice(product.price)}
                               </div>
                             </div>

@@ -20,8 +20,8 @@ import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { generateTheme, PRESET_ACCENT_COLORS, useTheme } from '../../context/ThemeContext'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
+import { generateTheme, PRESET_ACCENT_COLORS, resolveEffectiveTheme, useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../hooks/useAuth'
 import { createAddress, deleteAddress, getAddresses, setDefaultAddress, updateAddress } from '../../services/addressService'
 import { authService } from '../../services/authService'
@@ -41,7 +41,7 @@ const profileFormClass =
   '[&_.ant-form-item-label>label]:!text-xs [&_.ant-form-item-label>label]:!font-medium [&_.ant-form-item-label>label]:!uppercase [&_.ant-form-item-label>label]:!tracking-[0.06em] [&_.ant-form-item-label>label]:!text-[var(--theme-muted)] [&_.ant-input]:!min-h-[42px] [&_.ant-input]:!rounded-[12px] [&_.ant-input]:!border-[var(--profile-border)] [&_.ant-input]:!bg-[var(--profile-bg-container)] [&_.ant-input]:!text-[var(--profile-text)] [&_.ant-input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input-affix-wrapper]:!min-h-[42px] [&_.ant-input-affix-wrapper]:!rounded-[12px] [&_.ant-input-affix-wrapper]:!border-[var(--profile-border)] [&_.ant-input-affix-wrapper]:!bg-[var(--profile-bg-container)] [&_.ant-input-affix-wrapper_input]:!bg-transparent [&_.ant-input-affix-wrapper_input]:!text-[var(--profile-text)] [&_.ant-input-affix-wrapper_input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input:focus]:!border-[var(--profile-accent)] [&_.ant-input:focus]:!shadow-none [&_.ant-input-focused]:!border-[var(--profile-accent)] [&_.ant-input-focused]:!shadow-none [&_.ant-input-affix-wrapper-focused]:!border-[var(--profile-accent)] [&_.ant-input-affix-wrapper-focused]:!shadow-none [&_.ant-input[disabled]]:!cursor-not-allowed [&_.ant-input[disabled]]:!bg-[var(--theme-elevated)] [&_.ant-input[disabled]]:!text-[var(--theme-muted)] [&_.ant-input-disabled]:!cursor-not-allowed [&_.ant-input-disabled]:!bg-[var(--theme-elevated)] [&_.ant-input-disabled]:!text-[var(--theme-muted)]'
 
 const primaryButtonClass =
-  '!h-11 !rounded-full !border-0 !bg-[var(--theme-accent)] !font-extrabold !text-[var(--theme-button-text)] !shadow-none hover:!bg-[var(--theme-accent-hover)]'
+  '!h-11 !rounded-full !border-0 !bg-[var(--theme-button-bg)] !font-extrabold !text-[var(--theme-button-text)] !shadow-none hover:!bg-[var(--theme-accent-hover)]'
 
 const addressActionButtonClass =
   'grid h-7 w-7 cursor-pointer place-items-center rounded-[7px] border border-[var(--profile-border)] bg-transparent text-[var(--profile-text-secondary)] transition-colors hover:bg-[var(--profile-bg-container)] hover:text-[var(--profile-text)] max-[480px]:h-[26px] max-[480px]:w-[26px]'
@@ -281,10 +281,10 @@ const ProfileHeader = ({
         type="file"
         hidden
         accept="image/*"
-          onChange={(event) => {
-            const file = event.target.files?.[0]
-            if (file) onAvatarChange(file)
-          }}
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) onAvatarChange(file)
+        }}
       />
     </header>
   )
@@ -456,11 +456,21 @@ export default function AccountProfileModal({
   const fileRef = useRef<HTMLInputElement>(null)
   const coverRef = useRef<HTMLInputElement>(null)
   const profileScrollRef = useRef<HTMLDivElement>(null)
+  const preventCloseRef = useRef(false)
   const watchedEmail = Form.useWatch('email', form)
-  const previewTheme = generateTheme(accentColor)
+  const previewTheme = generateTheme(
+    accentColor,
+    resolveEffectiveTheme(systemSettings.general.defaultTheme === 'light' ? 'light' : 'dark', user?.themePreference),
+  )
 
   const hasPassword = Boolean(user?.hasPassword || user?.password)
   const contactText = user?.email || user?.phone || t('profile.no_email')
+
+  useEffect(() => {
+    if (user?.accentColor) {
+      setAccentColor(user.accentColor)
+    }
+  }, [user?.accentColor])
 
   const goToOrders = () => {
     handleClose()
@@ -468,8 +478,7 @@ export default function AccountProfileModal({
   }
 
   const handlePresetSelect = (hex: string) => {
-    setAccentColor(hex)
-    applyThemeFull(hex)
+    void saveAccentColor(hex)
   }
 
   const handleAccentPreview = (hex: string) => {
@@ -478,35 +487,68 @@ export default function AccountProfileModal({
   }
 
   const handleAccentCommit = (hex = accentColor) => {
-    setAccentColor(hex)
-    applyThemeFull(hex)
-  }
-
-  const resolveThemePreference = (preference: 'system' | 'light' | 'dark' = 'system') => {
-    if (preference === 'light' || preference === 'dark') return preference
-    return systemSettings.general.defaultTheme === 'light' ? 'light' : 'dark'
+    void saveAccentColor(hex)
   }
 
   const handleThemePreferenceChange = async (preference: 'system' | 'light' | 'dark') => {
     if (!user || loading) return
+    preventCloseRef.current = true
     const previousPreference = user.themePreference || 'system'
-    applyThemeMode(resolveThemePreference(preference))
+    const systemTheme = systemSettings.general.defaultTheme === 'light' ? 'light' : 'dark'
+    const payload = { themePreference: preference }
+    console.debug('[profile-theme] currentUser before update', user)
+    console.debug('[profile-theme] payload sent API', payload)
+    applyThemeMode(resolveEffectiveTheme(systemTheme, preference))
     updateUser({ ...user, themePreference: preference })
-
-    const formData = new FormData()
-    formData.append('themePreference', preference)
 
     setLoading(true)
     try {
-      const { data } = await authService.updateProfile(formData)
+      const { data } = await authService.updateProfile(payload)
+      console.debug('[profile-theme] response API', data)
       updateUser(data.user)
+      console.debug('[profile-theme] currentUser after update', data.user)
+      applyThemeMode(resolveEffectiveTheme(systemTheme, data.user.themePreference))
       message.success(t('profile.msg_theme_update_success'))
     } catch (err: any) {
-      applyThemeMode(resolveThemePreference(previousPreference))
+      applyThemeMode(resolveEffectiveTheme(systemTheme, previousPreference))
       updateUser({ ...user, themePreference: previousPreference })
       message.error(err.response?.data?.message || t('profile.msg_theme_update_failed'))
     } finally {
       setLoading(false)
+      preventCloseRef.current = false
+    }
+  }
+
+  const saveAccentColor = async (hex: string) => {
+    if (!user || loading) return
+    const previousAccent = user.accentColor || savedAccentColor
+    const nextAccent = hex.toUpperCase()
+    const payload = { accentColor: nextAccent }
+    console.debug('[profile-theme] currentUser before update', user)
+    console.debug('[profile-theme] payload sent API', payload)
+    preventCloseRef.current = true
+    setAccentColor(nextAccent)
+    applyThemeFull(nextAccent)
+    updateUser({ ...user, accentColor: nextAccent })
+
+    setLoading(true)
+    try {
+      const { data } = await authService.updateProfile(payload)
+      console.debug('[profile-theme] response API', data)
+      const persistedAccent = data.user.accentColor || nextAccent
+      updateUser(data.user)
+      console.debug('[profile-theme] currentUser after update', data.user)
+      setAccentColor(persistedAccent)
+      applyThemeFull(persistedAccent)
+      message.success(t('profile.msg_theme_update_success'))
+    } catch (err: any) {
+      setAccentColor(previousAccent)
+      applyThemeFull(previousAccent)
+      updateUser({ ...user, accentColor: previousAccent })
+      message.error(err.response?.data?.message || t('profile.msg_theme_update_failed'))
+    } finally {
+      setLoading(false)
+      preventCloseRef.current = false
     }
   }
 
@@ -596,6 +638,7 @@ export default function AccountProfileModal({
   }
 
   const handleClose = () => {
+    if (preventCloseRef.current) return
     commitPending()
     onClose()
   }
@@ -617,7 +660,7 @@ export default function AccountProfileModal({
     addressForm.resetFields()
     setEditAddress(null)
     setAddresses([])
-  }, [open, user, form, passwordForm, addressForm])
+  }, [open, form, passwordForm, addressForm])
 
   useEffect(() => {
     if (open) {
@@ -626,12 +669,12 @@ export default function AccountProfileModal({
   }, [open, savedAccentColor])
 
   const profileThemeStyle = {
-    '--profile-bg-layout': token.colorBgLayout,
-    '--profile-bg-container': 'var(--theme-input-bg)',
-    '--profile-bg-elevated': token.colorBgElevated,
-    '--profile-text': token.colorText,
-    '--profile-text-secondary': token.colorTextSecondary,
-    '--profile-border': 'var(--theme-border-strong)',
+    '--profile-bg-layout': 'var(--gs-bg)',
+    '--profile-bg-container': 'var(--gs-input-bg)',
+    '--profile-bg-elevated': 'var(--gs-card)',
+    '--profile-text': 'var(--gs-text)',
+    '--profile-text-secondary': 'var(--gs-muted)',
+    '--profile-border': 'var(--gs-border)',
     '--profile-mask': token.colorBgMask,
     '--profile-accent': 'var(--theme-accent)',
     '--profile-accent-hover': 'var(--theme-accent-hover)',
@@ -981,9 +1024,10 @@ export default function AccountProfileModal({
                           onClick={() => handleThemePreferenceChange(item.value)}
                           className="rounded-xl border px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70"
                           style={{
-                            background: active ? 'var(--theme-accent-muted)' : 'var(--theme-elevated)',
-                            borderColor: active ? 'var(--theme-accent)' : 'var(--theme-border-strong)',
-                            color: active ? 'var(--theme-accent)' : 'var(--theme-text)',
+                            background: active ? 'var(--theme-button-bg)' : 'var(--gs-card)',
+                            borderColor: active ? 'var(--theme-button-border)' : 'var(--gs-border)',
+                            color: active ? 'var(--theme-button-text)' : 'var(--gs-text)',
+                            fontWeight: active ? 600 : 700,
                           }}
                         >
                           {item.label}
@@ -1049,7 +1093,7 @@ export default function AccountProfileModal({
                       className="h-8 w-8 cursor-pointer rounded-full border transition-transform duration-150 hover:scale-110"
                       style={{
                         backgroundColor: item.color,
-                        borderColor: accentColor === item.color ? '#ffffff' : token.colorBorder,
+                        borderColor: accentColor.toLowerCase() === item.color.toLowerCase() ? '#ffffff' : token.colorBorder,
                       }}
                       aria-label={t('profile.choose_color', { label: item.label })}
                       title={item.label}
@@ -1067,8 +1111,8 @@ export default function AccountProfileModal({
                       onClick={() => i18n.changeLanguage('vi')}
                       title="Tiếng Việt"
                       style={{
-                        background: i18n.language === 'vi' ? 'var(--theme-accent-muted)' : 'transparent',
-                        border: i18n.language === 'vi' ? '1px solid var(--theme-accent)' : '1px solid var(--theme-border-strong)',
+                        background: i18n.language === 'vi' ? 'var(--theme-active-bg)' : 'transparent',
+                        border: i18n.language === 'vi' ? '1px solid var(--theme-active-bg)' : '1px solid var(--theme-border-strong)',
                         borderRadius: 10,
                         cursor: 'pointer',
                         padding: '8px 16px',
@@ -1078,7 +1122,7 @@ export default function AccountProfileModal({
                         opacity: i18n.language === 'vi' ? 1 : 0.5,
                         transition: 'all 0.2s',
                         fontWeight: i18n.language === 'vi' ? 600 : 400,
-                        color: 'var(--theme-text)',
+                        color: i18n.language === 'vi' ? 'var(--theme-active-text)' : 'var(--theme-text)',
                       }}
                     >
                       <img src="https://flagcdn.com/16x12/vn.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />
@@ -1088,8 +1132,8 @@ export default function AccountProfileModal({
                       onClick={() => i18n.changeLanguage('en')}
                       title="English"
                       style={{
-                        background: i18n.language === 'en' ? 'var(--theme-accent-muted)' : 'transparent',
-                        border: i18n.language === 'en' ? '1px solid var(--theme-accent)' : '1px solid var(--theme-border-strong)',
+                        background: i18n.language === 'en' ? 'var(--theme-active-bg)' : 'transparent',
+                        border: i18n.language === 'en' ? '1px solid var(--theme-active-bg)' : '1px solid var(--theme-border-strong)',
                         borderRadius: 10,
                         cursor: 'pointer',
                         padding: '8px 16px',
@@ -1099,7 +1143,7 @@ export default function AccountProfileModal({
                         opacity: i18n.language === 'en' ? 1 : 0.5,
                         transition: 'all 0.2s',
                         fontWeight: i18n.language === 'en' ? 600 : 400,
-                        color: 'var(--theme-text)',
+                        color: i18n.language === 'en' ? 'var(--theme-active-text)' : 'var(--theme-text)',
                       }}
                     >
                       <img src="https://flagcdn.com/16x12/us.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />

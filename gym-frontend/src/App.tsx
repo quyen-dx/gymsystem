@@ -1,7 +1,7 @@
 import { Button, ConfigProvider, theme } from 'antd'
 import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import MemberLayout from './components/layout/header/MemberLayout'
 import FeatureDisabled from './components/system/FeatureDisabled'
 import { SystemSettingsProvider, useSystemSettings } from './context/SystemSettingsContext'
@@ -43,9 +43,9 @@ import SellerProductsPage from './pages/dashboard/seller/SellerProductsPage'
 import StaffCheckinPage from './pages/dashboard/staff/StaffCheckinPage'
 import StaffMemberPage from './pages/dashboard/staff/StaffMemberPage'
 import AboutPage from './pages/public/AboutPage'
-import PartnershipPage from './pages/public/PartnershipPage'
 import HelpCenterPage from './pages/public/HelpCenterPage'
 import MaintenancePage from './pages/public/MaintenancePage'
+import PartnershipPage from './pages/public/PartnershipPage'
 import PolicyPage from './pages/public/PolicyPage'
 
 {/* ADMIN */ }
@@ -134,7 +134,7 @@ function MemberCheckinPage() {
 }
 
 function AppWithTheme() {
-  const { tokens, themeKey, dark } = useTheme()
+  const { tokens, dark } = useTheme()
   const { user, loading } = useAuth()
   const { settings, loading: settingsLoading } = useSystemSettings()
   const location = useLocation()
@@ -145,7 +145,6 @@ function AppWithTheme() {
 
   return (
     <ConfigProvider
-      key={themeKey}
       theme={{
         algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
@@ -154,7 +153,7 @@ function AppWithTheme() {
           colorBgElevated: tokens.elevated,
           colorBgLayout: tokens.bg,
           colorBorder: tokens.border,
-          colorBorderSecondary: 'rgba(255,255,255,0.06)',
+          colorBorderSecondary: tokens.border,
           colorFillTertiary: tokens.inputBg,
           colorText: tokens.text,
           colorTextBase: tokens.text,
@@ -167,7 +166,7 @@ function AppWithTheme() {
           colorTextPlaceholder: tokens.placeholder,
           colorIcon: tokens.text,
           colorIconHover: tokens.accent,
-          colorPrimary: tokens.accent,
+          colorPrimary: tokens.buttonBg,
           colorPrimaryHover: tokens.accentHover,
           colorPrimaryText: tokens.buttonText,
         },
@@ -181,11 +180,11 @@ function AppWithTheme() {
           Menu: {
             itemBg: tokens.card,
             itemColor: tokens.text,
-            itemHoverColor: 'var(--theme-accent)',
+            itemHoverColor: tokens.text,
             colorBgContainer: tokens.card,
-            itemSelectedBg: 'var(--theme-accent-muted)',
-            itemSelectedColor: 'var(--theme-accent)',
-            itemHoverBg: 'var(--theme-accent-muted)',
+            itemSelectedBg: tokens.activeBg,
+            itemSelectedColor: tokens.activeText,
+            itemHoverBg: tokens.outlineHoverBg,
             itemActiveBg: tokens.elevated,
             subMenuItemBg: tokens.card,
             groupTitleColor: tokens.muted,
@@ -193,6 +192,9 @@ function AppWithTheme() {
             darkItemColor: tokens.text,
             darkItemBg: tokens.card,
             darkItemHoverBg: tokens.elevated,
+            darkItemSelectedBg: tokens.activeBg,
+            darkItemSelectedColor: tokens.activeText,
+            darkItemHoverColor: tokens.text,
             activeBarHeight: 0,
             activeBarBorderWidth: 0,
           },

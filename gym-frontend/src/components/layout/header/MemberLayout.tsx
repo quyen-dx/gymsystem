@@ -188,7 +188,7 @@ export default function MemberLayout({
             <div
               className="member-shell-logo-mark"
               style={{
-                background: 'var(--theme-accent)',
+                background: 'var(--theme-button-bg)',
                 color: 'var(--theme-button-text)',
                 boxShadow: '0 0 12px var(--theme-accent-muted), 0 0 4px var(--theme-accent)',
                 borderRadius: 8,
@@ -204,7 +204,7 @@ export default function MemberLayout({
               GP
             </div>
           )}
-          <div className="member-shell-brand" style={{ color: 'var(--theme-accent)' }}>{settings.general.siteName}</div>
+          <div className="member-shell-brand" style={{ color: 'var(--gs-text)' }}>{settings.general.siteName}</div>
         </div>
 
         <nav className="member-shell-desktop-nav" aria-label="Member navigation">
@@ -439,12 +439,12 @@ export default function MemberLayout({
         <div className="flex items-center gap-3 p-4">
           <img className="h-10 w-10 rounded-full object-cover" src={avatarUrl} alt={user?.name || 'Avatar'} />
           <div className="min-w-0 flex-1">
-            <p className="m-0 truncate text-sm font-medium text-[#edebe6]" style={{ color: 'var(--theme-text)' }}>{user?.name}</p>
-            <p className="m-0 truncate text-xs text-[rgba(237,235,230,0.5)]">{t('role.' + (user?.role || 'member'))}</p>
+            <p className="m-0 truncate text-sm font-medium" style={{ color: 'var(--theme-text)' }}>{user?.name}</p>
+            <p className="m-0 truncate text-xs" style={{ color: 'var(--gs-text-muted)' }}>{t('role.' + (user?.role || 'member'))}</p>
           </div>
           <button
             onClick={openProfileModal}
-            className="whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs text-gray-300 transition-colors"
+            className="whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs transition-colors"
             style={{ borderColor: 'var(--theme-border)', backgroundColor: 'var(--theme-card)', color: 'var(--theme-text)' }}
             type="button"
           >

@@ -444,7 +444,7 @@ export default function AdminPartnershipRequestsPage() {
             key: 'requests',
             label: t('admin.partnership_requests.tabs.requests'),
             children: (
-              <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+              <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
                 <div className="dashboard-filter-bar">
                   <Input.Search
                     allowClear
@@ -507,7 +507,7 @@ export default function AdminPartnershipRequestsPage() {
             key: 'shops',
             label: t('admin.partnership_requests.tabs.shops'),
             children: (
-              <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+              <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
                 <div className="dashboard-filter-bar">
                   <Space wrap>
                     <Input.Search

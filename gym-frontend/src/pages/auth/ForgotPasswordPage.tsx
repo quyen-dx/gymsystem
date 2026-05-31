@@ -90,12 +90,9 @@ export default function ForgotPasswordPage() {
     }
   }
 
-  const cardBg = dark ? '#141414' : '#484848'
-  const textColor = dark ? '#ffffff' : '#edebe6'
-  const subTextColor = dark ? '#9ca3af' : 'rgba(237,235,230,0.65)'
-  const inputStyle = !dark
-    ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' }
-    : undefined
+  const textColor = 'var(--gs-text)'
+  const subTextColor = 'var(--gs-muted)'
+  const inputStyle = { background: 'var(--theme-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }
 
   return (
     <div className="relative flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-8 sm:overflow-hidden sm:p-0">
@@ -125,11 +122,24 @@ export default function ForgotPasswordPage() {
       <div
         className="relative z-10 w-full max-w-md rounded-2xl p-7 pb-16 shadow-2xl"
         style={{
-          background: cardBg,
-          border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a',
+          background: dark ? 'rgba(15,15,18,0.92)' : 'rgba(255,255,255,0.92)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: `1px solid ${dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'}`,
           color: textColor,
         }}
       >
+        <div className="mb-5 text-center">
+          <div
+            className="mx-auto mb-3 grid h-12 w-12 place-items-center overflow-hidden rounded-xl bg-[var(--theme-button-bg)] font-black text-[var(--theme-button-text)]"
+            style={{ border: `1px solid ${dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.12)'}` }}
+          >
+            {settings.general.logoUrl
+              ? <img src={settings.general.logoUrl} alt={settings.general.siteName} className="h-full w-full object-cover" />
+              : <span className="text-base font-black">GP</span>
+            }
+          </div>
+        </div>
         <Title level={3} style={{ textAlign: 'center', color: textColor }}>
           {t('forgot.title')}
         </Title>
@@ -142,15 +152,15 @@ export default function ForgotPasswordPage() {
             { title: <span style={{ color: textColor }}>{t('forgot.step_otp')}</span> },
             { title: <span style={{ color: textColor }}>{t('forgot.step_password')}</span> },
           ]}
-          className="mb-6"
+          className="mb-6 [&_.ant-steps-item-icon]:!bg-[var(--theme-active-bg)] [&_.ant-steps-item-icon]:!border-[var(--theme-active-bg)] [&_.ant-steps-icon]:!text-[var(--theme-active-text)]"
         />
 
         {settings.auth.demoOtpEnabled && !!otpPreview && (
           <div
             className="mb-4 rounded-lg p-2 text-center"
             style={{
-              background: dark ? 'rgba(234,88,12,0.15)' : 'rgba(224,90,48,0.15)',
-              color: dark ? '#fb923c' : '#e05a30',
+              background: 'var(--gs-card)',
+              color: 'var(--gs-text)',
             }}
           >
             OTP demo: <b>{otpPreview}</b>
@@ -201,7 +211,7 @@ export default function ForgotPasswordPage() {
 
             <Divider />
 
-            <Button block onClick={() => setStep('identifier')} style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined}>
+            <Button block onClick={() => setStep('identifier')} style={{ background: 'var(--theme-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }}>
               {t('forgot.back')}
             </Button>
           </Form>
@@ -233,7 +243,7 @@ export default function ForgotPasswordPage() {
         )}
 
         <div className="text-center mt-6 text-sm">
-          <Link to="/login" className="font-semibold" style={{ color: 'var(--theme-accent)' }}>
+          <Link to="/login" className="auth-link-action">
             {t('forgot.back_to_login')}
           </Link>
         </div>

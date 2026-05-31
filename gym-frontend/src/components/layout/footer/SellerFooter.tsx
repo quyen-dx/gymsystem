@@ -16,7 +16,6 @@ import {
   Truck,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useTheme } from '../../../context/ThemeProvider'
 
 type FooterLink = {
   label: string
@@ -38,7 +37,6 @@ const socialLogos = {
 function SellerFooter() {
   const { t } = useTranslation()
   const currentYear = new Date().getFullYear()
-  const { dark } = useTheme()
 
   const commitments: Commitment[] = [
     { label: t('footer.seller.commitments.authentic'), icon: ShieldCheck },
@@ -68,13 +66,10 @@ function SellerFooter() {
       <a
         key={item.label}
         href={item.href}
-        className={[
-          'group flex items-center gap-2 text-sm transition-colors',
-          dark ? 'text-zinc-300 hover:text-white' : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]',
-        ].join(' ')}
-        style={{ color: 'var(--theme-text)' }}
+        className="group flex items-center gap-2 text-sm transition-colors hover:text-[var(--gs-text)]"
+        style={{ color: 'var(--gs-muted)' }}
       >
-        <Icon className={['h-4 w-4 shrink-0 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-[rgba(237,235,230,0.5)] group-hover:text-[#edebe6]'].join(' ')} style={{ color: 'var(--theme-muted)' }} />
+        <Icon className="h-4 w-4 shrink-0 transition-colors group-hover:text-[var(--gs-text)]" style={{ color: 'var(--gs-muted)' }} />
         <span>{item.label}</span>
       </a>
     )
@@ -82,16 +77,11 @@ function SellerFooter() {
 
   return (
     <footer
-      className={[
-        'w-full border-t',
-        dark
-          ? 'border-zinc-800 bg-zinc-950 text-white'
-          : 'border-[#5a5a5a] bg-[#3e3e3e] text-[#edebe6]',
-      ].join(' ')}
+      className="w-full border-t"
       style={{ background: 'var(--theme-card)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
     >
       <section
-        className={['border-b px-5 py-7 md:px-8', dark ? 'border-zinc-800 bg-zinc-950 text-white' : 'border-[#5a5a5a] bg-[#3e3e3e] text-[#edebe6]'].join(' ')}
+        className="border-b px-5 py-7 md:px-8"
         style={{ background: 'var(--theme-card)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
       >
         <div className="w-full">
@@ -105,12 +95,12 @@ function SellerFooter() {
               return (
                 <div
                   key={item.label}
-                  className={['flex min-h-20 items-center gap-3 rounded-2xl border p-4 shadow-sm backdrop-blur', dark ? 'border-zinc-800 bg-zinc-900 text-white' : 'border-[#5a5a5a] bg-[#484848] text-[#edebe6]'].join(' ')}
+                  className="flex min-h-20 items-center gap-3 rounded-2xl border p-4 shadow-sm"
                   style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
                 >
                   <span
-                    className={['flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', dark ? 'bg-[#484848] text-[#edebe6]' : 'bg-[#484848] text-[#edebe6]'].join(' ')}
-                    style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)' }}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                    style={{ background: 'var(--theme-button-bg)', color: 'var(--theme-button-text)' }}
                   >
                     <Icon className="h-5 w-5" />
                   </span>
@@ -127,39 +117,39 @@ function SellerFooter() {
           <div>
             <div className="flex items-center gap-3">
               <span
-                className={['flex h-12 w-12 items-center justify-center rounded-2xl', dark ? 'bg-[#484848] text-[#edebe6]' : 'bg-[#484848] text-[#edebe6]'].join(' ')}
-                style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)' }}
+                className="flex h-12 w-12 items-center justify-center rounded-2xl"
+                style={{ background: 'var(--theme-button-bg)', color: 'var(--theme-button-text)' }}
               >
                 <Store className="h-6 w-6" />
               </span>
               <div>
                 <p className="text-lg font-extrabold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymPro Seller</p>
-                <p className={['text-sm', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
+                <p className="text-sm" style={{ color: 'var(--gs-muted)' }}>
                   {t('footer.seller.tagline')}
                 </p>
               </div>
             </div>
-            <p className={['mt-5 text-sm leading-6', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
+            <p className="mt-5 text-sm leading-6" style={{ color: 'var(--gs-muted)' }}>
               {t('footer.seller.description')}
             </p>
           </div>
 
           <div>
-            <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--gs-text)' }}>
               {t('footer.seller.section.for_seller')}
             </h3>
             <div className="mt-5 space-y-3">{sellerLinks.map(renderLink)}</div>
           </div>
 
           <div>
-            <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--gs-text)' }}>
               {t('footer.seller.section.support')}
             </h3>
             <div className="mt-5 space-y-3">{supportLinks.map(renderLink)}</div>
           </div>
 
           <div>
-            <h3 className={['text-sm font-bold uppercase tracking-[0.2em]', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--gs-text)' }}>
               {t('footer.seller.section.connect')}
             </h3>
             <div className="mt-5 flex items-center gap-3">
@@ -199,12 +189,12 @@ function SellerFooter() {
       </section>
 
       <div
-        className={['border-t px-5 py-5 md:px-8', dark ? 'border-zinc-800' : 'border-[#5a5a5a]'].join(' ')}
+        className="border-t px-5 py-5 md:px-8"
         style={{ borderColor: 'var(--theme-border)' }}
       >
-        <div className={['flex w-full flex-col gap-2 text-sm md:flex-row md:items-center md:justify-between', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
+        <div className="flex w-full flex-col gap-2 text-sm md:flex-row md:items-center md:justify-between" style={{ color: 'var(--gs-muted)' }}>
           <p>{t('footer.seller.copyright', { year: currentYear })}</p>
-          <p className={['flex items-center gap-2 font-semibold', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
+          <p className="flex items-center gap-2 font-semibold" style={{ color: 'var(--gs-text)' }}>
             <BadgeCheck className="h-4 w-4" style={{ color: 'var(--theme-accent)' }} />
             {t('footer.seller.trust')}
           </p>

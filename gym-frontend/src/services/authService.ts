@@ -29,10 +29,14 @@ export const authService = {
 
   getProfile: () => api.get('/auth/me', { timeout: 10000 }),
 
-  updateProfile: (data: FormData) =>
-    api.put('/auth/update-profile', data, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  updateProfile: (data: FormData | Record<string, unknown>) =>
+    api.put(
+      '/auth/update-profile',
+      data,
+      data instanceof FormData
+        ? { headers: { 'Content-Type': 'multipart/form-data' } }
+        : undefined,
+    ),
 
   addPassword: (data: { newPassword: string }) =>
     api.post('/auth/add-password', data),

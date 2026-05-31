@@ -44,11 +44,11 @@ export default function AdminDashboard() {
 
   const statCards = [
     { label: t('admin.dashboard.stats.total_users'), value: stats.totalUsers, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
-    { label: t('admin.dashboard.stats.members'), value: stats.totalMembers, tone: 'bg-[rgba(116,140,84,0.16)] text-[var(--gs-text)]' },
-    { label: t('admin.dashboard.stats.pt'), value: stats.totalPT, tone: 'bg-white/[0.04] text-[var(--gs-text)]' },
-    { label: t('admin.dashboard.stats.staff'), value: stats.totalStaff, tone: 'bg-white/[0.04] text-[var(--gs-text)]' },
-    { label: t('admin.dashboard.stats.total_plans'), value: stats.totalPlans, tone: 'bg-white/[0.04] text-[var(--gs-text)]' },
-    { label: t('admin.dashboard.stats.active_plans'), value: stats.activePlans, tone: 'bg-[rgba(116,140,84,0.16)] text-[var(--gs-text)]' },
+    { label: t('admin.dashboard.stats.members'), value: stats.totalMembers, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: t('admin.dashboard.stats.pt'), value: stats.totalPT, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: t('admin.dashboard.stats.staff'), value: stats.totalStaff, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: t('admin.dashboard.stats.total_plans'), value: stats.totalPlans, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: t('admin.dashboard.stats.active_plans'), value: stats.activePlans, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
   ]
 
   return (
@@ -65,7 +65,7 @@ export default function AdminDashboard() {
         {statCards.map((stat) => (
           <article
             key={stat.label}
-            className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6"
+            className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6"
           >
             <div className={`inline-flex rounded-full px-3 py-1 text-xs uppercase tracking-[0.18em] ${stat.tone}`}>
               {stat.label}

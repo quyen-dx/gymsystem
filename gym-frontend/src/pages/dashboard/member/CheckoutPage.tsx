@@ -378,7 +378,12 @@ export default function CheckoutPage() {
                   loading={loading}
                   onClick={handleSubmit}
                   disabled={notEnough}
-                  style={{ background: notEnough ? undefined : 'var(--theme-accent)', borderColor: notEnough ? undefined : 'var(--theme-accent)', flex: '1 1 180px' }}
+                  style={{
+                    background: notEnough ? undefined : 'var(--theme-button-bg)',
+                    borderColor: notEnough ? undefined : 'var(--theme-button-border)',
+                    color: notEnough ? undefined : 'var(--theme-button-text)',
+                    flex: '1 1 180px',
+                  }}
                 >
                   {t('checkout.pay_now')}
                 </Button>

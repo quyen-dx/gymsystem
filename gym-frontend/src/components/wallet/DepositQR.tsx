@@ -89,7 +89,7 @@ export default function DepositQR({
           loading={confirmLoading}
           disabled={isExpired || confirmLoading}
           onClick={onConfirm}
-          className="!bg-[var(--theme-accent)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
+          className="!bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
         >
           {confirmLoading ? t('deposit.qr.confirming') : t('deposit.qr.confirm_btn')}
         </Button>

@@ -170,7 +170,7 @@ export default function AdminProductsPage() {
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">{t('admin.shops.total', { count: shops.length })}</p>
       </div>
 
-      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
         <div className="dashboard-filter-bar">
           <Input.Search
             placeholder={t('admin.shops.search_placeholder')}

@@ -256,7 +256,7 @@ function StripeCardForm({
             loading={paying}
             disabled={!stripe || !!usdAmountError}
             onClick={handlePay}
-            className="!h-11 !bg-[var(--theme-accent)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
+            className="!h-11 !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
           >
             {t('deposit.card.pay_button', { amount: formatUSD(usdAmount) })}
           </Button>
@@ -486,7 +486,7 @@ export default function DepositPage() {
         loading={depositLoading}
         disabled={!!amountError}
         onClick={handleCreate}
-        className="!h-11 !bg-[var(--theme-accent)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
+        className="!h-11 !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
       >
         {t('deposit.create_qr')}
       </Button>
@@ -550,7 +550,7 @@ export default function DepositPage() {
               onClick={() => setTab('card')}
               className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
                 tab === 'card'
-                  ? 'bg-[var(--theme-accent)] text-[var(--theme-button-text)] shadow-sm'
+                  ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)] shadow-sm'
                   : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
               }`}
             >
@@ -560,7 +560,7 @@ export default function DepositPage() {
               onClick={() => setTab('qr')}
               className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
                 tab === 'qr'
-                  ? 'bg-[var(--theme-accent)] text-[var(--theme-button-text)] shadow-sm'
+                  ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)] shadow-sm'
                   : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
               }`}
             >
@@ -570,7 +570,7 @@ export default function DepositPage() {
               onClick={() => setTab('manual')}
               className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
                 tab === 'manual'
-                  ? 'bg-[var(--theme-accent)] text-[var(--theme-button-text)] shadow-sm'
+                  ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)] shadow-sm'
                   : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
               }`}
             >
@@ -605,7 +605,7 @@ export default function DepositPage() {
             <div className="space-y-3">
               {STEPS.map(({ step, titleKey, descKey }) => (
                 <div key={step} className="flex gap-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--theme-accent)] text-sm font-bold text-[var(--theme-button-text)]">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--theme-active-bg)] text-sm font-bold text-[var(--theme-active-text)]">
                     {step}
                   </span>
                   <div>

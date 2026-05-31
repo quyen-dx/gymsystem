@@ -66,8 +66,8 @@ function HomeHero({
   const isPreview = mode === 'preview'
   const isCompactPreview = isPreview && previewVariant === 'compact'
   const heroTitleClass = isPreview
-    ? "block max-w-full whitespace-normal font-extrabold leading-[1.25] tracking-[-0.03em] text-[var(--theme-text)]"
-    : "max-w-[920px] font-extrabold leading-[1.25] tracking-[-0.03em] text-[var(--theme-text)] text-[clamp(32px,4vw,48px)] md:text-[clamp(40px,5vw,72px)] lg:text-[clamp(56px,6vw,96px)]"
+    ? "block max-w-full whitespace-normal font-extrabold leading-[1.25] tracking-[-0.03em]"
+    : "max-w-[920px] font-extrabold leading-[1.25] tracking-[-0.03em] text-[clamp(32px,4vw,48px)] md:text-[clamp(40px,5vw,72px)] lg:text-[clamp(56px,6vw,96px)]"
 
   const statsGridClass = isPreview
     ? 'mt-10 grid grid-cols-1 min-[421px]:grid-cols-2 gap-px overflow-hidden rounded-lg border'
@@ -86,24 +86,27 @@ function HomeHero({
         </div>
         <h1
           className={`${heroTitleClass} mt-7 min-h-[1.25em]`}
-          style={isPreview ? {
-            fontSize: isCompactPreview ? 'clamp(28px, 3vw, 48px)' : 'clamp(36px, 4vw, 56px)',
-            whiteSpace: 'normal',
-            overflow: 'visible',
-            textOverflow: 'unset',
-            display: 'block',
-            maxWidth: '100%',
-            wordBreak: 'keep-all',
-            overflowWrap: 'break-word',
-          } : undefined}
+          style={{
+            color: 'var(--hero-text)',
+            ...(isPreview ? {
+              fontSize: isCompactPreview ? 'clamp(28px, 3vw, 48px)' : 'clamp(36px, 4vw, 56px)',
+              whiteSpace: 'normal',
+              overflow: 'visible',
+              textOverflow: 'unset',
+              display: 'block',
+              maxWidth: '100%',
+              wordBreak: 'keep-all',
+              overflowWrap: 'break-word',
+            } : {}),
+          }}
         >
           <TypewriterSlogans slogans={slogans} language={language} />
         </h1>
-        <p className={`${isPreview ? 'max-w-full text-[15px]' : 'max-w-[720px] text-[15px] md:text-[17px]'} mt-5 leading-7`} style={{ color: token.colorTextSecondary }}>{heroSubtitle}</p>
+        <p className={`${isPreview ? 'max-w-full text-[15px]' : 'max-w-[720px] text-[15px] md:text-[17px]'} mt-5 leading-7`} style={{ color: 'var(--hero-muted)' }}>{heroSubtitle}</p>
         {(showPrimaryCta || showSecondaryCta) && (
           <div className="mt-8 flex flex-col flex-wrap gap-3 min-[421px]:flex-row">
             {showPrimaryCta && <Button size="large" className="!h-[46px] !rounded-full !px-6 !font-extrabold" type="primary" onClick={() => onNavigate?.(landing?.ctaLink || '/booking')}>{primaryText}</Button>}
-            {showSecondaryCta && <Button size="large" className="!h-[46px] !rounded-full !bg-transparent !px-6 !font-extrabold" style={{ borderColor: 'var(--theme-accent)', color: 'var(--theme-accent)' }} onClick={() => onNavigate?.(landing?.secondaryCtaLink || '/checkin')}>{secondaryText}</Button>}
+            {showSecondaryCta && <Button size="large" className="!h-[46px] !rounded-full !bg-transparent !px-6 !font-extrabold hover:!bg-[var(--hero-outline-hover-bg)]" style={{ borderColor: 'var(--hero-outline-border)', color: 'var(--hero-text)' }} onClick={() => onNavigate?.(landing?.secondaryCtaLink || '/checkin')}>{secondaryText}</Button>}
           </div>
         )}
         {showStats && (
@@ -263,7 +266,7 @@ function HomeLandingSectionInner({
         <p className="mx-auto mt-[18px] max-w-[560px] text-base leading-7" style={{ color: token.colorTextSecondary }}>{finalSubtitle.replace('{{firstName}}', firstName)}</p>
         <div className="mt-8 flex flex-col flex-wrap justify-center gap-3 min-[421px]:flex-row">
           {landingFlags.startNowButtonEnabled && <Button size="large" className="!h-[46px] !rounded-full !px-6 !font-extrabold" type="primary" onClick={() => onNavigate?.(safeLanding.finalCtaPrimaryLink || '/booking')}>{finalPrimaryText}</Button>}
-          {landingFlags.checkinNowButtonEnabled && <Button size="large" className="!h-[46px] !rounded-full !bg-transparent !px-6 !font-extrabold" onClick={() => onNavigate?.(safeLanding.finalCtaSecondaryLink || '/health')}>{finalSecondaryText}</Button>}
+          {landingFlags.checkinNowButtonEnabled && <Button size="large" className="!h-[46px] !rounded-full !bg-transparent !px-6 !font-extrabold hover:!bg-[var(--hero-outline-hover-bg)]" style={{ borderColor: 'var(--hero-outline-border)', color: 'var(--hero-text)' }} onClick={() => onNavigate?.(safeLanding.finalCtaSecondaryLink || '/health')}>{finalSecondaryText}</Button>}
         </div>
       </section>
     </main>

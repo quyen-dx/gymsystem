@@ -18,6 +18,7 @@ export interface User {
   avatar?: string
   coverImage?: string | null
   themePreference?: 'system' | 'light' | 'dark'
+  accentColor?: string
   isActive: boolean
   isVerified: boolean
   hasPassword?: boolean

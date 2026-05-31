@@ -195,14 +195,14 @@ export default function SellerProductsPage() {
               width: 48, height: 48, borderRadius: 8,
               background: '#333', display: 'flex',
               alignItems: 'center', justifyContent: 'center',
-              color: '#888', fontSize: 12,
+              color: 'var(--gs-text-muted)', fontSize: 12,
             }}>
               No img
             </div>
           )}
           <div>
             <div style={{ fontWeight: 600 }}>{p.name}</div>
-            <div style={{ fontSize: 12, color: '#888' }}>
+            <div style={{ fontSize: 12, color: 'var(--gs-text-muted)' }}>
               {p.description?.slice(0, 50)}{p.description?.length > 50 ? '...' : ''}
             </div>
           </div>

@@ -524,7 +524,7 @@
     "appearance_title": "Appearance",
     "appearance_subtitle": "Customize theme and colors to your preference.",
     "personal_theme": "Personal theme",
-    "personal_theme_subtitle": "Only applies to your account.",
+    "personal_theme_subtitle": "Light and dark appearance is controlled by system settings.",
     "theme_light": "Light",
     "theme_dark": "Dark",
     "theme_system": "System default",

@@ -108,6 +108,10 @@ const userSchema = new mongoose.Schema(
       enum: ['system', 'light', 'dark'],
       default: 'system',
     },
+    accentColor: {
+      type: String,
+      default: '#7C3AED',
+    },
     isActive: {
       type: Boolean,
       default: true,

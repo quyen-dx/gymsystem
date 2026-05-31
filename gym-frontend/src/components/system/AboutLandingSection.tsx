@@ -4,15 +4,16 @@ import {
   RightOutlined,
   UserAddOutlined,
 } from '@ant-design/icons'
-import { Mail, MapPin, Phone } from 'lucide-react'
 import { Button } from 'antd'
+import { Mail, MapPin, Phone } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import LanguageSelect from '../common/LanguageSelect'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
-import { getLocalizedText } from '../../utils/localization'
-import { getShops } from '../../services/shopService'
+import { useTheme } from '../../context/ThemeContext'
 import useScrollReveal from '../../hooks/useScrollReveal'
+import { getShops } from '../../services/shopService'
+import { getLocalizedText } from '../../utils/localization'
+import LanguageSelect from '../common/LanguageSelect'
 
 const heroSlides = [
   {
@@ -100,6 +101,10 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
     t('about.intro.contentFallback'),
   )
   const landingFlags = systemSettings.landing
+  const { dark } = useTheme()
+  const heroOverlay = dark
+    ? 'linear-gradient(90deg, rgba(0,0,0,0.78), rgba(0,0,0,0.28), rgba(0,0,0,0.72))'
+    : 'linear-gradient(90deg, rgba(255,255,255,0.88), rgba(255,255,255,0.52), rgba(255,255,255,0.82))'
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -135,7 +140,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
   useEffect(() => {
     getShops()
       .then((res) => setShops(res.data?.shops || res.data || []))
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   const statsReveal = useScrollReveal()
@@ -176,34 +181,34 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
   }
 
   return (
-    <main className="about-page min-h-screen bg-[#070707] text-[var(--theme-text)]">
-      <header className={`fixed left-0 right-0 top-0 z-50 transition duration-300 ${navSolid ? 'border-b border-white/10 bg-black/70 shadow-2xl backdrop-blur-xl' : 'bg-black/10 backdrop-blur-sm'}`}>
+    <main className="about-page min-h-screen bg-[var(--gs-bg)] text-[var(--theme-text)]">
+      <header className={`fixed left-0 right-0 top-0 z-50 transition duration-300 ${navSolid ? 'border-b border-[var(--theme-border)] bg-[rgba(255,255,255,0.9)]/95 shadow-2xl backdrop-blur-xl dark:bg-[rgba(20,20,20,0.9)]/95' : 'bg-[rgba(255,255,255,0.18)] backdrop-blur-sm dark:bg-[rgba(0,0,0,0.18)]'}`}>
         <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-5 py-4 md:px-8">
           <button type="button" className="flex items-center gap-3" onClick={() => goTo('/about')}>
-            {logoUrl ? <img src={logoUrl} alt={gymName} className="h-10 w-10 rounded-lg object-cover" /> : <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--theme-accent)] font-black text-[var(--theme-button-text)]">GP</span>}
+            {logoUrl ? <img src={logoUrl} alt={gymName} className="h-10 w-10 rounded-lg object-cover" /> : <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--theme-button-bg)] font-black text-[var(--theme-button-text)]">GP</span>}
             <span className="text-lg font-black tracking-wide">{gymName}</span>
           </button>
           <nav className="hidden md:flex items-center gap-6">
             <button onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })}
-              className="text-sm font-medium text-white/80 hover:text-white transition">
+              className="text-sm font-medium text-[var(--theme-text)] hover:text-[var(--theme-accent)] transition">
               {t('nav.about')}
             </button>
             <button onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
-              className="text-sm font-medium text-white/80 hover:text-white transition">
+              className="text-sm font-medium text-[var(--theme-text)] hover:text-[var(--theme-accent)] transition">
               {t('nav.features')}
             </button>
             <button onClick={() => document.getElementById('trainers')?.scrollIntoView({ behavior: 'smooth' })}
-              className="text-sm font-medium text-white/80 hover:text-white transition">
+              className="text-sm font-medium text-[var(--theme-text)] hover:text-[var(--theme-accent)] transition">
               {t('nav.trainers')}
             </button>
             <button onClick={() => document.getElementById('footer')?.scrollIntoView({ behavior: 'smooth' })}
-              className="text-sm font-medium text-white/80 hover:text-white transition">
+              className="text-sm font-medium text-[var(--theme-text)] hover:text-[var(--theme-accent)] transition">
               {t('nav.contact')}
             </button>
           </nav>
           <div className="hidden items-center gap-3 md:flex">
             <div className="flex">
-              <Button className="!rounded-full !border-white/20 !bg-white/5 !px-5 !text-white hover:!border-[var(--theme-accent)]" icon={<LoginOutlined />} onClick={() => goTo('/login')}>
+              <Button className="!rounded-full !border-[var(--theme-border)] !bg-[var(--gs-card)] !px-5 !text-[var(--theme-text)] hover:!border-[var(--theme-accent)]" icon={<LoginOutlined />} onClick={() => goTo('/login')}>
                 {t('about.nav.login')}
               </Button>
             </div>
@@ -217,7 +222,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
           <div ref={mobileMenuRef} className="relative md:hidden">
             <button
               type="button"
-              className="grid h-10 w-10 place-items-center rounded-lg border border-white/15 bg-white/5 text-2xl font-black text-white backdrop-blur"
+              className="grid h-10 w-10 place-items-center rounded-lg border border-[var(--theme-border)] bg-[var(--gs-card)] text-2xl font-black text-[var(--theme-text)] backdrop-blur"
               onClick={() => setIsMenuOpen((open) => !open)}
               aria-label="Toggle mobile menu"
               aria-expanded={isMenuOpen}
@@ -225,14 +230,13 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
               {isMenuOpen ? '×' : '☰'}
             </button>
             <div
-              className={`absolute right-0 top-12 w-56 overflow-hidden rounded-xl border border-white/10 bg-black/90 shadow-2xl backdrop-blur-xl transition-all duration-300 ${
-                isMenuOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
-              }`}
+              className={`absolute right-0 top-12 w-56 overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--gs-card)]/95 shadow-2xl backdrop-blur-xl transition-all duration-300 ${isMenuOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                }`}
             >
               <div className="p-2">
                 <button
                   type="button"
-                  className="block w-full rounded-lg px-4 py-3 text-left text-sm text-white/78 transition hover:bg-white/10"
+                  className="block w-full rounded-lg px-4 py-3 text-left text-sm text-[var(--theme-text-secondary)] transition hover:bg-[var(--theme-accent-muted)]"
                   onClick={() => {
                     document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })
                     setIsMenuOpen(false)
@@ -242,7 +246,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                 </button>
                 <button
                   type="button"
-                  className="block w-full rounded-lg px-4 py-3 text-left text-sm text-white/78 transition hover:bg-white/10"
+                  className="block w-full rounded-lg px-4 py-3 text-left text-sm text-[var(--theme-text-secondary)] transition hover:bg-[var(--theme-accent-muted)]"
                   onClick={() => {
                     document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })
                     setIsMenuOpen(false)
@@ -252,7 +256,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                 </button>
                 <button
                   type="button"
-                  className="block w-full rounded-lg px-4 py-3 text-left text-sm text-white/78 transition hover:bg-white/10"
+                  className="block w-full rounded-lg px-4 py-3 text-left text-sm text-[var(--theme-text-secondary)] transition hover:bg-[var(--theme-accent-muted)]"
                   onClick={() => {
                     document.getElementById('trainers')?.scrollIntoView({ behavior: 'smooth' })
                     setIsMenuOpen(false)
@@ -262,7 +266,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                 </button>
                 <button
                   type="button"
-                  className="block w-full rounded-lg px-4 py-3 text-left text-sm text-white/78 transition hover:bg-white/10"
+                  className="block w-full rounded-lg px-4 py-3 text-left text-sm text-[var(--theme-text-secondary)] transition hover:bg-[var(--theme-accent-muted)]"
                   onClick={() => {
                     document.getElementById('footer')?.scrollIntoView({ behavior: 'smooth' })
                     setIsMenuOpen(false)
@@ -273,7 +277,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                 <div className="my-1 border-t border-white/10" />
                 <button
                   type="button"
-                  className="block w-full rounded-lg px-4 py-3 text-left text-sm text-white/78 transition hover:bg-white/10"
+                  className="block w-full rounded-lg px-4 py-3 text-left text-sm text-[var(--theme-text-secondary)] transition hover:bg-[var(--theme-accent-muted)]"
                   onClick={() => {
                     setIsMenuOpen(false)
                     goTo('/login')
@@ -284,7 +288,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                 {systemSettings.auth.allowRegistration && (
                   <button
                     type="button"
-                    className="block w-full rounded-lg px-4 py-3 text-left text-sm font-bold text-white transition hover:bg-white/10"
+                    className="block w-full rounded-lg px-4 py-3 text-left text-sm font-bold text-[var(--theme-text)] transition hover:bg-[var(--theme-accent-muted)]"
                     onClick={() => {
                       setIsMenuOpen(false)
                       goTo('/register')
@@ -297,18 +301,16 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                   <button
                     type="button"
                     onClick={() => i18n.changeLanguage('vi')}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${
-                      i18n.language === 'vi' ? 'bg-[var(--theme-accent)] text-white' : 'opacity-60'
-                    }`}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${i18n.language === 'vi' ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)]' : 'opacity-60'
+                      }`}
                   >
                     <img src="https://flagcdn.com/20x15/vn.png" alt="" className="h-3.5 w-5 rounded-sm object-cover" /> VN
                   </button>
                   <button
                     type="button"
                     onClick={() => i18n.changeLanguage('en')}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${
-                      i18n.language === 'en' ? 'bg-[var(--theme-accent)] text-white' : 'opacity-60'
-                    }`}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${i18n.language === 'en' ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)]' : 'opacity-60'
+                      }`}
                   >
                     <img src="https://flagcdn.com/20x15/us.png" alt="" className="h-3.5 w-5 rounded-sm object-cover" /> US
                   </button>
@@ -327,16 +329,16 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
             aria-hidden={index !== activeSlide}
           >
             <img src={slide.image} alt="" className="h-full w-full object-cover" />
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.78),rgba(0,0,0,0.28),rgba(0,0,0,0.72))]" />
+            <div className="absolute inset-0" style={{ background: heroOverlay }} />
           </div>
         ))}
         <div className="relative z-10 mx-auto flex h-full max-w-7xl items-center px-4 md:px-8 lg:px-16">
           <div className="max-w-4xl pt-20">
             <p className="mb-5 text-base font-extrabold uppercase tracking-[0.2em] text-[var(--theme-accent)] md:text-lg">{gymName}</p>
-            <h1 className="max-w-full break-words text-3xl font-black leading-[1.08] tracking-[1px] md:text-5xl lg:text-7xl">
+            <h1 className="max-w-full break-words text-3xl font-black leading-[1.08] tracking-[1px] text-[var(--hero-text)] md:text-5xl lg:text-7xl">
               {t(heroSlides[activeSlide].titleKey)}
             </h1>
-            <p className="mt-6 max-w-2xl text-base leading-8 text-white/78 md:text-xl">{t(heroSlides[activeSlide].subtitleKey)}</p>
+            <p className="mt-6 max-w-2xl text-base leading-8 text-[var(--hero-muted)] md:text-xl">{t(heroSlides[activeSlide].subtitleKey)}</p>
             {landingFlags.startNowButtonEnabled && (
               <Button type="primary" className="mt-8 !h-13 !rounded-full !px-8 !font-extrabold" onClick={() => goTo(heroSlides[activeSlide].link)}>
                 {t(heroSlides[activeSlide].ctaKey)}
@@ -344,10 +346,10 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
             )}
           </div>
         </div>
-        <button type="button" className="absolute top-1/2 left-2 z-20 hidden h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/30 text-white backdrop-blur hover:border-[var(--theme-accent)] md:left-4 md:flex md:h-10 md:w-10" onClick={prevSlide}>
+        <button type="button" className="absolute top-1/2 left-2 z-20 hidden h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)]/20 text-[var(--theme-text)] backdrop-blur hover:border-[var(--theme-accent)] md:left-4 md:flex md:h-10 md:w-10" onClick={prevSlide}>
           <LeftOutlined />
         </button>
-        <button type="button" className="absolute top-1/2 right-2 z-20 hidden h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/30 text-white backdrop-blur hover:border-[var(--theme-accent)] md:right-4 md:flex md:h-10 md:w-10" onClick={nextSlide}>
+        <button type="button" className="absolute top-1/2 right-2 z-20 hidden h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)]/20 text-[var(--theme-text)] backdrop-blur hover:border-[var(--theme-accent)] md:right-4 md:flex md:h-10 md:w-10" onClick={nextSlide}>
           <RightOutlined />
         </button>
         <div className="absolute bottom-8 left-0 right-0 z-20 flex justify-center gap-3">
@@ -496,19 +498,19 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         <div className="mx-auto grid max-w-7xl gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <div className="flex items-center gap-3">
-              {logoUrl ? <img src={logoUrl} alt={gymName} className="h-10 w-10 rounded-lg object-cover" /> : <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--theme-accent)] font-black text-[var(--theme-button-text)]">GP</span>}
+              {logoUrl ? <img src={logoUrl} alt={gymName} className="h-10 w-10 rounded-lg object-cover" /> : <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--theme-button-bg)] font-black text-[var(--theme-button-text)]">GP</span>}
               <span className="text-xl font-black">{gymName}</span>
             </div>
             <p className="mt-4 text-sm leading-7 text-white/50">{t('about.footer.description')}</p>
             <div className="mt-6 flex items-center gap-3">
               <a href="#" className="grid h-9 w-9 place-items-center rounded-full border border-white/15 text-sm text-white/50 transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]" aria-label="Facebook">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
               </a>
               <a href="#" className="grid h-9 w-9 place-items-center rounded-full border border-white/15 text-sm text-white/50 transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]" aria-label="Instagram">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
               </a>
               <a href="#" className="grid h-9 w-9 place-items-center rounded-full border border-white/15 text-sm text-white/50 transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]" aria-label="YouTube">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z" /><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" /></svg>
               </a>
             </div>
           </div>
@@ -554,14 +556,14 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
             <button
               type="button"
               onClick={() => i18n.changeLanguage('vi')}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition ${i18n.language === 'vi' ? 'bg-[var(--theme-accent)] text-white' : 'text-white/40 hover:text-white'}`}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition ${i18n.language === 'vi' ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)]' : 'text-white/40 hover:text-white'}`}
             >
               VI
             </button>
             <button
               type="button"
               onClick={() => i18n.changeLanguage('en')}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition ${i18n.language === 'en' ? 'bg-[var(--theme-accent)] text-white' : 'text-white/40 hover:text-white'}`}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition ${i18n.language === 'en' ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)]' : 'text-white/40 hover:text-white'}`}
             >
               EN
             </button>

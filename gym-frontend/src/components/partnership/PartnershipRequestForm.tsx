@@ -95,7 +95,7 @@ export default function PartnershipRequestForm({ onSuccess, compact = false }: P
         type="primary"
         htmlType="submit"
         block
-        className="!h-11 !rounded-xl !bg-[var(--theme-accent)] !text-[var(--theme-button-text)]"
+        className="!h-11 !rounded-xl !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)]"
       >
         {t('partnership_form.submit')}
       </Button>

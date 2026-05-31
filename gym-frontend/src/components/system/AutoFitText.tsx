@@ -42,6 +42,8 @@ export default function AutoFitText({ text, children, className, onStatus }: Aut
     if (textWidth <= containerWidth) {
       inner.style.fontSize = ''
       inner.style.whiteSpace = 'nowrap'
+      inner.style.overflowWrap = ''
+      inner.style.wordBreak = ''
       const prev = statusRef.current
       statusRef.current = 'single'
       if (prev !== 'single') onStatus?.('single')
@@ -65,8 +67,22 @@ export default function AutoFitText({ text, children, className, onStatus }: Aut
       }
     }
 
+    measurer.style.fontSize = minFs + 'px'
+    if (measurer.scrollWidth > containerWidth) {
+      inner.style.fontSize = minFs + 'px'
+      inner.style.whiteSpace = 'normal'
+      inner.style.overflowWrap = 'anywhere'
+      inner.style.wordBreak = 'break-word'
+      const prev = statusRef.current
+      statusRef.current = 'wrapped'
+      if (prev !== 'wrapped') onStatus?.('wrapped')
+      return
+    }
+
     inner.style.fontSize = bestFit + 'px'
     inner.style.whiteSpace = 'nowrap'
+    inner.style.overflowWrap = ''
+    inner.style.wordBreak = ''
     const prev = statusRef.current
     statusRef.current = 'scaled'
     if (prev !== 'scaled') onStatus?.('scaled')
@@ -83,8 +99,8 @@ export default function AutoFitText({ text, children, className, onStatus }: Aut
   }, [fit])
 
   return (
-    <div ref={outerRef} className={className} style={{ overflow: 'visible', width: '100%' }}>
-      <span ref={innerRef} style={{ display: 'block', overflow: 'visible' }}>
+    <div ref={outerRef} className={className} style={{ overflow: 'hidden', width: '100%', maxWidth: '100%' }}>
+      <span ref={innerRef} style={{ display: 'block', overflow: 'hidden', maxWidth: '100%' }}>
         {children}
       </span>
       <span

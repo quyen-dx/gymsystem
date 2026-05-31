@@ -12,7 +12,6 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
-import { useTheme } from '../../../context/ThemeProvider'
 import { useCart } from '../../../context/useCart'
 import type { CartItem } from '../../../types/member/cart'
 
@@ -20,10 +19,9 @@ export default function CartPage() {
   const { t } = useTranslation()
   const { cart, setCart } = useCart()
   const navigate = useNavigate()
-  const { dark } = useTheme()
-  const panelBg = 'var(--theme-card)'
-  const borderColor = dark ? 'rgba(255,255,255,0.08)' : '#5a5a5a'
-  const mutedText = dark ? '#bbb' : 'rgba(237,235,230,0.5)'
+  const panelBg = 'var(--gs-card)'
+  const borderColor = 'var(--gs-border)'
+  const mutedText = 'var(--gs-text-muted)'
 
   const updateQty = (id: string, weight: string | undefined, qty: number) => {
     const w = weight || ''
@@ -82,7 +80,7 @@ export default function CartPage() {
                       ) : undefined
                     }
                   >
-                    <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 8, color: 'var(--gs-text)' }}>
                       {item.name}
                     </div>
 
@@ -94,7 +92,7 @@ export default function CartPage() {
 
                     <div style={{ marginBottom: 8 }}>
                       {t('cart.price')}{' '}
-                      <b style={{ color: 'var(--theme-accent)' }}>
+                      <b style={{ color: 'var(--gs-text)' }}>
                         {item.price.toLocaleString('vi-VN')}đ
                       </b>
                     </div>
@@ -122,7 +120,7 @@ export default function CartPage() {
 
                     <div style={{ marginBottom: 12 }}>
                       {t('cart.subtotal')}{' '}
-                      <b style={{ color: 'var(--theme-accent)' }}>
+                      <b style={{ color: 'var(--gs-text)' }}>
                         {(item.price * item.quantity).toLocaleString('vi-VN')}đ
                       </b>
                     </div>
@@ -154,7 +152,7 @@ export default function CartPage() {
             >
               <div style={{ fontSize: 18, marginBottom: 16 }}>
                 {t('cart.total')}{' '}
-                <b style={{ color: 'var(--theme-accent)', fontSize: 24 }}>
+                <b style={{ color: 'var(--gs-text)', fontSize: 24 }}>
                   {total.toLocaleString('vi-VN')}đ
                 </b>
               </div>

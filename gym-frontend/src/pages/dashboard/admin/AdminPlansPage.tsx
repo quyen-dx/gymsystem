@@ -205,7 +205,7 @@ export default function AdminPlansPage() {
         <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.plans.title')}</h1>
       </div>
 
-      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
         <div className="dashboard-filter-bar">
           <Input.Search
             placeholder={t('admin.plans.search_placeholder')}

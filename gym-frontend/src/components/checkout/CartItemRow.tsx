@@ -20,7 +20,7 @@ export default function CartItemRow({ item }: CartItemRowProps) {
         display: 'flex',
         gap: 12,
         padding: '10px 0',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid var(--gs-border)',
       }}
     >
       <img
@@ -50,7 +50,7 @@ export default function CartItemRow({ item }: CartItemRowProps) {
             style={{
               fontSize: 14,
               fontWeight: 500,
-              color: 'var(--theme-text)',
+              color: 'var(--gs-text)',
               lineHeight: 1.4,
             }}
           >
@@ -60,7 +60,7 @@ export default function CartItemRow({ item }: CartItemRowProps) {
             strong
             style={{
               fontSize: 14,
-              color: 'var(--theme-text)',
+              color: 'var(--gs-text)',
               whiteSpace: 'nowrap',
               flexShrink: 0,
             }}
@@ -71,7 +71,7 @@ export default function CartItemRow({ item }: CartItemRowProps) {
 
         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {item.brand && (
-            <Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>
+            <Text style={{ fontSize: 12, color: 'var(--gs-text-muted)' }}>
               {item.brand}
             </Text>
           )}
@@ -93,7 +93,7 @@ export default function CartItemRow({ item }: CartItemRowProps) {
         </div>
 
         <div style={{ marginTop: 4 }}>
-          <Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>
+          <Text style={{ fontSize: 12, color: 'var(--gs-text-muted)' }}>
             x{item.quantity}
           </Text>
         </div>
