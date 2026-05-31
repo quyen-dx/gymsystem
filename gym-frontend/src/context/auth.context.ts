@@ -17,6 +17,7 @@ export interface User {
   shop_id?: string | null
   avatar?: string
   coverImage?: string | null
+  themePreference?: 'system' | 'light' | 'dark'
   isActive: boolean
   isVerified: boolean
   hasPassword?: boolean

@@ -27,7 +27,7 @@ export const authService = {
 
   refresh: () => api.post('/auth/refresh', undefined, { skipAuthRefresh: true } as any),
 
-  getProfile: () => api.get('/auth/me'),
+  getProfile: () => api.get('/auth/me', { timeout: 10000 }),
 
   updateProfile: (data: FormData) =>
     api.put('/auth/update-profile', data, {

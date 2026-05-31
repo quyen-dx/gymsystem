@@ -103,6 +103,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    themePreference: {
+      type: String,
+      enum: ['system', 'light', 'dark'],
+      default: 'system',
+    },
     isActive: {
       type: Boolean,
       default: true,

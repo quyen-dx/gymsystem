@@ -2,16 +2,21 @@ import { Button, theme } from 'antd'
 import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
-import { getLocalizedText, normalizeForStorage, normalizeLandingData } from '../../utils/localization'
-import EditableHeroSlogans from './EditableHeroSlogans'
+import { getLocalizedText, normalizeLandingData } from '../../utils/localization'
+import TypewriterSlogans from './TypewriterSlogans'
 
 const pickLocalized = (value: any, language: string, fallback = '') => {
   return getLocalizedText(value, language, fallback)
 }
 
+const pickLocalizedSlogans = (slogans: Array<{ vi?: string; en?: string }> = [], language: string) => {
+  return slogans
+    .map((item) => pickLocalized(item, language, ''))
+    .filter(Boolean)
+}
+
 type HomeLandingSectionProps = {
   landing?: any
-  settings?: any
   firstName?: string
   preview?: boolean
   mode?: 'page' | 'preview'
@@ -27,7 +32,6 @@ type HomeHeroProps = {
   heroBadge: string
   heroSubtitle: string
   slogans: string[]
-  rawSlogans?: any[]
   language?: string
   primaryText: string
   secondaryText: string
@@ -47,7 +51,6 @@ function HomeHero({
   heroBadge,
   heroSubtitle,
   slogans,
-  rawSlogans,
   language,
   primaryText,
   secondaryText,
@@ -58,23 +61,17 @@ function HomeHero({
   landing,
   previewVariant = 'compact',
   onNavigate,
-  editable = false,
-  onSettingsChange,
 }: HomeHeroProps) {
   const { token } = theme.useToken()
   const isPreview = mode === 'preview'
   const isCompactPreview = isPreview && previewVariant === 'compact'
   const heroTitleClass = isPreview
-    ? "block max-w-full whitespace-normal font-extrabold leading-[1.05] tracking-[-0.03em] text-[var(--theme-text)]"
-    : "max-w-[920px] font-extrabold leading-[1.05] tracking-[-0.03em] text-[var(--theme-text)] text-[clamp(32px,4vw,48px)] md:text-[clamp(40px,5vw,72px)] lg:text-[clamp(56px,6vw,96px)]"
+    ? "block max-w-full whitespace-normal font-extrabold leading-[1.25] tracking-[-0.03em] text-[var(--theme-text)]"
+    : "max-w-[920px] font-extrabold leading-[1.25] tracking-[-0.03em] text-[var(--theme-text)] text-[clamp(32px,4vw,48px)] md:text-[clamp(40px,5vw,72px)] lg:text-[clamp(56px,6vw,96px)]"
 
   const statsGridClass = isPreview
     ? 'mt-10 grid grid-cols-1 min-[421px]:grid-cols-2 gap-px overflow-hidden rounded-lg border'
     : 'mt-10 grid grid-cols-1 min-[421px]:grid-cols-2 lg:grid-cols-4 gap-px overflow-hidden rounded-lg border'
-
-  const handleSlogansChange = (newSlogans: any[]) => {
-    onSettingsChange?.({ slogans: newSlogans })
-  }
 
   return (
     <section
@@ -88,7 +85,7 @@ function HomeHero({
           <span className="min-w-0 break-words">{heroBadge}</span>
         </div>
         <h1
-          className={`${heroTitleClass} mt-7`}
+          className={`${heroTitleClass} mt-7 min-h-[1.25em]`}
           style={isPreview ? {
             fontSize: isCompactPreview ? 'clamp(28px, 3vw, 48px)' : 'clamp(36px, 4vw, 56px)',
             whiteSpace: 'normal',
@@ -100,13 +97,7 @@ function HomeHero({
             overflowWrap: 'break-word',
           } : undefined}
         >
-          <EditableHeroSlogans
-            slogans={slogans}
-            language={language}
-            editable={editable}
-            rawSlogans={rawSlogans}
-            onSlogansChange={handleSlogansChange}
-          />
+          <TypewriterSlogans slogans={slogans} language={language} />
         </h1>
         <p className={`${isPreview ? 'max-w-full text-[15px]' : 'max-w-[720px] text-[15px] md:text-[17px]'} mt-5 leading-7`} style={{ color: token.colorTextSecondary }}>{heroSubtitle}</p>
         {(showPrimaryCta || showSecondaryCta) && (
@@ -141,7 +132,6 @@ function HomeHero({
 
 function HomeLandingSectionInner({
   landing,
-  settings,
   firstName = '',
   preview = false,
   mode,
@@ -157,8 +147,6 @@ function HomeLandingSectionInner({
   const lang = language || i18n.language
   const renderMode = mode ?? (preview ? 'preview' : 'page')
   const safeLanding = useMemo(() => normalizeLandingData(landing || {}), [landing])
-  const safeSettings = settings || {}
-
   const fallbackStats = [
     { value: '500+', label: t('dashboard.stats.members') },
     { value: '20+', label: t('dashboard.stats.trainers') },
@@ -191,21 +179,12 @@ function HomeLandingSectionInner({
     userSubtitle: pickLocalized(item.userSubtitle, lang, ''),
   }))
 
-  const rawSlogans = useMemo(() => {
-    const items = Array.isArray(safeSettings.slogans) ? safeSettings.slogans : []
-    if (items.length > 0) return items.map((item: any) => normalizeForStorage(item))
-    if (safeSettings.slogan) return [{ vi: String(safeSettings.slogan), en: '' }]
-    return [{ vi: t('dashboard.slogan1'), en: '' }, { vi: t('dashboard.slogan2'), en: '' }]
-  }, [safeSettings.slogans, safeSettings.slogan, t])
-
   const slogans = useMemo(() => {
-    const picked = rawSlogans.map((item: any) => pickLocalized(item, lang)).filter(Boolean)
-    if (picked.length > 0) return picked
-    return [t('dashboard.slogan1'), t('dashboard.slogan2')]
-  }, [rawSlogans, lang, t])
+    return pickLocalizedSlogans(systemSettings.general.slogans, lang)
+  }, [lang, systemSettings.general.slogans])
 
   const heroSubtitle = pickLocalized(safeLanding.heroSubtitle, lang, t('dashboard.subtitle'))
-  const heroBadge = pickLocalized(safeLanding.heroBadgeText, lang, t('dashboard.badge'))
+  const heroBadge = systemSettings.general.siteName
   const primaryText = pickLocalized(safeLanding.ctaText, lang, t('dashboard.cta_booking'))
   const secondaryText = pickLocalized(safeLanding.secondaryCtaText, lang, t('dashboard.cta_checkin'))
   const servicesEyebrow = pickLocalized(safeLanding.servicesEyebrow, lang, t('dashboard.services.overline'))
@@ -227,7 +206,6 @@ function HomeLandingSectionInner({
         heroBadge={heroBadge}
         heroSubtitle={heroSubtitle}
         slogans={slogans}
-        rawSlogans={rawSlogans}
         language={lang}
         primaryText={primaryText}
         secondaryText={secondaryText}

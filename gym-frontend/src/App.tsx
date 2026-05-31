@@ -1,4 +1,5 @@
-import { ConfigProvider, theme } from 'antd'
+import { Button, ConfigProvider, theme } from 'antd'
+import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import MemberLayout from './components/layout/header/MemberLayout'
@@ -61,9 +62,17 @@ import PolicyPage from './pages/public/PolicyPage'
 
 function LoadingScreen() {
   const { t } = useTranslation()
+  const [timedOut, setTimedOut] = useState(false)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setTimedOut(true), 10000)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {t('common.loading')}
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
+      <div>{timedOut ? t('common.server_unavailable') : t('common.loading')}</div>
+      {timedOut && <Button type="primary" onClick={() => window.location.reload()}>{t('common.retry')}</Button>}
     </div>
   )
 }
@@ -86,8 +95,11 @@ function PrivateRoute({ children, feature }: { children: React.ReactNode; featur
 function HomeRoute() {
   const { user, loading } = useAuth()
   const { settings, loading: settingsLoading } = useSystemSettings()
+  const hasToken = Boolean(localStorage.getItem('token'))
 
-  if (loading || settingsLoading) {
+  if (!hasToken && loading) return <Navigate to="/about" replace />
+
+  if ((hasToken && loading) || settingsLoading) {
     return <LoadingScreen />
   }
 
@@ -97,10 +109,8 @@ function HomeRoute() {
 
 function MaintenanceRoute() {
   const { user, loading } = useAuth()
-  const { loading: settingsLoading } = useSystemSettings()
 
-  if (loading || settingsLoading) return <LoadingScreen />
-  if (user?.role === 'admin') return <Navigate to="/admin/system-settings" replace />
+  if (!loading && user?.role === 'admin') return <Navigate to="/admin/system-settings" replace />
   return <MaintenancePage />
 }
 

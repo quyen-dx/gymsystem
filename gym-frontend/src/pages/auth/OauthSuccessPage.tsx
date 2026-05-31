@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { authService } from '../../services/authService'
+import MaintenancePage from '../public/MaintenancePage'
 
 const oauthErrorKeyMap: Record<string, string> = {
   ACCOUNT_LOCKED: 'auth.accountLocked',
@@ -13,10 +14,10 @@ const oauthErrorKeyMap: Record<string, string> = {
 }
 
 const getDashboardPath = (role?: string) => {
-  if (role === 'admin') return '/'
-  if (role === 'seller') return '/'
-  if (role === 'staff') return '/'
-  if (role === 'pt') return '/'
+  if (role === 'admin') return '/admin'
+  if (role === 'seller') return '/seller'
+  if (role === 'staff') return '/staff'
+  if (role === 'pt') return '/pt'
   return '/'
 }
 
@@ -31,6 +32,10 @@ export default function OauthSuccessPage() {
     const syncOAuthLogin = async () => {
       const token = searchParams.get('token')
       const errorCode = searchParams.get('error')
+
+      if (errorCode === 'MAINTENANCE_MODE') {
+        return
+      }
 
       if (errorCode) {
         setError(t(oauthErrorKeyMap[errorCode] || 'auth.googleOAuthFailed'))
@@ -56,6 +61,10 @@ export default function OauthSuccessPage() {
 
     syncOAuthLogin()
   }, [navigate, searchParams, t, updateUser])
+
+  if (searchParams.get('error') === 'MAINTENANCE_MODE') {
+    return <MaintenancePage />
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 text-[var(--gs-text)]">

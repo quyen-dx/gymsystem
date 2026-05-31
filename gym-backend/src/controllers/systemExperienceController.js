@@ -2,15 +2,8 @@ import Faq from '../models/Faq.js'
 import Feedback from '../models/Feedback.js'
 import LandingContent from '../models/LandingContent.js'
 import Policy from '../models/Policy.js'
-import SystemSetting from '../models/SystemSetting.js'
 import UserActivity from '../models/UserActivity.js'
 import { recordUserActivity } from '../services/userActivityService.js'
-
-const getSingleton = async (Model, defaults = {}, filter = {}) => {
-  let doc = await Model.findOne(filter)
-  if (!doc) doc = await Model.create(defaults)
-  return doc
-}
 
 const normalizePageId = (value) => {
   const pageId = String(value || 'home').trim().toLowerCase()
@@ -31,29 +24,6 @@ const getLandingPage = async (pageId = 'home') => {
 
   if (!landing) landing = await LandingContent.create({ pageId: normalizedPageId })
   return normalizeLandingDoc(landing)
-}
-
-const normalizeSettingsSlogans = async (settings) => {
-  if (!settings) return settings
-  if (Array.isArray(settings.slogans) && settings.slogans.length > 0) {
-    const nextSlogans = settings.slogans
-      .map((item) => {
-        if (typeof item === 'string') return { vi: item.trim(), en: '' }
-        return { vi: String(item?.vi || '').trim(), en: String(item?.en || '').trim() }
-      })
-      .filter((item) => item.vi || item.en)
-    const changed = JSON.stringify(settings.slogans) !== JSON.stringify(nextSlogans)
-    settings.slogans = nextSlogans
-    if (!settings.slogan && nextSlogans[0]) settings.slogan = nextSlogans[0].vi || nextSlogans[0].en || ''
-    if (changed) await settings.save()
-    return settings
-  }
-  if (!Array.isArray(settings.slogans) || settings.slogans.length === 0) {
-    const legacy = String(settings.slogan || '').trim()
-    settings.slogans = legacy ? [{ vi: legacy, en: '' }] : []
-    await settings.save()
-  }
-  return settings
 }
 
 const slugify = (value = '') => value
@@ -161,32 +131,6 @@ const normalizeLandingDoc = async (landing) => {
   }
   if (changed) await landing.save()
   return landing
-}
-
-export const getSystemSettings = async (_req, res) => {
-  const settings = await normalizeSettingsSlogans(await getSingleton(SystemSetting))
-  res.json({ settings })
-}
-
-export const updateSystemSettings = async (req, res) => {
-  const settings = await normalizeSettingsSlogans(await getSingleton(SystemSetting))
-  const allowed = ['gymName', 'slogan', 'logoUrl', 'bannerUrl', 'faviconUrl', 'pageBlocks']
-  allowed.forEach((key) => {
-    if (req.body[key] !== undefined) settings[key] = req.body[key]
-  })
-  if (req.body.slogans !== undefined) {
-    settings.slogans = Array.isArray(req.body.slogans)
-      ? req.body.slogans
-        .map((item) => {
-          if (typeof item === 'string') return { vi: item.trim(), en: '' }
-          return { vi: String(item?.vi || '').trim(), en: String(item?.en || '').trim() }
-        })
-        .filter((item) => item.vi || item.en)
-      : []
-    settings.slogan = settings.slogans[0]?.vi || settings.slogans[0]?.en || settings.slogan || ''
-  }
-  await settings.save()
-  res.json({ message: 'Cập nhật system settings thành công', settings })
 }
 
 export const getLandingContent = async (_req, res) => {

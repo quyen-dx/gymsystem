@@ -17,10 +17,10 @@ export default function TypewriterSlogans({
   slogans,
   language,
   className = '',
-  typeSpeed = 90,
-  deleteSpeed = 45,
-  pauseAfterTyping = 2200,
-  pauseAfterDeleting = 500,
+  typeSpeed = 60,
+  deleteSpeed = 35,
+  pauseAfterTyping = 1500,
+  pauseAfterDeleting = 300,
 }: TypewriterSlogansProps) {
   const [displayText, setDisplayText] = useState('')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -106,7 +106,7 @@ export default function TypewriterSlogans({
 
   return (
     <>
-      <AutoFitText text={displayText} className={className}>
+      <AutoFitText text={displayText} className={`leading-[1.2] py-[0.06em] ${className}`.trim()}>
         {displayText}
         <span
           className="inline-block w-[3px] h-[1em] ml-0.5 align-middle"

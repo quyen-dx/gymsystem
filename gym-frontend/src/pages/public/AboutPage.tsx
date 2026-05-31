@@ -22,7 +22,7 @@ class AboutErrorBoundary extends React.Component<{ children: React.ReactNode }, 
 
   render() {
     if (this.state.hasError) {
-      return <AboutLandingSection landing={normalizeLandingData({})} settings={{}} />
+      return <AboutLandingSection landing={normalizeLandingData({})} />
     }
     return this.props.children
   }
@@ -33,28 +33,21 @@ export default function AboutPage() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [landing, setLanding] = useState<any>(null)
-  const [settings, setSettings] = useState<any>(null)
 
   useEffect(() => {
-    Promise.all([
-      systemExperienceService.getCmsPage('about'),
-      systemExperienceService.getSettings(),
-    ])
-      .then(([landingRes, settingsRes]) => {
+    systemExperienceService.getCmsPage('about')
+      .then((landingRes) => {
         console.log('GET /api/cms/page/about response:', landingRes.data)
         try {
           setLanding(normalizeLandingData(landingRes.data?.landing || {}))
-          setSettings(settingsRes.data?.settings || {})
         } catch (error) {
           console.error('Invalid about CMS payload:', error, landingRes.data)
           setLanding(normalizeLandingData({}))
-          setSettings({})
         }
       })
       .catch((error) => {
         console.error('Failed to load about CMS, rendering fallback:', error)
         setLanding(normalizeLandingData({}))
-        setSettings({})
       })
       .finally(() => setLoading(false))
   }, [])
@@ -69,7 +62,7 @@ export default function AboutPage() {
 
   return (
     <AboutErrorBoundary>
-      <AboutLandingSection landing={landing || normalizeLandingData({})} settings={settings || {}} onCtaClick={(link) => navigate(link)} />
+      <AboutLandingSection landing={landing || normalizeLandingData({})} onCtaClick={(link) => navigate(link)} />
     </AboutErrorBoundary>
   )
 }

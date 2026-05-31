@@ -9,30 +9,39 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import LanguageSelect from '../../components/common/LanguageSelect'
+import TypewriterSlogans from '../../components/system/TypewriterSlogans'
 import { API_URL } from '../../config/env'
 import { useTheme } from '../../context/ThemeProvider'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { useAuth } from '../../hooks/useAuth'
 import { getErrorMessage } from '../../utils/errorMessages'
+import { getLocalizedText } from '../../utils/localization'
 
 const { Title } = Typography
 
 const getDashboardPath = (role: string) => {
-  if (role === 'admin') return '/'
-  if (role === 'seller') return '/'
-  if (role === 'staff') return '/'
-  if (role === 'pt') return '/'
+  if (role === 'admin') return '/admin'
+  if (role === 'seller') return '/seller'
+  if (role === 'staff') return '/staff'
+  if (role === 'pt') return '/pt'
   return '/'
 }
 
+const pickLocalizedSlogans = (slogans: Array<{ vi?: string; en?: string }> = [], language: string) => {
+  return slogans
+    .map((item) => getLocalizedText(item, language, ''))
+    .filter(Boolean)
+}
+
 export default function LoginPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { login } = useAuth()
   const navigate = useNavigate()
   const { dark } = useTheme()
   const { settings } = useSystemSettings()
 
   const [loading, setLoading] = useState(false)
+  const slogans = pickLocalizedSlogans(settings.general.slogans, i18n.language)
 
   const handleSubmit = async (values: any) => {
     setLoading(true)
@@ -47,6 +56,10 @@ export default function LoginPage() {
       setTimeout(() => navigate(getDashboardPath(user.role)), 500)
     } catch (err: any) {
       const errorCode = err.response?.data?.code
+      if (errorCode === 'MAINTENANCE_MODE') {
+        navigate('/maintenance', { replace: true })
+        return
+      }
       message.error(getErrorMessage(t, err.response?.data?.message, 'login.failed', errorCode))
     } finally {
       setLoading(false)
@@ -88,6 +101,20 @@ export default function LoginPage() {
         `}
         style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a' }}
       >
+        <div className="mb-5 text-center">
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center overflow-hidden rounded-xl bg-[var(--theme-accent)] font-black text-[var(--theme-button-text)]">
+            {settings.general.logoUrl ? <img src={settings.general.logoUrl} alt={settings.general.siteName} className="h-full w-full object-cover" /> : 'GP'}
+          </div>
+          <div className="text-lg font-black tracking-wide text-[var(--theme-text)]">{settings.general.siteName}</div>
+          {slogans.length > 0 && (
+            <TypewriterSlogans
+              slogans={slogans}
+              language={i18n.language}
+              className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--theme-accent)]"
+            />
+          )}
+        </div>
+
         {/* TITLE */}
         <Title
           level={3}

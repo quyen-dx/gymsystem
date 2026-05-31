@@ -96,7 +96,9 @@
     "member": "Member"
   },
   "common": {
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "server_unavailable": "Unable to connect to the server. Please try again.",
+    "retry": "Retry"
   },
   "lang": {
     "vi": "VI",
@@ -520,7 +522,12 @@
     "orders_subtitle": "Track purchase history and delivery status.",
     "logout": "Log Out",
     "appearance_title": "Appearance",
-    "appearance_subtitle": "Customize colors to your preference.",
+    "appearance_subtitle": "Customize theme and colors to your preference.",
+    "personal_theme": "Personal theme",
+    "personal_theme_subtitle": "Only applies to your account.",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
+    "theme_system": "System default",
     "accent_color": "Accent Color",
     "accent_subtitle": "Customize colors to your preference",
     "bg_mode": "Background",
@@ -540,7 +547,9 @@
     "msg_default_failed": "Unable to set default",
     "msg_change_password_success": "Password changed successfully",
     "msg_change_password_failed": "Password change failed",
-    "msg_contact_copied": "Contact information copied"
+    "msg_contact_copied": "Contact information copied",
+    "msg_theme_update_success": "Personal theme updated",
+    "msg_theme_update_failed": "Unable to update personal theme"
   },
   "seller_orders": {
     "title": "Seller Orders",
@@ -1244,8 +1253,13 @@
     "reset_failed": "Failed to reset defaults",
     "disabled_message": "This feature has been temporarily disabled by the administrator.",
     "maintenance": {
-      "title": "System Maintenance",
-      "default_message": "The system is currently under maintenance. Please come back later."
+      "title": "System Under Maintenance",
+      "default_message": "We are currently improving the platform. Please come back later.",
+      "estimate_label": "Estimated completion",
+      "estimate_value": "To be updated soon",
+      "reason_label": "Reason",
+      "reason_value": "Platform improvement",
+      "contact_support": "Contact support"
     },
     "options": {
       "vi": "Vietnamese",
@@ -1269,9 +1283,10 @@
     },
     "items": {
       "general.siteName": { "label": "Website name", "description": "Name shown across the system and browser title." },
+      "general.slogans": { "label": "Website slogans", "description": "Manage multiple bilingual slogans rotating on the Landing Page, Login Page, and branding areas." },
       "general.logoUrl": { "label": "Website logo", "description": "Logo URL used for header, dashboard, and favicon when available." },
       "general.defaultLanguage": { "label": "Default language", "description": "Default language for visitors who have not chosen one." },
-      "general.defaultTheme": { "label": "Default theme", "description": "Default website appearance." },
+      "general.defaultTheme": { "label": "Default theme", "description": "Default theme for guests or users who have not selected a personal theme." },
       "general.maintenanceMode": { "label": "Maintenance mode", "description": "Temporarily locks the website experience for non-admin users." },
       "general.maintenanceMessage.vi": { "label": "Vietnamese maintenance content", "description": "Message shown on the Maintenance page when the current language is Vietnamese." },
       "general.maintenanceMessage.en": { "label": "English maintenance content", "description": "Message shown on the Maintenance page when the current language is English." },
@@ -1338,6 +1353,14 @@
       "landing.partnersSectionEnabled": { "label": "Partners section", "description": "Show or hide the landing partners section." },
       "landing.startNowButtonEnabled": { "label": "Start now button", "description": "Show or hide the start now button." },
       "landing.checkinNowButtonEnabled": { "label": "Check in now button", "description": "Show or hide the check-in button." }
+    },
+    "slogans": {
+      "vi_placeholder": "Vietnamese slogan",
+      "en_placeholder": "English slogan",
+      "add": "Add slogan",
+      "delete": "Delete slogan",
+      "at_least_one": "At least 1 slogan is required.",
+      "bilingual_required": "Slogan row {{index}} must include both Vietnamese and English."
     }
   },
   "system_experience": {

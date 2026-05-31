@@ -11,9 +11,9 @@ type AutoFitTextProps = {
 
 const getMinFontSize = () => {
   const vw = window.innerWidth
-  if (vw >= 1024) return 48
-  if (vw >= 768) return 40
-  return 32
+  if (vw >= 1024) return 36
+  if (vw >= 768) return 28
+  return 20
 }
 
 export default function AutoFitText({ text, children, className, onStatus }: AutoFitTextProps) {
@@ -66,18 +66,10 @@ export default function AutoFitText({ text, children, className, onStatus }: Aut
     }
 
     inner.style.fontSize = bestFit + 'px'
-
-    if (bestFit <= minFs && measurer.scrollWidth > containerWidth) {
-      inner.style.whiteSpace = 'normal'
-      const prev = statusRef.current
-      statusRef.current = 'wrapped'
-      if (prev !== 'wrapped') onStatus?.('wrapped')
-    } else {
-      inner.style.whiteSpace = 'nowrap'
-      const prev = statusRef.current
-      statusRef.current = 'scaled'
-      if (prev !== 'scaled') onStatus?.('scaled')
-    }
+    inner.style.whiteSpace = 'nowrap'
+    const prev = statusRef.current
+    statusRef.current = 'scaled'
+    if (prev !== 'scaled') onStatus?.('scaled')
   }, [text, onStatus])
 
   useEffect(() => {
@@ -91,8 +83,8 @@ export default function AutoFitText({ text, children, className, onStatus }: Aut
   }, [fit])
 
   return (
-    <div ref={outerRef} className={className} style={{ overflow: 'hidden', width: '100%' }}>
-      <span ref={innerRef} style={{ display: 'block', overflow: 'hidden' }}>
+    <div ref={outerRef} className={className} style={{ overflow: 'visible', width: '100%' }}>
+      <span ref={innerRef} style={{ display: 'block', overflow: 'visible' }}>
         {children}
       </span>
       <span

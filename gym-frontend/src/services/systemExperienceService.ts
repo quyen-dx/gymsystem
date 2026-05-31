@@ -1,10 +1,6 @@
 import api from './api'
 
 export const systemExperienceService = {
-  getSettings: () => api.get('/system-experience/settings'),
-  updateSettings: (payload: any) => api.put('/system-experience/settings', payload),
-  getLanding: () => api.get('/system-experience/landing'),
-  updateLanding: (payload: any) => api.put('/system-experience/landing', payload),
   getCmsPage: (pageId: 'home' | 'about') => api.get(`/cms/page/${pageId}`),
   saveCmsPage: (pageId: 'home' | 'about', payload: any) => api.post(`/cms/page/${pageId}`, payload),
   getCmsLanding: () => api.get('/cms/page/home'),

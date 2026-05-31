@@ -31,8 +31,6 @@ import { useWallet } from '../../../context/WalletProvider'
 import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
 import { getShops } from '../../../services/shopService'
-import { systemExperienceService } from '../../../services/systemExperienceService'
-import { getLocalizedText } from '../../../utils/localization'
 import type { ProductShop } from '../../../types/member/product'
 import AiChatWidget from '../../chat/AiChatWidget'
 import MemberFooter from '../footer/MemberFooter'
@@ -55,8 +53,6 @@ const shouldLockMemberInteractions = (pathname: string) => (
   pathname.startsWith('/store')
 )
 
-const pickLocalized = (value: any, language: string) => getLocalizedText(value, language, '')
-
 export default function MemberLayout({
   children,
   hideFooter = false,
@@ -64,7 +60,7 @@ export default function MemberLayout({
   children: React.ReactNode
   hideFooter?: boolean
 }) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { user } = useAuth()
   const { settings, isEnabled } = useSystemSettings()
   const [accountOpen, setAccountOpen] = useState(false)
@@ -76,7 +72,6 @@ export default function MemberLayout({
   const [storeDropdownShops, setStoreDropdownShops] = useState<ProductShop[]>([])
   const [moreDropdownOpen, setMoreDropdownOpen] = useState(false)
   const moreDropdownRef = useRef<HTMLDivElement>(null)
-  const [branding, setBranding] = useState({ gymName: 'GymPro', logoUrl: '', slogan: '' })
   const { cartCount } = useCart()
   const { wallet } = useWallet()
   const navigate = useNavigate()
@@ -168,22 +163,6 @@ export default function MemberLayout({
     }
   }, [moreDropdownOpen])
 
-  useEffect(() => {
-    systemExperienceService.getSettings()
-      .then((res) => {
-        const settings = res.data.settings || {}
-        const firstSlogan = Array.isArray(settings.slogans) && settings.slogans.length > 0
-          ? pickLocalized(settings.slogans[0], i18n.language)
-          : settings.slogan || ''
-        setBranding({ gymName: settings.gymName || 'GymPro', logoUrl: settings.logoUrl || '', slogan: firstSlogan })
-        if (settings.faviconUrl) {
-          const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null
-          if (link) link.href = settings.faviconUrl
-        }
-      })
-      .catch(() => { })
-  }, [i18n.language])
-
   return (
     <Layout className="member-shell" style={{ minHeight: '100vh' }}>
       <Header
@@ -203,8 +182,8 @@ export default function MemberLayout({
             if (event.key === 'Enter') goTo('/')
           }}
         >
-          {branding.logoUrl ? (
-            <img src={branding.logoUrl} alt={branding.gymName} style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover' }} />
+          {settings.general.logoUrl ? (
+            <img src={settings.general.logoUrl} alt={settings.general.siteName} style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover' }} />
           ) : (
             <div
               className="member-shell-logo-mark"
@@ -225,7 +204,7 @@ export default function MemberLayout({
               GP
             </div>
           )}
-          <div className="member-shell-brand" style={{ color: 'var(--theme-accent)' }}>{branding.gymName}</div>
+          <div className="member-shell-brand" style={{ color: 'var(--theme-accent)' }}>{settings.general.siteName}</div>
         </div>
 
         <nav className="member-shell-desktop-nav" aria-label="Member navigation">
@@ -451,7 +430,7 @@ export default function MemberLayout({
       {!hideFooter && <MemberFooter />}
 
       <Drawer
-        title="GymPro"
+        title={settings.general.siteName}
         placement="right"
         open={menuOpen}
         onClose={() => setMenuOpen(false)}

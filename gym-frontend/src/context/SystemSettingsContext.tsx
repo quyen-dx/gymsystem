@@ -1,18 +1,23 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import i18n from '../i18n'
 import { systemSettingsService } from '../services/systemSettingsService'
+import { useAuth } from '../hooks/useAuth'
 import { useTheme } from './ThemeContext'
 
 export const SYSTEM_SETTINGS_DEFAULTS = {
   general: {
     siteName: 'GymPro',
+    slogans: [
+      { vi: 'CHINH PHỤC TỪNG NGÀY', en: 'CONQUER EVERY DAY' },
+      { vi: 'NƠI BẠN VƯỢT QUA GIỚI HẠN', en: 'WHERE YOU BREAK YOUR LIMITS' },
+    ],
     logoUrl: '',
     defaultLanguage: 'vi',
     defaultTheme: 'dark',
     maintenanceMode: false,
     maintenanceMessage: {
-      vi: 'Hệ thống đang bảo trì. Vui lòng quay lại sau.',
-      en: 'The system is currently under maintenance. Please come back later.',
+      vi: 'Chúng tôi đang nâng cấp hệ thống để mang lại trải nghiệm tốt hơn. Vui lòng quay lại sau.',
+      en: 'We are currently improving the platform. Please come back later.',
     },
   },
   auth: { allowRegistration: true, allowPhoneLogin: true, allowEmailUsernameLogin: true, googleOAuthEnabled: true, facebookOAuthEnabled: true, demoOtpEnabled: true, otpExpiresInSeconds: 300, forgotPasswordSmsOtpEnabled: true, forgotPasswordEmailEnabled: true },
@@ -49,16 +54,43 @@ const mergeSettings = (base: any, overrides: any): any => {
   return output
 }
 
+const normalizeSettings = (settings: any): SystemSettings => {
+  const rawGeneral = settings?.general || {}
+  const hasProvidedSlogans = Array.isArray(rawGeneral.slogans) && rawGeneral.slogans.length > 0
+  const legacySlogan = typeof rawGeneral.slogan === 'string'
+    ? { vi: rawGeneral.slogan.trim(), en: rawGeneral.slogan.trim() }
+    : rawGeneral.slogan
+  const merged = mergeSettings(SYSTEM_SETTINGS_DEFAULTS, settings || {})
+  const sourceSlogans = hasProvidedSlogans
+    ? rawGeneral.slogans
+    : legacySlogan
+      ? [{ vi: legacySlogan.vi || legacySlogan.en, en: legacySlogan.en || legacySlogan.vi }]
+      : SYSTEM_SETTINGS_DEFAULTS.general.slogans
+  const slogans = sourceSlogans
+    .map((item: any) => ({
+      vi: String(item?.vi || '').trim(),
+      en: String(item?.en || '').trim(),
+    }))
+    .filter((item: any) => item.vi && item.en)
+  const safeSlogans = slogans.length ? slogans : SYSTEM_SETTINGS_DEFAULTS.general.slogans
+  return {
+    ...merged,
+    general: {
+      ...merged.general,
+      slogans: safeSlogans.map((item: any) => ({ vi: item.vi, en: item.en })),
+    },
+  }
+}
+
 const getByPath = (value: any, path: string) => path.split('.').reduce((current, key) => current?.[key], value)
 
 export function SystemSettingsProvider({ children }: { children: ReactNode }) {
   const { applyThemeMode } = useTheme()
+  const { user } = useAuth()
   const [settings, setSettings] = useState<SystemSettings>(SYSTEM_SETTINGS_DEFAULTS)
   const [loading, setLoading] = useState(true)
 
-  const refresh = async () => {
-    const response = await systemSettingsService.get()
-    const nextSettings = mergeSettings(SYSTEM_SETTINGS_DEFAULTS, response.data?.settings || {})
+  const applySettings = (nextSettings: SystemSettings) => {
     setSettings(nextSettings)
     document.title = nextSettings.general.siteName || 'GymPro'
     if (nextSettings.general.logoUrl) {
@@ -69,11 +101,30 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
     if (!localStorage.getItem('i18nextLng') && ['vi', 'en'].includes(preferredLanguage)) {
       i18n.changeLanguage(preferredLanguage)
     }
-    applyThemeMode(nextSettings.general.defaultTheme === 'light' ? 'light' : 'dark')
+  }
+
+  const refresh = async () => {
+    try {
+      const response = await systemSettingsService.get()
+      applySettings(normalizeSettings(response.data?.settings || {}))
+    } catch (error) {
+      console.error('[system-settings] failed to load, using defaults:', error)
+      applySettings(SYSTEM_SETTINGS_DEFAULTS)
+    }
   }
 
   useEffect(() => {
-    refresh().catch(() => { }).finally(() => setLoading(false))
+    const personalTheme = user?.themePreference
+    const resolvedTheme = personalTheme === 'light' || personalTheme === 'dark'
+      ? personalTheme
+      : settings.general.defaultTheme === 'light'
+        ? 'light'
+        : 'dark'
+    applyThemeMode(resolvedTheme)
+  }, [applyThemeMode, settings.general.defaultTheme, user?.themePreference])
+
+  useEffect(() => {
+    refresh().finally(() => setLoading(false))
   }, [])
 
   const value = useMemo<ContextValue>(() => ({

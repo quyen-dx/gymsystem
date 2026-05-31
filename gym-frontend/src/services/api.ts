@@ -6,6 +6,7 @@ import i18n from '../i18n'
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
+  timeout: 10000,
 })
 
 let refreshPromise: Promise<string | null> | null = null
@@ -62,13 +63,20 @@ api.interceptors.response.use(
     if (errorCode === 'FEATURE_DISABLED' || errorCode === 'MAINTENANCE_MODE') {
       const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en'
       const translatedMessage = errorCode === 'MAINTENANCE_MODE'
-        ? (error.response?.data?.maintenanceMessage?.[lang] || i18n.t('system_settings.maintenance.default_message'))
+        ? (
+          error.response?.data?.maintenanceMessage?.[lang] ||
+          (typeof error.response?.data?.message === 'object' ? error.response?.data?.message?.[lang] : '') ||
+          i18n.t('system_settings.maintenance.default_message')
+        )
         : i18n.t('system_settings.disabled_message')
       error.response.data.message = translatedMessage
       const now = Date.now()
       if (now - lastFeatureDisabledToastAt > 1200) {
         lastFeatureDisabledToastAt = now
         message.warning(translatedMessage)
+      }
+      if (errorCode === 'MAINTENANCE_MODE' && window.location.pathname !== '/maintenance') {
+        window.location.href = '/maintenance'
       }
       return Promise.reject(error)
     }

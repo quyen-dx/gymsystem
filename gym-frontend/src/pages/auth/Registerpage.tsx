@@ -5,18 +5,26 @@ import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import LanguageSelect from '../../components/common/LanguageSelect'
 import FeatureDisabled from '../../components/system/FeatureDisabled'
+import TypewriterSlogans from '../../components/system/TypewriterSlogans'
 import { useTheme } from '../../context/ThemeProvider'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { useAuth } from '../../hooks/useAuth'
 import { authService } from '../../services/authService'
 import { getErrorMessage } from '../../utils/errorMessages'
+import { getLocalizedText } from '../../utils/localization'
 const { Title, Text } = Typography
 
 const registerOtpMessageKey = 'register-send-otp'
 const registerVerifyMessageKey = 'register-verify-otp'
 
+const pickLocalizedSlogans = (slogans: Array<{ vi?: string; en?: string }> = [], language: string) => {
+  return slogans
+    .map((item) => getLocalizedText(item, language, ''))
+    .filter(Boolean)
+}
+
 export default function RegisterPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { dark } = useTheme()
   const { updateUser } = useAuth()
@@ -27,6 +35,7 @@ export default function RegisterPage() {
 
   const [form] = Form.useForm()
   const [otpPreview, setOtpPreview] = useState('')
+  const slogans = pickLocalizedSlogans(settings.general.slogans, i18n.language)
 
   if (!settings.auth.allowRegistration) return <FeatureDisabled />
 
@@ -105,13 +114,27 @@ export default function RegisterPage() {
 
       {/* CARD */}
       <div
-        className={`relative z-10 my-auto w-full max-w-md rounded-2xl p-7 shadow-2xl transition-all
+        className={`relative z-10 my-auto w-full max-w-sm rounded-2xl p-7 shadow-2xl transition-all
           ${dark ? 'bg-[#141414] text-white' : 'bg-[#484848] text-[#edebe6]'}
         `}
         style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a' }}
       >
+        <div className="mb-5 text-center">
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center overflow-hidden rounded-xl bg-[var(--theme-accent)] font-black text-[var(--theme-button-text)]">
+            {settings.general.logoUrl ? <img src={settings.general.logoUrl} alt={settings.general.siteName} className="h-full w-full object-cover" /> : 'GP'}
+          </div>
+          <div className="text-lg font-black tracking-wide text-[var(--theme-text)]">{settings.general.siteName}</div>
+          {slogans.length > 0 && (
+            <TypewriterSlogans
+              slogans={slogans}
+              language={i18n.language}
+              className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--theme-accent)]"
+            />
+          )}
+        </div>
+
         {/* HEADER */}
-        <div className="flex items-center gap-2 mb-4">
+        <div className="mb-4 flex items-center justify-center gap-2">
 
           {step === 'otp' && (
             <Button
@@ -119,6 +142,7 @@ export default function RegisterPage() {
               icon={<ArrowLeftOutlined />}
               onClick={() => setStep('form')}
               disabled={loading}
+              className="!absolute !left-5"
               style={{ color: dark ? '#fff' : '#edebe6' }}
             />
           )}
@@ -127,6 +151,7 @@ export default function RegisterPage() {
             level={3}
             style={{
               margin: 0,
+              textAlign: 'center',
               color: dark ? '#fff' : '#edebe6',
             }}
           >

@@ -185,6 +185,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   const applyTheme = applyThemeFull
 
   const applyThemeMode = (mode: 'dark' | 'light') => {
+    if (themeModeRef.current === mode) return
     themeModeRef.current = mode
     setThemeMode(mode)
     localStorage.setItem('theme', mode)

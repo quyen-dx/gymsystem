@@ -20,6 +20,7 @@ import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { generateTheme, PRESET_ACCENT_COLORS, useTheme } from '../../context/ThemeContext'
+import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { useAuth } from '../../hooks/useAuth'
 import { createAddress, deleteAddress, getAddresses, setDefaultAddress, updateAddress } from '../../services/addressService'
 import { authService } from '../../services/authService'
@@ -30,7 +31,7 @@ const getUsernameFromEmail = (email?: string | null) => {
 }
 
 const profileModalClass =
-  'max-w-[760px] max-[768px]:!m-0 max-[768px]:!w-[calc(100vw-16px)] max-[768px]:!max-w-none max-[768px]:!pb-0 [&_.ant-modal-content]:!overflow-hidden [&_.ant-modal-content]:!p-0 [&_.ant-modal-content]:!rounded-2xl [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-content]:!shadow-2xl [&_.ant-modal-close]:!right-3.5 [&_.ant-modal-close]:!top-3.5 [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
+  'max-w-[760px] max-[768px]:!m-0 max-[768px]:!w-[calc(100vw-8px)] max-[768px]:!max-w-none max-[768px]:!pb-0 [&_.ant-modal-content]:!p-0 [&_.ant-modal-content]:!rounded-2xl [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-content]:!shadow-2xl [&_.ant-modal-close]:!right-3.5 [&_.ant-modal-close]:!top-3.5 [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
 
 const profileModalWrapClass =
   'profile-modal-wrap [&_.ant-modal-mask]:!bg-[var(--profile-mask)] [&_.ant-modal-mask]:backdrop-blur-[10px]'
@@ -327,7 +328,7 @@ const MobileMenuGrid = ({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: '8px 16px',
+      padding: '8px 12px',
       borderBottom: mobileMenuOpen ? '1px solid var(--theme-border)' : 'none',
     }}>
       <span style={{ fontSize: 13, color: 'var(--theme-muted)', fontWeight: 500 }}>
@@ -395,7 +396,8 @@ export default function AccountProfileModal({
 }) {
   const { t, i18n } = useTranslation()
   const { user, updateUser, logout } = useAuth()
-  const { applyAccentFast, applyThemeFull, commitPending, accentColor: savedAccentColor } = useTheme()
+  const { applyAccentFast, applyThemeFull, applyThemeMode, commitPending, accentColor: savedAccentColor } = useTheme()
+  const { settings: systemSettings } = useSystemSettings()
   const { token } = theme.useToken()
   const screens = Grid.useBreakpoint()
   const navigate = useNavigate()
@@ -439,6 +441,34 @@ export default function AccountProfileModal({
   const handleAccentCommit = (hex = accentColor) => {
     setAccentColor(hex)
     applyThemeFull(hex)
+  }
+
+  const resolveThemePreference = (preference: 'system' | 'light' | 'dark' = 'system') => {
+    if (preference === 'light' || preference === 'dark') return preference
+    return systemSettings.general.defaultTheme === 'light' ? 'light' : 'dark'
+  }
+
+  const handleThemePreferenceChange = async (preference: 'system' | 'light' | 'dark') => {
+    if (!user || loading) return
+    const previousPreference = user.themePreference || 'system'
+    applyThemeMode(resolveThemePreference(preference))
+    updateUser({ ...user, themePreference: preference })
+
+    const formData = new FormData()
+    formData.append('themePreference', preference)
+
+    setLoading(true)
+    try {
+      const { data } = await authService.updateProfile(formData)
+      updateUser(data.user)
+      message.success(t('profile.msg_theme_update_success'))
+    } catch (err: any) {
+      applyThemeMode(resolveThemePreference(previousPreference))
+      updateUser({ ...user, themePreference: previousPreference })
+      message.error(err.response?.data?.message || t('profile.msg_theme_update_failed'))
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleLogout = () => {
@@ -504,7 +534,7 @@ export default function AccountProfileModal({
             .getPropertyValue('--sab') || '0'
         ) || 0
         const height = Math.floor(vvHeight) - safeBottom
-        const top = Math.max(8, Math.floor(vvTop) + 8)
+        const top = Math.max(4, Math.floor(vvTop) + 4)
 
         document.documentElement.style.setProperty('--profile-visual-height', `${height}px`)
         document.documentElement.style.setProperty('--profile-visual-top', `${top}px`)
@@ -516,6 +546,8 @@ export default function AccountProfileModal({
     }
 
     const handleTouchMove = (event: TouchEvent) => {
+      if (window.innerWidth <= 768) return
+
       const scrollNode = profileScrollRef.current
       const target = event.target as Node | null
 
@@ -545,6 +577,8 @@ export default function AccountProfileModal({
     }
 
     const handleWheel = (event: WheelEvent) => {
+      if (window.innerWidth <= 768) return
+
       const scrollNode = profileScrollRef.current
       const target = event.target as Node | null
       const modalNode = document.querySelector('.profile-modal .ant-modal-content')
@@ -776,6 +810,10 @@ export default function AccountProfileModal({
   const responsiveSectionCardStyle = {
     ...sectionCardStyle,
     marginBottom: isProfileMobile ? 16 : 12,
+    padding: isProfileMobile ? 12 : sectionCardStyle.padding,
+    width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
   } as CSSProperties
   const tabs: ProfileTabItem[] = [
     { key: 'profile', label: t('profile.info'), icon: <UserOutlined /> },
@@ -824,7 +862,7 @@ export default function AccountProfileModal({
       footer={null}
       maskClosable
       destroyOnClose
-      width={isProfileDesktop ? 760 : isProfileMobile ? 'calc(100vw - 16px)' : 680}
+      width={isProfileDesktop ? 760 : isProfileMobile ? 'calc(100vw - 8px)' : 680}
       className={`profile-modal ${profileModalClass}`}
       wrapClassName={profileModalWrapClass}
       style={{
@@ -838,26 +876,26 @@ export default function AccountProfileModal({
         content: {
           borderRadius: 16,
           padding: 0,
-          overflow: 'hidden',
+          overflow: isProfileMobile ? 'auto' : 'hidden',
           display: 'flex',
           flexDirection: 'column',
           border: '1px solid var(--theme-border)',
           height: isProfileMobile
-            ? 'calc(var(--profile-visual-height, 92vh) - 16px)'
+            ? 'calc(var(--profile-visual-height, 100dvh) - 8px)'
             : isProfileCompact
               ? '82vh'
               : 'auto',
           maxHeight: isProfileMobile
-            ? 'calc(var(--profile-visual-height, 92vh) - 16px)'
+            ? 'calc(100dvh - 16px)'
             : '90vh',
         },
         body: {
           padding: 0,
-          height: '100%',
+          height: isProfileMobile ? 'auto' : '100%',
           minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
+          overflow: isProfileMobile ? 'visible' : 'hidden',
         },
         mask: {
           backdropFilter: 'blur(4px)',
@@ -870,7 +908,7 @@ export default function AccountProfileModal({
           color: token.colorText,
           overflowX: 'hidden',
           width: '100%',
-          maxWidth: '100%',
+          maxWidth: 'none',
           height: isProfileCompact ? '100%' : 'auto',
           display: 'flex',
           flexDirection: 'column',
@@ -915,14 +953,14 @@ export default function AccountProfileModal({
             ref={profileScrollRef}
             className="profile-modal-scroll min-h-0 flex-1 overflow-y-auto"
             style={{
-              maxHeight: isProfileCompact ? 'calc(var(--profile-visual-height, 100svh) - 320px - env(safe-area-inset-bottom, 20px))' : '70vh',
+              maxHeight: isProfileMobile ? 'none' : isProfileCompact ? 'calc(var(--profile-visual-height, 100svh) - 320px - env(safe-area-inset-bottom, 20px))' : '70vh',
               minHeight: 120,
-              padding: isProfileMobile ? '16px 16px 0' : '16px 20px',
-              paddingBottom: isProfileMobile ? 'calc(24px + env(safe-area-inset-bottom, 16px))' : '16px',
+              padding: isProfileMobile ? '4px 4px 0' : '16px 20px',
+              paddingBottom: isProfileMobile ? 'calc(96px + env(safe-area-inset-bottom, 16px))' : '16px',
               scrollbarWidth: 'thin',
               scrollbarColor: 'var(--theme-border) transparent',
               overflowX: 'hidden',
-              overflowY: 'auto',
+              overflowY: isProfileMobile ? 'visible' : 'auto',
               width: '100%',
               maxWidth: '100%',
               WebkitOverflowScrolling: 'touch',
@@ -1006,6 +1044,37 @@ export default function AccountProfileModal({
               {activeTab === 'appearance' && (
                 <div style={responsiveSectionCardStyle}>
                   {renderSectionHeader(<BgColorsOutlined />, t('profile.appearance_title'), t('profile.appearance_subtitle'))}
+                  <div className="mb-6 border-b border-[var(--theme-border)] pb-5">
+                    <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.personal_theme')}</div>
+                    <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
+                      {t('profile.personal_theme_subtitle')}
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {([
+                        { value: 'system', label: t('profile.theme_system') },
+                        { value: 'light', label: t('profile.theme_light') },
+                        { value: 'dark', label: t('profile.theme_dark') },
+                      ] as Array<{ value: 'system' | 'light' | 'dark'; label: string }>).map((item) => {
+                        const active = (user.themePreference || 'system') === item.value
+                        return (
+                          <button
+                            key={item.value}
+                            type="button"
+                            disabled={loading}
+                            onClick={() => handleThemePreferenceChange(item.value)}
+                            className="rounded-xl border px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70"
+                            style={{
+                              background: active ? 'var(--theme-accent-muted)' : 'var(--theme-elevated)',
+                              borderColor: active ? 'var(--theme-accent)' : 'var(--theme-border-strong)',
+                              color: active ? 'var(--theme-accent)' : 'var(--theme-text)',
+                            }}
+                          >
+                            {item.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
                   <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
                     <div>
                       <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.accent_color')}</div>

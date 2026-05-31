@@ -32,7 +32,6 @@ import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
 import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
 import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
-import { systemExperienceService } from '../../../services/systemExperienceService'
 
 const { Sider, Content } = Layout
 const { Text } = Typography
@@ -43,7 +42,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { settings, isEnabled } = useSystemSettings()
   const [accountOpen, setAccountOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
-  const [branding, setBranding] = useState({ gymName: 'GymPro', logoUrl: '' })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
@@ -57,19 +55,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         .catch(() => { })
     }
   }, [user?.role])
-
-  useEffect(() => {
-    systemExperienceService.getSettings()
-      .then((res) => {
-        const settings = res.data.settings || {}
-        setBranding({ gymName: settings.gymName || 'GymPro', logoUrl: settings.logoUrl || '' })
-        if (settings.faviconUrl) {
-          const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null
-          if (link) link.href = settings.faviconUrl
-        }
-      })
-      .catch(() => { })
-  }, [])
 
   const roleMenus: Record<string, any[]> = {
     admin: [
@@ -156,7 +141,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         color: 'var(--theme-text)',
       }}
     >
-      {branding.logoUrl ? <img src={branding.logoUrl} alt={branding.gymName} style={{ maxHeight: 30 }} /> : `${branding.gymName} DASHBOARD`}
+      {settings.general.logoUrl ? <img src={settings.general.logoUrl} alt={settings.general.siteName} style={{ maxHeight: 30 }} /> : `${settings.general.siteName} DASHBOARD`}
     </div>
   )
 
@@ -236,7 +221,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             onClick={() => setSidebarOpen(true)}
           />
           <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: 2, color: 'var(--theme-text)' }}>
-            GYM PRO
+            {settings.general.siteName}
           </div>
           <Avatar
             size={32}
@@ -261,7 +246,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           styles={{ body: { padding: 0, background: 'var(--theme-card)' } }}
         >
           <div className="dashboard-drawer-close">
-            <span className="drawer-brand">GYM PRO</span>
+            <span className="drawer-brand">{settings.general.siteName}</span>
             <button
               type="button"
               onClick={closeSidebar}

@@ -1,13 +1,23 @@
 export const SYSTEM_SETTINGS_DEFAULTS = {
   general: {
     siteName: 'GymPro',
+    slogans: [
+      {
+        vi: 'CHINH PHỤC TỪNG NGÀY',
+        en: 'CONQUER EVERY DAY',
+      },
+      {
+        vi: 'NƠI BẠN VƯỢT QUA GIỚI HẠN',
+        en: 'WHERE YOU BREAK YOUR LIMITS',
+      },
+    ],
     logoUrl: '',
     defaultLanguage: 'vi',
     defaultTheme: 'dark',
     maintenanceMode: false,
     maintenanceMessage: {
-      vi: 'Hệ thống đang bảo trì. Vui lòng quay lại sau.',
-      en: 'The system is currently under maintenance. Please come back later.',
+      vi: 'Chúng tôi đang nâng cấp hệ thống để mang lại trải nghiệm tốt hơn. Vui lòng quay lại sau.',
+      en: 'We are currently improving the platform. Please come back later.',
     },
   },
   auth: {
@@ -112,14 +122,67 @@ export const mergeSystemSettings = (base, overrides = {}) => {
 }
 
 export const normalizeSystemSettings = (settings = {}) => {
+  const rawGeneral = settings?.general || {}
+  const hasProvidedSlogans = Array.isArray(rawGeneral.slogans) && rawGeneral.slogans.length > 0
+  const legacySlogan = typeof rawGeneral.slogan === 'string'
+    ? { vi: rawGeneral.slogan.trim(), en: rawGeneral.slogan.trim() }
+    : rawGeneral.slogan
   const merged = mergeSystemSettings(SYSTEM_SETTINGS_DEFAULTS, settings)
+  const legacyMaintenanceMessages = {
+    vi: 'Hệ thống đang bảo trì. Vui lòng quay lại sau.',
+    en: 'The system is currently under maintenance. Please come back later.',
+  }
   merged.general.defaultLanguage = ['vi', 'en'].includes(merged.general.defaultLanguage) ? merged.general.defaultLanguage : 'vi'
   merged.general.defaultTheme = ['dark', 'light'].includes(merged.general.defaultTheme) ? merged.general.defaultTheme : 'dark'
+  merged.general.siteName = String(merged.general.siteName || SYSTEM_SETTINGS_DEFAULTS.general.siteName).trim()
+  const sourceSlogans = hasProvidedSlogans
+    ? rawGeneral.slogans
+    : legacySlogan
+      ? [{ vi: legacySlogan.vi || legacySlogan.en, en: legacySlogan.en || legacySlogan.vi }]
+      : SYSTEM_SETTINGS_DEFAULTS.general.slogans
+  merged.general.slogans = sourceSlogans
+    .map((item) => ({
+      vi: String(item?.vi || '').trim(),
+      en: String(item?.en || '').trim(),
+    }))
+    .filter((item) => item.vi && item.en)
+  if (!merged.general.slogans.length) {
+    merged.general.slogans = SYSTEM_SETTINGS_DEFAULTS.general.slogans.map(({ vi, en }) => ({ vi, en }))
+  }
+  delete merged.general.slogan
+  merged.general.logoUrl = String(merged.general.logoUrl || '').trim()
   merged.general.maintenanceMessage = {
     vi: String(merged.general.maintenanceMessage?.vi || SYSTEM_SETTINGS_DEFAULTS.general.maintenanceMessage.vi).trim(),
     en: String(merged.general.maintenanceMessage?.en || SYSTEM_SETTINGS_DEFAULTS.general.maintenanceMessage.en).trim(),
   }
+  if (merged.general.maintenanceMessage.vi === legacyMaintenanceMessages.vi) {
+    merged.general.maintenanceMessage.vi = SYSTEM_SETTINGS_DEFAULTS.general.maintenanceMessage.vi
+  }
+  if (merged.general.maintenanceMessage.en === legacyMaintenanceMessages.en) {
+    merged.general.maintenanceMessage.en = SYSTEM_SETTINGS_DEFAULTS.general.maintenanceMessage.en
+  }
   merged.auth.otpExpiresInSeconds = Math.max(30, Number(merged.auth.otpExpiresInSeconds) || 300)
   merged.checkin.qrTokenTtlSeconds = Math.max(5, Number(merged.checkin.qrTokenTtlSeconds) || 30)
   return merged
+}
+
+export const validateSystemSettingsForSave = (settings = {}) => {
+  const slogans = settings?.general?.slogans
+  if (!Array.isArray(slogans) || slogans.length < 1) {
+    const error = new Error('Phải có ít nhất 1 slogan')
+    error.statusCode = 400
+    error.code = 'VALIDATION_FAILED'
+    throw error
+  }
+
+  slogans.forEach((item, index) => {
+    const vi = String(item?.vi || '').trim()
+    const en = String(item?.en || '').trim()
+    if (!vi || !en) {
+      const error = new Error(`Slogan dòng ${index + 1} phải có cả tiếng Việt và tiếng Anh`)
+      error.statusCode = 400
+      error.code = 'VALIDATION_FAILED'
+      throw error
+    }
+  })
 }

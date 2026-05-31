@@ -12,12 +12,10 @@ import {
   getMyFeedback,
   getPolicies,
   getPolicyBySlug,
-  getSystemSettings,
   updateFaq,
   updateFeedbackStatus,
   updateLandingContent,
   updatePolicy,
-  updateSystemSettings,
 } from '../controllers/systemExperienceController.js'
 import { adminOnly, protect } from '../middlewares/authMiddleware.js'
 
@@ -27,9 +25,6 @@ const optionalAuth = (req, _res, next) => {
   if (!req.headers.authorization) return next()
   return protect(req, _res, next)
 }
-
-router.get('/settings', getSystemSettings)
-router.put('/settings', protect, adminOnly, updateSystemSettings)
 
 router.get('/landing', getLandingContent)
 router.put('/landing', protect, adminOnly, updateLandingContent)

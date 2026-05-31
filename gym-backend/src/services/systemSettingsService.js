@@ -1,4 +1,4 @@
-import { normalizeSystemSettings, SYSTEM_SETTINGS_DEFAULTS } from '../config/systemSettingsDefaults.js'
+import { normalizeSystemSettings, SYSTEM_SETTINGS_DEFAULTS, validateSystemSettingsForSave } from '../config/systemSettingsDefaults.js'
 import SystemSettings from '../models/SystemSettings.js'
 import AppError from '../utils/appError.js'
 
@@ -29,6 +29,7 @@ export const getSystemSettingsValue = async () => {
 
 export const updateSystemSettingsValue = async (settings) => {
   const doc = await getSystemSettingsDocument()
+  validateSystemSettingsForSave(settings)
   doc.settings = normalizeSystemSettings(settings)
   await doc.save()
   return doc

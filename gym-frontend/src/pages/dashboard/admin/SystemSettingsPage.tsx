@@ -1,4 +1,4 @@
-import { ReloadOutlined, SaveOutlined, SearchOutlined } from '@ant-design/icons'
+import { DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, SearchOutlined } from '@ant-design/icons'
 import { Button, Card, Input, InputNumber, Select, Space, Spin, Switch, Typography, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -8,7 +8,7 @@ import { systemSettingsService } from '../../../services/systemSettingsService'
 
 const { Text } = Typography
 
-type SettingType = 'switch' | 'text' | 'select' | 'number'
+type SettingType = 'switch' | 'text' | 'select' | 'number' | 'slogans'
 
 type SettingItem = {
   path: string
@@ -38,6 +38,7 @@ const SETTING_GROUPS: SettingGroup[] = [
     key: 'general',
     items: [
       { path: 'general.siteName', type: 'text' },
+      { path: 'general.slogans', type: 'slogans' },
       { path: 'general.logoUrl', type: 'text' },
       { path: 'general.defaultLanguage', type: 'select', options: langOptions },
       { path: 'general.defaultTheme', type: 'select', options: themeOptions },
@@ -212,6 +213,17 @@ export default function SystemSettingsPage() {
   }, [groupFilter, search, t])
 
   const save = async () => {
+    const slogans = Array.isArray(draft?.general?.slogans) ? draft.general.slogans : []
+    if (slogans.length < 1) {
+      message.error(t('system_settings.slogans.at_least_one'))
+      return
+    }
+    const invalidIndex = slogans.findIndex((slogan: any) => !String(slogan?.vi || '').trim() || !String(slogan?.en || '').trim())
+    if (invalidIndex >= 0) {
+      message.error(t('system_settings.slogans.bilingual_required', { index: invalidIndex + 1 }))
+      return
+    }
+
     setSaving(true)
     try {
       const response = await systemSettingsService.update(draft)
@@ -219,7 +231,8 @@ export default function SystemSettingsPage() {
       await refresh()
       message.success(t('system_settings.save_success'))
     } catch (error: any) {
-      message.error(t(error.response?.data?.code === 'FEATURE_DISABLED' ? 'system_settings.disabled_message' : 'system_settings.save_failed'))
+      console.error('[system-settings] save failed response:', error.response?.status, error.response?.data || error.message)
+      message.error(error.response?.data?.message || t('system_settings.save_failed'))
     } finally {
       setSaving(false)
     }
@@ -233,7 +246,8 @@ export default function SystemSettingsPage() {
       await refresh()
       message.success(t('system_settings.reset_success'))
     } catch (error: any) {
-      message.error(t(error.response?.data?.code === 'FEATURE_DISABLED' ? 'system_settings.disabled_message' : 'system_settings.reset_failed'))
+      console.error('[system-settings] reset failed response:', error.response?.status, error.response?.data || error.message)
+      message.error(error.response?.data?.message || t('system_settings.reset_failed'))
     } finally {
       setResetting(false)
     }
@@ -241,6 +255,56 @@ export default function SystemSettingsPage() {
 
   const renderControl = (item: SettingItem) => {
     const value = getByPath(draft, item.path)
+    if (item.type === 'slogans') {
+      const slogans = Array.isArray(value) ? value : []
+      const updateSlogans = (nextSlogans: any[]) => {
+        setDraft(setByPath(draft, item.path, nextSlogans.map((slogan) => ({
+          vi: slogan.vi || '',
+          en: slogan.en || '',
+        }))))
+      }
+      return (
+        <div className="flex w-full flex-col gap-3">
+          {slogans.map((slogan: any, index: number) => (
+            <div key={`slogan-${index}`} className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
+              <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-center">
+                <Input
+                  value={slogan.vi || ''}
+                  placeholder={t('system_settings.slogans.vi_placeholder')}
+                  onChange={(event) => {
+                    const next = clone(slogans)
+                    next[index].vi = event.target.value
+                    updateSlogans(next)
+                  }}
+                />
+                <Input
+                  value={slogan.en || ''}
+                  placeholder={t('system_settings.slogans.en_placeholder')}
+                  onChange={(event) => {
+                    const next = clone(slogans)
+                    next[index].en = event.target.value
+                    updateSlogans(next)
+                  }}
+                />
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => updateSlogans(slogans.filter((_: any, itemIndex: number) => itemIndex !== index))}
+                >
+                  {t('system_settings.slogans.delete')}
+                </Button>
+              </div>
+            </div>
+          ))}
+          <Button
+            icon={<PlusOutlined />}
+            onClick={() => updateSlogans([...slogans, { vi: '', en: '' }])}
+          >
+            {t('system_settings.slogans.add')}
+          </Button>
+        </div>
+      )
+    }
     if (item.type === 'switch') {
       return <Switch checked={Boolean(value)} onChange={(checked) => setDraft(setByPath(draft, item.path, checked))} />
     }
@@ -317,12 +381,12 @@ export default function SystemSettingsPage() {
               >
                 <div className="flex flex-col divide-y divide-[var(--theme-border)]">
                   {group.items.map((item) => (
-                    <div key={item.path} className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    <div key={item.path} className={`grid gap-3 py-4 ${item.type === 'slogans' ? '' : 'sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center'}`}>
                       <div className="min-w-0">
                         <div className="font-medium text-[var(--theme-text)]">{t(`system_settings.items.${item.path}.label`)}</div>
                         <Text className="text-sm text-[var(--theme-muted)]">{t(`system_settings.items.${item.path}.description`)}</Text>
                       </div>
-                      <div className="sm:justify-self-end">{renderControl(item)}</div>
+                      <div className={item.type === 'slogans' ? 'min-w-0' : 'sm:justify-self-end'}>{renderControl(item)}</div>
                     </div>
                   ))}
                 </div>

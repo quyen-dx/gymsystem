@@ -39,7 +39,6 @@ export default function MemberDashboard() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [landing, setLanding] = useState<any>(null)
-  const [settings, setSettings] = useState<any>(null)
   const langRef = useRef(i18n.language)
   const firstName = user?.name?.split(' ').pop() || t('dashboard.greeting_fallback')
 
@@ -50,25 +49,17 @@ export default function MemberDashboard() {
   useEffect(() => {
     Promise.allSettled([
       systemExperienceService.getCmsPage('home'),
-      systemExperienceService.getSettings(),
     ])
-      .then(([landingRes, settingsRes]) => {
+      .then(([landingRes]) => {
         if (landingRes.status === 'fulfilled' && landingRes.value.data?.landing) {
           setLanding(normalizeLandingData(landingRes.value.data.landing))
         } else {
           setLanding({})
         }
-
-        if (settingsRes.status === 'fulfilled') {
-          setSettings(settingsRes.value.data?.settings || {})
-        } else {
-          setSettings({})
-        }
       })
       .catch((err) => {
         console.error('Failed to load landing data:', err)
         setLanding({})
-        setSettings({})
       })
       .finally(() => setLoading(false))
   }, [])
@@ -81,7 +72,6 @@ export default function MemberDashboard() {
         <ErrorBoundary>
           <HomeLandingSection
             landing={landing || {}}
-            settings={settings || {}}
             firstName={firstName}
             onNavigate={(path) => navigate(path)}
           />

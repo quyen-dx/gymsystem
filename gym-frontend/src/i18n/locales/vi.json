@@ -96,7 +96,9 @@
     "member": "Thành viên"
   },
   "common": {
-    "loading": "Đang tải..."
+    "loading": "Đang tải...",
+    "server_unavailable": "Không thể kết nối máy chủ. Vui lòng thử lại.",
+    "retry": "Thử lại"
   },
   "lang": {
     "vi": "VI",
@@ -521,7 +523,12 @@
     "orders_subtitle": "Theo dõi lịch sử mua hàng và trạng thái giao hàng.",
     "logout": "Đăng xuất",
     "appearance_title": "Giao diện",
-    "appearance_subtitle": "Tuỳ chỉnh màu sắc theo sở thích.",
+    "appearance_subtitle": "Tuỳ chỉnh giao diện và màu sắc theo sở thích.",
+    "personal_theme": "Giao diện cá nhân",
+    "personal_theme_subtitle": "Chỉ áp dụng cho tài khoản của bạn.",
+    "theme_light": "Sáng",
+    "theme_dark": "Tối",
+    "theme_system": "Theo hệ thống",
     "accent_color": "Màu chủ đạo",
     "accent_subtitle": "Tuỳ chỉnh màu sắc theo sở thích",
     "bg_mode": "Nền",
@@ -541,7 +548,9 @@
     "msg_default_failed": "Không thể đặt mặc định",
     "msg_change_password_success": "Đổi mật khẩu thành công",
     "msg_change_password_failed": "Đổi mật khẩu thất bại",
-    "msg_contact_copied": "Đã sao chép thông tin liên hệ"
+    "msg_contact_copied": "Đã sao chép thông tin liên hệ",
+    "msg_theme_update_success": "Đã cập nhật giao diện cá nhân",
+    "msg_theme_update_failed": "Không thể cập nhật giao diện cá nhân"
   },
   "seller_orders": {
     "title": "Đơn hàng bán",
@@ -1246,7 +1255,12 @@
     "disabled_message": "Chức năng này hiện đang bị quản trị viên tạm thời vô hiệu hóa.",
     "maintenance": {
       "title": "Hệ thống đang bảo trì",
-      "default_message": "Hệ thống đang bảo trì. Vui lòng quay lại sau."
+      "default_message": "Chúng tôi đang nâng cấp hệ thống để mang lại trải nghiệm tốt hơn. Vui lòng quay lại sau.",
+      "estimate_label": "Thời gian hoàn tất dự kiến",
+      "estimate_value": "Sẽ được cập nhật sớm",
+      "reason_label": "Lý do",
+      "reason_value": "Nâng cấp hệ thống",
+      "contact_support": "Liên hệ hỗ trợ"
     },
     "options": {
       "vi": "Tiếng Việt",
@@ -1270,9 +1284,10 @@
     },
     "items": {
       "general.siteName": { "label": "Tên website", "description": "Tên hiển thị trên hệ thống và tiêu đề trình duyệt." },
+      "general.slogans": { "label": "Danh sách slogan website", "description": "Quản lý nhiều slogan song ngữ hiển thị luân phiên trên Landing Page, Login Page và các khu vực branding." },
       "general.logoUrl": { "label": "Logo website", "description": "URL logo dùng cho header, dashboard và favicon nếu có." },
       "general.defaultLanguage": { "label": "Ngôn ngữ mặc định", "description": "Ngôn ngữ mặc định cho người dùng chưa chọn ngôn ngữ." },
-      "general.defaultTheme": { "label": "Theme mặc định", "description": "Giao diện mặc định của website." },
+      "general.defaultTheme": { "label": "Giao diện mặc định", "description": "Giao diện mặc định cho khách hoặc người dùng chưa từng chọn giao diện." },
       "general.maintenanceMode": { "label": "Chế độ bảo trì", "description": "Tạm khóa trải nghiệm website cho người dùng không phải admin." },
       "general.maintenanceMessage.vi": { "label": "Nội dung bảo trì tiếng Việt", "description": "Thông báo hiển thị trên trang Maintenance khi người dùng dùng tiếng Việt." },
       "general.maintenanceMessage.en": { "label": "Nội dung bảo trì tiếng Anh", "description": "Thông báo hiển thị trên trang Maintenance khi người dùng dùng tiếng Anh." },
@@ -1339,6 +1354,14 @@
       "landing.partnersSectionEnabled": { "label": "Section đối tác", "description": "Ẩn/hiện section đối tác landing page." },
       "landing.startNowButtonEnabled": { "label": "Nút bắt đầu ngay", "description": "Ẩn/hiện nút bắt đầu ngay." },
       "landing.checkinNowButtonEnabled": { "label": "Nút điểm danh ngay", "description": "Ẩn/hiện nút điểm danh ngay." }
+    },
+    "slogans": {
+      "vi_placeholder": "Slogan tiếng Việt",
+      "en_placeholder": "English slogan",
+      "add": "Thêm slogan",
+      "delete": "Xóa slogan",
+      "at_least_one": "Phải có ít nhất 1 slogan.",
+      "bilingual_required": "Slogan dòng {{index}} phải có cả tiếng Việt và tiếng Anh."
     }
   },
   "system_experience": {

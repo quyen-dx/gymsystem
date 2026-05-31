@@ -4,7 +4,7 @@ const auditLogSchema = new mongoose.Schema(
   {
     module: {
       type: String,
-      enum: ['users', 'plans', 'products', 'shops', 'ai'],
+      enum: ['users', 'plans', 'products', 'shops', 'ai', 'system_settings'],
       required: true,
       index: true,
     },

@@ -48,6 +48,22 @@ export const isAccountLocked = (user) =>
 
 const accountLockedError = () => new AppError('Account is locked', 403, 'ACCOUNT_LOCKED')
 
+const getMaintenancePayload = (settings) => ({
+  code: 'MAINTENANCE_MODE',
+  message: {
+    vi: 'Hệ thống đang bảo trì. Vui lòng quay lại sau.',
+    en: 'The system is currently under maintenance. Please come back later.',
+  },
+  maintenanceMessage: settings.general.maintenanceMessage,
+})
+
+const isAdminUser = (user) => String(user?.role || '').toLowerCase() === 'admin'
+
+const isMaintenanceBlocked = async (user) => {
+  const settings = await getSystemSettingsValue()
+  return settings.general.maintenanceMode && !isAdminUser(user) ? settings : null
+}
+
 const validateMockOAuthToken = (provider, token) => {
   if (!token || typeof token !== 'string') return false
   return token.startsWith(`${provider}-demo-`) || token === `${provider}-demo-token`
@@ -122,6 +138,11 @@ const createVerifiedUser = async (payload) => {
 }
 
 export const buildGoogleOauthRedirect = async (user, res) => {
+  const maintenanceSettings = await isMaintenanceBlocked(user)
+  if (maintenanceSettings) {
+    return buildClientUrl('/oauth-success', { error: 'MAINTENANCE_MODE' })
+  }
+
   const accessToken = generateAccessToken(user._id, user.role)
   const refreshToken = generateRefreshToken(user._id)
 
@@ -132,6 +153,11 @@ export const buildGoogleOauthRedirect = async (user, res) => {
   return buildClientUrl('/oauth-success', { token: accessToken })
 }
 export const buildFacebookOauthRedirect = async (user, res) => {
+  const maintenanceSettings = await isMaintenanceBlocked(user)
+  if (maintenanceSettings) {
+    return buildClientUrl('/oauth-success', { error: 'MAINTENANCE_MODE' })
+  }
+
   const accessToken = generateAccessToken(user._id, user.role)
   const refreshToken = generateRefreshToken(user._id)
 
@@ -357,6 +383,10 @@ export const login = async (req, res) => {
       if (!validateMockOAuthToken(provider, oauthToken)) {
         throw new AppError('OAuth token không hợp lệ', 401)
       }
+      const maintenanceSettings = await isMaintenanceBlocked(user)
+      if (maintenanceSettings) {
+        return res.status(503).json(getMaintenancePayload(maintenanceSettings))
+      }
       return res.json(await buildAuthResponse(user, res))
     }
 
@@ -371,6 +401,11 @@ export const login = async (req, res) => {
     const isMatch = await user.comparePassword(password)
     if (!isMatch) {
       throw new AppError('Mật khẩu không đúng', 401)
+    }
+
+    const maintenanceSettings = await isMaintenanceBlocked(user)
+    if (maintenanceSettings) {
+      return res.status(503).json(getMaintenancePayload(maintenanceSettings))
     }
 
     return res.json(await buildAuthResponse(user, res))
@@ -470,7 +505,7 @@ export const hasPassword = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     await assertFeatureEnabled('members.allowProfileUpdate')
-    const { name, phone, email, dateOfBirth } = req.body
+    const { name, phone, email, dateOfBirth, themePreference } = req.body
     const updateData = {}
 
     if (name) updateData.name = name.trim()
@@ -510,6 +545,13 @@ export const updateProfile = async (req, res) => {
         throw new AppError('Ngày sinh không hợp lệ', 400)
       }
       updateData.dateOfBirth = parsedDate
+    }
+
+    if (themePreference !== undefined) {
+      if (!['system', 'light', 'dark'].includes(themePreference)) {
+        throw new AppError('Tuỳ chọn giao diện không hợp lệ', 400)
+      }
+      updateData.themePreference = themePreference
     }
 
     if (req.files?.avatar?.[0]) {

@@ -76,13 +76,12 @@ const galleryImages = [
 
 type AboutLandingSectionProps = {
   landing?: any
-  settings?: any
   onCtaClick?: (link: string) => void
 }
 
 const pick = (value: any, lang: string, fallback = '') => getLocalizedText(value, lang, fallback)
 
-export default function AboutLandingSection({ landing, settings, onCtaClick }: AboutLandingSectionProps) {
+export default function AboutLandingSection({ landing, onCtaClick }: AboutLandingSectionProps) {
   const { t, i18n } = useTranslation()
   const { settings: systemSettings } = useSystemSettings()
   const lang = i18n.language
@@ -92,7 +91,8 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [shops, setShops] = useState<any[]>([])
   const mobileMenuRef = useRef<HTMLDivElement>(null)
-  const gymName = settings?.gymName || 'GymPro'
+  const gymName = systemSettings.general.siteName
+  const logoUrl = systemSettings.general.logoUrl
   const aboutTitle = pick(landing?.aboutTitle, lang, t('about.intro.titleFallback'))
   const aboutContent = pick(
     landing?.aboutContent,
@@ -180,7 +180,7 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
       <header className={`fixed left-0 right-0 top-0 z-50 transition duration-300 ${navSolid ? 'border-b border-white/10 bg-black/70 shadow-2xl backdrop-blur-xl' : 'bg-black/10 backdrop-blur-sm'}`}>
         <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-5 py-4 md:px-8">
           <button type="button" className="flex items-center gap-3" onClick={() => goTo('/about')}>
-            <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--theme-accent)] font-black text-[var(--theme-button-text)]">GP</span>
+            {logoUrl ? <img src={logoUrl} alt={gymName} className="h-10 w-10 rounded-lg object-cover" /> : <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--theme-accent)] font-black text-[var(--theme-button-text)]">GP</span>}
             <span className="text-lg font-black tracking-wide">{gymName}</span>
           </button>
           <nav className="hidden md:flex items-center gap-6">
@@ -496,7 +496,7 @@ export default function AboutLandingSection({ landing, settings, onCtaClick }: A
         <div className="mx-auto grid max-w-7xl gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--theme-accent)] font-black text-[var(--theme-button-text)]">GP</span>
+              {logoUrl ? <img src={logoUrl} alt={gymName} className="h-10 w-10 rounded-lg object-cover" /> : <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--theme-accent)] font-black text-[var(--theme-button-text)]">GP</span>}
               <span className="text-xl font-black">{gymName}</span>
             </div>
             <p className="mt-4 text-sm leading-7 text-white/50">{t('about.footer.description')}</p>
