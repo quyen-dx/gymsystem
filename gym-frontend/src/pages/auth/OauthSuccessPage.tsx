@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
+import { Button } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { authService } from '../../services/authService'
+
+const oauthErrorKeyMap: Record<string, string> = {
+  ACCOUNT_LOCKED: 'auth.accountLocked',
+  GOOGLE_AUTH_FAILED: 'auth.googleOAuthFailed',
+  INVALID_TOKEN: 'auth.invalidToken',
+  SERVER_ERROR: 'auth.serverError',
+}
 
 const getDashboardPath = (role?: string) => {
   if (role === 'admin') return '/'
@@ -12,6 +21,7 @@ const getDashboardPath = (role?: string) => {
 }
 
 export default function OauthSuccessPage() {
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { updateUser } = useAuth()
@@ -20,9 +30,15 @@ export default function OauthSuccessPage() {
   useEffect(() => {
     const syncOAuthLogin = async () => {
       const token = searchParams.get('token')
+      const errorCode = searchParams.get('error')
+
+      if (errorCode) {
+        setError(t(oauthErrorKeyMap[errorCode] || 'auth.googleOAuthFailed'))
+        return
+      }
 
       if (!token) {
-        navigate('/login?error=google_oauth_failed', { replace: true })
+        setError(t('auth.invalidToken'))
         return
       }
 
@@ -34,23 +50,28 @@ export default function OauthSuccessPage() {
         navigate(getDashboardPath(data.user?.role), { replace: true })
       } catch {
         localStorage.removeItem('token')
-        setError('Không thể hoàn tất đăng nhập Google. Vui lòng thử lại.')
+        setError(t('auth.invalidToken'))
       }
     }
 
     syncOAuthLogin()
-  }, [navigate, searchParams, updateUser])
+  }, [navigate, searchParams, t, updateUser])
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 text-[var(--gs-text)]">
       <div className="rounded-[28px] border border-[var(--gs-border)] bg-[var(--gs-panel)] px-8 py-10 text-center shadow-[var(--gs-shadow)]">
-        <p className="text-xs uppercase tracking-[0.28em] text-[var(--gs-text-soft)]">Google OAuth</p>
+        <p className="text-xs uppercase tracking-[0.28em] text-[var(--gs-text-soft)]">{t('auth.googleOAuthTitle')}</p>
         <h1 className="mt-3 text-3xl font-semibold">
-          {error ? 'Đăng nhập thất bại' : 'Đăng nhập thành công'}
+          {error ? t('auth.oauthLoginFailed') : t('auth.oauthLoginSuccess')}
         </h1>
         <p className="mt-3 text-sm text-[var(--gs-text-muted)]">
-          {error || 'Đang đồng bộ phiên đăng nhập và chuyển bạn tới dashboard...'}
+          {error || t('auth.syncingSession')}
         </p>
+        {error && (
+          <Button className="mt-6" type="primary" onClick={() => navigate('/login', { replace: true })}>
+            {t('auth.backToLogin')}
+          </Button>
+        )}
       </div>
     </div>
   )

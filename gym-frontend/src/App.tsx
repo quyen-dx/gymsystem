@@ -238,6 +238,7 @@ function AppWithTheme() {
 
         {/* MEMBER */}
         <Route path="/" element={<HomeRoute />} />
+        <Route path="/dashboard" element={<PrivateRoute><MemberDashboard /></PrivateRoute>} />
         <Route path="/deposit" element={<PrivateRoute><DepositPage /></PrivateRoute>} />
         <Route path="/checkout" element={<PrivateRoute><CheckoutPage /></PrivateRoute>} />
         <Route path="/orders" element={<PrivateRoute><OrderHistoryPage /></PrivateRoute>} />

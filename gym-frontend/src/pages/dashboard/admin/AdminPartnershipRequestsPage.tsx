@@ -57,12 +57,14 @@ export default function AdminPartnershipRequestsPage() {
   const [requestSearch, setRequestSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [requestCategoryFilter, setRequestCategoryFilter] = useState<string>('')
+  const [requestPage, setRequestPage] = useState(1)
   const [selectedRequest, setSelectedRequest] = useState<PartnershipRequest | null>(null)
 
   const [shops, setShops] = useState<AdminShop[]>([])
   const [shopsLoading, setShopsLoading] = useState(false)
   const [shopSearch, setShopSearch] = useState('')
   const [shopCategoryFilter, setShopCategoryFilter] = useState<string>('')
+  const [shopPage, setShopPage] = useState(1)
   const [viewingProducts, setViewingProducts] = useState<AdminProduct[]>([])
   const [isProductsModalVisible, setIsProductsModalVisible] = useState(false)
   const [viewingShopName, setViewingShopName] = useState('')
@@ -258,6 +260,12 @@ export default function AdminPartnershipRequestsPage() {
 
   const requestColumns = [
     {
+      title: t('admin.table_no'),
+      width: 70,
+      align: 'center' as const,
+      render: (_: any, __: PartnershipRequest, index: number) => (requestPage - 1) * 10 + index + 1,
+    },
+    {
       title: t('admin.partnership_requests.request_columns.brand'),
       dataIndex: 'brand_name',
       render: (value: string, item: PartnershipRequest) => (
@@ -309,6 +317,12 @@ export default function AdminPartnershipRequestsPage() {
   ]
 
   const shopColumns = [
+    {
+      title: t('admin.table_no'),
+      width: 70,
+      align: 'center' as const,
+      render: (_: any, __: AdminShop, index: number) => (shopPage - 1) * 10 + index + 1,
+    },
     {
       title: t('admin.partnership_requests.shop_columns.brand'),
       render: (_: any, s: AdminShop) => (
@@ -435,7 +449,10 @@ export default function AdminPartnershipRequestsPage() {
                   <Input.Search
                     allowClear
                     placeholder={t('admin.partnership_requests.search_placeholder')}
-                    onChange={(event) => setRequestSearch(event.target.value)}
+                    onChange={(event) => {
+                      setRequestSearch(event.target.value)
+                      setRequestPage(1)
+                    }}
                   />
                   <Space wrap>
                     <Select
@@ -443,7 +460,10 @@ export default function AdminPartnershipRequestsPage() {
                       placeholder={t('admin.partnership_requests.filter_status')}
                       style={{ minWidth: 150 }}
                       value={statusFilter || undefined}
-                      onChange={(value) => setStatusFilter(value || '')}
+                      onChange={(value) => {
+                        setStatusFilter(value || '')
+                        setRequestPage(1)
+                      }}
                       options={[
                         { label: t('admin.partnership_requests.status.pending'), value: 'pending' },
                         { label: t('admin.partnership_requests.status.approved'), value: 'approved' },
@@ -455,7 +475,10 @@ export default function AdminPartnershipRequestsPage() {
                       placeholder={t('admin.partnership_requests.filter_category')}
                       style={{ minWidth: 150 }}
                       value={requestCategoryFilter || undefined}
-                      onChange={(value) => setRequestCategoryFilter(value || '')}
+                      onChange={(value) => {
+                        setRequestCategoryFilter(value || '')
+                        setRequestPage(1)
+                      }}
                       options={categoryOptions}
                     />
                   </Space>
@@ -466,7 +489,11 @@ export default function AdminPartnershipRequestsPage() {
                     loading={requestsLoading}
                     dataSource={filteredRequests}
                     columns={requestColumns}
-                    pagination={{ pageSize: 10 }}
+                    pagination={{
+                      current: requestPage,
+                      pageSize: 10,
+                      onChange: setRequestPage,
+                    }}
                     onRow={(record) => ({
                       onClick: () => setSelectedRequest(record),
                       style: { cursor: 'pointer' },
@@ -486,14 +513,20 @@ export default function AdminPartnershipRequestsPage() {
                     <Input.Search
                       placeholder={t('admin.partnership_requests.search_placeholder')}
                       allowClear
-                      onChange={(e) => setShopSearch(e.target.value)}
+                      onChange={(e) => {
+                        setShopSearch(e.target.value)
+                        setShopPage(1)
+                      }}
                     />
                     <Select
                       allowClear
                       placeholder={t('admin.partnership_requests.filter_category')}
                       style={{ minWidth: 150 }}
                       value={shopCategoryFilter || undefined}
-                      onChange={(value) => setShopCategoryFilter(value || '')}
+                      onChange={(value) => {
+                        setShopCategoryFilter(value || '')
+                        setShopPage(1)
+                      }}
                       options={categoryOptions}
                     />
                   </Space>
@@ -505,7 +538,11 @@ export default function AdminPartnershipRequestsPage() {
                     columns={shopColumns}
                     rowKey="_id"
                     loading={shopsLoading}
-                    pagination={{ pageSize: 10 }}
+                    pagination={{
+                      current: shopPage,
+                      pageSize: 10,
+                      onChange: setShopPage,
+                    }}
                   />
                 </div>
               </div>

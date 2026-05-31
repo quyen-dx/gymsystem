@@ -10,6 +10,7 @@ export default function PolicyManagerPage() {
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<any>(null)
+  const [page, setPage] = useState(1)
   const [form] = Form.useForm()
   const load = () => { setLoading(true); systemExperienceService.getPolicies({ includeHidden: true }).then((res) => setItems(res.data.policies || [])).finally(() => setLoading(false)) }
   useEffect(load, [])
@@ -26,10 +27,11 @@ export default function PolicyManagerPage() {
       <div className="grid gap-4">
         <div className="flex items-center justify-between"><h1 className="text-2xl font-semibold">{t('system_experience.admin.policy_manager')}</h1><Button type="primary" onClick={() => setOpen(true)}>{t('system_experience.admin.add_policy')}</Button></div>
         <Table rowKey="_id" loading={loading} dataSource={items} columns={[
+          { title: t('admin.table_no'), width: 70, align: 'center' as const, render: (_: any, __: any, index: number) => (page - 1) * 10 + index + 1 },
           { title: t('system_experience.admin.title'), dataIndex: 'title' }, { title: t('system_experience.admin.slug'), dataIndex: 'slug' }, { title: t('system_experience.admin.category'), dataIndex: 'category' },
           { title: t('system_experience.admin.publish'), dataIndex: 'isPublished', render: (v) => v ? t('system_experience.admin.published') : t('system_experience.admin.hidden') },
           { title: t('system_experience.admin.actions'), render: (_, row: any) => <Space><Button onClick={() => { setEditing(row); form.setFieldsValue(row); setOpen(true) }}>{t('system_experience.admin.edit')}</Button><Button danger onClick={async () => { await systemExperienceService.deletePolicy(row._id); load() }}>{t('system_experience.admin.delete')}</Button></Space> },
-        ]} />
+        ]} pagination={{ current: page, pageSize: 10, onChange: setPage }} />
       </div>
       <Modal width={760} title={editing ? t('system_experience.admin.edit_policy') : t('system_experience.admin.add_policy')} open={open} onOk={save} onCancel={() => { setOpen(false); setEditing(null); form.resetFields() }}>
         <Form form={form} layout="vertical" initialValues={{ category: 'Chung', isPublished: true }}>

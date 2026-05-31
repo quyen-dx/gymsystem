@@ -45,6 +45,8 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [page, setPage] = useState(1)
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null)
   const [form] = Form.useForm()
   const [submitLoading, setSubmitLoading] = useState(false)
@@ -121,13 +123,20 @@ export default function AdminUsersPage() {
       u.email?.toLowerCase().includes(search.toLowerCase()) ||
       u.phone?.includes(search)
     const matchRole = roleFilter ? u.role === roleFilter : true
-    return matchSearch && matchRole
+    const matchStatus = statusFilter === 'active' ? u.isActive : statusFilter === 'locked' ? !u.isActive : true
+    return matchSearch && matchRole && matchStatus
   })
 
   const isSelf = (userId: string) => userId === currentUser?._id
   const isProtectedAdmin = (user: AdminUser) => user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL
 
   const columns = [
+    {
+      title: t('admin.table_no'),
+      width: 70,
+      align: 'center' as const,
+      render: (_: any, __: AdminUser, index: number) => (page - 1) * 10 + index + 1,
+    },
     {
       title: t('admin.users.columns.user'),
       width: 220,
@@ -299,19 +308,38 @@ export default function AdminUsersPage() {
               placeholder={t('admin.users.search_placeholder')}
               allowClear
               className="dashboard-search-input"
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setPage(1)
+              }}
             />
             <Select
               placeholder={t('admin.users.filter_role')}
               allowClear
               style={{ minWidth: 160 }}
-              onChange={(val) => setRoleFilter(val || '')}
+              onChange={(val) => {
+                setRoleFilter(val || '')
+                setPage(1)
+              }}
               options={[
                 { label: 'Admin', value: 'admin' },
                 { label: 'PT', value: 'pt' },
                 { label: 'Staff', value: 'staff' },
                 { label: 'Member', value: 'member' },
                 { label: 'Seller', value: 'seller' },
+              ]}
+            />
+            <Select
+              placeholder={t('admin.users.status.filter_all')}
+              allowClear
+              style={{ minWidth: 160 }}
+              onChange={(val) => {
+                setStatusFilter(val || '')
+                setPage(1)
+              }}
+              options={[
+                { label: t('admin.users.status.active'), value: 'active' },
+                { label: t('admin.users.status.locked'), value: 'locked' },
               ]}
             />
           </div>
@@ -324,7 +352,11 @@ export default function AdminUsersPage() {
             columns={columns}
             rowKey="_id"
             loading={loading}
-            pagination={{ pageSize: 10 }}
+            pagination={{
+              current: page,
+              pageSize: 10,
+              onChange: setPage,
+            }}
             scroll={{ x: 900 }}
           />
         </div>

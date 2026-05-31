@@ -37,9 +37,15 @@ const sendError = (res, error) => {
   }
 
   return res.status(error.statusCode || 500).json({
+    ...(error.code ? { code: error.code } : {}),
     message: error.message || 'Lỗi máy chủ',
   })
 }
+
+export const isAccountLocked = (user) =>
+  user?.status === 'locked' || user?.isLocked === true || user?.isActive === false
+
+const accountLockedError = () => new AppError('Account is locked', 403, 'ACCOUNT_LOCKED')
 
 const validateMockOAuthToken = (provider, token) => {
   if (!token || typeof token !== 'string') return false
@@ -93,15 +99,18 @@ const buildAuthResponse = async (user, res) => {
 }
 
 const createVerifiedUser = async (payload) => {
-  const user = new User({
+  const userPayload = {
     name: payload.name,
-    email: payload.email || null,
-    phone: payload.phone || null,
     provider: payload.provider,
     isVerified: true,
     password: payload.passwordHash || null,
     role: 'member',
-  })
+  }
+
+  if (payload.email) userPayload.email = payload.email
+  if (payload.phone) userPayload.phone = payload.phone
+
+  const user = new User(userPayload)
 
   if (payload.passwordHash) {
     user.$locals.skipPasswordHashing = true
@@ -135,45 +144,59 @@ export const sendRegisterOtp = async (req, res) => {
   try {
     const { provider, name, phone, password } = req.body
 
-    if (provider !== 'phone') {
-      throw new AppError('Chỉ đăng ký bằng số điện thoại mới cần OTP', 400)
+    if (provider !== 'phone' && provider !== 'email') {
+      throw new AppError('Chỉ đăng ký bằng số điện thoại hoặc email mới cần OTP', 400)
     }
 
     if (!name?.trim()) {
       throw new AppError('Họ tên là bắt buộc', 400)
     }
 
-    const normalizedPhone = normalizePhone(phone)
-
-    if (!isValidPhone(normalizedPhone)) {
-      throw new AppError('Số điện thoại không hợp lệ', 400)
-    }
-
     if (!password || password.length < 6) {
       throw new AppError('Mật khẩu phải có ít nhất 6 ký tự', 400)
     }
 
-    const existingUser = await User.findOne({ phone: normalizedPhone })
+    if (!phone?.trim()) {
+      throw new AppError('Email hoặc số điện thoại là bắt buộc', 400)
+    }
+
+    const isEmail = provider === 'email'
+    let normalizedIdentifier
+    if (isEmail) {
+      normalizedIdentifier = phone.trim().toLowerCase()
+      if (!isValidEmail(normalizedIdentifier)) {
+        throw new AppError('Email không hợp lệ', 400)
+      }
+    } else {
+      normalizedIdentifier = normalizePhone(phone)
+      if (!normalizedIdentifier) {
+        throw new AppError('Số điện thoại là bắt buộc', 400)
+      }
+    }
+
+    const existingUser = isEmail
+      ? await User.findOne({ email: normalizedIdentifier })
+      : await User.findOne({ phone: normalizedIdentifier })
     if (existingUser) {
-      throw new AppError('Số điện thoại đã được sử dụng', 400)
+      throw new AppError(isEmail ? 'Email đã được sử dụng' : 'Số điện thoại đã được sử dụng', 400)
     }
 
     const passwordHash = await hashPendingPassword(password)
     const otpResult = await sendOtp({
-      identifier: normalizedPhone,
+      identifier: normalizedIdentifier,
       purpose: 'register',
-      channel: 'sms',
-      provider: 'phone',
+      channel: isEmail ? 'email' : 'sms',
+      provider: isEmail ? 'email' : 'phone',
       payload: {
         name: name.trim(),
-        phone: normalizedPhone,
+        ...(isEmail ? { email: normalizedIdentifier } : { phone: normalizedIdentifier }),
         passwordHash,
-        provider: 'phone',
+        provider: isEmail ? 'email' : 'phone',
       },
     })
 
     return res.json({
-      message: 'Mã OTP đã được gửi qua SMS',
+      message: isEmail ? 'Mã OTP đã được gửi qua email' : 'Mã OTP đã được gửi qua SMS',
       expiresIn: otpResult.expiresIn,
       resendAfter: otpResult.resendAfter,
       otpPreview: otpResult.otpPreview,
@@ -204,7 +227,13 @@ export const verifyRegisterOtp = async (req, res) => {
 
     if (existingUser) {
       await consumeOtp(otpRecord._id)
-      throw new AppError('Tài khoản đã tồn tại', 400)
+      const duplicatedField = otpRecord.payload.email ? 'email' : 'phone'
+      throw new AppError(
+        duplicatedField === 'email'
+          ? 'Email đã được sử dụng'
+          : 'Số điện thoại đã được sử dụng',
+        400,
+      )
     }
 
     const user = await createVerifiedUser(otpRecord.payload)
@@ -295,8 +324,8 @@ export const login = async (req, res) => {
       throw new AppError('Tài khoản không tồn tại', 401)
     }
 
-    if (!user.isActive) {
-      throw new AppError('Tài khoản đã bị khóa', 403)
+    if (isAccountLocked(user)) {
+      throw accountLockedError()
     }
 
     if (oauthToken) {
@@ -343,11 +372,11 @@ export const refreshToken = async (req, res) => {
       throw new AppError('Refresh token không hợp lệ hoặc đã hết hạn', 401)
     }
 
-    if (!user.isActive) {
+    if (isAccountLocked(user)) {
       user.refreshToken = null
       await user.save({ validateBeforeSave: false })
       clearRefreshCookie(res)
-      throw new AppError('Tài khoản đã bị khóa', 403)
+      throw accountLockedError()
     }
 
     const accessToken = generateAccessToken(user._id, user.role)
@@ -769,6 +798,8 @@ export const toggleUserStatus = async (req, res) => {
 
     const user = await findEditableUserById(req.params.id)
     user.isActive = !user.isActive
+    user.isLocked = !user.isActive
+    user.status = user.isActive ? 'active' : 'locked'
     await user.save()
     await recordAuditLog({
       req,

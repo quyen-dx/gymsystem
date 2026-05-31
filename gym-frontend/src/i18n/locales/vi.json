@@ -68,6 +68,8 @@
     "plans": "Gói tập",
     "partnerships": "Hợp tác",
     "members": "Hội viên",
+    "features": "Tính năng",
+    "contact": "Liên hệ",
     "trainers": "Huấn luyện viên",
     "reports": "Báo cáo",
     "system_settings": "Cài đặt hệ thống",
@@ -554,6 +556,7 @@
     "msg_update_failed": "Không thể cập nhật trạng thái"
   },
   "admin": {
+    "table_no": "STT",
     "dashboard": {
       "overline": "Admin overview",
       "title": "Daily operations",
@@ -586,6 +589,7 @@
         "facebook_profile": "Trang cá nhân Facebook"
       },
       "status": {
+        "filter_all": "Tất cả trạng thái",
         "active": "Hoạt động",
         "locked": "Đã khóa",
         "verified": "Đã xác minh",
@@ -1073,7 +1077,49 @@
     "action_fallback": "Mình đã thực hiện yêu cầu của bạn.",
     "action_processed": "Mình đã xử lý xong yêu cầu của bạn."
   },
+  "auth": {
+    "phoneAlreadyExists": "Số điện thoại đã được sử dụng",
+    "emailAlreadyExists": "Email đã được sử dụng",
+    "registrationSuccessful": "Đăng ký thành công! Vui lòng đăng nhập.",
+    "otpSent": "Mã OTP đã được gửi",
+    "invalidOtp": "Mã OTP không hợp lệ",
+    "otpExpired": "Mã OTP đã hết hạn",
+    "passwordRequired": "Mật khẩu là bắt buộc",
+    "fullNameRequired": "Họ tên là bắt buộc",
+    "phoneRequired": "Số điện thoại là bắt buộc",
+    "networkError": "Lỗi kết nối mạng",
+    "unexpectedError": "Lỗi không xác định",
+    "passwordMinLength": "Mật khẩu phải có ít nhất 6 ký tự",
+    "invalidEmail": "Email không hợp lệ",
+    "invalidPhone": "Số điện thoại không hợp lệ",
+    "emailOrPhoneRequired": "Email hoặc số điện thoại là bắt buộc",
+    "accountNotFound": "Không tìm thấy tài khoản",
+    "accountLocked": "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.",
+    "invalidCredentials": "Thông tin đăng nhập không hợp lệ",
+    "incorrectPassword": "Mật khẩu không đúng",
+    "loginSuccess": "Đăng nhập thành công",
+    "logoutSuccess": "Đăng xuất thành công",
+    "resetPasswordSuccess": "Đặt lại mật khẩu thành công",
+    "otpVerified": "Xác thực OTP thành công",
+    "missingLoginInfo": "Thiếu thông tin đăng nhập",
+    "passwordMissing": "Thiếu mật khẩu",
+    "noPasswordSet": "Tài khoản chưa có mật khẩu",
+    "facebookOnly": "Tài khoản Facebook không hỗ trợ quên mật khẩu bằng OTP",
+    "sessionExpired": "Phiên đặt lại mật khẩu không hợp lệ hoặc đã hết hạn",
+    "providerRequired": "Chỉ đăng ký bằng số điện thoại hoặc email mới cần OTP",
+    "googleOAuthFailed": "Không thể hoàn tất đăng nhập Google. Vui lòng thử lại.",
+    "invalidToken": "Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.",
+    "serverError": "Máy chủ gặp lỗi. Vui lòng thử lại sau.",
+    "oauthLoginFailed": "Đăng nhập thất bại",
+    "oauthLoginSuccess": "Đăng nhập thành công",
+    "syncingSession": "Đang đồng bộ phiên đăng nhập và chuyển bạn tới dashboard...",
+    "googleOAuthTitle": "Đăng nhập Google",
+    "backToLogin": "Quay lại đăng nhập"
+  },
   "about": {
+    "partners": {
+      "title": "THƯƠNG HIỆU HỢP TÁC"
+    },
     "nav": {
       "login": "Đăng nhập",
       "register": "Đăng ký"
@@ -1107,31 +1153,31 @@
       "contentFallback": "GymPro được xây dựng để hành trình luyện tập trở nên rõ ràng, hiện đại và truyền cảm hứng hơn. Chúng tôi kết hợp không gian phòng tập thực tế, đội ngũ huấn luyện viên cá nhân và công cụ số để mỗi hội viên có lộ trình tập luyện mạch lạc, theo dõi được tiến độ và luôn được kết nối."
     },
     "features": {
-      "eyebrow": "Tính năng nổi bật",
-      "title": "Mọi thứ trong một luồng",
-      "qr": {
-        "title": "QR Check-in",
-        "desc": "Điểm danh nhanh tại quầy hoặc cổng vào."
+      "eyebrow": "Không chỉ là phòng tập — là hệ sinh thái luyện tập",
+      "title": "TẠI SAO CHỌN GYMPRO",
+      "modernTech": {
+        "title": "Công nghệ hiện đại",
+        "desc": "Check-in QR, đặt lịch online, theo dõi sức khoẻ — tất cả trên một app duy nhất"
       },
-      "booking": {
-        "title": "Đặt lịch PT",
-        "desc": "Chọn PT và khung giờ phù hợp với lịch cá nhân."
+      "certifiedPt": {
+        "title": "PT được chứng nhận",
+        "desc": "100% huấn luyện viên có chứng chỉ chuyên môn, được đào tạo bài bản và đánh giá định kỳ"
       },
-      "health": {
-        "title": "Theo dõi sức khoẻ",
-        "desc": "Lưu chỉ số, mục tiêu và tiến độ luyện tập."
+      "personalData": {
+        "title": "Dữ liệu cá nhân hoá",
+        "desc": "Lộ trình tập luyện và dinh dưỡng được xây dựng riêng cho từng mục tiêu của bạn"
       },
-      "roadmap": {
-        "title": "Lộ trình cá nhân",
-        "desc": "Kế hoạch tập luyện rõ ràng theo từng giai đoạn."
+      "safe": {
+        "title": "An toàn & Minh bạch",
+        "desc": "Theo dõi toàn bộ lịch sử tập luyện, thanh toán rõ ràng, không phát sinh phí ẩn"
       },
-      "store": {
-        "title": "Cửa hàng",
-        "desc": "Mua sản phẩm gym từ các đối tác trong hệ thống."
+      "community": {
+        "title": "Cộng đồng năng động",
+        "desc": "Kết nối với hàng trăm thành viên, tham gia lớp tập nhóm và thử thách hàng tháng"
       },
-      "notifications": {
-        "title": "Thông báo",
-        "desc": "Nhắc lịch tập, lịch PT và các cập nhật quan trọng."
+      "anywhere": {
+        "title": "Dùng mọi lúc mọi nơi",
+        "desc": "Truy cập từ điện thoại hoặc máy tính, đồng bộ dữ liệu thời gian thực"
       }
     },
     "pts": {
@@ -1174,7 +1220,13 @@
       "about": "Về chúng tôi",
       "contact": "Liên hệ",
       "policies": "Chính sách",
-      "copyright": "Đã đăng ký bản quyền."
+      "copyright": "Đã đăng ký bản quyền.",
+      "features_title": "Tính năng",
+      "support_title": "Hỗ trợ",
+      "contact_title": "Liên hệ",
+      "email": "contact@gympro.vn",
+      "phone": "1900 xxxx",
+      "address": "Hà Nội, Việt Nam"
     }
   },
   "system_experience": {

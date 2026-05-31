@@ -68,6 +68,8 @@
     "plans": "Plans",
     "partnerships": "Partnerships",
     "members": "Members",
+    "features": "Features",
+    "contact": "Contact",
     "trainers": "Trainers",
     "reports": "Reports",
     "system_settings": "System Settings",
@@ -553,6 +555,7 @@
     "msg_update_failed": "Unable to update status"
   },
   "admin": {
+    "table_no": "No.",
     "dashboard": {
       "overline": "Admin overview",
       "title": "Daily operations",
@@ -585,6 +588,7 @@
         "facebook_profile": "Facebook Profile"
       },
       "status": {
+        "filter_all": "All statuses",
         "active": "Active",
         "locked": "Locked",
         "verified": "Verified",
@@ -1072,7 +1076,49 @@
     "action_fallback": "I've completed your request.",
     "action_processed": "I've processed your request successfully."
   },
+  "auth": {
+    "phoneAlreadyExists": "Phone number is already in use",
+    "emailAlreadyExists": "Email is already in use",
+    "registrationSuccessful": "Registration successful! Please log in.",
+    "otpSent": "OTP has been sent",
+    "invalidOtp": "Invalid OTP",
+    "otpExpired": "OTP has expired",
+    "passwordRequired": "Password is required",
+    "fullNameRequired": "Full name is required",
+    "phoneRequired": "Phone number is required",
+    "networkError": "Network error. Please try again.",
+    "unexpectedError": "An unexpected error occurred",
+    "passwordMinLength": "Password must be at least 6 characters",
+    "invalidEmail": "Invalid email address",
+    "invalidPhone": "Invalid phone number",
+    "emailOrPhoneRequired": "Email or phone number is required",
+    "accountNotFound": "Account not found",
+    "accountLocked": "Your account has been locked. Please contact the administrator.",
+    "invalidCredentials": "Invalid login credentials",
+    "incorrectPassword": "Incorrect password",
+    "loginSuccess": "Login successful",
+    "logoutSuccess": "Logout successful",
+    "resetPasswordSuccess": "Password reset successful",
+    "otpVerified": "OTP verified successfully",
+    "missingLoginInfo": "Missing login information",
+    "passwordMissing": "Password is missing",
+    "noPasswordSet": "Account has no password set. Please log in with Google and set a password in your Profile.",
+    "facebookOnly": "Facebook account does not support OTP forgot password",
+    "sessionExpired": "Password reset session is invalid or expired",
+    "providerRequired": "Only phone or email registration requires OTP",
+    "googleOAuthFailed": "Unable to complete Google login. Please try again.",
+    "invalidToken": "The login session is invalid. Please log in again.",
+    "serverError": "The server encountered an error. Please try again later.",
+    "oauthLoginFailed": "Login failed",
+    "oauthLoginSuccess": "Login successful",
+    "syncingSession": "Syncing session and redirecting to dashboard...",
+    "googleOAuthTitle": "Google Login",
+    "backToLogin": "Back to login"
+  },
   "about": {
+    "partners": {
+      "title": "OUR PARTNERS"
+    },
     "nav": {
       "login": "Login",
       "register": "Register"
@@ -1106,31 +1152,31 @@
       "contentFallback": "GymPro was created to make fitness operations and member journeys simpler, smarter and more inspiring. We combine real gym spaces, personal coaching and digital tools so every member can train with a clear plan, track progress and stay connected."
     },
     "features": {
-      "eyebrow": "Core features",
-      "title": "Everything runs in one flow",
-      "qr": {
-        "title": "QR Check-in",
-        "desc": "Fast attendance at reception or gate."
+      "eyebrow": "Not just a gym — it's a training ecosystem",
+      "title": "WHY CHOOSE GYMPRO",
+      "modernTech": {
+        "title": "Modern Technology",
+        "desc": "QR check-in, online booking, health tracking — all in one app."
       },
-      "booking": {
-        "title": "PT Booking",
-        "desc": "Choose trainers and time slots that fit your day."
+      "certifiedPt": {
+        "title": "Certified Personal Trainers",
+        "desc": "100% certified coaches with professional training and regular evaluation."
       },
-      "health": {
-        "title": "Health Tracking",
-        "desc": "Track metrics, goals and training progress."
+      "personalData": {
+        "title": "Personalised Data",
+        "desc": "Training and nutrition roadmaps built specifically for your goals."
       },
-      "roadmap": {
-        "title": "Personal Roadmap",
-        "desc": "Clear training plans for each phase."
+      "safe": {
+        "title": "Safe & Transparent",
+        "desc": "Full training history tracking, clear payments, no hidden fees."
       },
-      "store": {
-        "title": "Store",
-        "desc": "Buy gym products from connected partners."
+      "community": {
+        "title": "Dynamic Community",
+        "desc": "Connect with hundreds of members, join group classes and monthly challenges."
       },
-      "notifications": {
-        "title": "Notifications",
-        "desc": "Workout reminders, PT schedules and key updates."
+      "anywhere": {
+        "title": "Use Anywhere, Anytime",
+        "desc": "Access from phone or computer, real-time data sync."
       }
     },
     "pts": {
@@ -1173,7 +1219,13 @@
       "about": "About us",
       "contact": "Contact",
       "policies": "Policies",
-      "copyright": "All rights reserved."
+      "copyright": "All rights reserved.",
+      "features_title": "Features",
+      "support_title": "Support",
+      "contact_title": "Contact",
+      "email": "contact@gympro.vn",
+      "phone": "1900 xxxx",
+      "address": "Ha Noi, Vietnam"
     }
   },
   "system_experience": {

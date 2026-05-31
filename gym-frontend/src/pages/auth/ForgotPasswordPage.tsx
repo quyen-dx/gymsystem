@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import LanguageSelect from '../../components/common/LanguageSelect'
 import { useTheme } from '../../context/ThemeProvider'
 import { authService } from '../../services/authService'
+import { getErrorMessage } from '../../utils/errorMessages'
 
 const { Title, Text } = Typography
 
@@ -36,10 +37,10 @@ export default function ForgotPasswordPage() {
       const { data } = await authService.sendForgotPasswordOtp(values.identifier)
       setOtpPreview(data.otpPreview || '')
       setStep('otp')
-      message.success(data.message || t('forgot.otp_sent_msg'))
+      message.success(getErrorMessage(t, data.message, 'forgot.otp_sent_msg'))
     } catch (error) {
       const err = error as any;
-      message.error(err.response?.data?.message || t('forgot.otp_send_failed'))
+      message.error(getErrorMessage(t, err.response?.data?.message, 'forgot.otp_send_failed'))
     } finally {
       setLoading(false)
     }
@@ -57,7 +58,7 @@ export default function ForgotPasswordPage() {
       message.success(t('forgot.otp_valid'))
     } catch (error) {
       const err = error as any;
-      message.error(err.response?.data?.message || t('forgot.otp_invalid_msg'))
+      message.error(getErrorMessage(t, err.response?.data?.message, 'forgot.otp_invalid_msg'))
     } finally {
       setLoading(false)
     }
@@ -78,7 +79,7 @@ export default function ForgotPasswordPage() {
       setTimeout(() => navigate('/login'), 800)
     } catch (error) {
       const err = error as any;
-      message.error(err.response?.data?.message || t('forgot.reset_failed'))
+      message.error(getErrorMessage(t, err.response?.data?.message, 'forgot.reset_failed'))
     } finally {
       setLoading(false)
     }

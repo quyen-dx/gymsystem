@@ -47,8 +47,14 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
     const status = error.response?.status
+    const errorCode = error.response?.data?.code
     const isRefreshRequest = originalRequest?.skipAuthRefresh || originalRequest?.url?.includes('/auth/refresh')
     const isLoginRequest = originalRequest?.url?.includes('/auth/login')
+
+    if (errorCode === 'ACCOUNT_LOCKED') {
+      clearAuthSession()
+      return Promise.reject(error)
+    }
 
     if (status === 401 && originalRequest && !originalRequest._retry && !isRefreshRequest && !isLoginRequest) {
       originalRequest._retry = true
@@ -73,9 +79,7 @@ api.interceptors.response.use(
 
     if (status === 403 && String(error.response?.data?.message || '').includes('Tài khoản đã bị khóa')) {
       clearAuthSession()
-      if (!window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login'
-      }
+      return Promise.reject(error)
     }
     return Promise.reject(error)
   },

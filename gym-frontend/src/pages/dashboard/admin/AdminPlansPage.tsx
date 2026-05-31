@@ -121,6 +121,12 @@ export default function AdminPlansPage() {
 
   const columns = [
     {
+      title: t('admin.table_no'),
+      width: 70,
+      align: 'center' as const,
+      render: (_: any, __: AdminPlan, index: number) => (page - 1) * 10 + index + 1,
+    },
+    {
       title: t('admin.plans.columns.name'),
       dataIndex: 'name',
       render: (name: string, record: AdminPlan) => (

@@ -10,6 +10,7 @@ import {
   getAllUsers,
   getMe,
   hasPassword,
+  isAccountLocked,
   login,
   logout,
   refreshToken,
@@ -50,13 +51,14 @@ router.get(
   ensureGoogleOAuthConfigured,
   (req, res, next) => {
     passport.authenticate('google', { session: false }, async (err, user) => {
-      if (err) return next(err)
-      if (!user) return res.redirect(buildClientUrl('/login', { error: 'google_oauth_failed' }))
+      if (err) return res.redirect(buildClientUrl('/oauth-success', { error: 'SERVER_ERROR' }))
+      if (!user) return res.redirect(buildClientUrl('/oauth-success', { error: 'GOOGLE_AUTH_FAILED' }))
+      if (isAccountLocked(user)) return res.redirect(buildClientUrl('/oauth-success', { error: 'ACCOUNT_LOCKED' }))
       try {
         const redirectUrl = await buildGoogleOauthRedirect(user, res)
         return res.redirect(redirectUrl)
       } catch (error) {
-        return next(error)
+        return res.redirect(buildClientUrl('/oauth-success', { error: 'SERVER_ERROR' }))
       }
     })(req, res, next)
   }

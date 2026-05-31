@@ -12,6 +12,7 @@ import LanguageSelect from '../../components/common/LanguageSelect'
 import { API_URL } from '../../config/env'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hooks/useAuth'
+import { getErrorMessage } from '../../utils/errorMessages'
 
 const { Title } = Typography
 
@@ -43,7 +44,8 @@ export default function LoginPage() {
       message.success(t('login.success'))
       setTimeout(() => navigate(getDashboardPath(user.role)), 500)
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('login.failed'))
+      const errorCode = err.response?.data?.code
+      message.error(getErrorMessage(t, err.response?.data?.message, 'login.failed', errorCode))
     } finally {
       setLoading(false)
     }

@@ -3,7 +3,7 @@ import api from './api'
 
 export const authService = {
   sendRegisterOtp: (data: {
-    provider: Extract<AuthProviderType, 'phone'>
+    provider: Extract<AuthProviderType, 'phone' | 'email'>
     name: string
     phone?: string
     password?: string

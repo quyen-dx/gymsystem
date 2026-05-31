@@ -5,21 +5,19 @@ import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import LanguageSelect from '../../components/common/LanguageSelect'
 import { useTheme } from '../../context/ThemeProvider'
+import { useAuth } from '../../hooks/useAuth'
 import { authService } from '../../services/authService'
+import { getErrorMessage } from '../../utils/errorMessages'
 const { Title, Text } = Typography
 
-const getDashboardPath = (role: string) => {
-  if (role === 'admin') return '/admin'
-  if (role === 'seller') return '/seller'
-  if (role === 'staff') return '/staff'
-  if (role === 'pt') return '/pt'
-  return '/'
-}
+const registerOtpMessageKey = 'register-send-otp'
+const registerVerifyMessageKey = 'register-verify-otp'
 
 export default function RegisterPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { dark } = useTheme()
+  const { updateUser } = useAuth()
 
   const [step, setStep] = useState<'form' | 'otp'>('form')
   const [loading, setLoading] = useState(false)
@@ -28,27 +26,30 @@ export default function RegisterPage() {
   const [otpPreview, setOtpPreview] = useState('')
 
   const handleSendOtp = async (values: any) => {
+    if (loading) return
     setLoading(true)
     try {
+      const identifier = String(values.phone || '').trim()
       const { data } = await authService.sendRegisterOtp({
-        provider: 'phone',
+        provider: identifier.includes('@') ? 'email' : 'phone',
         name: values.name,
-        phone: values.phone,
+        phone: identifier,
         password: values.password,
       })
 
       setOtpPreview(data.otpPreview || '')
       setStep('otp')
 
-      message.success(data.message || t('register.otp_sent'))
+      message.success({ key: registerOtpMessageKey, content: data.message || t('register.otp_sent') })
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('register.otp_failed'))
+      message.error({ key: registerOtpMessageKey, content: getErrorMessage(t, err.response?.data?.message, 'register.otp_failed') })
     } finally {
       setLoading(false)
     }
   }
 
   const handleVerifyOtp = async (values: any) => {
+    if (loading) return
     setLoading(true)
     try {
       const phone = form.getFieldValue('phone')
@@ -58,12 +59,18 @@ export default function RegisterPage() {
         otp: values.otp,
       })
 
-      message.success(t('register.success'))
+      message.success({ key: registerVerifyMessageKey, content: t('register.success') })
 
-      localStorage.setItem('token', data.accessToken)
-      navigate(getDashboardPath(data.user.role))
+      if (data?.accessToken && data?.user) {
+        localStorage.setItem('token', data.accessToken)
+        updateUser(data.user)
+        navigate('/dashboard', { replace: true })
+        return
+      }
+
+      navigate('/login', { replace: true })
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('register.otp_invalid'))
+      message.error({ key: registerVerifyMessageKey, content: getErrorMessage(t, err.response?.data?.message, 'register.otp_invalid') })
     } finally {
       setLoading(false)
     }
@@ -106,6 +113,7 @@ export default function RegisterPage() {
               type="text"
               icon={<ArrowLeftOutlined />}
               onClick={() => setStep('form')}
+              disabled={loading}
               style={{ color: dark ? '#fff' : '#edebe6' }}
             />
           )}
@@ -154,6 +162,7 @@ export default function RegisterPage() {
               block
               size="large"
               loading={loading}
+              disabled={loading}
             >
               {t('register.send_otp')}
             </Button>
@@ -200,6 +209,7 @@ export default function RegisterPage() {
               block
               size="large"
               loading={loading}
+              disabled={loading}
             >
               {t('register.otp_verify')}
             </Button>
