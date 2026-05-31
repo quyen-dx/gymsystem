@@ -31,7 +31,7 @@ const getUsernameFromEmail = (email?: string | null) => {
 }
 
 const profileModalClass =
-  'max-w-[760px] max-[768px]:!m-0 max-[768px]:!w-[calc(100vw-8px)] max-[768px]:!max-w-none max-[768px]:!pb-0 [&_.ant-modal-content]:!p-0 [&_.ant-modal-content]:!rounded-2xl [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-content]:!shadow-2xl [&_.ant-modal-close]:!right-3.5 [&_.ant-modal-close]:!top-3.5 [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
+  'max-w-[760px] [&_.ant-modal-content]:!p-0 [&_.ant-modal-content]:!rounded-2xl [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-content]:!shadow-2xl [&_.ant-modal-close]:!right-3.5 [&_.ant-modal-close]:!top-3.5 [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
 
 const profileModalWrapClass =
   'profile-modal-wrap [&_.ant-modal-mask]:!bg-[var(--profile-mask)] [&_.ant-modal-mask]:backdrop-blur-[10px]'
@@ -140,6 +140,7 @@ const ProfileHeader = ({
   onAvatarChange,
   onCoverChange,
   onCoverRemove,
+  mediaUploading,
   isMobile,
   t,
 }: {
@@ -150,9 +151,10 @@ const ProfileHeader = ({
   coverRef: React.RefObject<HTMLInputElement | null>
   contactText: string
   onCopyContact: () => void
-  onAvatarChange: (url: string) => void
-  onCoverChange: (url: string) => void
+  onAvatarChange: (file: File) => void
+  onCoverChange: (file: File) => void
   onCoverRemove: () => void
+  mediaUploading: 'avatar' | 'cover' | 'cover-remove' | null
   isMobile: boolean
   t: (key: string, opts?: any) => string
 }) => {
@@ -191,6 +193,7 @@ const ProfileHeader = ({
         >
           <button
             type="button"
+            disabled={mediaUploading === 'cover'}
             onClick={() => coverRef.current?.click()}
             style={{
               background: 'rgba(0,0,0,0.5)',
@@ -200,18 +203,20 @@ const ProfileHeader = ({
               color: '#fff',
               padding: '4px 10px',
               fontSize: 12,
-              cursor: 'pointer',
+              cursor: mediaUploading === 'cover' ? 'not-allowed' : 'pointer',
+              opacity: mediaUploading === 'cover' ? 0.7 : 1,
               display: 'flex',
               alignItems: 'center',
               gap: 4,
             }}
           >
-            <CameraOutlined /> {t('profile.change_cover')}
+            <CameraOutlined /> {mediaUploading === 'cover' ? t('common.loading') : t('profile.change_cover')}
           </button>
 
           {(coverPreview || user?.coverImage) && coverPreview !== '' && (
             <button
               type="button"
+              disabled={mediaUploading === 'cover-remove'}
               onClick={() => onCoverRemove()}
               style={{
                 background: 'rgba(239,68,68,0.6)',
@@ -221,13 +226,14 @@ const ProfileHeader = ({
                 color: '#fff',
                 padding: '4px 10px',
                 fontSize: 12,
-                cursor: 'pointer',
+                cursor: mediaUploading === 'cover-remove' ? 'not-allowed' : 'pointer',
+                opacity: mediaUploading === 'cover-remove' ? 0.7 : 1,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 4,
               }}
             >
-              <DeleteOutlined /> {t('profile.remove')}
+              <DeleteOutlined /> {mediaUploading === 'cover-remove' ? t('common.loading') : t('profile.remove')}
             </button>
           )}
         </div>
@@ -239,12 +245,12 @@ const ProfileHeader = ({
           accept="image/*"
           onChange={(e) => {
             const file = e.target.files?.[0]
-            if (file) onCoverChange(URL.createObjectURL(file))
+            if (file) onCoverChange(file)
           }}
         />
       </div>
       <div className="profile-header-content">
-        <div className="profile-avatar-wrap cursor-pointer" onClick={() => fileRef.current?.click()}>
+        <div className="profile-avatar-wrap cursor-pointer" onClick={() => mediaUploading !== 'avatar' && fileRef.current?.click()}>
           <Avatar
             size={isMobile ? 78 : 88}
             src={
@@ -257,7 +263,7 @@ const ProfileHeader = ({
           />
           <span className="profile-avatar-status" />
           <div className="profile-avatar-camera">
-            <CameraOutlined />
+            {mediaUploading === 'avatar' ? t('common.loading') : <CameraOutlined />}
           </div>
         </div>
 
@@ -274,10 +280,10 @@ const ProfileHeader = ({
         type="file"
         hidden
         accept="image/*"
-        onChange={(event) => {
-          const file = event.target.files?.[0]
-          if (file) onAvatarChange(URL.createObjectURL(file))
-        }}
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            if (file) onAvatarChange(file)
+          }}
       />
     </header>
   )
@@ -316,20 +322,21 @@ const MobileMenuGrid = ({
   onChange,
   mobileMenuOpen,
   onToggle,
+  hideBackdrop,
 }: {
   tabs: ProfileTabItem[]
   activeTab: ProfileTabKey
   onChange: (tab: ProfileTabKey) => void
   mobileMenuOpen: boolean
   onToggle: () => void
+  hideBackdrop?: boolean
 }) => (
-  <>
+  <div className="profile-mobile-menu-anchor">
     <div className="profile-mobile-menu-toggle" style={{
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: '8px 12px',
-      borderBottom: mobileMenuOpen ? '1px solid var(--theme-border)' : 'none',
     }}>
       <span style={{ fontSize: 13, color: 'var(--theme-muted)', fontWeight: 500 }}>
         {tabs.find(t => t.key === activeTab)?.label}
@@ -355,24 +362,29 @@ const MobileMenuGrid = ({
     </div>
 
     {mobileMenuOpen && (
-      <div className="profile-mobile-grid">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.key
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              className={`profile-grid-tab${isActive ? ' active' : ''}`}
-              onClick={() => onChange(tab.key)}
-            >
-              <span>{tab.icon}</span>
-              <strong>{tab.label}</strong>
-            </button>
-          )
-        })}
-      </div>
+      <>
+        {!hideBackdrop && (
+          <button type="button" className="profile-mobile-menu-backdrop" aria-label="Close menu" onClick={onToggle} />
+        )}
+        <div className="profile-mobile-grid">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.key
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                className={`profile-grid-tab${isActive ? ' active' : ''}`}
+                onClick={() => onChange(tab.key)}
+              >
+                <span>{tab.icon}</span>
+                <strong>{tab.label}</strong>
+              </button>
+            )
+          })}
+        </div>
+      </>
     )}
-  </>
+  </div>
 )
 
 const TabContent = ({
@@ -414,6 +426,7 @@ export default function AccountProfileModal({
   const [addressModalOpen, setAddressModalOpen] = useState(false)
   const [editAddress, setEditAddress] = useState<any>(null)
   const [accentColor, setAccentColor] = useState(savedAccentColor)
+  const [mediaUploading, setMediaUploading] = useState<'avatar' | 'cover' | 'cover-remove' | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const coverRef = useRef<HTMLInputElement>(null)
   const profileScrollRef = useRef<HTMLDivElement>(null)
@@ -475,6 +488,87 @@ export default function AccountProfileModal({
     logout()
   }
 
+  const handleAvatarFileChange = async (file: File) => {
+    if (!user || mediaUploading) return
+    const previousPreview = avatarPreview
+    const previewUrl = URL.createObjectURL(file)
+    setAvatarPreview(previewUrl)
+    setMediaUploading('avatar')
+
+    const formData = new FormData()
+    formData.append('avatar', file)
+
+    try {
+      const { data } = await authService.updateProfile(formData)
+      updateUser(data.user)
+      setAvatarPreview(null)
+      if (fileRef.current) fileRef.current.value = ''
+      message.success(t('profile.msg_avatar_update_success'))
+    } catch (err: any) {
+      setAvatarPreview(previousPreview)
+      message.error(err.response?.data?.message || t('profile.msg_avatar_update_failed'))
+    } finally {
+      URL.revokeObjectURL(previewUrl)
+      setMediaUploading(null)
+    }
+  }
+
+  const handleCoverFileChange = async (file: File) => {
+    if (!user || mediaUploading) return
+    const previousPreview = coverPreview
+    const previousRemoved = coverRemoved
+    const previewUrl = URL.createObjectURL(file)
+    setCoverPreview(previewUrl)
+    setCoverRemoved(false)
+    setMediaUploading('cover')
+
+    const formData = new FormData()
+    formData.append('coverImage', file)
+
+    try {
+      const { data } = await authService.updateProfile(formData)
+      updateUser(data.user)
+      setCoverPreview(null)
+      setCoverRemoved(false)
+      if (coverRef.current) coverRef.current.value = ''
+      message.success(t('profile.msg_cover_update_success'))
+    } catch (err: any) {
+      setCoverPreview(previousPreview)
+      setCoverRemoved(previousRemoved)
+      message.error(err.response?.data?.message || t('profile.msg_cover_update_failed'))
+    } finally {
+      URL.revokeObjectURL(previewUrl)
+      setMediaUploading(null)
+    }
+  }
+
+  const handleCoverRemove = async () => {
+    if (!user || mediaUploading) return
+    const previousPreview = coverPreview
+    const previousRemoved = coverRemoved
+    setCoverPreview('')
+    setCoverRemoved(true)
+    setMediaUploading('cover-remove')
+
+    const formData = new FormData()
+    formData.append('removeCoverImage', 'true')
+
+    try {
+      const { data } = await authService.updateProfile(formData)
+      updateUser(data.user)
+      setCoverPreview(null)
+      setCoverRemoved(false)
+      if (coverRef.current) coverRef.current.value = ''
+      message.success(t('profile.msg_cover_update_success'))
+    } catch (err: any) {
+      setCoverPreview(previousPreview)
+      setCoverRemoved(previousRemoved)
+      message.error(err.response?.data?.message || t('profile.msg_cover_update_failed'))
+    } finally {
+      setMediaUploading(null)
+    }
+  }
+
   const handleClose = () => {
     commitPending()
     onClose()
@@ -508,128 +602,20 @@ export default function AccountProfileModal({
   useEffect(() => {
     if (!open) return
 
-    let frame = 0
-    let touchStartY = 0
     const scrollY = window.scrollY
-    const previousBodyPosition = document.body.style.position
-    const previousBodyTop = document.body.style.top
-    const previousBodyWidth = document.body.style.width
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-
     document.body.style.position = 'fixed'
     document.body.style.top = `-${scrollY}px`
     document.body.style.width = '100%'
     document.body.style.overflow = 'hidden'
     document.documentElement.style.overflow = 'hidden'
 
-    const updateProfileViewport = () => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
-        const viewport = window.visualViewport
-        const vvHeight = viewport?.height || window.innerHeight
-        const vvTop = viewport?.offsetTop || 0
-        const safeBottom = parseInt(
-          getComputedStyle(document.documentElement)
-            .getPropertyValue('--sab') || '0'
-        ) || 0
-        const height = Math.floor(vvHeight) - safeBottom
-        const top = Math.max(4, Math.floor(vvTop) + 4)
-
-        document.documentElement.style.setProperty('--profile-visual-height', `${height}px`)
-        document.documentElement.style.setProperty('--profile-visual-top', `${top}px`)
-      })
-    }
-
-    const handleTouchStart = (event: TouchEvent) => {
-      touchStartY = event.touches[0]?.clientY || 0
-    }
-
-    const handleTouchMove = (event: TouchEvent) => {
-      if (window.innerWidth <= 768) return
-
-      const scrollNode = profileScrollRef.current
-      const target = event.target as Node | null
-
-      if (!scrollNode || !target || !scrollNode.contains(target)) {
-        const modalNode = document.querySelector('.profile-modal .ant-modal-content')
-        const currentY = event.touches[0]?.clientY || 0
-        const deltaY = currentY - touchStartY
-
-        if (scrollNode && target && modalNode?.contains(target)) {
-          scrollNode.scrollTop -= deltaY
-          touchStartY = currentY
-        }
-
-        event.preventDefault()
-        return
-      }
-
-      const currentY = event.touches[0]?.clientY || 0
-      const deltaY = currentY - touchStartY
-      const atTop = scrollNode.scrollTop <= 0
-      const atBottom = scrollNode.scrollTop + scrollNode.clientHeight >= scrollNode.scrollHeight - 1
-      const cannotScroll = scrollNode.scrollHeight <= scrollNode.clientHeight
-
-      if (cannotScroll || (atTop && deltaY > 0) || (atBottom && deltaY < 0)) {
-        event.preventDefault()
-      }
-    }
-
-    const handleWheel = (event: WheelEvent) => {
-      if (window.innerWidth <= 768) return
-
-      const scrollNode = profileScrollRef.current
-      const target = event.target as Node | null
-      const modalNode = document.querySelector('.profile-modal .ant-modal-content')
-
-      if (!scrollNode || !target) return
-
-      if (scrollNode.contains(target)) {
-        const atTop = scrollNode.scrollTop <= 0
-        const atBottom = scrollNode.scrollTop + scrollNode.clientHeight >= scrollNode.scrollHeight - 1
-
-        if ((atTop && event.deltaY < 0) || (atBottom && event.deltaY > 0)) {
-          event.preventDefault()
-        }
-        return
-      }
-
-      if (modalNode?.contains(target)) {
-        scrollNode.scrollTop += event.deltaY
-        event.preventDefault()
-        return
-      }
-
-      event.preventDefault()
-    }
-
-    updateProfileViewport()
-    window.visualViewport?.addEventListener('resize', updateProfileViewport)
-    window.visualViewport?.addEventListener('scroll', updateProfileViewport)
-    window.addEventListener('resize', updateProfileViewport)
-    window.addEventListener('orientationchange', updateProfileViewport)
-    document.addEventListener('touchstart', handleTouchStart, { passive: true })
-    document.addEventListener('touchmove', handleTouchMove, { passive: false })
-    document.addEventListener('wheel', handleWheel, { passive: false })
-
     return () => {
-      cancelAnimationFrame(frame)
-      window.visualViewport?.removeEventListener('resize', updateProfileViewport)
-      window.visualViewport?.removeEventListener('scroll', updateProfileViewport)
-      window.removeEventListener('resize', updateProfileViewport)
-      window.removeEventListener('orientationchange', updateProfileViewport)
-      document.removeEventListener('touchstart', handleTouchStart)
-      document.removeEventListener('touchmove', handleTouchMove)
-      document.removeEventListener('wheel', handleWheel)
-      document.body.style.position = previousBodyPosition
-      document.body.style.top = previousBodyTop
-      document.body.style.width = previousBodyWidth
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
+      document.body.style.position = ''
+      document.body.style.top = ''
+      document.body.style.width = ''
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
       window.scrollTo(0, scrollY)
-      document.documentElement.style.removeProperty('--profile-visual-height')
-      document.documentElement.style.removeProperty('--profile-visual-top')
     }
   }, [open])
 
@@ -656,15 +642,6 @@ export default function AccountProfileModal({
       if (values.email) formData.append('email', values.email)
       if (values.phone) formData.append('phone', values.phone)
       if (values.dateOfBirth) formData.append('dateOfBirth', values.dateOfBirth)
-      if (fileRef.current?.files?.[0]) {
-        formData.append('avatar', fileRef.current.files[0])
-      }
-      if (coverRef.current?.files?.[0]) {
-        formData.append('coverImage', coverRef.current.files[0])
-      }
-      if (coverRemoved) {
-        formData.append('removeCoverImage', 'true')
-      }
       const { data } = await authService.updateProfile(formData)
       updateUser(data.user)
       message.success(t('profile.msg_update_success'))
@@ -874,44 +851,34 @@ export default function AccountProfileModal({
       }}
       styles={{
         content: {
-          borderRadius: 16,
           padding: 0,
-          overflow: isProfileMobile ? 'auto' : 'hidden',
           display: 'flex',
           flexDirection: 'column',
           border: '1px solid var(--theme-border)',
-          height: isProfileMobile
-            ? 'calc(var(--profile-visual-height, 100dvh) - 8px)'
-            : isProfileCompact
-              ? '82vh'
-              : 'auto',
-          maxHeight: isProfileMobile
-            ? 'calc(100dvh - 16px)'
-            : '90vh',
-        },
+        } as CSSProperties,
         body: {
           padding: 0,
-          height: isProfileMobile ? 'auto' : '100%',
-          minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
-          overflow: isProfileMobile ? 'visible' : 'hidden',
-        },
+          flex: 1,
+        } as CSSProperties,
         mask: {
           backdropFilter: 'blur(4px)',
         },
       } as any}
     >
       <div
+        ref={isProfileMobile ? undefined : profileScrollRef}
+        className="profile-modal-content-wrapper"
+        data-profile-scroll-container="account-profile-modal"
         style={{
           ...profileThemeStyle,
           color: token.colorText,
-          overflowX: 'hidden',
           width: '100%',
-          maxWidth: 'none',
-          height: isProfileCompact ? '100%' : 'auto',
           display: 'flex',
           flexDirection: 'column',
+          minHeight: 0,
+          flex: 1,
         }}
       >
         <ProfileHeader
@@ -922,21 +889,15 @@ export default function AccountProfileModal({
           coverRef={coverRef}
           contactText={contactText}
           onCopyContact={handleCopyContact}
-          onAvatarChange={setAvatarPreview}
-          onCoverChange={(url) => {
-            setCoverPreview(url)
-            setCoverRemoved(false)
-          }}
-          onCoverRemove={() => {
-            setCoverPreview('')
-            setCoverRemoved(true)
-            if (coverRef.current) coverRef.current.value = ''
-          }}
+          onAvatarChange={handleAvatarFileChange}
+          onCoverChange={handleCoverFileChange}
+          onCoverRemove={handleCoverRemove}
+          mediaUploading={mediaUploading}
           isMobile={isProfileCompact}
           t={t}
         />
 
-        <div className="profile-modal-main min-h-0 flex-1">
+        <div className="profile-modal-main">
           <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
           <MobileMenuGrid
             tabs={tabs}
@@ -947,23 +908,21 @@ export default function AccountProfileModal({
             }}
             mobileMenuOpen={mobileMenuOpen}
             onToggle={() => setMobileMenuOpen(prev => !prev)}
+            hideBackdrop={isProfileMobile}
           />
 
           <div
-            ref={profileScrollRef}
-            className="profile-modal-scroll min-h-0 flex-1 overflow-y-auto"
+            className="profile-modal-scroll"
             style={{
-              maxHeight: isProfileMobile ? 'none' : isProfileCompact ? 'calc(var(--profile-visual-height, 100svh) - 320px - env(safe-area-inset-bottom, 20px))' : '70vh',
               minHeight: 120,
               padding: isProfileMobile ? '4px 4px 0' : '16px 20px',
-              paddingBottom: isProfileMobile ? 'calc(96px + env(safe-area-inset-bottom, 16px))' : '16px',
+              paddingBottom: isProfileMobile ? '0' : '16px',
               scrollbarWidth: 'thin',
               scrollbarColor: 'var(--theme-border) transparent',
               overflowX: 'hidden',
               overflowY: isProfileMobile ? 'visible' : 'auto',
               width: '100%',
               maxWidth: '100%',
-              WebkitOverflowScrolling: 'touch',
               flex: 1,
             }}
           >

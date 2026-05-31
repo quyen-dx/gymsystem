@@ -550,7 +550,11 @@
     "msg_change_password_failed": "Đổi mật khẩu thất bại",
     "msg_contact_copied": "Đã sao chép thông tin liên hệ",
     "msg_theme_update_success": "Đã cập nhật giao diện cá nhân",
-    "msg_theme_update_failed": "Không thể cập nhật giao diện cá nhân"
+    "msg_theme_update_failed": "Không thể cập nhật giao diện cá nhân",
+    "msg_cover_update_success": "Đã cập nhật ảnh nền",
+    "msg_cover_update_failed": "Không thể cập nhật ảnh nền",
+    "msg_avatar_update_success": "Đã cập nhật ảnh đại diện",
+    "msg_avatar_update_failed": "Không thể cập nhật ảnh đại diện"
   },
   "seller_orders": {
     "title": "Đơn hàng bán",

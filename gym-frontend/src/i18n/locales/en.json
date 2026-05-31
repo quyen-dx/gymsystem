@@ -549,7 +549,11 @@
     "msg_change_password_failed": "Password change failed",
     "msg_contact_copied": "Contact information copied",
     "msg_theme_update_success": "Personal theme updated",
-    "msg_theme_update_failed": "Unable to update personal theme"
+    "msg_theme_update_failed": "Unable to update personal theme",
+    "msg_cover_update_success": "Cover photo updated",
+    "msg_cover_update_failed": "Unable to update cover photo",
+    "msg_avatar_update_success": "Profile photo updated",
+    "msg_avatar_update_failed": "Unable to update profile photo"
   },
   "seller_orders": {
     "title": "Seller Orders",
