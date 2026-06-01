@@ -163,7 +163,7 @@ export default function MemberLayout({
   }, [moreDropdownOpen])
 
   return (
-    <Layout className="member-shell" style={{ minHeight: '100vh' }}>
+    <Layout className="member-shell" style={{ minHeight: '100dvh' }}>
       <Header
         className="member-shell-header"
         style={{

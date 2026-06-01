@@ -21,7 +21,7 @@ export default function MaintenancePage() {
   )
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--theme-bg)] p-4 text-[var(--theme-text)] sm:p-6">
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[var(--theme-bg)] p-4 text-[var(--theme-text)] sm:p-6">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,var(--theme-accent-muted),transparent_42%)]" />
       <Card className="relative z-10 w-full max-w-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] text-center shadow-2xl">
         <div className="mb-7 flex items-center justify-center gap-3">

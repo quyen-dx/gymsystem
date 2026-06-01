@@ -223,7 +223,7 @@
     "member": "Thành viên"
   },
   "common": {
-    "loading": "Đang tải...",
+    "loading": "Đang tải",
     "server_unavailable": "Không thể kết nối máy chủ. Vui lòng thử lại.",
     "retry": "Thử lại"
   },
@@ -1655,7 +1655,7 @@
       "empty": "Chưa có hoạt động"
     },
     "about": {
-      "loading": "Đang tải nội dung giới thiệu...",
+      "loading": "Đang tải",
       "empty_title": "Chưa có nội dung giới thiệu",
       "empty_desc": "Admin có thể cập nhật nội dung tại Cài đặt hệ thống.",
       "cta_fallback": "Bắt đầu ngay",

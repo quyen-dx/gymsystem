@@ -15,14 +15,27 @@ const getItemVariant = (item: any) => item.variant?.weight || item.weight || ''
 export default function SellerRevenuePage() {
   const { t } = useTranslation()
   const [orders, setOrders] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
-    getSellerOrders()
-      .then((res) => setOrders(res.data.data || []))
-      .catch((error) => console.error(error))
-      .finally(() => setLoading(false))
+    let cancelled = false
+
+    const fetchOrders = async () => {
+      try {
+        const res = await getSellerOrders()
+        if (!cancelled) setOrders(res.data.data || [])
+      } catch (error) {
+        if (!cancelled) console.error(error)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    fetchOrders()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const soldProducts = useMemo(() => {

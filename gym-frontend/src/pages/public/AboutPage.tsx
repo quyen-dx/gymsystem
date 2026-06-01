@@ -54,8 +54,8 @@ export default function AboutPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--theme-bg)]">
-        <Spin tip={t('system_experience.about.loading')} />
+      <div className="flex min-h-dvh items-center justify-center bg-[var(--theme-bg)]">
+        <Spin tip={t('common.loading')} />
       </div>
     )
   }

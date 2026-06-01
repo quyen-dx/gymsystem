@@ -181,7 +181,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
   }
 
   return (
-    <main className="about-page min-h-screen bg-[var(--gs-bg)] text-[var(--gs-text)]">
+    <main className="about-page min-h-dvh bg-[var(--gs-bg)] text-[var(--gs-text)]">
       <header
         className={`fixed left-0 right-0 top-0 z-50 transition duration-300 ${navSolid ? 'border-b border-[var(--gs-border)] shadow-2xl backdrop-blur-xl' : 'backdrop-blur-sm'}`}
         style={{ background: navSolid ? 'color-mix(in srgb, var(--gs-card) 94%, transparent)' : 'color-mix(in srgb, var(--gs-card) 72%, transparent)' }}
@@ -324,7 +324,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         </div>
       </header>
 
-      <section className="relative h-screen min-h-[620px] overflow-hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <section className="relative h-dvh min-h-[620px] overflow-hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         {heroSlides.map((slide, index) => (
           <div
             key={slide.image}

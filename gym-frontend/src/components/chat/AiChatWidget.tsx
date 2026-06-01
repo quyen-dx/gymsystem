@@ -1134,7 +1134,7 @@ export default function AiChatWidget() {
         hasMoved: hasDraggedChat,
     } = useDraggable(defaultChatPosition, mascotButtonWidth)
     const panelWidth = compactChat ? 'min(350px, calc(100vw - 24px))' : expanded ? 760 : 560
-    const panelHeight = compactChat ? 'min(560px, calc(100vh - 140px))' : expanded ? 760 : 560
+    const panelHeight = compactChat ? 'min(560px, calc(100dvh - 140px))' : expanded ? 760 : 560
     const panelBackground = 'color-mix(in srgb, var(--theme-card) 75%, transparent)'
     const panelBandBackground = 'color-mix(in srgb, var(--theme-bg) 60%, transparent)'
     const panelTint = dark
@@ -1436,7 +1436,7 @@ export default function AiChatWidget() {
                             width: panelWidth,
                             maxWidth: compactChat ? 'calc(100vw - 24px)' : 'calc(100vw - 48px)',
                             height: panelHeight,
-                            maxHeight: compactChat ? 'calc(100vh - 140px)' : 'calc(100vh - 48px)',
+                            maxHeight: compactChat ? 'calc(100dvh - 140px)' : 'calc(100dvh - 48px)',
                             zIndex: 11010,
                             // Chat panel must float above the member header/menu.
                             borderRadius: 16,

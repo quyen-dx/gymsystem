@@ -76,7 +76,7 @@ function LoadingScreen() {
   }, [])
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
+    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
       <div>{timedOut ? t('common.server_unavailable') : t('common.loading')}</div>
       {timedOut && <Button type="primary" onClick={() => window.location.reload()}>{t('common.retry')}</Button>}
     </div>

@@ -3,7 +3,7 @@ import PartnershipRequestForm from '../../components/partnership/PartnershipRequ
 
 export default function PartnershipPage() {
   return (
-    <main className="min-h-screen bg-[var(--theme-bg)] px-4 py-6 text-[var(--theme-text)] sm:py-10">
+    <main className="min-h-dvh bg-[var(--theme-bg)] px-4 py-6 text-[var(--theme-text)] sm:py-10">
       <div className="mx-auto grid max-w-6xl grid-cols-[0.9fr_1.1fr] gap-6 sm:gap-8 max-[860px]:grid-cols-1">
         <section className="flex flex-col justify-center">
           <div className="mb-6 flex items-center gap-4">

@@ -67,7 +67,7 @@ export default function OauthSuccessPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 text-[var(--gs-text)]">
+    <div className="flex min-h-dvh items-center justify-center px-4 text-[var(--gs-text)]">
       <div className="rounded-[28px] border border-[var(--gs-border)] bg-[var(--gs-panel)] px-8 py-10 text-center shadow-[var(--gs-shadow)]">
         <p className="text-xs uppercase tracking-[0.28em] text-[var(--gs-text-soft)]">{t('auth.googleOAuthTitle')}</p>
         <h1 className="mt-3 text-3xl font-semibold">

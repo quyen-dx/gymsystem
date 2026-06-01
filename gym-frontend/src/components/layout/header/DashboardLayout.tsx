@@ -207,7 +207,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 
   return (
-    <Layout className="dashboard-layout-root" style={{ minHeight: '100vh' }}>
+    <Layout className="dashboard-layout-root" style={{ minHeight: '100dvh' }}>
 
       {/* DESKTOP SIDEBAR */}
       <Sider

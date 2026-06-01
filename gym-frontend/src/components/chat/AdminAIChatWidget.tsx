@@ -92,7 +92,7 @@ export default function AdminAIChatWidget() {
           width: 480px;
           max-width: calc(100vw - 48px);
           height: 650px;
-          max-height: calc(100vh - 120px);
+          max-height: calc(100dvh - 120px);
           border-radius: 16px;
           display: flex;
           flex-direction: column;

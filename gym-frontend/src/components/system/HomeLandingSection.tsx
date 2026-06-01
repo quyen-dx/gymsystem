@@ -202,7 +202,7 @@ function HomeLandingSectionInner({
   const landingFlags = systemSettings.landing
 
   return (
-    <main className="min-h-screen " style={{ backgroundColor: token.colorBgLayout, color: token.colorText }}>
+    <main className="min-h-dvh " style={{ backgroundColor: token.colorBgLayout, color: token.colorText }}>
       <HomeHero
         mode={renderMode}
         previewVariant={previewVariant}
