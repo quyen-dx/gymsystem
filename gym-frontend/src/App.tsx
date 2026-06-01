@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import MemberLayout from './components/layout/header/MemberLayout'
 import FeatureDisabled from './components/system/FeatureDisabled'
+import { getAuthToken } from './services/api'
 import { SystemSettingsProvider, useSystemSettings } from './context/SystemSettingsContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { useAuth } from './hooks/useAuth'
@@ -101,7 +102,7 @@ function PrivateRoute({ children, feature }: { children: React.ReactNode; featur
 function HomeRoute() {
   const { user, loading } = useAuth()
   const { settings, loading: settingsLoading } = useSystemSettings()
-  const hasToken = Boolean(localStorage.getItem('token'))
+  const hasToken = Boolean(getAuthToken())
 
   if (!hasToken && loading) return <Navigate to="/about" replace />
 

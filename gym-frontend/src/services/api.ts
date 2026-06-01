@@ -11,9 +11,23 @@ const api = axios.create({
 
 let refreshPromise: Promise<string | null> | null = null
 let lastFeatureDisabledToastAt = 0
+const authTokenKey = 'token'
+const legacyAuthKeys = ['token', 'accessToken', 'refreshToken', 'auth', 'user', 'role']
+
+export const getAuthToken = () => sessionStorage.getItem(authTokenKey)
+
+export const clearLegacyAuthStorage = () => {
+  legacyAuthKeys.forEach((key) => localStorage.removeItem(key))
+}
+
+export const setAuthToken = (token: string) => {
+  sessionStorage.setItem(authTokenKey, token)
+  clearLegacyAuthStorage()
+}
 
 export const clearAuthSession = () => {
-  localStorage.removeItem('token')
+  sessionStorage.removeItem(authTokenKey)
+  clearLegacyAuthStorage()
 }
 
 export const refreshAccessToken = async () => {
@@ -23,7 +37,7 @@ export const refreshAccessToken = async () => {
     } as any)
       .then((response) => {
         const accessToken = response.data?.accessToken || null
-        if (accessToken) localStorage.setItem('token', accessToken)
+        if (accessToken) setAuthToken(accessToken)
         return accessToken
       })
       .catch((error) => {
@@ -39,7 +53,7 @@ export const refreshAccessToken = async () => {
 }
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
+  const token = getAuthToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -81,7 +95,7 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    if (status === 401 && originalRequest && !originalRequest._retry && !isRefreshRequest && !isLoginRequest) {
+    if (status === 401 && originalRequest && !originalRequest._retry && !isRefreshRequest && !isLoginRequest && getAuthToken()) {
       originalRequest._retry = true
       try {
         const newToken = await refreshAccessToken()

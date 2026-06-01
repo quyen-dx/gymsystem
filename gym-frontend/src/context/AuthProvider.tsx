@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { clearAuthSession, refreshAccessToken } from '../services/api'
+import { clearAuthSession, clearLegacyAuthStorage, getAuthToken, setAuthToken } from '../services/api'
 import { authService } from '../services/authService'
 import { AuthContext, type LoginPayload, type User } from './auth.context'
 
@@ -12,10 +12,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const bootstrapAuth = async () => {
       try {
-        let token = localStorage.getItem('token')
-        if (!token) {
-          token = await refreshAccessToken()
-        }
+        clearLegacyAuthStorage()
+        const token = getAuthToken()
 
         if (!token) {
           if (!cancelled) setUser(null)
@@ -41,7 +39,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = async (payload: LoginPayload) => {
     const { data } = await authService.login(payload)
-    localStorage.setItem('token', data.accessToken)
+    setAuthToken(data.accessToken)
     setUser(data.user)
     return data.user
   }

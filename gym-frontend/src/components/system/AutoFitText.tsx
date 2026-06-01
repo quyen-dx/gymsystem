@@ -99,8 +99,8 @@ export default function AutoFitText({ text, children, className, onStatus }: Aut
   }, [fit])
 
   return (
-    <div ref={outerRef} className={className} style={{ overflow: 'hidden', width: '100%', maxWidth: '100%' }}>
-      <span ref={innerRef} style={{ display: 'block', overflow: 'hidden', maxWidth: '100%' }}>
+    <div ref={outerRef} className={className} style={{ overflow: 'visible', width: '100%', maxWidth: '100%' }}>
+      <span ref={innerRef} style={{ display: 'block', overflow: 'visible', maxWidth: '100%' }}>
         {children}
       </span>
       <span

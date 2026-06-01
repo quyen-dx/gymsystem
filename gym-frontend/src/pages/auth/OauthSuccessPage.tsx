@@ -3,6 +3,7 @@ import { Button } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import { clearAuthSession, setAuthToken } from '../../services/api'
 import { authService } from '../../services/authService'
 import MaintenancePage from '../public/MaintenancePage'
 
@@ -47,14 +48,14 @@ export default function OauthSuccessPage() {
         return
       }
 
-      localStorage.setItem('token', token)
+      setAuthToken(token)
 
       try {
         const { data } = await authService.getProfile()
         updateUser(data.user)
         navigate(getDashboardPath(data.user?.role), { replace: true })
       } catch {
-        localStorage.removeItem('token')
+        clearAuthSession()
         setError(t('auth.invalidToken'))
       }
     }

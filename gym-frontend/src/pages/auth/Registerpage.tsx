@@ -8,6 +8,7 @@ import FeatureDisabled from '../../components/system/FeatureDisabled'
 import TypewriterSlogans from '../../components/system/TypewriterSlogans'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { useAuth } from '../../hooks/useAuth'
+import { setAuthToken } from '../../services/api'
 import { authService } from '../../services/authService'
 import { getErrorMessage } from '../../utils/errorMessages'
 import { getLocalizedText } from '../../utils/localization'
@@ -74,7 +75,7 @@ export default function RegisterPage() {
       message.success({ key: registerVerifyMessageKey, content: t('register.success') })
 
       if (data?.accessToken && data?.user) {
-        localStorage.setItem('token', data.accessToken)
+        setAuthToken(data.accessToken)
         updateUser(data.user)
         navigate('/dashboard', { replace: true })
         return
