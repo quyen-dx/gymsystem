@@ -18,6 +18,7 @@ import {
   updatePolicy,
 } from '../controllers/systemExperienceController.js'
 import { adminOnly, protect } from '../middlewares/authMiddleware.js'
+import { feedbackUpload } from '../config/cloudinary.js'
 
 const router = express.Router()
 
@@ -40,7 +41,7 @@ router.post('/policies', protect, adminOnly, createPolicy)
 router.put('/policies/:id', protect, adminOnly, updatePolicy)
 router.delete('/policies/:id', protect, adminOnly, deletePolicy)
 
-router.post('/feedback', protect, createFeedback)
+router.post('/feedback', protect, feedbackUpload.array('attachments', 3), createFeedback)
 router.get('/feedback/my', protect, getMyFeedback)
 router.get('/feedback', protect, adminOnly, getAllFeedback)
 router.patch('/feedback/:id', protect, adminOnly, updateFeedbackStatus)

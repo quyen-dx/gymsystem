@@ -84,9 +84,9 @@ export default function MemberLayout({
     ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/checkin', label: t('nav.checkin'), icon: <CreditCardOutlined /> }] : []),
   ]
   const moreNavItems = [
-    { key: '/help', label: t('nav.help'), icon: <QuestionCircleOutlined /> },
-    { key: '/policies', label: t('nav.policies'), icon: <FileTextOutlined /> },
     { key: '/feedback', label: t('nav.feedback'), icon: <CommentOutlined /> },
+    { key: '/policies', label: t('nav.policies'), icon: <FileTextOutlined /> },
+    { key: '/help', label: t('nav.help'), icon: <QuestionCircleOutlined /> },
   ]
   const drawerNavItems = [...navItems, ...moreNavItems]
 

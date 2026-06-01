@@ -842,7 +842,7 @@
       "products_modal_title": "Sản phẩm của shop: {{name}}",
       "products_columns": {
         "product": "Sản phẩm",
-        "category": "Danh mục",
+      "category": "Danh mục",
         "price": "Giá",
         "stock": "Tồn kho"
       },
@@ -1559,8 +1559,18 @@
       "edit_faq": "Sửa FAQ",
       "edit_policy": "Sửa chính sách",
       "question": "Câu hỏi",
+      "question_vi": "Câu hỏi (Tiếng Việt)",
+      "question_en": "Câu hỏi (English)",
       "answer": "Câu trả lời",
+      "answer_vi": "Câu trả lời (Tiếng Việt)",
+      "answer_en": "Câu trả lời (English)",
       "category": "Danh mục",
+      "category_select_placeholder": "Chọn danh mục có sẵn",
+      "category_existing_label": "Danh mục có sẵn",
+      "category_new_label": "Hoặc nhập danh mục mới",
+      "category_new_vi_placeholder": "Tiếng Việt (VD: Gói tập)",
+      "category_new_en_placeholder": "English (VD: Membership)",
+      "category_required": "Vui lòng chọn danh mục có sẵn hoặc nhập đầy đủ danh mục mới song ngữ",
       "published": "Đã xuất bản",
       "hidden": "Đã ẩn",
       "publish": "Xuất bản",
@@ -1568,8 +1578,12 @@
       "edit": "Sửa",
       "delete": "Xóa",
       "title": "Tiêu đề",
+      "title_vi": "Tiêu đề (Tiếng Việt)",
+      "title_en": "Tiêu đề (English)",
       "slug": "Đường dẫn",
       "content": "Nội dung",
+      "content_vi": "Nội dung (Tiếng Việt)",
+      "content_en": "Nội dung (English)",
       "sender": "Người gửi",
       "type": "Loại",
       "priority": "Ưu tiên",
@@ -1611,13 +1625,19 @@
       "preview_about_fallback": "Về GymPro"
     },
     "help": {
-      "title": "Trung tâm trợ giúp",
+      "title": "Trung tâm trợ giúp GymPro",
+      "description": "Tìm câu trả lời nhanh cho các câu hỏi thường gặp về gói tập, tài khoản, đặt lịch, thanh toán và hỗ trợ.",
       "search_placeholder": "Tìm câu hỏi...",
-      "empty": "Chưa có FAQ phù hợp"
+      "empty": "Không tìm thấy câu hỏi phù hợp",
+      "filter_all": "Tất cả"
     },
     "policy": {
       "title": "Chính sách GymPro",
-      "empty": "Chưa có chính sách"
+      "description": "Tìm hiểu các điều khoản, quy định, chính sách bảo mật và thanh toán khi sử dụng hệ thống GymPro.",
+      "search_placeholder": "Tìm kiếm chính sách...",
+      "filter_all": "Tất cả",
+      "updated_label": "Cập nhật lần cuối",
+      "empty": "Không tìm thấy chính sách phù hợp"
     },
     "feedback": {
       "form_title": "Gửi góp ý / báo lỗi",
@@ -1626,11 +1646,28 @@
       "content_label": "Nội dung",
       "type_label": "Loại",
       "priority_label": "Ưu tiên",
+      "status_label": "Trạng thái",
+      "sent_at": "Ngày gửi",
+      "attachments": "Ảnh đính kèm",
+      "upload_images": "Tải ảnh lên",
+      "remove_image": "Xóa ảnh",
+      "view_image": "Xem ảnh",
+      "image_required": "Bắt buộc tải lên file ảnh",
+      "image_size_limit": "Ảnh không được vượt quá 5MB",
+      "image_count_limit": "Chỉ được tải tối đa 3 ảnh",
+      "image_count": "{{count}} ảnh",
       "submit": "Gửi góp ý",
       "success": "Đã gửi góp ý",
       "failed": "Gửi thất bại",
       "empty": "Bạn chưa gửi góp ý",
       "admin_reply": "Admin",
+      "no_admin_reply": "Chưa có phản hồi",
+      "filter_all_types": "Tất cả loại",
+      "filter_all_priorities": "Tất cả mức ưu tiên",
+      "filter_all_statuses": "Tất cả trạng thái",
+      "search_placeholder": "Tìm kiếm góp ý...",
+      "clear_filters": "Xóa bộ lọc",
+      "result_count": "{{count}} kết quả",
       "type": {
         "suggestion": "Góp ý",
         "bug": "Báo lỗi",
@@ -1645,9 +1682,9 @@
       },
       "status": {
         "pending": "Đang chờ",
-        "reviewing": "Đang xem xét",
-        "resolved": "Đã xử lý",
-        "rejected": "Từ chối"
+        "reviewing": "Đang xử lý",
+        "resolved": "Đã phản hồi",
+        "rejected": "Đã đóng"
       }
     },
     "activity": {

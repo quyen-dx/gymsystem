@@ -1558,8 +1558,18 @@
       "edit_faq": "Edit FAQ",
       "edit_policy": "Edit Policy",
       "question": "Question",
+      "question_vi": "Question (Vietnamese)",
+      "question_en": "Question (English)",
       "answer": "Answer",
+      "answer_vi": "Answer (Vietnamese)",
+      "answer_en": "Answer (English)",
       "category": "Category",
+      "category_select_placeholder": "Select existing category",
+      "category_existing_label": "Existing category",
+      "category_new_label": "Or enter new category",
+      "category_new_vi_placeholder": "Vietnamese (e.g. Gói tập)",
+      "category_new_en_placeholder": "English (e.g. Membership)",
+      "category_required": "Please select an existing category or enter a complete bilingual new category",
       "published": "Published",
       "hidden": "Hidden",
       "publish": "Publish",
@@ -1567,8 +1577,12 @@
       "edit": "Edit",
       "delete": "Delete",
       "title": "Title",
+      "title_vi": "Title (Vietnamese)",
+      "title_en": "Title (English)",
       "slug": "Slug",
       "content": "Content",
+      "content_vi": "Content (Vietnamese)",
+      "content_en": "Content (English)",
       "sender": "Sender",
       "type": "Type",
       "priority": "Priority",
@@ -1610,13 +1624,19 @@
       "preview_about_fallback": "About GymPro"
     },
     "help": {
-      "title": "Help Center",
+      "title": "GymPro Help Center",
+      "description": "Find quick answers to common questions about memberships, accounts, bookings, payments, and support.",
       "search_placeholder": "Search questions...",
-      "empty": "No matching FAQ found"
+      "empty": "No matching FAQ found",
+      "filter_all": "All"
     },
     "policy": {
       "title": "GymPro Policies",
-      "empty": "No policies yet"
+      "description": "Learn about terms, privacy, payment, refund, and membership policies when using GymPro.",
+      "search_placeholder": "Search policies...",
+      "filter_all": "All",
+      "updated_label": "Last updated",
+      "empty": "No matching policies found"
     },
     "feedback": {
       "form_title": "Send Feedback / Report Issue",
@@ -1625,11 +1645,28 @@
       "content_label": "Content",
       "type_label": "Type",
       "priority_label": "Priority",
+      "status_label": "Status",
+      "sent_at": "Sent at",
+      "attachments": "Attachments",
+      "upload_images": "Upload images",
+      "remove_image": "Remove image",
+      "view_image": "View image",
+      "image_required": "You must upload image files",
+      "image_size_limit": "Image must not exceed 5MB",
+      "image_count_limit": "You can upload up to 3 images",
+      "image_count": "{{count}} images",
       "submit": "Send Feedback",
       "success": "Feedback sent",
       "failed": "Failed to send feedback",
       "empty": "You have not sent any feedback yet",
       "admin_reply": "Admin",
+      "no_admin_reply": "No reply yet",
+      "filter_all_types": "All types",
+      "filter_all_priorities": "All priorities",
+      "filter_all_statuses": "All statuses",
+      "search_placeholder": "Search feedback...",
+      "clear_filters": "Clear filters",
+      "result_count": "{{count}} results",
       "type": {
         "suggestion": "Suggestion",
         "bug": "Bug report",
@@ -1644,9 +1681,9 @@
       },
       "status": {
         "pending": "Pending",
-        "reviewing": "Reviewing",
-        "resolved": "Resolved",
-        "rejected": "Rejected"
+        "reviewing": "In progress",
+        "resolved": "Replied",
+        "rejected": "Closed"
       }
     },
     "activity": {

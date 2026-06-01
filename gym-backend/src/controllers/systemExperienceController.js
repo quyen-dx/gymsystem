@@ -178,16 +178,30 @@ export const updateCmsPage = async (req, res) => {
   res.json({ message: 'Cập nhật landing CMS thành công', pageId, landing })
 }
 
+const getLangField = (base) => (lang) => lang === 'en' ? `${base}En` : `${base}Vi`
+
 export const getFaqs = async (req, res) => {
-  const { search = '', category = '', includeHidden = 'false' } = req.query
+  const { search = '', category = '', categoryVi = '', categoryEn = '', includeHidden = 'false', lang = '' } = req.query
   const filter = {}
   if (req.user?.role !== 'admin' || includeHidden !== 'true') filter.isPublished = true
-  if (category) filter.category = category
-  if (search) filter.$or = [
-    { question: { $regex: search, $options: 'i' } },
-    { answer: { $regex: search, $options: 'i' } },
-    { category: { $regex: search, $options: 'i' } },
-  ]
+  if (categoryVi) filter.categoryVi = categoryVi
+  if (categoryEn) filter.categoryEn = categoryEn
+  const orConditions = []
+  if (category && !categoryVi && !categoryEn) {
+    orConditions.push(
+      { categoryVi: category },
+      { categoryEn: category },
+    )
+  }
+  if (search) {
+    const qf = getLangField('question')(lang)
+    const af = getLangField('answer')(lang)
+    orConditions.push(
+      { [qf]: { $regex: search, $options: 'i' } },
+      { [af]: { $regex: search, $options: 'i' } },
+    )
+  }
+  if (orConditions.length > 0) filter.$or = orConditions
   const faqs = await Faq.find(filter).sort({ order: 1, createdAt: -1 })
   res.json({ faqs })
 }
@@ -210,8 +224,26 @@ export const deleteFaq = async (req, res) => {
 }
 
 export const getPolicies = async (req, res) => {
-  const { includeHidden = 'false' } = req.query
+  const { search = '', category = '', categoryVi = '', categoryEn = '', includeHidden = 'false', lang = '' } = req.query
   const filter = req.user?.role === 'admin' && includeHidden === 'true' ? {} : { isPublished: true }
+  if (categoryVi) filter.categoryVi = categoryVi
+  if (categoryEn) filter.categoryEn = categoryEn
+  const orConditions = []
+  if (category && !categoryVi && !categoryEn) {
+    orConditions.push(
+      { categoryVi: category },
+      { categoryEn: category },
+    )
+  }
+  if (search) {
+    const tf = getLangField('title')(lang)
+    const cf = getLangField('content')(lang)
+    orConditions.push(
+      { [tf]: { $regex: search, $options: 'i' } },
+      { [cf]: { $regex: search, $options: 'i' } },
+    )
+  }
+  if (orConditions.length > 0) filter.$or = orConditions
   const policies = await Policy.find(filter).sort({ createdAt: -1 })
   res.json({ policies })
 }
@@ -225,14 +257,14 @@ export const getPolicyBySlug = async (req, res) => {
 }
 
 export const createPolicy = async (req, res) => {
-  const slug = req.body.slug || slugify(req.body.title)
+  const slug = req.body.slug || slugify(req.body.titleVi || req.body.titleEn)
   const policy = await Policy.create({ ...req.body, slug })
   res.status(201).json({ message: 'Tạo chính sách thành công', policy })
 }
 
 export const updatePolicy = async (req, res) => {
   const payload = { ...req.body }
-  if (payload.title && !payload.slug) payload.slug = slugify(payload.title)
+  if ((payload.titleVi || payload.titleEn) && !payload.slug) payload.slug = slugify(payload.titleVi || payload.titleEn)
   const policy = await Policy.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true })
   if (!policy) return res.status(404).json({ message: 'Không tìm thấy chính sách' })
   res.json({ message: 'Cập nhật chính sách thành công', policy })
@@ -247,7 +279,12 @@ export const deletePolicy = async (req, res) => {
 export const createFeedback = async (req, res) => {
   const { title, content, type = 'suggestion', priority = 'medium' } = req.body
   if (!title || !content) return res.status(400).json({ message: 'Tiêu đề và nội dung là bắt buộc' })
-  const feedback = await Feedback.create({ user: req.user._id, title, content, type, priority })
+  const attachments = (req.files || []).map((file) => ({
+    url: file.path,
+    publicId: file.filename || '',
+    type: 'image',
+  }))
+  const feedback = await Feedback.create({ user: req.user._id, title, content, type, priority, attachments })
   await recordUserActivity({
     userId: req.user._id,
     type: 'feedback',

@@ -595,6 +595,71 @@ html[data-theme="light"] .member-shell-content .ant-btn-default {
   background: var(--btn-cart-hover-bg, transparent) !important;
 }
 
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.select-text {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.tap-transparent {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.no-select :where(.ant-card-head-title, .ant-form-item-label, button, .ant-btn) {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.select-text :where(input, textarea, .ant-input, .ant-input-affix-wrapper, .ant-input-search) {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.policy-center-collapse.ant-collapse {
+  border: 1px solid var(--theme-border);
+  border-radius: 22px;
+  background: var(--theme-card);
+  overflow: hidden;
+}
+
+.policy-center-collapse .ant-collapse-item {
+  border-bottom-color: var(--theme-border) !important;
+}
+
+.policy-center-collapse .ant-collapse-header {
+  align-items: center !important;
+  padding: 18px 20px !important;
+  color: var(--theme-text) !important;
+  transition: background-color 160ms ease, color 160ms ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.policy-center-collapse .ant-collapse-header:hover {
+  background: var(--theme-accent-muted);
+}
+
+.policy-center-collapse .ant-collapse-expand-icon,
+.policy-center-collapse .ant-collapse-arrow {
+  color: var(--theme-accent) !important;
+}
+
+.policy-center-collapse .ant-collapse-content {
+  border-top-color: var(--theme-border) !important;
+  background: var(--theme-elevated) !important;
+  color: var(--theme-text) !important;
+}
+
+.policy-center-collapse .ant-collapse-content-box {
+  padding: 18px 20px !important;
+}
+
 @media (max-width: 1180px) {
   .member-shell-header {
     padding: 10px 16px;

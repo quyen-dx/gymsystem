@@ -22,6 +22,11 @@ const feedbackSchema = new mongoose.Schema(
       index: true,
     },
     adminReply: { type: String, default: '', trim: true },
+    attachments: [{
+      url: { type: String, required: true },
+      publicId: { type: String, default: '' },
+      type: { type: String, enum: ['image'], default: 'image' },
+    }],
   },
   { timestamps: true },
 )
