@@ -28,6 +28,17 @@ export const getAdminShops = async (req, res, next) => {
   }
 }
 
+export const getShops = async (req, res, next) => {
+  try {
+    const shops = await Shop.find({ isActive: true })
+      .populate('user_id', 'name avatar')
+      .sort({ createdAt: -1 })
+    res.json({ shops })
+  } catch (err) {
+    next(err)
+  }
+}
+
 export const getShopById = async (req, res, next) => {
   try {
     const shop = await Shop.findById(req.params.id)

@@ -1,5 +1,6 @@
-import { createContext, useEffect, useState } from 'react'
+import { createContext, useEffect, useState, useCallback } from 'react'
 import type { CartItem, CartProduct } from '../types/member/cart'
+import { useAuth } from '../hooks/useAuth'
 
 type CartContextType = {
   cart: CartItem[]
@@ -10,20 +11,32 @@ type CartContextType = {
 
 const CartContext = createContext<CartContextType | null>(null)
 
-const getCart = (): CartItem[] => {
+const getCartKey = (userId?: string) => (userId ? `cart_${userId}` : 'cart')
+
+const getCart = (userId?: string): CartItem[] => {
   try {
-    return JSON.parse(localStorage.getItem('cart') || '[]')
+    return JSON.parse(localStorage.getItem(getCartKey(userId)) || '[]')
   } catch {
     return []
   }
 }
 
 export const CartProvider = ({ children }: { children: React.ReactNode }) => {
-  const [cart, setCart] = useState<CartItem[]>(getCart)
+  const { user } = useAuth()
+  const userId = user?._id
+  const [cart, setCart] = useState<CartItem[]>(() => getCart(userId))
 
   useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(cart))
-  }, [cart])
+    setCart(getCart(userId))
+  }, [userId])
+
+  const saveCart = useCallback((items: CartItem[]) => {
+    localStorage.setItem(getCartKey(userId), JSON.stringify(items))
+  }, [userId])
+
+  useEffect(() => {
+    saveCart(cart)
+  }, [cart, saveCart])
 
   const addToCart = (product: CartProduct, opts?: { weight?: string }) => {
     const weight = opts?.weight?.trim() || undefined

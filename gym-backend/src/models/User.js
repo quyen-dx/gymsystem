@@ -2,7 +2,6 @@ import bcrypt from 'bcrypt'
 import mongoose from 'mongoose'
 
 const emailRegex = /^\S+@\S+\.\S+$/
-const phoneRegex = /^(0|\+84)\d{9}$/
 
 const userSchema = new mongoose.Schema(
   {
@@ -37,7 +36,7 @@ const userSchema = new mongoose.Schema(
       sparse: true,
       trim: true,
       validate: {
-        validator: (value) => value == null || value === '' || phoneRegex.test(value),
+        validator: (value) => value == null || value === '' || value.trim().length > 0,
         message: 'Số điện thoại không hợp lệ',
       },
     },
@@ -53,7 +52,7 @@ const userSchema = new mongoose.Schema(
     },
     provider: {
       type: String,
-      enum: ['google', 'facebook', 'phone'],
+      enum: ['google', 'facebook', 'phone', 'email'],
       required: true,
     },
     isVerified: {
@@ -104,9 +103,27 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    themePreference: {
+      type: String,
+      enum: ['system', 'light', 'dark'],
+      default: 'system',
+    },
+    accentColor: {
+      type: String,
+      default: '#7C3AED',
+    },
     isActive: {
       type: Boolean,
       default: true,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'locked'],
+      default: 'active',
+    },
+    isLocked: {
+      type: Boolean,
+      default: false,
     },
     refreshToken: {
       type: String,
@@ -123,6 +140,10 @@ userSchema.pre('validate', function () {
 
   if (this.provider === 'phone' && !this.phone) {
     this.invalidate('phone', 'Tài khoản số điện thoại cần có số điện thoại')
+  }
+
+  if (this.provider === 'email' && !this.email) {
+    this.invalidate('email', 'Tài khoản email cần có email')
   }
 })
 

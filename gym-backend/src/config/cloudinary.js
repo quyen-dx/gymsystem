@@ -17,9 +17,28 @@ const storage = new CloudinaryStorage({
     },
 });
 
+const feedbackStorage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+        folder: 'gympro/feedback',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    },
+});
+
 export const upload = multer({
     storage,
     limits: { fileSize: 2 * 1024 * 1024 },
+});
+
+export const feedbackUpload = multer({
+    storage: feedbackStorage,
+    limits: { fileSize: 5 * 1024 * 1024, files: 3 },
+    fileFilter: (_req, file, cb) => {
+        if (!['image/png', 'image/jpg', 'image/jpeg', 'image/webp'].includes(file.mimetype)) {
+            return cb(new Error('Bắt buộc tải lên file ảnh'));
+        }
+        return cb(null, true);
+    },
 });
 
 export default cloudinary;

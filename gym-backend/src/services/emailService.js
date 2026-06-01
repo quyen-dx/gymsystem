@@ -77,3 +77,34 @@ export const sendShopDeletionEmail = async ({ toEmail, shopName, reason }) => {
 
   return info
 }
+
+export const sendPartnershipRequestEmail = async ({ toEmail, request }) => {
+  const info = await transporter.sendMail({
+    from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
+    to: toEmail,
+    subject: `Yêu cầu hợp tác mới - ${request.brand_name}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; padding: 24px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px;">
+        <p style="font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b7280; margin: 0 0 12px;">GymPro</p>
+        <h1 style="font-size: 24px; margin: 0 0 12px; color: #111827;">Yêu cầu hợp tác thương hiệu mới</h1>
+        <p style="color: #374151; line-height: 1.7; margin: 0 0 20px;">
+          Thương hiệu <strong>${request.brand_name}</strong> vừa gửi yêu cầu hợp tác trên hệ thống GymPro.
+        </p>
+        <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 12px;">
+          <p style="margin: 0 0 8px;"><strong>Lĩnh vực:</strong> ${request.category}</p>
+          <p style="margin: 0 0 8px;"><strong>Người liên hệ:</strong> ${request.contact_name}</p>
+          <p style="margin: 0 0 8px;"><strong>Số điện thoại:</strong> ${request.phone}</p>
+          <p style="margin: 0 0 8px;"><strong>Email:</strong> ${request.email}</p>
+          <p style="margin: 0 0 8px;"><strong>Website:</strong> ${request.website || 'Không cung cấp'}</p>
+          <p style="margin: 0;"><strong>Mô tả:</strong> ${request.description || 'Không cung cấp'}</p>
+        </div>
+      </div>
+    `,
+  })
+
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.log('Email Partnership Request mock:', info.message)
+  }
+
+  return info
+}

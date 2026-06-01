@@ -1,6 +1,6 @@
 import axios from 'axios'
 import api from './api'
-import { clearAuthSession, refreshAccessToken } from './api'
+import { clearAuthSession, getAuthToken, refreshAccessToken } from './api'
 import { API_URL } from '../config/env'
 import type { ConversationContext } from '../types/aichat/aichat'
 
@@ -105,7 +105,7 @@ export const requestAiAssistantStream = async (
         signal: options.signal,
     })
 
-    let token = localStorage.getItem('token')
+    let token = getAuthToken()
     let response = await buildRequest(token)
 
     if (response.status === 401 && token) {

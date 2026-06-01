@@ -8,13 +8,14 @@ import {
   togglePlanStatus,
 } from '../controllers/planController.js';
 import { protect, adminOnly } from '../middlewares/authMiddleware.js';
+import { requireFeature } from '../middlewares/systemSettingsMiddleware.js';
 
 const router = express.Router();
 
 // Xem danh sách và chi tiết: tất cả đều xem được (kể cả chưa login)
 // Nhưng admin mới thấy cả gói inactive → protect để biết role
-router.get('/', protect, getPlans);
-router.get('/:id', protect, getPlanById);
+router.get('/', protect, requireFeature('billing.allowPlanPurchase'), getPlans);
+router.get('/:id', protect, requireFeature('billing.allowPlanPurchase'), getPlanById);
 
 // Chỉ Admin mới được tạo / sửa / xoá / toggle
 router.post('/', protect, adminOnly, createPlan);

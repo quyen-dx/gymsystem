@@ -4,8 +4,9 @@ import type { MouseEvent as ReactMouseEvent, ReactNode, TouchEvent as ReactTouch
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../context/ThemeProvider'
-import { useAuth } from '../../hook/useAuth'
+import { useAuth } from '../../hooks/useAuth'
 import { useDraggable } from '../../hooks/useDraggable'
 import { deleteAiChatSession, getAiChatHistory, renameAiChatSession, requestAiAssistant, requestAiAssistantStream, saveAiChatHistory, type AiMode } from '../../services/aiService'
 import type { AiToolPayload, ChatMessage, ChatSession, ConversationContext, StoredChatState, WebSearchResult } from '../../types/aichat/aichat'
@@ -16,11 +17,6 @@ const MASCOT_HEIGHT = 100
 const CHAT_PANEL_BACKGROUND_IMAGE = 'https://genk.mediacdn.vn/2019/7/3/photo-1-1562129061617297549771.jpg'
 const AI_AVATAR_IMAGE = 'https://vcdn1-giaitri.vnecdn.net/2023/04/28/doraemon4-1682675790-8961-1682675801.jpg?w=500&h=300&q=100&dpr=1&fit=crop&s=3dxqum5l0xkhHX-R0z_a1g'
 
-const AI_MODE_OPTIONS: { label: string; value: AiMode }[] = [
-    { label: 'Gym', value: 'gym' },
-    { label: 'Khác', value: 'general' },
-]
-
 const getSourceDomain = (url: string) => {
     try {
         return new URL(url).hostname.replace(/^www\./, '')
@@ -29,10 +25,10 @@ const getSourceDomain = (url: string) => {
     }
 }
 
-const getSourceName = (source: WebSearchResult) => {
+const getSourceName = (source: WebSearchResult, t?: (key: string) => string) => {
     const domain = getSourceDomain(source.url)
     const title = String(source.title || '').replace(/\s+/g, ' ').trim()
-    if (!title) return domain || 'Nguồn web'
+    if (!title) return domain || (t ? t('chat.source_web') : 'Web source')
     return title
         .replace(/\s*[-|]\s*.*$/, '')
         .slice(0, 80)
@@ -163,53 +159,53 @@ const parseAiActionPayload = (content: unknown): AiActionPayload | null => {
     return null
 }
 
-const getAiActionFallbackMessage = (action?: string) => {
+const getAiActionFallbackMessage = (t: (key: string) => string, action?: string) => {
     const messages: Record<string, string> = {
-        change_theme: 'Đã đổi giao diện theo yêu cầu.',
-        open_modal: 'Mình đã mở phần bạn cần.',
-        navigate: 'Mình đã chuyển đến trang phù hợp.',
-        search_web: 'Mình đã tìm thông tin liên quan cho bạn.',
+        change_theme: t('chat.action_change_theme'),
+        open_modal: t('chat.action_open_modal'),
+        navigate: t('chat.action_navigate'),
+        search_web: t('chat.action_search_web'),
     }
-    return action ? messages[action] || 'Mình đã thực hiện yêu cầu của bạn.' : 'Mình đã thực hiện yêu cầu của bạn.'
+    return action ? messages[action] || t('chat.action_fallback') : t('chat.action_fallback')
 }
 
 const getAiActionDisplayMessage = (
     actionPayload: ReturnType<typeof parseAiActionPayload>,
     currentContent = '',
+    t: (key: string) => string,
 ) => {
     if (!actionPayload) return currentContent
     const actionMessage = typeof actionPayload.message === 'string'
         ? actionPayload.message
         : ''
-    return actionMessage.trim() ? actionMessage : getAiActionFallbackMessage(actionPayload.action)
+    return actionMessage.trim() ? actionMessage : getAiActionFallbackMessage(t, actionPayload.action)
 }
 
-const getAiObjectDisplayMessage = (content: unknown) => {
+const getAiObjectDisplayMessage = (content: unknown, t: (key: string) => string) => {
     const parsed = extractJsonObjectPayload(content)
     if (!parsed) return null
     const actionPayload = typeof parsed.action === 'string'
         ? parsed as AiActionPayload
         : null
-    if (actionPayload) return getAiActionDisplayMessage(actionPayload)
+    if (actionPayload) return getAiActionDisplayMessage(actionPayload, '', t)
 
     const naturalMessage = [parsed.message, parsed.text, parsed.answer, parsed.content]
         .find((value) => typeof value === 'string' && value.trim())
     return typeof naturalMessage === 'string'
         ? naturalMessage
-        : 'Mình đã xử lý xong yêu cầu của bạn.'
+        : t('chat.action_processed')
 }
 
-const getSafeAssistantDisplayContent = (content: unknown, actionPayload: ReturnType<typeof parseAiActionPayload>) => {
-    if (actionPayload) return getAiActionDisplayMessage(actionPayload)
-    const objectMessage = getAiObjectDisplayMessage(content)
-    if (objectMessage) return objectMessage
-    return typeof content === 'string' ? content : ''
+const getSafeAssistantDisplayContent = (content: unknown, actionPayload: ReturnType<typeof parseAiActionPayload>, t: (key: string) => string) => {
+    if (actionPayload) return getAiActionDisplayMessage(actionPayload, '', t)
+    const objectMessage = getAiObjectDisplayMessage(content, t)
+    return objectMessage ? objectMessage : typeof content === 'string' ? content : ''
 }
 
-const splitAiAssistantResponse = (rawContent: unknown, currentContent = '') => {
+const splitAiAssistantResponse = (rawContent: unknown, currentContent = '', t: (key: string) => string) => {
     const actionPayload = parseAiActionPayload(rawContent)
     const chatContent = rawContent
-        ? getSafeAssistantDisplayContent(rawContent, actionPayload)
+        ? getSafeAssistantDisplayContent(rawContent, actionPayload, t)
         : currentContent
 
     return {
@@ -218,7 +214,7 @@ const splitAiAssistantResponse = (rawContent: unknown, currentContent = '') => {
     }
 }
 
-const extractAiResponseContent = (response: unknown, fallback = '') => {
+const extractAiResponseContent = (response: unknown, fallback = '', t?: (key: string) => string) => {
     if (typeof response === 'string') return response
     if (!response || typeof response !== 'object') return fallback
 
@@ -228,13 +224,16 @@ const extractAiResponseContent = (response: unknown, fallback = '') => {
 
     if (typeof directContent === 'string') return directContent
 
-    const objectMessage = getAiObjectDisplayMessage(payload.answer ?? payload.message ?? payload.text ?? payload.content ?? payload)
+    const objectMessage = getAiObjectDisplayMessage(
+        payload.answer ?? payload.message ?? payload.text ?? payload.content ?? payload,
+        t || ((key: string) => key),
+    )
     return objectMessage || fallback
 }
 
-const normalizeChatContent = (content: unknown) => {
+const normalizeChatContent = (content: unknown, t?: (key: string) => string) => {
     if (typeof content === 'string') return content
-    return getAiObjectDisplayMessage(content) || ''
+    return getAiObjectDisplayMessage(content, t || ((key: string) => key)) || ''
 }
 
 const isPotentialJsonObjectResponse = (content: unknown) => {
@@ -383,7 +382,6 @@ const renderInlineMarkdown = (text: string, color: string): ReactNode[] => {
                         borderRadius: 5,
                         background: 'rgba(0,0,0,0.10)',
                         color,
-                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
                         fontSize: '0.92em',
                     }}
                 >
@@ -414,7 +412,6 @@ const renderMarkdownText = (text: string, color: string) => {
                                 overflowX: 'auto',
                                 background: 'rgba(0,0,0,0.14)',
                                 color,
-                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
                                 fontSize: 13,
                                 lineHeight: 1.55,
                             }}
@@ -441,7 +438,7 @@ const renderMarkdownText = (text: string, color: string) => {
     )
 }
 
-const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean) => {
+const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean, t?: (key: string) => string) => {
     const uniqueSources = sources
         .filter((source) => /^https:\/\//i.test(source.url || '') && getSourceDomain(source.url))
         .filter((source, index, list) => list.findIndex((item) => item.url === source.url) === index)
@@ -453,7 +450,7 @@ const renderWebSourceCards = (sources: WebSearchResult[], dark: boolean) => {
         <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
             {uniqueSources.map((source) => {
                 const domain = getSourceDomain(source.url)
-                const name = getSourceName(source)
+                const name = getSourceName(source, t)
                 return (
                     <a
                         key={source.url}
@@ -642,6 +639,7 @@ const DoraemonMiniAvatar = () => (
 export default function AiChatWidget() {
     const { dark, tokens, applyTheme } = useTheme()
     const { user } = useAuth()
+    const { t, i18n } = useTranslation()
     const navigate = useNavigate()
     const [visible, setVisible] = useState(false)
     const [expanded, setExpanded] = useState(false)
@@ -926,10 +924,10 @@ export default function AiChatWidget() {
 
     const confirmDeleteSession = (sessionId: string) => {
         Modal.confirm({
-            title: 'Xóa cuộc trò chuyện',
-            content: 'Bạn có chắc muốn xóa cuộc trò chuyện này không?',
-            okText: 'Xóa',
-            cancelText: 'Hủy',
+            title: t('chat.delete_modal_title'),
+            content: t('chat.delete_modal_content'),
+            okText: t('chat.delete'),
+            cancelText: t('chat.cancel'),
             okButtonProps: { danger: true },
             zIndex: 12000,
             onOk: () => deleteSession(sessionId),
@@ -1056,7 +1054,7 @@ export default function AiChatWidget() {
                 stopStreamTyping()
                 const fallbackResponse = await requestAiAssistant(trimmed, mode, conversationContext)
                 const fallbackContent = extractAiResponseContent(fallbackResponse)
-                const fallbackSplit = splitAiAssistantResponse(fallbackContent)
+                const fallbackSplit = splitAiAssistantResponse(fallbackContent, '', t)
                 const fallbackAction = fallbackSplit.actionPayload
                 if (fallbackAction) executeAiAction(fallbackAction)
                 setAiActionLoading(false)
@@ -1064,7 +1062,7 @@ export default function AiChatWidget() {
                     ...message,
                     content: fallbackContent
                         ? fallbackSplit.chatContent
-                        : 'Mình không có câu trả lời cho câu hỏi này.',
+                        : t('chat.fallback_response'),
                     intent: fallbackAction?.action,
                     action: fallbackAction?.action,
                     webSearch: fallbackResponse.webSearch,
@@ -1073,7 +1071,7 @@ export default function AiChatWidget() {
             }
 
             const responseContent = extractAiResponseContent(response, suppressedActionText)
-            const splitResponse = splitAiAssistantResponse(responseContent, suppressedActionText)
+            const splitResponse = splitAiAssistantResponse(responseContent, suppressedActionText, t)
             const actionPayload = splitResponse.actionPayload
             if (actionPayload) executeAiAction(actionPayload)
 
@@ -1096,7 +1094,7 @@ export default function AiChatWidget() {
                     ...message,
                     content: splitResponse.chatContent
                         ? splitResponse.chatContent
-                        : message.content || 'Mình không có câu trả lời cho câu hỏi này.',
+                        : message.content || t('chat.fallback_response'),
                     intent: actionPayload?.action,
                     action: actionPayload?.action,
                     webSearch: response.webSearch,
@@ -1104,7 +1102,7 @@ export default function AiChatWidget() {
             }
         } catch (error: any) {
             setAiActionLoading(false)
-            const errMsg = error?.userMessage || 'Có lỗi khi gọi AI. Vui lòng thử lại.'
+            const errMsg = error?.userMessage || t('chat.error_message')
             if (error?.code === 429) setRetryCountdown(4)
             setErrorInfo({ code: error?.code || 500, message: errMsg })
             flushStreamTextBuffer(assistantMessageId)
@@ -1136,7 +1134,7 @@ export default function AiChatWidget() {
         hasMoved: hasDraggedChat,
     } = useDraggable(defaultChatPosition, mascotButtonWidth)
     const panelWidth = compactChat ? 'min(350px, calc(100vw - 24px))' : expanded ? 760 : 560
-    const panelHeight = compactChat ? 'min(560px, calc(100vh - 140px))' : expanded ? 760 : 560
+    const panelHeight = compactChat ? 'min(560px, calc(100dvh - 140px))' : expanded ? 760 : 560
     const panelBackground = 'color-mix(in srgb, var(--theme-card) 75%, transparent)'
     const panelBandBackground = 'color-mix(in srgb, var(--theme-bg) 60%, transparent)'
     const panelTint = dark
@@ -1188,55 +1186,55 @@ export default function AiChatWidget() {
                                 transition: 'background 0.15s',
                             }}
                         >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                            {editingSessionId === session.sessionId ? (
-                                <Input
-                                    size="small"
-                                    value={editingTitle}
-                                    onChange={(e) => setEditingTitle(e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    onBlur={commitEditingSession}
-                                    onPressEnter={(e) => { e.preventDefault(); commitEditingSession() }}
-                                    onKeyDown={(e) => { if (e.key === 'Escape') cancelEditingSession() }}
-                                    autoFocus
-                                    style={{ width: '100%' }}
-                                />
-                            ) : (
-                                <>
-                                    <div style={{ minWidth: 0, flex: 1 }}>
-                                        <Typography.Text strong style={{ color: isActive ? 'var(--theme-accent)' : 'var(--theme-text)', display: 'block' }}>
-                                            {session.title}
-                                        </Typography.Text>
-                                        <Typography.Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>
-                                            {new Date(session.createdAt).toLocaleString('vi-VN')}
-                                        </Typography.Text>
-                                    </div>
-                                    <Dropdown
-                                        trigger={['click']}
-                                        menu={{
-                                            items: [
-                                                { key: 'rename', icon: <EditOutlined />, label: 'Đổi tên' },
-                                                { key: 'delete', icon: <DeleteOutlined />, label: 'Xóa', danger: true },
-                                            ],
-                                            onClick: ({ key, domEvent }) => {
-                                                domEvent.stopPropagation()
-                                                if (key === 'rename') startEditingSession(session.sessionId, session.title)
-                                                if (key === 'delete') confirmDeleteSession(session.sessionId)
-                                            },
-                                        }}
-                                    >
-                                        <Button
-                                            type="text"
-                                            size="small"
-                                            className="ai-chat-session-actions"
-                                            icon={<MoreOutlined />}
-                                            onClick={(e) => e.stopPropagation()}
-                                            style={{ color: panelMutedText }}
-                                        />
-                                    </Dropdown>
-                                </>
-                            )}
-                        </div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                {editingSessionId === session.sessionId ? (
+                                    <Input
+                                        size="small"
+                                        value={editingTitle}
+                                        onChange={(e) => setEditingTitle(e.target.value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onBlur={commitEditingSession}
+                                        onPressEnter={(e) => { e.preventDefault(); commitEditingSession() }}
+                                        onKeyDown={(e) => { if (e.key === 'Escape') cancelEditingSession() }}
+                                        autoFocus
+                                        style={{ width: '100%' }}
+                                    />
+                                ) : (
+                                    <>
+                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                            <Typography.Text strong style={{ color: isActive ? 'var(--theme-accent)' : 'var(--theme-text)', display: 'block' }}>
+                                                {session.title}
+                                            </Typography.Text>
+                                            <Typography.Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>
+                                                            {new Date(session.createdAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}
+                                            </Typography.Text>
+                                        </div>
+                                        <Dropdown
+                                            trigger={['click']}
+                                            menu={{
+                                                items: [
+                                                    { key: 'rename', icon: <EditOutlined />, label: t('chat.rename') },
+                                                    { key: 'delete', icon: <DeleteOutlined />, label: t('chat.delete'), danger: true },
+                                                ],
+                                                onClick: ({ key, domEvent }) => {
+                                                    domEvent.stopPropagation()
+                                                    if (key === 'rename') startEditingSession(session.sessionId, session.title)
+                                                    if (key === 'delete') confirmDeleteSession(session.sessionId)
+                                                },
+                                            }}
+                                        >
+                                            <Button
+                                                type="text"
+                                                size="small"
+                                                className="ai-chat-session-actions"
+                                                icon={<MoreOutlined />}
+                                                onClick={(e) => e.stopPropagation()}
+                                                style={{ color: panelMutedText }}
+                                            />
+                                        </Dropdown>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     )
                 })}
@@ -1376,12 +1374,12 @@ export default function AiChatWidget() {
                     color: var(--theme-muted) !important;
                 }
                 .ai-chat-panel .ant-segmented-item-selected {
-                    background: var(--theme-accent) !important;
-                    color: var(--theme-button-text) !important;
+                    background: var(--theme-active-bg) !important;
+                    color: var(--theme-active-text) !important;
                     border: none !important;
                 }
                 .ai-chat-panel .ant-segmented-thumb {
-                    background: var(--theme-accent) !important;
+                    background: var(--theme-active-bg) !important;
                 }
 
             `}</style>
@@ -1405,636 +1403,609 @@ export default function AiChatWidget() {
                 }}
             >
                 <div className="ai-chat-wrapper" style={{ touchAction: 'none' }}>
-            {/* MASCOT BUTTON */}
-            <Tooltip  placement="left">
-                    <button
-                        type="button"
-                        className={`doraemon-chat-trigger ${visible ? 'is-active' : ''}`}
-                        aria-label="Chat với AI"
+                    {/* MASCOT BUTTON */}
+                    <Tooltip placement="left">
+                        <button
+                            type="button"
+                            className={`doraemon-chat-trigger ${visible ? 'is-active' : ''}`}
+                            aria-label={t('chat.aria_label')}
+                            style={{
+                                width: mascotButtonWidth,
+                                height: mascotButtonHeight,
+                                cursor: mascotCursor,
+                                touchAction: 'none',
+                            }}
+                            onMouseDown={startDraggingChat}
+                            onTouchStart={startDraggingChat}
+                            onClick={(event) => {
+                                event.stopPropagation()
+                                if (!hasDraggedChat.current) toggleWidget()
+                            }}
+                        >
+                            <DoraemonChatMascot width={mascotButtonWidth} height={mascotButtonHeight} />
+                        </button>
+                    </Tooltip>
+
+                    {/* CHAT PANELl */}
+                    <div
+                        className="ai-chat-panel ai-chat-popup"
+                        onClick={handleFloatingWidgetClick}
                         style={{
-                            width: mascotButtonWidth,
-                            height: mascotButtonHeight,
-                            cursor: mascotCursor,
-                            touchAction: 'none',
-                        }}
-                        onMouseDown={startDraggingChat}
-                        onTouchStart={startDraggingChat}
-                        onClick={(event) => {
-                            event.stopPropagation()
-                            if (!hasDraggedChat.current) toggleWidget()
+                            left: panelAlignRight ? 'auto' : 0,
+                            right: panelAlignRight ? 0 : 'auto',
+                            width: panelWidth,
+                            maxWidth: compactChat ? 'calc(100vw - 24px)' : 'calc(100vw - 48px)',
+                            height: panelHeight,
+                            maxHeight: compactChat ? 'calc(100dvh - 140px)' : 'calc(100dvh - 48px)',
+                            zIndex: 11010,
+                            // Chat panel must float above the member header/menu.
+                            borderRadius: 16,
+                            background: panelBackground,
+                            color: 'var(--theme-text)',
+                            border: panelBorder,
+                            boxShadow: visible
+                                ? '0 28px 100px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.08)'
+                                : '0 24px 80px rgba(0,0,0,0.18)',
+                            transform: visible ? 'scale(1)' : 'scale(0.75)',
+                            opacity: visible ? 1 : 0,
+                            visibility: visible ? 'visible' : 'hidden',
+                            transition: 'all 220ms ease',
+                            overflow: 'hidden',
+                            position: 'absolute',
+                            isolation: 'isolate',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            backdropFilter: 'blur(20px)',
+                            WebkitBackdropFilter: 'blur(20px)',
+                            cursor: 'default',
+                            userSelect: 'text',
+                            WebkitUserSelect: 'text',
                         }}
                     >
-                        <DoraemonChatMascot width={mascotButtonWidth} height={mascotButtonHeight} />
-                    </button>
-            </Tooltip>
-
-            {/* CHAT PANELl */}
-            <div
-                className="ai-chat-panel ai-chat-popup"
-                onClick={handleFloatingWidgetClick}
-                style={{
-                    left: panelAlignRight ? 'auto' : 0,
-                    right: panelAlignRight ? 0 : 'auto',
-                    width: panelWidth,
-                    maxWidth: compactChat ? 'calc(100vw - 24px)' : 'calc(100vw - 48px)',
-                    height: panelHeight,
-                    maxHeight: compactChat ? 'calc(100vh - 140px)' : 'calc(100vh - 48px)',
-                    zIndex: 11010,
-                    // Chat panel must float above the member header/menu.
-                    borderRadius: 16,
-                    background: panelBackground,
-                    color: 'var(--theme-text)',
-                    border: panelBorder,
-                    boxShadow: visible
-                        ? '0 28px 100px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.08)'
-                        : '0 24px 80px rgba(0,0,0,0.18)',
-                    transform: visible ? 'scale(1)' : 'scale(0.75)',
-                    opacity: visible ? 1 : 0,
-                    visibility: visible ? 'visible' : 'hidden',
-                    transition: 'all 220ms ease',
-                    overflow: 'hidden',
-                    position: 'absolute',
-                    isolation: 'isolate',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    backdropFilter: 'blur(20px)',
-                    WebkitBackdropFilter: 'blur(20px)',
-                    cursor: 'default',
-                    userSelect: 'text',
-                    WebkitUserSelect: 'text',
-                }}
-            >
-                {CHAT_PANEL_BACKGROUND_IMAGE && (
-                    <img
-                        className="ai-chat-panel-bg-image"
-                        src={CHAT_PANEL_BACKGROUND_IMAGE}
-                        alt=""
-                        aria-hidden="true"
-                        style={{
+                        {CHAT_PANEL_BACKGROUND_IMAGE && (
+                            <img
+                                className="ai-chat-panel-bg-image"
+                                src={CHAT_PANEL_BACKGROUND_IMAGE}
+                                alt=""
+                                aria-hidden="true"
+                                style={{
+                                    position: 'absolute',
+                                    inset: -18,
+                                    width: 'calc(100% + 36px)',
+                                    height: 'calc(100% + 36px)',
+                                    objectFit: 'cover',
+                                    transform: 'scale(1.03)',
+                                    zIndex: 0,
+                                    pointerEvents: 'none',
+                                    filter: panelImageFilter,
+                                    opacity: dark ? 0.72 : 0.76,
+                                }}
+                            />
+                        )}
+                        <div style={{
                             position: 'absolute',
-                            inset: -18,
-                            width: 'calc(100% + 36px)',
-                            height: 'calc(100% + 36px)',
-                            objectFit: 'cover',
-                            transform: 'scale(1.03)',
+                            inset: 0,
                             zIndex: 0,
                             pointerEvents: 'none',
-                            filter: panelImageFilter,
-                            opacity: dark ? 0.72 : 0.76,
-                        }}
-                    />
-                )}
-                <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    zIndex: 0,
-                    pointerEvents: 'none',
-                    background: panelTint,
-                }} />
+                            background: panelTint,
+                        }} />
 
-                {/* Panel content */}
-                <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                        {/* Panel content */}
+                        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
-                    {/* HEADER */}
-                    <div
-                        onMouseDown={startDraggingFromHeader}
-                        onTouchStart={startDraggingFromHeader}
-                        style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 12,
-                        padding: mobileChat ? '12px 14px' : '16px 18px',
-                        background: 'var(--theme-accent)',
-                        backdropFilter: 'blur(10px)',
-                        WebkitBackdropFilter: 'blur(10px)',
-                        color: 'var(--theme-button-text)',
-                        flexShrink: 0,
-                        cursor: 'grab',
-                        userSelect: 'none',
-                        WebkitUserSelect: 'none',
-                        touchAction: 'none',
-                    }}>
-                        <div style={{ minWidth: 0 }}>
-                            <Typography.Title level={5} style={{ margin: 0, color: 'var(--theme-button-text)', fontSize: mobileChat ? 14 : 16 }}>
-                                Gì cũng biết! Tò mò hỏi Doraemon
-                            </Typography.Title>
-                            {mode === 'gym' && (
-                                <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                                    <span style={{
-                                        background: 'var(--theme-accent-muted)',
-                                        color: 'var(--theme-button-text)',
-                                        border: '1px solid var(--theme-accent-border)',
-                                        borderRadius: 999,
-                                        padding: '2px 8px',
-                                        fontSize: 11,
-                                        fontWeight: 700,
-                                    }}>
-                                        Gym Assistant
-                                    </span>
-                                    <span style={{
-                                        background: 'var(--theme-accent-muted)',
-                                        color: 'var(--theme-button-text)',
-                                        border: '1px solid var(--theme-accent-border)',
-                                        borderRadius: 999,
-                                        padding: '2px 8px',
-                                        fontSize: 11,
-                                        fontWeight: 700,
-                                    }}>
-                                        AI Action
-                                    </span>
+                            {/* HEADER */}
+                            <div
+                                onMouseDown={startDraggingFromHeader}
+                                onTouchStart={startDraggingFromHeader}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: 12,
+                                    padding: mobileChat ? '12px 14px' : '16px 18px',
+                                    background: 'var(--theme-button-bg)',
+                                    backdropFilter: 'blur(10px)',
+                                    WebkitBackdropFilter: 'blur(10px)',
+                                    color: 'var(--theme-button-text)',
+                                    flexShrink: 0,
+                                    cursor: 'grab',
+                                    userSelect: 'none',
+                                    WebkitUserSelect: 'none',
+                                    touchAction: 'none',
+                                }}>
+                                <div style={{ minWidth: 0 }}>
+                                    <Typography.Title level={5} style={{ margin: 0, color: 'var(--theme-button-text)', fontSize: mobileChat ? 14 : 16 }}>
+                                        {t('chat.header_title')}
+                                    </Typography.Title>
+
                                 </div>
-                            )}
-                            {!mobileChat && (
-                                <Typography.Text style={{ color: 'var(--theme-button-text)', fontSize: 12 }}>
-                                    Chồn đến từ thế kỉ 22
-                                </Typography.Text>
-                            )}
-                        </div>
-                        <Space
-                            size={mobileChat ? 2 : 8}
-                            style={{ flexShrink: 0 }}
-                        >
-                            {/* FIX: Nút "Phiên" chỉ hiện trên mobile/tablet, mở drawer với z-index cao */}
-                            {compactChat && (
-                                <Button
-                                    size="small"
-                                    type="text"
-                                    style={{ color: 'var(--theme-button-text)', fontWeight: 600 }}
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        setSessionDrawerOpen(true)
-                                    }}
+                                <Space
+                                    size={mobileChat ? 2 : 8}
+                                    style={{ flexShrink: 0 }}
                                 >
-                                    Phiên ({sessions.length})
-                                </Button>
-                            )}
-                            {!compactChat && (
-                                <Button
-                                    size="small"
-                                    type="text"
-                                    icon={<ExpandAltOutlined />}
-                                    style={{ color: 'var(--theme-button-text)' }}
-                                    onClick={() => setExpanded(!expanded)}
-                                />
-                            )}
-                            <Button size="small" type="text" icon={<CloseOutlined />} style={{ color: 'var(--theme-button-text)' }} onClick={closeWidget} />
-                        </Space>
-                    </div>
+                                    {/* FIX: Nút "Phiên" chỉ hiện trên mobile/tablet, mở drawer với z-index cao */}
+                                    {compactChat && (
+                                        <Button
+                                            size="small"
+                                            type="text"
+                                            style={{ color: 'var(--theme-button-text)', fontWeight: 600 }}
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setSessionDrawerOpen(true)
+                                            }}
+                                        >
+                                            {t('chat.session_button', { count: sessions.length })}
+                                        </Button>
+                                    )}
+                                    {!compactChat && (
+                                        <Button
+                                            size="small"
+                                            type="text"
+                                            icon={<ExpandAltOutlined />}
+                                            style={{ color: 'var(--theme-button-text)' }}
+                                            onClick={() => setExpanded(!expanded)}
+                                        />
+                                    )}
+                                    <Button size="small" type="text" icon={<CloseOutlined />} style={{ color: 'var(--theme-button-text)' }} onClick={closeWidget} />
+                                </Space>
+                            </div>
 
-                    <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+                            <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
-                        {/* SIDEBAR (desktop only) */}
-                        {showSessionSidebar && (
-                            <div style={{
-                                width: 220,
-                                minWidth: 220,
-                                borderRight: panelBorder,
-                                 background: panelBandBackground,
-                                 backdropFilter: 'blur(12px)',
-                                 WebkitBackdropFilter: 'blur(12px)',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                overflow: 'hidden',
-                            }}>
-                                <div
-                                    style={{
-                                        padding: '12px 14px',
+                                {/* SIDEBAR (desktop only) */}
+                                {showSessionSidebar && (
+                                    <div style={{
+                                        width: 220,
+                                        minWidth: 220,
+                                        borderRight: panelBorder,
+                                        background: panelBandBackground,
+                                        backdropFilter: 'blur(12px)',
+                                        WebkitBackdropFilter: 'blur(12px)',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        overflow: 'hidden',
+                                    }}>
+                                        <div
+                                            style={{
+                                                padding: '12px 14px',
+                                                borderBottom: panelBorder,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                gap: 8,
+                                            }}
+                                        >
+                                            <Typography.Text strong style={{ color: panelText }}>{t('chat.session_sidebar_title')}</Typography.Text>
+                                            <Button
+                                                size="small"
+                                                type="text"
+                                                icon={<PlusOutlined />}
+                                                style={{
+                                                    color: 'var(--theme-accent)',
+                                                    background: 'var(--theme-accent-muted)',
+                                                    border: '1px solid var(--theme-accent-border)',
+                                                    borderRadius: 6,
+                                                }}
+                                                onClick={createNewChat}
+                                            />
+                                        </div>
+                                        <div style={{ flex: 1, overflowY: 'auto' }}>
+                                            {sessions.map((session) => {
+                                                const isActive = session.sessionId === activeSession?.sessionId
+                                                return (
+                                                    <div
+                                                        key={session.sessionId}
+                                                        className="ai-chat-session-item"
+                                                        onClick={() => selectSession(session.sessionId)}
+                                                        onMouseEnter={(e) => {
+                                                            e.currentTarget.style.background = 'var(--theme-accent-muted)'
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            if (!isActive) e.currentTarget.style.background = 'transparent'
+                                                        }}
+                                                        style={{
+                                                            padding: '12px 14px',
+                                                            cursor: 'pointer',
+                                                            background: isActive ? 'var(--theme-accent-muted)' : 'transparent',
+                                                            borderLeft: isActive ? '3px solid var(--theme-accent)' : '3px solid transparent',
+                                                            borderRadius: 8,
+                                                            transition: 'background 0.15s',
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                                            {editingSessionId === session.sessionId ? (
+                                                                <Input
+                                                                    size="small"
+                                                                    value={editingTitle}
+                                                                    onChange={(e) => setEditingTitle(e.target.value)}
+                                                                    onBlur={commitEditingSession}
+                                                                    onPressEnter={(e) => { e.preventDefault(); commitEditingSession() }}
+                                                                    onKeyDown={(e) => { if (e.key === 'Escape') cancelEditingSession() }}
+                                                                    autoFocus
+                                                                    style={{ width: '100%' }}
+                                                                />
+                                                            ) : (
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
+                                                                    <Typography.Text strong style={{ color: isActive ? 'var(--theme-accent)' : 'var(--theme-text)', flex: 1, fontSize: 13 }}>
+                                                                        {session.title}
+                                                                    </Typography.Text>
+                                                                    <Dropdown
+                                                                        trigger={['click']}
+                                                                        getPopupContainer={(trigger) => trigger.parentElement || document.body}
+                                                                        menu={{
+                                                                            items: [
+                                                                                { key: 'rename', icon: <EditOutlined />, label: t('chat.rename') },
+                                                                                { key: 'delete', icon: <DeleteOutlined />, label: t('chat.delete'), danger: true },
+                                                                            ],
+                                                                            onClick: ({ key, domEvent }) => {
+                                                                                domEvent.stopPropagation()
+                                                                                if (key === 'rename') startEditingSession(session.sessionId, session.title)
+                                                                                if (key === 'delete') confirmDeleteSession(session.sessionId)
+                                                                            },
+                                                                        }}
+                                                                    >
+                                                                        <Button
+                                                                            type="text"
+                                                                            size="small"
+                                                                            className="ai-chat-session-actions"
+                                                                            icon={<MoreOutlined />}
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                            style={{ color: panelMutedText }}
+                                                                        />
+                                                                    </Dropdown>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <Typography.Text style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
+                                                {new Date(session.createdAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}
+                                                        </Typography.Text>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* MAIN CHAT AREA */}
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
+
+                                    {/* SESSION HEADER */}
+                                    <div style={{
+                                        padding: mobileChat ? '10px 12px' : '12px 16px',
                                         borderBottom: panelBorder,
                                         display: 'flex',
-                                        alignItems: 'center',
                                         justifyContent: 'space-between',
+                                        alignItems: 'center',
                                         gap: 8,
-                                    }}
-                                >
-                                    <Typography.Text strong style={{ color: panelText }}>Phiên chat</Typography.Text>
-                                    <Button
-                                        size="small"
-                                        type="text"
-                                        icon={<PlusOutlined />}
+                                        flexShrink: 0,
+                                        flexWrap: 'wrap',
+                                    }}>
+                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                            <Typography.Text strong style={{ color: panelText, fontSize: mobileChat ? 13 : 14, display: 'block' }}>
+                                                {activeSession?.title || t('chat.default_session_title')}
+                                            </Typography.Text>
+                                            <Typography.Text style={{ fontSize: 11, color: panelMutedText }}>
+                                                {activeSession?.messages.length
+                                                    ? t('chat.session_count', { count: activeSession.messages.length })
+                                                    : t('chat.new_chat_empty')}
+                                            </Typography.Text>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                                            <Segmented
+                                                value={mode}
+                                                onChange={(value) => setMode(value as AiMode)}
+                                                options={[
+                                                    { label: 'Gym', value: 'gym' },
+                                                    { label: t('chat.mode_general'), value: 'general' },
+                                                ]}
+                                                size="small"
+                                            />
+                                            {!showSessionSidebar && !compactChat && (
+                                                <Select
+                                                    value={activeSession?.sessionId}
+                                                    onChange={selectSession}
+                                                    style={{ width: 140 }}
+                                                    options={sessions.map((s) => ({ label: s.title, value: s.sessionId }))}
+                                                />
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* MESSAGES */}
+                                    <div
+                                        ref={scrollRef}
                                         style={{
-                                            color: 'var(--theme-accent)',
-                                            background: 'var(--theme-accent-muted)',
-                                            border: '1px solid var(--theme-accent-border)',
-                                            borderRadius: 6,
+                                            flex: 1,
+                                            overflowY: 'auto',
+                                            padding: mobileChat ? 10 : 16,
+                                            background: panelBandBackground,
+                                            backdropFilter: 'blur(12px)',
+                                            WebkitBackdropFilter: 'blur(12px)',
+                                            cursor: 'text',
+                                            pointerEvents: 'auto',
+                                            userSelect: 'text',
+                                            WebkitUserSelect: 'text',
                                         }}
-                                        onClick={createNewChat}
-                                    />
-                                </div>
-                                <div style={{ flex: 1, overflowY: 'auto' }}>
-                                    {sessions.map((session) => {
-                                        const isActive = session.sessionId === activeSession?.sessionId
-                                        return (
-                                            <div
-                                                key={session.sessionId}
-                                                className="ai-chat-session-item"
-                                                onClick={() => selectSession(session.sessionId)}
-                                                onMouseEnter={(e) => {
-                                                    e.currentTarget.style.background = 'var(--theme-accent-muted)'
-                                                }}
-                                                onMouseLeave={(e) => {
-                                                    if (!isActive) e.currentTarget.style.background = 'transparent'
-                                                }}
-                                                style={{
-                                                    padding: '12px 14px',
-                                                    cursor: 'pointer',
-                                                    background: isActive ? 'var(--theme-accent-muted)' : 'transparent',
-                                                    borderLeft: isActive ? '3px solid var(--theme-accent)' : '3px solid transparent',
-                                                    borderRadius: 8,
-                                                    transition: 'background 0.15s',
-                                                }}
-                                            >
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                                {editingSessionId === session.sessionId ? (
-                                                    <Input
-                                                        size="small"
-                                                        value={editingTitle}
-                                                        onChange={(e) => setEditingTitle(e.target.value)}
-                                                        onBlur={commitEditingSession}
-                                                        onPressEnter={(e) => { e.preventDefault(); commitEditingSession() }}
-                                                        onKeyDown={(e) => { if (e.key === 'Escape') cancelEditingSession() }}
-                                                        autoFocus
-                                                        style={{ width: '100%' }}
-                                                    />
-                                                ) : (
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
-                                                        <Typography.Text strong style={{ color: isActive ? 'var(--theme-accent)' : 'var(--theme-text)', flex: 1, fontSize: 13 }}>
-                                                            {session.title}
+                                    >
+                                        {activeMessages.length === 0 ? (
+                                            <div style={{ textAlign: 'center', marginTop: 32 }}>
+                                                <Typography.Text style={{ color: panelMutedText }}>
+                                                    {t('chat.empty_state')}
+                                                </Typography.Text>
+                                            </div>
+                                        ) : (
+                                            activeMessages.map((message) => {
+                                                const isUser = message.role === 'user'
+                                                const messageContent = normalizeChatContent(message.content)
+                                                const bubbleBg = isUser ? 'var(--theme-accent)' : assistantBubbleBackground
+                                                const bubbleColor = isUser ? 'var(--theme-button-text)' : panelText
+                                                const toolPayload = !isUser && message.role === 'assistant'
+                                                    ? parseAiToolPayload(messageContent)
+                                                    : null
+                                                const actionPayload = !isUser && message.role === 'assistant'
+                                                    ? parseAiActionPayload(messageContent)
+                                                    : null
+                                                const sourceCards = !isUser
+                                                    ? (message.webSearch?.results?.length
+                                                        ? message.webSearch.results
+                                                        : extractSourceResultsFromText(messageContent))
+                                                    : []
+                                                const safeAssistantContent = !isUser
+                                                    ? getSafeAssistantDisplayContent(messageContent, actionPayload, t)
+                                                    : messageContent
+                                                const visibleContent = isUser
+                                                    ? messageContent
+                                                    : safeAssistantContent !== messageContent
+                                                        ? safeAssistantContent
+                                                        : sourceCards.length > 0
+                                                            ? stripWebSourceSection(messageContent)
+                                                            : safeAssistantContent
+                                                return (
+                                                    <div
+                                                        key={message.id}
+                                                        style={{
+                                                            display: 'flex',
+                                                            justifyContent: isUser ? 'flex-end' : 'flex-start',
+                                                            marginBottom: 10,
+                                                        }}
+                                                    >
+                                                        <div style={{
+                                                            maxWidth: mobileChat ? '92%' : '78%',
+                                                            padding: mobileChat ? '9px 12px' : '12px 16px',
+                                                            borderRadius: 20,
+                                                            borderTopRightRadius: isUser ? 4 : 20,
+                                                            borderTopLeftRadius: isUser ? 20 : 4,
+                                                            background: bubbleBg,
+                                                            color: bubbleColor,
+                                                            boxShadow: '0 4px 14px rgba(0,0,0,0.08)',
+                                                            whiteSpace: 'pre-wrap',
+                                                            lineHeight: 1.6,
+                                                            wordBreak: 'break-word',
+                                                            cursor: 'text',
+                                                            userSelect: 'text',
+                                                            WebkitUserSelect: 'text',
+                                                        }}>
+                                                            {message.role === 'assistant' && (
+                                                                <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                    <Avatar size={22} style={{ backgroundColor: '#0aa7e6' }} icon={<DoraemonMiniAvatar />} />
+                                                                    <Typography.Text strong style={{ color: bubbleColor }}>Doraemon</Typography.Text>
+                                                                </div>
+                                                            )}
+                                                            <div className="ai-chat-message-content">
+                                                                {toolPayload?.type === 'empty' && (
+                                                                    <Typography.Text style={{ color: bubbleColor }}>{toolPayload.message}</Typography.Text>
+                                                                )}
+                                                                {toolPayload?.type === 'product_list' && (
+                                                                    <div style={{ display: 'grid', gap: 10 }}>
+                                                                        {toolPayload.message && (
+                                                                            <Typography.Text style={{ color: bubbleColor }}>{toolPayload.message}</Typography.Text>
+                                                                        )}
+                                                                        {toolPayload.items.map((item, index) => (
+                                                                            <a
+                                                                                key={`${item.link}-${index}`}
+                                                                                href={item.link}
+                                                                                style={{
+                                                                                    display: 'grid',
+                                                                                    gridTemplateColumns: '54px minmax(0, 1fr)',
+                                                                                    gap: 10,
+                                                                                    alignItems: 'center',
+                                                                                    padding: 10,
+                                                                                    borderRadius: 14,
+                                                                                    background: 'var(--theme-card)',
+                                                                                    color: bubbleColor,
+                                                                                    textDecoration: 'none',
+                                                                                }}
+                                                                            >
+                                                                                <img src={item.image || AI_AVATAR_IMAGE} alt={item.name}
+                                                                                    style={{ width: 54, height: 54, borderRadius: 10, objectFit: 'cover' }} />
+                                                                                <div style={{ minWidth: 0 }}>
+                                                                                    <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
+                                                                                        {item.name}
+                                                                                    </Typography.Text>
+                                                                                    <Typography.Text style={{ color: 'var(--theme-accent)' }}>
+                                                                                        {Number(item.price).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}đ
+                                                                                    </Typography.Text>
+                                                                                    {item.selectedVariant && (
+                                                                                        <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
+                                                                                            {t('chat.weight_label')}: {item.selectedVariant}
+                                                                                        </Typography.Text>
+                                                                                    )}
+                                                                                </div>
+                                                                            </a>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                                {toolPayload?.type === 'category_list' && (
+                                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                                                        {toolPayload.items.map((item) => (
+                                                                            <a
+                                                                                key={item.slug}
+                                                                                href={`/store?category=${encodeURIComponent(item.name)}`}
+                                                                                style={{
+                                                                                    padding: '7px 10px',
+                                                                                    borderRadius: 999,
+                                                                                    background: 'var(--theme-elevated)',
+                                                                                    color: bubbleColor,
+                                                                                    textDecoration: 'none',
+                                                                                    fontSize: 13,
+                                                                                }}
+                                                                            >
+                                                                                {item.name}
+                                                                            </a>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                                {toolPayload?.type === 'pt_list' && (
+                                                                    <div style={{ display: 'grid', gap: 10 }}>
+                                                                        {toolPayload.items.map((item, index) => (
+                                                                            <div
+                                                                                key={`${item.email || item.phone || item.name}-${index}`}
+                                                                                style={{
+                                                                                    display: 'grid',
+                                                                                    gridTemplateColumns: '44px minmax(0, 1fr)',
+                                                                                    gap: 10,
+                                                                                    alignItems: 'center',
+                                                                                    padding: 10,
+                                                                                    borderRadius: 14,
+                                                                                    background: 'var(--theme-card)',
+                                                                                }}
+                                                                            >
+                                                                                <Avatar src={item.avatar || undefined} size={44}>
+                                                                                    {item.name?.charAt(0) || 'PT'}
+                                                                                </Avatar>
+                                                                                <div style={{ minWidth: 0 }}>
+                                                                                    <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
+                                                                                        {item.name}
+                                                                                    </Typography.Text>
+                                                                                    <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
+                                                                                        {item.specialty || t('chat.pt_fallback')}
+                                                                                    </Typography.Text>
+                                                                                    <Typography.Text style={{ color: panelMutedText, display: 'block', fontSize: 12 }}>
+                                                                                        {item.phone || t('chat.phone_fallback')} {item.email ? `• ${item.email}` : ''}
+                                                                                    </Typography.Text>
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                                {!toolPayload && (
+                                                                    visibleContent
+                                                                        ? renderMarkdownText(visibleContent, bubbleColor)
+                                                                        : <Typography.Text style={{ color: panelMutedText }}>{t('chat.loading')}</Typography.Text>
+                                                                )}
+                                                                {!toolPayload && !actionPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark, t)}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })
+                                        )}
+                                        {loading && (
+                                            <div style={{ textAlign: 'center', marginTop: 14 }}>
+                                                <Spin />
+                                                {aiActionLoading && (
+                                                    <div style={{ marginTop: 8 }}>
+                                                        <Typography.Text style={{ color: 'var(--theme-muted)', fontSize: 12 }}>
+                                                            {t('chat.ai_action_loading')}{activeAiTool ? `: ${activeAiTool}` : ''}
                                                         </Typography.Text>
-                                                        <Dropdown
-                                                            trigger={['click']}
-                                                            getPopupContainer={(trigger) => trigger.parentElement || document.body}
-                                                            menu={{
-                                                                items: [
-                                                                    { key: 'rename', icon: <EditOutlined />, label: 'Đổi tên' },
-                                                                    { key: 'delete', icon: <DeleteOutlined />, label: 'Xóa', danger: true },
-                                                                ],
-                                                                onClick: ({ key, domEvent }) => {
-                                                                    domEvent.stopPropagation()
-                                                                    if (key === 'rename') startEditingSession(session.sessionId, session.title)
-                                                                    if (key === 'delete') confirmDeleteSession(session.sessionId)
-                                                                },
-                                                            }}
-                                                        >
-                                                            <Button
-                                                                type="text"
-                                                                size="small"
-                                                                className="ai-chat-session-actions"
-                                                                icon={<MoreOutlined />}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                style={{ color: panelMutedText }}
-                                                            />
-                                                        </Dropdown>
                                                     </div>
                                                 )}
                                             </div>
-                                            <Typography.Text style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
-                                                {new Date(session.createdAt).toLocaleString('vi-VN')}
-                                            </Typography.Text>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* MAIN CHAT AREA */}
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
-
-                            {/* SESSION HEADER */}
-                            <div style={{
-                                padding: mobileChat ? '10px 12px' : '12px 16px',
-                                borderBottom: panelBorder,
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                gap: 8,
-                                flexShrink: 0,
-                                flexWrap: 'wrap',
-                            }}>
-                                <div style={{ minWidth: 0, flex: 1 }}>
-                                    <Typography.Text strong style={{ color: panelText, fontSize: mobileChat ? 13 : 14, display: 'block' }}>
-                                        {activeSession?.title || 'New Chat'}
-                                    </Typography.Text>
-                                    <Typography.Text style={{ fontSize: 11, color: panelMutedText }}>
-                                        {activeSession?.messages.length
-                                            ? `${activeSession.messages.length} tin nhắn`
-                                            : 'Bắt đầu cuộc trò chuyện mới'}
-                                    </Typography.Text>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                    <Segmented
-                                        value={mode}
-                                        onChange={(value) => setMode(value as AiMode)}
-                                        options={AI_MODE_OPTIONS}
-                                        size="small"
-                                    />
-                                    {!showSessionSidebar && !compactChat && (
-                                        <Select
-                                            value={activeSession?.sessionId}
-                                            onChange={selectSession}
-                                            style={{ width: 140 }}
-                                            options={sessions.map((s) => ({ label: s.title, value: s.sessionId }))}
-                                        />
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* MESSAGES */}
-                            <div
-                                ref={scrollRef}
-                                style={{
-                                    flex: 1,
-                                    overflowY: 'auto',
-                                    padding: mobileChat ? 10 : 16,
-                                     background: panelBandBackground,
-                                     backdropFilter: 'blur(12px)',
-                                     WebkitBackdropFilter: 'blur(12px)',
-                                    cursor: 'text',
-                                    pointerEvents: 'auto',
-                                    userSelect: 'text',
-                                    WebkitUserSelect: 'text',
-                                }}
-                            >
-                                {activeMessages.length === 0 ? (
-                                    <div style={{ textAlign: 'center', marginTop: 32 }}>
-                                        <Typography.Text style={{ color: panelMutedText }}>
-                                            Viết câu hỏi, sau đó nhấn gửi để bắt đầu.
-                                        </Typography.Text>
-                                    </div>
-                                ) : (
-                                    activeMessages.map((message) => {
-                                        const isUser = message.role === 'user'
-                                        const messageContent = normalizeChatContent(message.content)
-                                        const bubbleBg = isUser ? 'var(--theme-accent)' : assistantBubbleBackground
-                                        const bubbleColor = isUser ? 'var(--theme-button-text)' : panelText
-                                        const toolPayload = !isUser && message.role === 'assistant'
-                                            ? parseAiToolPayload(messageContent)
-                                            : null
-                                        const actionPayload = !isUser && message.role === 'assistant'
-                                            ? parseAiActionPayload(messageContent)
-                                            : null
-                                        const sourceCards = !isUser
-                                            ? (message.webSearch?.results?.length
-                                                ? message.webSearch.results
-                                                : extractSourceResultsFromText(messageContent))
-                                            : []
-                                        const safeAssistantContent = !isUser
-                                            ? getSafeAssistantDisplayContent(messageContent, actionPayload)
-                                            : messageContent
-                                        const visibleContent = isUser
-                                            ? messageContent
-                                            : safeAssistantContent !== messageContent
-                                            ? safeAssistantContent
-                                            : sourceCards.length > 0
-                                            ? stripWebSourceSection(messageContent)
-                                            : safeAssistantContent
-                                        return (
-                                            <div
-                                                key={message.id}
-                                                style={{
-                                                    display: 'flex',
-                                                    justifyContent: isUser ? 'flex-end' : 'flex-start',
-                                                    marginBottom: 10,
-                                                }}
-                                            >
-                                                <div style={{
-                                                    maxWidth: mobileChat ? '92%' : '78%',
-                                                    padding: mobileChat ? '9px 12px' : '12px 16px',
-                                                    borderRadius: 20,
-                                                    borderTopRightRadius: isUser ? 4 : 20,
-                                                    borderTopLeftRadius: isUser ? 20 : 4,
-                                                    background: bubbleBg,
-                                                    color: bubbleColor,
-                                                    boxShadow: '0 4px 14px rgba(0,0,0,0.08)',
-                                                    whiteSpace: 'pre-wrap',
-                                                    lineHeight: 1.6,
-                                                    wordBreak: 'break-word',
-                                                    cursor: 'text',
-                                                    userSelect: 'text',
-                                                    WebkitUserSelect: 'text',
-                                                }}>
-                                                    {message.role === 'assistant' && (
-                                                        <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                            <Avatar size={22} style={{ backgroundColor: '#0aa7e6' }} icon={<DoraemonMiniAvatar />} />
-                                                            <Typography.Text strong style={{ color: bubbleColor }}>Doraemon</Typography.Text>
-                                                        </div>
-                                                    )}
-                                                    <div className="ai-chat-message-content">
-                                                        {toolPayload?.type === 'empty' && (
-                                                            <Typography.Text style={{ color: bubbleColor }}>{toolPayload.message}</Typography.Text>
-                                                        )}
-                                                        {toolPayload?.type === 'product_list' && (
-                                                            <div style={{ display: 'grid', gap: 10 }}>
-                                                                {toolPayload.message && (
-                                                                    <Typography.Text style={{ color: bubbleColor }}>{toolPayload.message}</Typography.Text>
-                                                                )}
-                                                                {toolPayload.items.map((item, index) => (
-                                                                    <a
-                                                                        key={`${item.link}-${index}`}
-                                                                        href={item.link}
-                                                                        style={{
-                                                                            display: 'grid',
-                                                                            gridTemplateColumns: '54px minmax(0, 1fr)',
-                                                                            gap: 10,
-                                                                            alignItems: 'center',
-                                                                            padding: 10,
-                                                                            borderRadius: 14,
-                                                                            background: 'var(--theme-card)',
-                                                                            color: bubbleColor,
-                                                                            textDecoration: 'none',
-                                                                        }}
-                                                                    >
-                                                                        <img src={item.image || AI_AVATAR_IMAGE} alt={item.name}
-                                                                            style={{ width: 54, height: 54, borderRadius: 10, objectFit: 'cover' }} />
-                                                                        <div style={{ minWidth: 0 }}>
-                                                                            <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
-                                                                                {item.name}
-                                                                            </Typography.Text>
-                                                                                <Typography.Text style={{ color: 'var(--theme-accent)' }}>
-                                                                                {Number(item.price).toLocaleString('vi-VN')}đ
-                                                                            </Typography.Text>
-                                                                            {item.selectedVariant && (
-                                                                                <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
-                                                                                    Mức tạ tối đa: {item.selectedVariant}
-                                                                                </Typography.Text>
-                                                                            )}
-                                                                        </div>
-                                                                    </a>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                        {toolPayload?.type === 'category_list' && (
-                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                                                {toolPayload.items.map((item) => (
-                                                                    <a
-                                                                        key={item.slug}
-                                                                        href={`/dashboard/member/store?category=${encodeURIComponent(item.name)}`}
-                                                                        style={{
-                                                                            padding: '7px 10px',
-                                                                            borderRadius: 999,
-                                                                            background: 'var(--theme-elevated)',
-                                                                            color: bubbleColor,
-                                                                            textDecoration: 'none',
-                                                                            fontSize: 13,
-                                                                        }}
-                                                                    >
-                                                                        {item.name}
-                                                                    </a>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                        {toolPayload?.type === 'pt_list' && (
-                                                            <div style={{ display: 'grid', gap: 10 }}>
-                                                                {toolPayload.items.map((item, index) => (
-                                                                    <div
-                                                                        key={`${item.email || item.phone || item.name}-${index}`}
-                                                                        style={{
-                                                                            display: 'grid',
-                                                                            gridTemplateColumns: '44px minmax(0, 1fr)',
-                                                                            gap: 10,
-                                                                            alignItems: 'center',
-                                                                            padding: 10,
-                                                                            borderRadius: 14,
-                                                                            background: 'var(--theme-card)',
-                                                                        }}
-                                                                    >
-                                                                        <Avatar src={item.avatar || undefined} size={44}>
-                                                                            {item.name?.charAt(0) || 'PT'}
-                                                                        </Avatar>
-                                                                        <div style={{ minWidth: 0 }}>
-                                                                            <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
-                                                                                {item.name}
-                                                                            </Typography.Text>
-                                                                            <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
-                                                                                {item.specialty || 'Huấn luyện viên'}
-                                                                            </Typography.Text>
-                                                                            <Typography.Text style={{ color: panelMutedText, display: 'block', fontSize: 12 }}>
-                                                                                {item.phone || 'Chưa có SĐT'} {item.email ? `• ${item.email}` : ''}
-                                                                            </Typography.Text>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                        {!toolPayload && (
-                                                            visibleContent
-                                                                ? renderMarkdownText(visibleContent, bubbleColor)
-                                                                : <Typography.Text style={{ color: panelMutedText }}>Đang trả lời...</Typography.Text>
-                                                        )}
-                                                        {!toolPayload && !actionPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark)}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )
-                                    })
-                                )}
-                                {loading && (
-                                    <div style={{ textAlign: 'center', marginTop: 14 }}>
-                                        <Spin />
-                                        {aiActionLoading && (
-                                            <div style={{ marginTop: 8 }}>
-                                                <Typography.Text style={{ color: 'var(--theme-muted)', fontSize: 12 }}>
-                                                    AI Action đang gọi dữ liệu GymPro{activeAiTool ? `: ${activeAiTool}` : ''}
-                                                </Typography.Text>
-                                            </div>
                                         )}
                                     </div>
-                                )}
-                            </div>
 
-                            {/* INPUT */}
-                            <div style={{
-                                borderTop: panelBorder,
-                                padding: mobileChat ? '10px 12px' : '14px 16px',
-                                 background: panelBackground,
-                                 backdropFilter: 'blur(12px)',
-                                 WebkitBackdropFilter: 'blur(12px)',
-                                flexShrink: 0,
-                            }}>
-                                {errorInfo && (
+                                    {/* INPUT */}
                                     <div style={{
-                                        marginBottom: 10,
-                                        padding: 10,
-                                        borderRadius: 14,
-                                        background: 'rgba(255,77,79,0.12)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        gap: 10,
-                                        flexWrap: 'wrap',
+                                        borderTop: panelBorder,
+                                        padding: mobileChat ? '10px 12px' : '14px 16px',
+                                        background: panelBackground,
+                                        backdropFilter: 'blur(12px)',
+                                        WebkitBackdropFilter: 'blur(12px)',
+                                        flexShrink: 0,
                                     }}>
-                                        <Typography.Text style={{ color: 'var(--theme-text)', fontSize: 13 }}>{errorInfo.message}</Typography.Text>
-                                        <Button
-                                            size="small"
-                                            disabled={retryCountdown > 0}
-                                            onClick={handleRetry}
-                                            style={{ background: 'var(--theme-accent)', borderColor: 'var(--theme-accent)', color: 'var(--theme-text)' }}
-                                        >
-                                            {retryCountdown > 0 ? `Thử lại sau ${retryCountdown}s` : 'Thử lại'}
-                                        </Button>
-                                    </div>
-                                )}
-                                <Input.TextArea
-                                    value={query}
-                                    onChange={(e) => setQuery(e.target.value)}
-                                    onPressEnter={(e) => {
-                                        if (!e.shiftKey) { e.preventDefault(); handleSend() }
-                                    }}
-                                    placeholder="Nhập câu hỏi..."
-                                    rows={mobileChat ? 2 : 3}
-                                    disabled={loading}
-                                    style={{
-                                        borderRadius: 14,
-                                        marginBottom: 10,
-                                         background: inputBackground,
-                                        border: `1px solid ${inputBorder}`,
-                                        backdropFilter: 'blur(8px)',
-                                        WebkitBackdropFilter: 'blur(8px)',
-                                        color: panelText,
-                                        fontSize: mobileChat ? 14 : 15,
-                                    }}
-                                />
-                                <div style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    gap: 8,
-                                    flexWrap: 'wrap',
-                                }}>
-                                    {!mobileChat && (
-                                        <Typography.Text style={{ fontSize: 12, color: panelMutedText }}>
-                                            Enter để gửi · Shift+Enter xuống dòng
-                                        </Typography.Text>
-                                    )}
-                                    <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-                                        <Button
-                                            type="text"
-                                            size={mobileChat ? 'small' : 'middle'}
-                                            onClick={createNewChat}
-                                            style={{ color: panelText }}
-                                        >
-                                            Mới
-                                        </Button>
-                                        <Button
-                                            icon={<SendOutlined />}
-                                            size={mobileChat ? 'small' : 'middle'}
-                                            onClick={() => handleSend()}
-                                            loading={loading}
-                                            style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)', border: 'none' }}
-                                        >
-                                            Gửi
-                                        </Button>
+                                        {errorInfo && (
+                                            <div style={{
+                                                marginBottom: 10,
+                                                padding: 10,
+                                                borderRadius: 14,
+                                                background: 'rgba(255,77,79,0.12)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                gap: 10,
+                                                flexWrap: 'wrap',
+                                            }}>
+                                                <Typography.Text style={{ color: 'var(--theme-text)', fontSize: 13 }}>{errorInfo.message}</Typography.Text>
+                                                <Button
+                                                    size="small"
+                                                    disabled={retryCountdown > 0}
+                                                    onClick={handleRetry}
+                                                    style={{ background: 'var(--theme-button-bg)', borderColor: 'var(--theme-button-border)', color: 'var(--theme-button-text)' }}
+                                                >
+                                                    {retryCountdown > 0 ? t('chat.retry_after', { count: retryCountdown }) : t('chat.retry')}
+                                                </Button>
+                                            </div>
+                                        )}
+                                        <Input.TextArea
+                                            value={query}
+                                            onChange={(e) => setQuery(e.target.value)}
+                                            onPressEnter={(e) => {
+                                                if (!e.shiftKey) { e.preventDefault(); handleSend() }
+                                            }}
+                                            placeholder={t('chat.input_placeholder')}
+                                            rows={mobileChat ? 2 : 3}
+                                            disabled={loading}
+                                            style={{
+                                                borderRadius: 14,
+                                                marginBottom: 10,
+                                                background: inputBackground,
+                                                border: `1px solid ${inputBorder}`,
+                                                backdropFilter: 'blur(8px)',
+                                                WebkitBackdropFilter: 'blur(8px)',
+                                                color: panelText,
+                                                fontSize: mobileChat ? 14 : 15,
+                                            }}
+                                        />
+                                        <div style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            gap: 8,
+                                            flexWrap: 'wrap',
+                                        }}>
+                                            {!mobileChat && (
+                                                <Typography.Text style={{ fontSize: 12, color: panelMutedText }}>
+                                                    {t('chat.input_helper')}
+                                                </Typography.Text>
+                                            )}
+                                            <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                                                <Button
+                                                    type="text"
+                                                    size={mobileChat ? 'small' : 'middle'}
+                                                    onClick={createNewChat}
+                                                    style={{ color: panelText }}
+                                                >
+                                                {t('chat.new_chat')}
+                                            </Button>
+                                                <Button
+                                                    icon={<SendOutlined />}
+                                                    size={mobileChat ? 'small' : 'middle'}
+                                                    onClick={() => handleSend()}
+                                                    loading={loading}
+                                                    style={{ background: 'var(--theme-button-bg)', color: 'var(--theme-button-text)', border: 'none' }}
+                                                >
+                                                    {t('chat.send')}
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            {/* SESSION DRAWER — mobile/tablet */}
-            {/* Drawer phien chat cao hon khung chat va thap hon modal xoa. */}
+                    {/* SESSION DRAWER — mobile/tablet */}
+                    {/* Drawer phien chat cao hon khung chat va thap hon modal xoa. */}
                 </div>
             </div>
 
@@ -2042,7 +2013,7 @@ export default function AiChatWidget() {
                 className="ai-session-drawer"
                 title={
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <span>Phiên chat</span>
+                        <span>{t('chat.session_drawer_title')}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Badge count={sessions.length} color="var(--theme-accent)" />
                             <Button

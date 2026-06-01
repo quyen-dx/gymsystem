@@ -1,11 +1,14 @@
 import {
   CalendarOutlined,
+  CommentOutlined,
   CreditCardOutlined,
+  DashboardOutlined,
+  FileTextOutlined,
   FundOutlined,
   HeartOutlined,
   HomeOutlined,
   MenuOutlined,
-  PlaySquareOutlined,
+  QuestionCircleOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
 } from '@ant-design/icons'
@@ -15,38 +18,38 @@ import {
   Button,
   Drawer,
   Layout,
-  Menu,
+  Skeleton,
   Typography,
 } from 'antd'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useCart } from '../../../context/useCart'
+import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useWallet } from '../../../context/WalletProvider'
-import { useAuth } from '../../../hook/useAuth'
+import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
+import { getShops } from '../../../services/shopService'
+import type { ProductShop } from '../../../types/member/product'
 import AiChatWidget from '../../chat/AiChatWidget'
 import MemberFooter from '../footer/MemberFooter'
 
 const { Header, Content } = Layout
 const { Text } = Typography
 const MEMBER_INTERACTION_LOCK_ROUTES = [
-  '/dashboard/member',
-  '/dashboard/member/wallet',
-  '/dashboard/member/wallet/deposit',
-  '/dashboard/member/transfer',
-  '/dashboard/member/checkout',
-  '/dashboard/member/orders',
-  '/dashboard/member/cart',
-  '/dashboard/member/workout',
-  '/dashboard/member/checkin',
-  '/shorts',
+  '/',
+  '/deposit',
+  '/checkout',
+  '/orders',
+  '/cart',
+  '/workout',
+  '/checkin',
 ]
 
 const shouldLockMemberInteractions = (pathname: string) => (
   MEMBER_INTERACTION_LOCK_ROUTES.includes(pathname) ||
-  pathname.startsWith('/dashboard/member/track/') ||
-  pathname.startsWith('/dashboard/member/store') ||
-  pathname.startsWith('/dashboard/member/shop/')
+  pathname.startsWith('/track/') ||
+  pathname.startsWith('/store')
 )
 
 export default function MemberLayout({
@@ -56,34 +59,67 @@ export default function MemberLayout({
   children: React.ReactNode
   hideFooter?: boolean
 }) {
+  const { t } = useTranslation()
   const { user } = useAuth()
+  const { settings, isEnabled } = useSystemSettings()
   const [accountOpen, setAccountOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [hovered, setHovered] = useState(false)
+  const [storeDropdownOpen, setStoreDropdownOpen] = useState(false)
+  const [storeDropdownLoading, setStoreDropdownLoading] = useState(false)
+  const [storeDropdownFetched, setStoreDropdownFetched] = useState(false)
+  const [storeDropdownShops, setStoreDropdownShops] = useState<ProductShop[]>([])
+  const [moreDropdownOpen, setMoreDropdownOpen] = useState(false)
+  const moreDropdownRef = useRef<HTMLDivElement>(null)
   const { cartCount } = useCart()
   const { wallet } = useWallet()
   const navigate = useNavigate()
   const location = useLocation()
   const navItems = [
-    { key: '/dashboard/member', label: 'Trang chủ', icon: <HomeOutlined /> },
-    { key: '/dashboard/member/store', label: 'Cửa hàng', icon: <ShopOutlined /> },
-    { key: '/shorts', label: 'Shorts', icon: <PlaySquareOutlined /> },
-    { key: '/dashboard/member/booking', label: 'Đặt lịch PT', icon: <CalendarOutlined /> },
-    { key: '/dashboard/member/health', label: 'Sức khoẻ', icon: <HeartOutlined /> },
-    { key: '/dashboard/member/workout', label: 'Lộ trình', icon: <FundOutlined /> },
-    { key: '/dashboard/member/checkin', label: 'Checkin', icon: <CreditCardOutlined /> },
+    { key: '/', label: t('nav.home'), icon: <HomeOutlined /> },
+    ...(isEnabled('shop.productStoreEnabled') ? [{ key: '/store', label: t('nav.store'), icon: <ShopOutlined /> }] : []),
+    ...(isEnabled('pt.memberBookingEnabled') ? [{ key: '/booking', label: t('nav.book_pt'), icon: <CalendarOutlined /> }] : []),
+    ...(isEnabled('workout.healthLogEnabled') ? [{ key: '/health', label: t('nav.health'), icon: <HeartOutlined /> }] : []),
+    ...(isEnabled('workout.workoutPlanEnabled') ? [{ key: '/workout', label: t('nav.workout'), icon: <FundOutlined /> }] : []),
+    ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/checkin', label: t('nav.checkin'), icon: <CreditCardOutlined /> }] : []),
   ]
+  const moreNavItems = [
+    { key: '/feedback', label: t('nav.feedback'), icon: <CommentOutlined /> },
+    { key: '/policies', label: t('nav.policies'), icon: <FileTextOutlined /> },
+    { key: '/help', label: t('nav.help'), icon: <QuestionCircleOutlined /> },
+  ]
+  const drawerNavItems = [...navItems, ...moreNavItems]
 
   const selectedKey =
-    navItems
+    drawerNavItems
       .map((item) => item.key)
       .sort((a, b) => b.length - a.length)
       .find((key) => location.pathname === key || location.pathname.startsWith(`${key}/`)) ||
-    '/dashboard/member'
+    '/'
+  const moreActive = moreNavItems.some((item) => selectedKey === item.key)
 
   const goTo = (path: string) => {
     navigate(path)
     setMenuOpen(false)
+    setStoreDropdownOpen(false)
+    setMoreDropdownOpen(false)
+  }
+
+  const loadStoreDropdown = () => {
+    if (storeDropdownFetched || storeDropdownLoading) return
+    setStoreDropdownLoading(true)
+    getShops()
+      .then((res) => setStoreDropdownShops(res.data.shops || res.data || []))
+      .catch(() => setStoreDropdownShops([]))
+      .finally(() => {
+        setStoreDropdownFetched(true)
+        setStoreDropdownLoading(false)
+      })
+  }
+
+  const handleStoreMouseEnter = () => {
+    setStoreDropdownOpen(true)
+    loadStoreDropdown()
   }
 
   const walletText = wallet ? `${wallet.balance.toLocaleString('vi-VN')}đ` : '0đ'
@@ -109,8 +145,25 @@ export default function MemberLayout({
     }
   }, [lockMemberInteractions])
 
+  useEffect(() => {
+    if (!moreDropdownOpen) return
+
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      if (!moreDropdownRef.current?.contains(event.target as Node)) {
+        setMoreDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown, { passive: true })
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+    }
+  }, [moreDropdownOpen])
+
   return (
-    <Layout className="member-shell" style={{ minHeight: '100vh' }}>
+    <Layout className="member-shell" style={{ minHeight: '100dvh' }}>
       <Header
         className="member-shell-header"
         style={{
@@ -121,88 +174,194 @@ export default function MemberLayout({
       >
         <div
           className="member-shell-logo"
-          onClick={() => goTo('/dashboard/member')}
+          onClick={() => goTo('/')}
           role="button"
           tabIndex={0}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') goTo('/dashboard/member')
+            if (event.key === 'Enter') goTo('/')
           }}
         >
-          <div
-            className="member-shell-logo-mark"
-            style={{
-              background: 'var(--theme-accent)',
-              color: 'var(--theme-button-text)',
-              boxShadow: '0 0 12px var(--theme-accent-muted), 0 0 4px var(--theme-accent)',
-              borderRadius: 8,
-              width: 32,
-              height: 32,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 700,
-              fontSize: 14,
-            }}
-          >
-            GP
-          </div>
-          <div className="member-shell-brand" style={{ color: 'var(--theme-accent)' }}>GymPro</div>
+          {settings.general.logoUrl ? (
+            <img src={settings.general.logoUrl} alt={settings.general.siteName} style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover' }} />
+          ) : (
+            <div
+              className="member-shell-logo-mark"
+              style={{
+                background: 'var(--theme-button-bg)',
+                color: 'var(--theme-button-text)',
+                boxShadow: '0 0 12px var(--theme-accent-muted), 0 0 4px var(--theme-accent)',
+                borderRadius: 8,
+                width: 32,
+                height: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: 14,
+              }}
+            >
+              GP
+            </div>
+          )}
+          <div className="member-shell-brand" style={{ color: 'var(--gs-text)' }}>{settings.general.siteName}</div>
         </div>
 
-        <Menu
-          className="member-shell-desktop-nav"
-          mode="horizontal"
-          selectedKeys={[selectedKey]}
-          items={navItems}
-          onClick={(event) => goTo(event.key)}
-          style={{
-            flex: 1,
-            justifyContent: 'center',
-            border: 'none',
-            borderBottom: 'none',
-            background: 'transparent',
-            minWidth: 0,
-          }}
-        />
+        <nav className="member-shell-desktop-nav" aria-label="Member navigation">
+          {navItems.map((item) => {
+            const active = selectedKey === item.key
+            const isStore = item.key === '/store'
+            const showStoreDropdown = isStore && storeDropdownOpen && (storeDropdownLoading || storeDropdownShops.length > 0)
+
+            if (isStore) {
+              return (
+                <div
+                  key={item.key}
+                  className="member-store-nav-wrapper"
+                  onMouseEnter={handleStoreMouseEnter}
+                  onMouseLeave={() => setStoreDropdownOpen(false)}
+                >
+                  <button
+                    type="button"
+                    className={`member-shell-nav-item${active ? ' is-active' : ''}`}
+                    onClick={() => goTo(item.key)}
+                  >
+                    {item.icon}
+                    <span>{item.label}</span>
+                  </button>
+
+                  {showStoreDropdown && (
+                    <div className="member-store-dropdown">
+                      {storeDropdownLoading ? (
+                        <div className="member-store-dropdown-loading">
+                          {[0, 1, 2].map((index) => (
+                            <div key={index} className="member-store-dropdown-skeleton">
+                              <Skeleton.Avatar active size={28} />
+                              <Skeleton.Input active size="small" style={{ width: 132 }} />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="member-store-dropdown-list">
+                            {storeDropdownShops.map((shop) => {
+                              const owner = shop.user_id
+                              const name = shop.name || owner?.name || t('store_fallback')
+                              const avatar = shop.avatar || owner?.avatar
+
+                              return (
+                                <button
+                                  key={shop._id}
+                                  type="button"
+                                  className="member-store-dropdown-item"
+                                  onClick={() => goTo(`/store/${shop._id}`)}
+                                >
+                                  <Avatar size={28} src={avatar} icon={<ShopOutlined />}>
+                                    {name.charAt(0)}
+                                  </Avatar>
+                                  <span>{name}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            return (
+              <button
+                key={item.key}
+                type="button"
+                className={`member-shell-nav-item${active ? ' is-active' : ''}`}
+                onClick={() => goTo(item.key)}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+          <div className="member-more-nav-wrapper" ref={moreDropdownRef}>
+            <button
+              type="button"
+              className={`member-shell-nav-item${moreActive ? ' is-active' : ''}`}
+              onClick={() => setMoreDropdownOpen((open) => !open)}
+            >
+              <span>{t('nav.more')}</span>
+              <span aria-hidden="true">▾</span>
+            </button>
+
+            {moreDropdownOpen && (
+              <div className="member-more-dropdown">
+                {moreNavItems.map((item) => {
+                  const active = selectedKey === item.key
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={`member-more-dropdown-item${active ? ' is-active' : ''}`}
+                      onClick={() => goTo(item.key)}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </nav>
+
+        {(user?.role === 'admin' || user?.role === 'pt' || user?.role === 'staff' || user?.role === 'seller') && (
+          <button
+            type="button"
+            className="member-shell-nav-item"
+            onClick={() => {
+              const target = user?.role === 'pt' ? '/pt/schedule' : user?.role === 'staff' ? '/staff/checkin' : user?.role === 'seller' ? '/seller/products' : '/admin'
+              goTo(target)
+            }}
+            style={{ marginLeft: 8 }}
+          >
+            <DashboardOutlined />
+            <span>{t('management', { role: t(`role.${user?.role}`) })}</span>
+          </button>
+        )}
 
         <div className="member-shell-desktop-actions">
-          <div
-            className="member-shell-wallet-pill"
-            style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
-          >
-            <Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>Ví:</Text>
-            <Text strong style={{ fontSize: 14 }}>
-              {walletText}
-            </Text>
-            <Button
-              type="link"
-              size="small"
-              onClick={() => goTo('/dashboard/member/wallet')}
-              style={{ padding: 0, height: 'auto', fontSize: 12, marginLeft: 4 }}
-            >
-              Nạp tiền
-            </Button>
-          </div>
 
-          <Badge count={cartCount} size="small">
-            <Button
-              type="text"
-              icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
-              onClick={() => goTo('/dashboard/member/cart')}
-              style={navbarIconButtonStyle}
-              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
-              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
-            />
-          </Badge>
-
-          {location.pathname === '/shorts' && (
-            <Button
-              type="primary"
-              icon={<PlaySquareOutlined />}
-              onClick={() => navigate('/shorts?upload=1')}
+          {isEnabled('billing.qrPaymentEnabled') && (
+            <div
+              className="member-shell-wallet-pill"
+              style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
             >
-              Tải video short
-            </Button>
+              <Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>{t('wallet.label')}</Text>
+              <Text strong style={{ fontSize: 14 }}>
+                {walletText}
+              </Text>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => goTo('/deposit')}
+                style={{ padding: 0, height: 'auto', fontSize: 12, marginLeft: 4 }}
+              >
+                {t('wallet.deposit')}
+              </Button>
+            </div>
+          )}
+
+          {isEnabled('shop.cartEnabled') && (
+            <Badge count={cartCount} size="small">
+              <Button
+                type="text"
+                icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
+                onClick={() => goTo('/cart')}
+                style={navbarIconButtonStyle}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
+              />
+            </Badge>
           )}
 
           <div
@@ -234,16 +393,18 @@ export default function MemberLayout({
         </div>
 
         <div className="member-shell-mobile-actions">
-          <Badge count={cartCount} size="small">
-            <Button
-              type="text"
-              icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
-              onClick={() => goTo('/dashboard/member/cart')}
-              style={navbarIconButtonStyle}
-              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
-              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
-            />
-          </Badge>
+          {isEnabled('shop.cartEnabled') && (
+            <Badge count={cartCount} size="small">
+              <Button
+                type="text"
+                icon={<ShoppingCartOutlined style={{ fontSize: 18 }} />}
+                onClick={() => goTo('/cart')}
+                style={navbarIconButtonStyle}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
+              />
+            </Badge>
+          )}
           <Button
             type="text"
             icon={<MenuOutlined />}
@@ -268,7 +429,7 @@ export default function MemberLayout({
       {!hideFooter && <MemberFooter />}
 
       <Drawer
-        title="GymPro"
+        title={settings.general.siteName}
         placement="right"
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
@@ -277,48 +438,70 @@ export default function MemberLayout({
         <div className="flex items-center gap-3 p-4">
           <img className="h-10 w-10 rounded-full object-cover" src={avatarUrl} alt={user?.name || 'Avatar'} />
           <div className="min-w-0 flex-1">
-            <p className="m-0 truncate text-sm font-medium text-[#edebe6]" style={{ color: 'var(--theme-text)' }}>{user?.name}</p>
-            <p className="m-0 truncate text-xs text-[rgba(237,235,230,0.5)]">{user?.role || 'Member'}</p>
+            <p className="m-0 truncate text-sm font-medium" style={{ color: 'var(--theme-text)' }}>{user?.name}</p>
+            <p className="m-0 truncate text-xs" style={{ color: 'var(--gs-text-muted)' }}>{t('role.' + (user?.role || 'member'))}</p>
           </div>
           <button
             onClick={openProfileModal}
-            className="whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs text-gray-300 transition-colors"
+            className="whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs transition-colors"
             style={{ borderColor: 'var(--theme-border)', backgroundColor: 'var(--theme-card)', color: 'var(--theme-text)' }}
             type="button"
           >
-            Tài khoản
+            {t('account')}
           </button>
         </div>
 
-        <div className="member-shell-drawer-wallet">
-          <Text type="secondary">Ví hiện tại</Text>
-          <Text strong style={{ fontSize: 18 }}>
-            {walletText}
-          </Text>
-          <Button type="primary" block onClick={() => goTo('/dashboard/member/wallet')}>
-            Nạp / xem ví
-          </Button>
-        </div>
-
-        <Menu
-          mode="inline"
-          selectedKeys={[selectedKey]}
-          items={navItems}
-          onClick={(event) => goTo(event.key)}
-          style={{ borderInlineEnd: 0 }}
-        />
-
-        <div className="member-shell-drawer-actions">
-          {location.pathname === '/shorts' && (
-            <Button block type="primary" icon={<PlaySquareOutlined />} onClick={() => goTo('/shorts?upload=1')}>
-              Tải video short
+        {isEnabled('billing.qrPaymentEnabled') && (
+          <div className="member-shell-drawer-wallet">
+            <Text type="secondary">{t('wallet.current')}</Text>
+            <Text strong style={{ fontSize: 18 }}>
+              {walletText}
+            </Text>
+            <Button type="primary" block onClick={() => goTo('/deposit')}>
+              {t('wallet.deposit')}
             </Button>
-          )}
-        </div>
+          </div>
+        )}
+
+        <nav className="member-drawer-nav" aria-label="Member mobile navigation">
+          {drawerNavItems.map((item) => {
+            const active = selectedKey === item.key
+            return (
+              <button
+                key={item.key}
+                type="button"
+                className={`member-drawer-nav-item${active ? ' is-active' : ''}`}
+                onClick={() => goTo(item.key)}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </nav>
+
+        {(user?.role === 'admin' || user?.role === 'pt' || user?.role === 'staff' || user?.role === 'seller') && (
+          <>
+            <div style={{ padding: '8px 16px 0' }}>
+              <div style={{ height: 1, background: 'var(--theme-border)' }} />
+            </div>
+            <nav className="member-drawer-nav" aria-label="Management navigation">
+              <button
+                type="button"
+                className="member-drawer-nav-item"
+                onClick={() => goTo(user?.role === 'pt' ? '/pt/schedule' : user?.role === 'staff' ? '/staff/checkin' : user?.role === 'seller' ? '/seller/products' : '/admin')}
+              >
+                <DashboardOutlined />
+                <span>{t('management', { role: t(`role.${user?.role}`) })}</span>
+              </button>
+            </nav>
+          </>
+        )}
+
       </Drawer>
 
       <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
-      {location.pathname !== '/shorts' && !accountOpen && !menuOpen && <AiChatWidget />}
-    </Layout>
+      {!accountOpen && !menuOpen && settings.ai.floatingChatbotEnabled && <AiChatWidget />}
+    </Layout >
   )
 }

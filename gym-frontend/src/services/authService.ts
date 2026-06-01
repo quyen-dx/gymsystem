@@ -3,7 +3,7 @@ import api from './api'
 
 export const authService = {
   sendRegisterOtp: (data: {
-    provider: Extract<AuthProviderType, 'phone'>
+    provider: Extract<AuthProviderType, 'phone' | 'email'>
     name: string
     phone?: string
     password?: string
@@ -27,12 +27,16 @@ export const authService = {
 
   refresh: () => api.post('/auth/refresh', undefined, { skipAuthRefresh: true } as any),
 
-  getProfile: () => api.get('/auth/me'),
+  getProfile: () => api.get('/auth/me', { timeout: 10000 }),
 
-  updateProfile: (data: FormData) =>
-    api.put('/auth/update-profile', data, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  updateProfile: (data: FormData | Record<string, unknown>) =>
+    api.put(
+      '/auth/update-profile',
+      data,
+      data instanceof FormData
+        ? { headers: { 'Content-Type': 'multipart/form-data' } }
+        : undefined,
+    ),
 
   addPassword: (data: { newPassword: string }) =>
     api.post('/auth/add-password', data),

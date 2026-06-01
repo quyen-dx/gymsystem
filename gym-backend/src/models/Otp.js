@@ -25,7 +25,7 @@ const otpSchema = new mongoose.Schema(
     },
     provider: {
       type: String,
-      enum: ['google', 'facebook', 'phone'],
+      enum: ['google', 'facebook', 'phone', 'email'],
       default: null,
     },
     payload: {

@@ -1,9 +1,9 @@
 import { getDefaultAddress } from '../services/addressService.js'
-import { calculateOrderShipping, createOrder, getOrderById, getOrdersBySeller, getOrdersByUser, getSellerOrderById, getShippingByOrder, hideOrderForUser, updateSellerOrderStatus } from '../services/orderService.js'
+import { calculateCheckoutDiscount, calculateOrderShipping, createOrder, getOrderById, getOrdersBySeller, getOrdersByUser, getSellerOrderById, getShippingByOrder, hideOrderForUser, updateSellerOrderStatus } from '../services/orderService.js'
 
 export const checkoutOrder = async (req, res, next) => {
     try {
-        const { items, address: requestAddress, paymentReference } = req.body
+        const { items, address: requestAddress, paymentReference, discountCode } = req.body
         let address = requestAddress
 
         if (!address) {
@@ -19,6 +19,7 @@ export const checkoutOrder = async (req, res, next) => {
             items,
             address,
             paymentReference,
+            discountCode,
         })
         return res.status(201).json({ success: true, data: orders, order: orders[0] })
     } catch (error) {
@@ -40,6 +41,16 @@ export const calculateShippingController = async (req, res, next) => {
         })
         
         return res.json({ success: true, data: shippingInfo })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const validateDiscountCode = async (req, res, next) => {
+    try {
+        const { code, subtotal = 0, shippingFee = 0 } = req.body
+        const discount = await calculateCheckoutDiscount({ code, subtotal: Number(subtotal), shippingFee: Number(shippingFee) })
+        return res.json({ success: true, data: discount })
     } catch (error) {
         next(error)
     }

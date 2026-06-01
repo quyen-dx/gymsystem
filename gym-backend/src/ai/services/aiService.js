@@ -1,7 +1,33 @@
 import { GoogleGenAI } from '@google/genai'
 import { gymToolDeclarations, runGymTool } from '../tools/gymTools.js'
 
-const createGeminiClient = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+const memberKeys = [
+  process.env.GEMINI_API_KEY_MEMBE_1,
+  process.env.GEMINI_API_KEY_MEMBE_2,
+  process.env.GEMINI_API_KEY_MEMBE_3,
+  process.env.GEMINI_API_KEY_MEMBE_4,
+  process.env.GEMINI_API_KEY_MEMBE_5,
+].filter(Boolean)
+
+let memberKeyIndex = 0
+
+const createGeminiClient = (keyIndex) => new GoogleGenAI({ apiKey: memberKeys[keyIndex] })
+
+async function callGeminiWithKeyRotation(contents, config) {
+  for (let i = 0; i < memberKeys.length; i++) {
+    const idx = (memberKeyIndex + i) % memberKeys.length
+    try {
+      const client = createGeminiClient(idx)
+      const res = await client.models.generateContent({ contents, config })
+      memberKeyIndex = idx
+      return res
+    } catch (err) {
+      if (err?.status === 429 || err?.code === 429) continue
+      throw err
+    }
+  }
+  throw new Error('Tất cả API key member đã hết quota')
+}
 
 const getResponseText = (response) => {
   if (typeof response?.text === 'string') return response.text.trim()
@@ -22,19 +48,48 @@ const getFunctionCalls = (response) => {
 }
 
 const buildGymProPrompt = ({ user, conversationContext }) => `
-Bạn là Gym Assistant của GymPro.
+## Vai trò
 
-Luật Gym Mode:
-- Chỉ trả lời các nội dung liên quan gym, gói tập, PT, booking, sản phẩm shop, dinh dưỡng và tập luyện.
-- Khi user hỏi về các gói tập (plans), bảng giá (pricing), hoặc danh sách membership đang có, BẮT BUỘC dùng tool getAvailablePlans.
-- Khi user hỏi về gói tập hiện tại của chính họ (remaining days, my plan), dùng getMembershipInfo.
-- Khi user muốn đăng ký gói mới, mua membership hoặc gia hạn gói, gọi createMembership với planId rõ ràng.
-- KHÔNG ĐƯỢC trả lời "Tôi chỉ có thể kiểm tra thông tin gói tập hiện tại của bạn" khi user hỏi về danh sách gói tập chung. Hãy gọi getAvailablePlans.
-- Khi câu hỏi cần dữ liệu thật, bắt buộc dùng tool. Không bịa dữ liệu.
-- Không đọc hoặc suy đoán dữ liệu của user khác.
-- Chỉ thao tác membership của user hiện tại. Không tự tạo dữ liệu giả.
-- Nếu thiếu thông tin để tạo booking, hỏi lại ngắn gọn phần còn thiếu.
-- Nếu user muốn đặt lịch nhưng chưa chọn PT cụ thể, hãy gọi getAvailablePTs trước rồi gợi ý PT.
+Bạn là Doraemon — trợ lý ảo thân thiện của GymPro dành cho hội viên (member). Chỉ trả lời các câu hỏi liên quan đến trải nghiệm cá nhân của member trong GymPro. Tính cách: vui vẻ, ngắn gọn, dùng emoji, tối đa 3-4 câu.
+
+---
+
+## Được phép trả lời
+
+✅ Check-in: xem QR cá nhân, QR tự refresh 30 giây
+✅ Đặt lịch PT: chọn PT → xem lịch trống → đặt → hủy
+✅ Lộ trình tập: xem lịch tập, bấm start buổi tập, timer đếm ngược
+✅ Sức khoẻ: nhập cân nặng, số đo, xem chart BMI
+✅ Cửa hàng: xem sản phẩm, mua, đánh giá
+✅ Ví & thanh toán: nạp tiền QR, nạp Visa/Card, xem số dư, lịch sử giao dịch
+✅ Thông báo: xem thông báo từ hệ thống
+✅ Giao diện: đổi màu, dark/light mode, ngôn ngữ VI/EN
+✅ Tài khoản cá nhân: đổi ảnh đại diện, ảnh bìa, thông tin cá nhân, địa chỉ
+
+## Bảo mật tài khoản — Trả lời an toàn
+
+✅ Hướng dẫn đổi mật khẩu: vào Profile → Đổi mật khẩu
+✅ Quên mật khẩu: trang đăng nhập → Quên mật khẩu → nhập email/SĐT → nhận OTP
+✅ Đăng xuất: bấm avatar → Đăng xuất
+✅ Nhắc người dùng KHÔNG chia sẻ mật khẩu với bất kỳ ai kể cả staff
+✅ Nếu nghi bị hack: đổi mật khẩu ngay + liên hệ staff tại quầy
+
+❌ KHÔNG hỗ trợ đăng nhập hộ
+❌ KHÔNG xác nhận email/SĐT của người dùng qua chat
+
+## Khi bị hỏi về thông tin tài khoản người khác
+
+Chỉ trả lời đúng 1 câu, KHÔNG giải thích gì thêm: "Mình không thể cung cấp thông tin tài khoản của người khác để bảo vệ quyền riêng tư nhé! 🔒"
+
+## Tuyệt đối KHÔNG trả lời
+
+❌ Doanh thu, doanh số, báo cáo tài chính
+❌ Thông tin member khác
+❌ Số lượng member toàn hệ thống
+❌ Thông tin nội bộ staff/admin
+❌ Câu hỏi ngoài GymPro
+
+Nếu hỏi những điều trên: "Mình không có thông tin về điều này. Bạn cần hỗ trợ thêm thì liên hệ staff tại quầy nhé! 😊"
 - Ngày hiện tại: ${new Date().toISOString().slice(0, 10)}.
 - Role user hiện tại: ${user?.role || 'member'}.
 - User hiện tại: ${user?.name || 'Người dùng'}.
@@ -51,7 +106,6 @@ const buildFallbackGymAnswer = (message) => ({
 })
 
 const callGeminiWithTools = async ({ query, user, conversationContext }) => {
-  const client = createGeminiClient()
   const systemPrompt = buildGymProPrompt({ user, conversationContext })
   const contents = [
     {
@@ -60,24 +114,19 @@ const callGeminiWithTools = async ({ query, user, conversationContext }) => {
     },
   ]
 
-  return client.models.generateContent({
+  return callGeminiWithKeyRotation(contents, {
     model: 'gemini-2.5-flash',
-    contents,
-    config: {
-      temperature: 0.2,
-      maxOutputTokens: 900,
-      tools: [{ functionDeclarations: gymToolDeclarations }],
-    },
+    temperature: 0.2,
+    maxOutputTokens: 900,
+    tools: [{ functionDeclarations: gymToolDeclarations }],
   })
 }
 
 const finishWithToolResult = async ({ query, user, conversationContext, functionCall, toolResult }) => {
-  const client = createGeminiClient()
   const systemPrompt = buildGymProPrompt({ user, conversationContext })
 
-  const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: [
+  const response = await callGeminiWithKeyRotation(
+    [
       {
         role: 'user',
         parts: [{ text: `${systemPrompt}\n\nCâu hỏi user: ${query}` }],
@@ -96,18 +145,19 @@ const finishWithToolResult = async ({ query, user, conversationContext, function
         }],
       },
     ],
-    config: {
+    {
+      model: 'gemini-2.5-flash',
       temperature: 0.25,
       maxOutputTokens: 900,
     },
-  })
+  )
 
   return getResponseText(response)
 }
 
 export const runGymAiAction = async ({ query, user, conversationContext }) => {
-  if (!process.env.GEMINI_API_KEY) {
-    return buildFallbackGymAnswer('Backend chưa cấu hình GEMINI_API_KEY nên Gym Assistant chưa thể gọi AI Action.')
+  if (memberKeys.length === 0) {
+    return buildFallbackGymAnswer('Backend chưa cấu hình API key cho member AI.')
   }
 
   const firstResponse = await callGeminiWithTools({ query, user, conversationContext })

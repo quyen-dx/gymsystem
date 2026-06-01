@@ -1,6 +1,9 @@
 import User from '../models/User.js';
 import { verifyAccessToken } from '../utils/generateToken.js';
 
+const isAccountLocked = (user) =>
+  user?.status === 'locked' || user?.isLocked === true || user?.isActive === false
+
 export const protect = async (req, res, next) => {
   try {
     let token;
@@ -24,8 +27,8 @@ export const protect = async (req, res, next) => {
       return res.status(401).json({ message: 'Token không hợp lệ' });
     }
 
-    if (!user.isActive) {
-      return res.status(403).json({ message: 'Tài khoản đã bị khóa' });
+    if (isAccountLocked(user)) {
+      return res.status(403).json({ code: 'ACCOUNT_LOCKED', message: 'Account is locked' });
     }
 
     req.user = user;

@@ -1,6 +1,6 @@
 import { createContext } from 'react'
 
-export type AuthProviderType = 'google' | 'facebook' | 'phone'
+export type AuthProviderType = 'google' | 'facebook' | 'phone' | 'email'
 
 export interface User {
   _id: string
@@ -17,6 +17,8 @@ export interface User {
   shop_id?: string | null
   avatar?: string
   coverImage?: string | null
+  themePreference?: 'system' | 'light' | 'dark'
+  accentColor?: string
   isActive: boolean
   isVerified: boolean
   hasPassword?: boolean

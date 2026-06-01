@@ -1,6 +1,6 @@
 import {
-  CameraOutlined,
   BgColorsOutlined,
+  CameraOutlined,
   CopyOutlined,
   DeleteOutlined,
   EditOutlined,
@@ -10,17 +10,19 @@ import {
   PhoneOutlined,
   PlusOutlined,
   RightOutlined,
-  ShopOutlined,
   ShoppingCartOutlined,
   StarFilled,
   StarOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, Modal, Space, message, theme } from 'antd'
+import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, message, Modal, Space, theme } from 'antd'
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { generateTheme, PRESET_ACCENT_COLORS, useTheme } from '../../context/ThemeContext'
-import { useAuth } from '../../hook/useAuth'
+import { useSystemSettings } from '../../context/SystemSettingsContext'
+import { generateTheme, PRESET_ACCENT_COLORS, resolveEffectiveTheme, useTheme } from '../../context/ThemeContext'
+import { useAuth } from '../../hooks/useAuth'
 import { createAddress, deleteAddress, getAddresses, setDefaultAddress, updateAddress } from '../../services/addressService'
 import { authService } from '../../services/authService'
 
@@ -30,7 +32,7 @@ const getUsernameFromEmail = (email?: string | null) => {
 }
 
 const profileModalClass =
-  'max-w-[760px] max-[768px]:!m-0 max-[768px]:!w-[calc(100vw-16px)] max-[768px]:!max-w-none max-[768px]:!pb-0 [&_.ant-modal-content]:!overflow-hidden [&_.ant-modal-content]:!p-0 [&_.ant-modal-content]:!rounded-2xl [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-content]:!shadow-2xl [&_.ant-modal-close]:!right-3.5 [&_.ant-modal-close]:!top-3.5 [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
+  'max-w-[760px] [&_.ant-modal-content]:!p-0 [&_.ant-modal-content]:!rounded-2xl [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-content]:!shadow-2xl [&_.ant-modal-close]:!right-3.5 [&_.ant-modal-close]:!top-3.5 [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
 
 const profileModalWrapClass =
   'profile-modal-wrap [&_.ant-modal-mask]:!bg-[var(--profile-mask)] [&_.ant-modal-mask]:backdrop-blur-[10px]'
@@ -39,7 +41,7 @@ const profileFormClass =
   '[&_.ant-form-item-label>label]:!text-xs [&_.ant-form-item-label>label]:!font-medium [&_.ant-form-item-label>label]:!uppercase [&_.ant-form-item-label>label]:!tracking-[0.06em] [&_.ant-form-item-label>label]:!text-[var(--theme-muted)] [&_.ant-input]:!min-h-[42px] [&_.ant-input]:!rounded-[12px] [&_.ant-input]:!border-[var(--profile-border)] [&_.ant-input]:!bg-[var(--profile-bg-container)] [&_.ant-input]:!text-[var(--profile-text)] [&_.ant-input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input-affix-wrapper]:!min-h-[42px] [&_.ant-input-affix-wrapper]:!rounded-[12px] [&_.ant-input-affix-wrapper]:!border-[var(--profile-border)] [&_.ant-input-affix-wrapper]:!bg-[var(--profile-bg-container)] [&_.ant-input-affix-wrapper_input]:!bg-transparent [&_.ant-input-affix-wrapper_input]:!text-[var(--profile-text)] [&_.ant-input-affix-wrapper_input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input:focus]:!border-[var(--profile-accent)] [&_.ant-input:focus]:!shadow-none [&_.ant-input-focused]:!border-[var(--profile-accent)] [&_.ant-input-focused]:!shadow-none [&_.ant-input-affix-wrapper-focused]:!border-[var(--profile-accent)] [&_.ant-input-affix-wrapper-focused]:!shadow-none [&_.ant-input[disabled]]:!cursor-not-allowed [&_.ant-input[disabled]]:!bg-[var(--theme-elevated)] [&_.ant-input[disabled]]:!text-[var(--theme-muted)] [&_.ant-input-disabled]:!cursor-not-allowed [&_.ant-input-disabled]:!bg-[var(--theme-elevated)] [&_.ant-input-disabled]:!text-[var(--theme-muted)]'
 
 const primaryButtonClass =
-  '!h-11 !rounded-full !border-0 !bg-[var(--theme-accent)] !font-extrabold !text-[var(--theme-button-text)] !shadow-none hover:!bg-[var(--theme-accent-hover)]'
+  '!h-11 !rounded-full !border-0 !bg-[var(--theme-button-bg)] !font-extrabold !text-[var(--theme-button-text)] !shadow-none hover:!bg-[var(--theme-accent-hover)]'
 
 const addressActionButtonClass =
   'grid h-7 w-7 cursor-pointer place-items-center rounded-[7px] border border-[var(--profile-border)] bg-transparent text-[var(--profile-text-secondary)] transition-colors hover:bg-[var(--profile-bg-container)] hover:text-[var(--profile-text)] max-[480px]:h-[26px] max-[480px]:w-[26px]'
@@ -139,7 +141,9 @@ const ProfileHeader = ({
   onAvatarChange,
   onCoverChange,
   onCoverRemove,
+  mediaUploading,
   isMobile,
+  t,
 }: {
   user: any
   avatarPreview: string | null
@@ -148,134 +152,140 @@ const ProfileHeader = ({
   coverRef: React.RefObject<HTMLInputElement | null>
   contactText: string
   onCopyContact: () => void
-  onAvatarChange: (url: string) => void
-  onCoverChange: (url: string) => void
+  onAvatarChange: (file: File) => void
+  onCoverChange: (file: File) => void
   onCoverRemove: () => void
+  mediaUploading: 'avatar' | 'cover' | 'cover-remove' | null
   isMobile: boolean
+  t: (key: string, opts?: any) => string
 }) => {
   const coverSrc = coverPreview !== null && coverPreview !== ''
     ? coverPreview
     : coverPreview === ''
-    ? null
-    : user?.coverImage || DEFAULT_COVER
+      ? null
+      : user?.coverImage || DEFAULT_COVER
 
   return (
     <header className="profile-modal-header">
-    <div
-      className="profile-cover"
-      style={{
-        backgroundImage: coverSrc ? `url(${coverSrc})` : 'none',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        position: 'relative',
-        cursor: 'pointer',
-      }}
-      onClick={() => coverRef.current?.click()}
-    >
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.5) 100%)',
-      }} />
-
       <div
+        className="profile-cover"
         style={{
-          position: 'absolute',
-          top: 8, right: 40,
-          display: 'flex',
-          gap: 6,
+          backgroundImage: coverSrc ? `url(${coverSrc})` : 'none',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          position: 'relative',
+          cursor: 'pointer',
         }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={() => coverRef.current?.click()}
       >
-        <button
-          type="button"
-          onClick={() => coverRef.current?.click()}
-          style={{
-            background: 'rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,255,255,0.2)',
-            borderRadius: 8,
-            color: '#fff',
-            padding: '4px 10px',
-            fontSize: 12,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          <CameraOutlined /> Đổi ảnh nền
-        </button>
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.5) 100%)',
+        }} />
 
-        {(coverPreview || user?.coverImage) && coverPreview !== '' && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 8, right: 40,
+            display: 'flex',
+            gap: 6,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
-            onClick={() => onCoverRemove()}
+            disabled={mediaUploading === 'cover'}
+            onClick={() => coverRef.current?.click()}
             style={{
-              background: 'rgba(239,68,68,0.6)',
+              background: 'rgba(0,0,0,0.5)',
               backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(239,68,68,0.4)',
+              border: '1px solid rgba(255,255,255,0.2)',
               borderRadius: 8,
               color: '#fff',
               padding: '4px 10px',
               fontSize: 12,
-              cursor: 'pointer',
+              cursor: mediaUploading === 'cover' ? 'not-allowed' : 'pointer',
+              opacity: mediaUploading === 'cover' ? 0.7 : 1,
               display: 'flex',
               alignItems: 'center',
               gap: 4,
             }}
           >
-            <DeleteOutlined /> Xóa
+            <CameraOutlined /> {mediaUploading === 'cover' ? t('common.loading') : t('profile.change_cover')}
           </button>
-        )}
-      </div>
 
+          {(coverPreview || user?.coverImage) && coverPreview !== '' && (
+            <button
+              type="button"
+              disabled={mediaUploading === 'cover-remove'}
+              onClick={() => onCoverRemove()}
+              style={{
+                background: 'rgba(239,68,68,0.6)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(239,68,68,0.4)',
+                borderRadius: 8,
+                color: '#fff',
+                padding: '4px 10px',
+                fontSize: 12,
+                cursor: mediaUploading === 'cover-remove' ? 'not-allowed' : 'pointer',
+                opacity: mediaUploading === 'cover-remove' ? 0.7 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <DeleteOutlined /> {mediaUploading === 'cover-remove' ? t('common.loading') : t('profile.remove')}
+            </button>
+          )}
+        </div>
+
+        <input
+          ref={coverRef}
+          type="file"
+          hidden
+          accept="image/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) onCoverChange(file)
+          }}
+        />
+      </div>
+      <div className="profile-header-content">
+        <div className="profile-avatar-wrap cursor-pointer" onClick={() => mediaUploading !== 'avatar' && fileRef.current?.click()}>
+          <Avatar
+            size={isMobile ? 78 : 88}
+            src={
+              avatarPreview ||
+              user.avatar ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'U')}`
+            }
+            icon={<UserOutlined />}
+            className="profile-avatar-image"
+          />
+          <span className="profile-avatar-status" />
+          <div className="profile-avatar-camera">
+            {mediaUploading === 'avatar' ? t('common.loading') : <CameraOutlined />}
+          </div>
+        </div>
+
+        <div className="profile-header-meta">
+          <h2>{user.name || t('profile.account_name')}</h2>
+          <button type="button" onClick={onCopyContact}>
+            <span>{contactText}</span>
+            {(user.email || user.phone) && <CopyOutlined />}
+          </button>
+        </div>
+      </div>
       <input
-        ref={coverRef}
+        ref={fileRef}
         type="file"
         hidden
         accept="image/*"
-        onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) onCoverChange(URL.createObjectURL(file))
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) onAvatarChange(file)
         }}
       />
-    </div>
-    <div className="profile-header-content">
-      <div className="profile-avatar-wrap cursor-pointer" onClick={() => fileRef.current?.click()}>
-        <Avatar
-          size={isMobile ? 78 : 88}
-          src={
-            avatarPreview ||
-            user.avatar ||
-            `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'U')}`
-          }
-          icon={<UserOutlined />}
-          className="profile-avatar-image"
-        />
-        <span className="profile-avatar-status" />
-        <div className="profile-avatar-camera">
-          <CameraOutlined />
-        </div>
-      </div>
-
-      <div className="profile-header-meta">
-        <h2>{user.name || 'Tài khoản GymPro'}</h2>
-        <button type="button" onClick={onCopyContact}>
-          <span>{contactText}</span>
-          {(user.email || user.phone) && <CopyOutlined />}
-        </button>
-      </div>
-    </div>
-    <input
-      ref={fileRef}
-      type="file"
-      hidden
-      accept="image/*"
-      onChange={(event) => {
-        const file = event.target.files?.[0]
-        if (file) onAvatarChange(URL.createObjectURL(file))
-      }}
-    />
     </header>
   )
 }
@@ -313,20 +323,21 @@ const MobileMenuGrid = ({
   onChange,
   mobileMenuOpen,
   onToggle,
+  hideBackdrop,
 }: {
   tabs: ProfileTabItem[]
   activeTab: ProfileTabKey
   onChange: (tab: ProfileTabKey) => void
   mobileMenuOpen: boolean
   onToggle: () => void
+  hideBackdrop?: boolean
 }) => (
-  <>
+  <div className="profile-mobile-menu-anchor">
     <div className="profile-mobile-menu-toggle" style={{
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: '8px 16px',
-      borderBottom: mobileMenuOpen ? '1px solid var(--theme-border)' : 'none',
+      padding: '8px 12px',
     }}>
       <span style={{ fontSize: 13, color: 'var(--theme-muted)', fontWeight: 500 }}>
         {tabs.find(t => t.key === activeTab)?.label}
@@ -352,24 +363,29 @@ const MobileMenuGrid = ({
     </div>
 
     {mobileMenuOpen && (
-      <div className="profile-mobile-grid">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.key
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              className={`profile-grid-tab${isActive ? ' active' : ''}`}
-              onClick={() => onChange(tab.key)}
-            >
-              <span>{tab.icon}</span>
-              <strong>{tab.label}</strong>
-            </button>
-          )
-        })}
-      </div>
+      <>
+        {!hideBackdrop && (
+          <button type="button" className="profile-mobile-menu-backdrop" aria-label="Close menu" onClick={onToggle} />
+        )}
+        <div className="profile-mobile-grid">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.key
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                className={`profile-grid-tab${isActive ? ' active' : ''}`}
+                onClick={() => onChange(tab.key)}
+              >
+                <span>{tab.icon}</span>
+                <strong>{tab.label}</strong>
+              </button>
+            )
+          })}
+        </div>
+      </>
     )}
-  </>
+  </div>
 )
 
 const TabContent = ({
@@ -384,6 +400,31 @@ const TabContent = ({
   </div>
 )
 
+const MobileProfileSheet = ({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean
+  onClose: () => void
+  children: ReactNode
+}) => {
+  if (!open) return null
+
+  return createPortal(
+    <div className="profile-mobile-sheet">
+      <button className="profile-mobile-sheet-backdrop" onClick={onClose} type="button" aria-label="Close" />
+      <div className="profile-mobile-sheet-content" onClick={(e) => e.stopPropagation()}>
+        <button className="profile-mobile-sheet-close" onClick={onClose} type="button" aria-label="Close">
+          ✕
+        </button>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 export default function AccountProfileModal({
   open,
   onClose,
@@ -391,8 +432,10 @@ export default function AccountProfileModal({
   open: boolean
   onClose: () => void
 }) {
+  const { t, i18n } = useTranslation()
   const { user, updateUser, logout } = useAuth()
-  const { applyAccentFast, applyThemeFull, commitPending, accentColor: savedAccentColor } = useTheme()
+  const { applyAccentFast, applyThemeFull, applyThemeMode, commitPending, accentColor: savedAccentColor } = useTheme()
+  const { settings: systemSettings } = useSystemSettings()
   const { token } = theme.useToken()
   const screens = Grid.useBreakpoint()
   const navigate = useNavigate()
@@ -404,34 +447,38 @@ export default function AccountProfileModal({
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [coverRemoved, setCoverRemoved] = useState(false)
   const [activeTab, setActiveTab] = useState<ProfileTabKey>('profile')
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(true)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [addresses, setAddresses] = useState<any[]>([])
   const [addressModalOpen, setAddressModalOpen] = useState(false)
   const [editAddress, setEditAddress] = useState<any>(null)
   const [accentColor, setAccentColor] = useState(savedAccentColor)
+  const [mediaUploading, setMediaUploading] = useState<'avatar' | 'cover' | 'cover-remove' | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const coverRef = useRef<HTMLInputElement>(null)
   const profileScrollRef = useRef<HTMLDivElement>(null)
+  const preventCloseRef = useRef(false)
   const watchedEmail = Form.useWatch('email', form)
-  const previewTheme = generateTheme(accentColor)
+  const previewTheme = generateTheme(
+    accentColor,
+    resolveEffectiveTheme(systemSettings.general.defaultTheme === 'light' ? 'light' : 'dark', user?.themePreference),
+  )
 
   const hasPassword = Boolean(user?.hasPassword || user?.password)
-  const contactText = user?.email || user?.phone || 'Chưa cập nhật email'
+  const contactText = user?.email || user?.phone || t('profile.no_email')
+
+  useEffect(() => {
+    if (user?.accentColor) {
+      setAccentColor(user.accentColor)
+    }
+  }, [user?.accentColor])
 
   const goToOrders = () => {
     handleClose()
-    navigate('/dashboard/member/orders')
-  }
-
-  const goToChannel = () => {
-    if (!user?._id) return
-    handleClose()
-    navigate(`/channel/${user._id}`)
+    navigate('/orders')
   }
 
   const handlePresetSelect = (hex: string) => {
-    setAccentColor(hex)
-    applyThemeFull(hex)
+    void saveAccentColor(hex)
   }
 
   const handleAccentPreview = (hex: string) => {
@@ -440,15 +487,158 @@ export default function AccountProfileModal({
   }
 
   const handleAccentCommit = (hex = accentColor) => {
-    setAccentColor(hex)
-    applyThemeFull(hex)
+    void saveAccentColor(hex)
+  }
+
+  const handleThemePreferenceChange = async (preference: 'system' | 'light' | 'dark') => {
+    if (!user || loading) return
+    preventCloseRef.current = true
+    const previousPreference = user.themePreference || 'system'
+    const systemTheme = systemSettings.general.defaultTheme === 'light' ? 'light' : 'dark'
+    const payload = { themePreference: preference }
+    console.debug('[profile-theme] currentUser before update', user)
+    console.debug('[profile-theme] payload sent API', payload)
+    applyThemeMode(resolveEffectiveTheme(systemTheme, preference))
+    updateUser({ ...user, themePreference: preference })
+
+    setLoading(true)
+    try {
+      const { data } = await authService.updateProfile(payload)
+      console.debug('[profile-theme] response API', data)
+      updateUser(data.user)
+      console.debug('[profile-theme] currentUser after update', data.user)
+      applyThemeMode(resolveEffectiveTheme(systemTheme, data.user.themePreference))
+      message.success(t('profile.msg_theme_update_success'))
+    } catch (err: any) {
+      applyThemeMode(resolveEffectiveTheme(systemTheme, previousPreference))
+      updateUser({ ...user, themePreference: previousPreference })
+      message.error(err.response?.data?.message || t('profile.msg_theme_update_failed'))
+    } finally {
+      setLoading(false)
+      preventCloseRef.current = false
+    }
+  }
+
+  const saveAccentColor = async (hex: string) => {
+    if (!user || loading) return
+    const previousAccent = user.accentColor || savedAccentColor
+    const nextAccent = hex.toUpperCase()
+    const payload = { accentColor: nextAccent }
+    console.debug('[profile-theme] currentUser before update', user)
+    console.debug('[profile-theme] payload sent API', payload)
+    preventCloseRef.current = true
+    setAccentColor(nextAccent)
+    applyThemeFull(nextAccent)
+    updateUser({ ...user, accentColor: nextAccent })
+
+    setLoading(true)
+    try {
+      const { data } = await authService.updateProfile(payload)
+      console.debug('[profile-theme] response API', data)
+      const persistedAccent = data.user.accentColor || nextAccent
+      updateUser(data.user)
+      console.debug('[profile-theme] currentUser after update', data.user)
+      setAccentColor(persistedAccent)
+      applyThemeFull(persistedAccent)
+      message.success(t('profile.msg_theme_update_success'))
+    } catch (err: any) {
+      setAccentColor(previousAccent)
+      applyThemeFull(previousAccent)
+      updateUser({ ...user, accentColor: previousAccent })
+      message.error(err.response?.data?.message || t('profile.msg_theme_update_failed'))
+    } finally {
+      setLoading(false)
+      preventCloseRef.current = false
+    }
   }
 
   const handleLogout = () => {
     logout()
   }
 
+  const handleAvatarFileChange = async (file: File) => {
+    if (!user || mediaUploading) return
+    const previousPreview = avatarPreview
+    const previewUrl = URL.createObjectURL(file)
+    setAvatarPreview(previewUrl)
+    setMediaUploading('avatar')
+
+    const formData = new FormData()
+    formData.append('avatar', file)
+
+    try {
+      const { data } = await authService.updateProfile(formData)
+      updateUser(data.user)
+      setAvatarPreview(null)
+      if (fileRef.current) fileRef.current.value = ''
+      message.success(t('profile.msg_avatar_update_success'))
+    } catch (err: any) {
+      setAvatarPreview(previousPreview)
+      message.error(err.response?.data?.message || t('profile.msg_avatar_update_failed'))
+    } finally {
+      URL.revokeObjectURL(previewUrl)
+      setMediaUploading(null)
+    }
+  }
+
+  const handleCoverFileChange = async (file: File) => {
+    if (!user || mediaUploading) return
+    const previousPreview = coverPreview
+    const previousRemoved = coverRemoved
+    const previewUrl = URL.createObjectURL(file)
+    setCoverPreview(previewUrl)
+    setCoverRemoved(false)
+    setMediaUploading('cover')
+
+    const formData = new FormData()
+    formData.append('coverImage', file)
+
+    try {
+      const { data } = await authService.updateProfile(formData)
+      updateUser(data.user)
+      setCoverPreview(null)
+      setCoverRemoved(false)
+      if (coverRef.current) coverRef.current.value = ''
+      message.success(t('profile.msg_cover_update_success'))
+    } catch (err: any) {
+      setCoverPreview(previousPreview)
+      setCoverRemoved(previousRemoved)
+      message.error(err.response?.data?.message || t('profile.msg_cover_update_failed'))
+    } finally {
+      URL.revokeObjectURL(previewUrl)
+      setMediaUploading(null)
+    }
+  }
+
+  const handleCoverRemove = async () => {
+    if (!user || mediaUploading) return
+    const previousPreview = coverPreview
+    const previousRemoved = coverRemoved
+    setCoverPreview('')
+    setCoverRemoved(true)
+    setMediaUploading('cover-remove')
+
+    const formData = new FormData()
+    formData.append('removeCoverImage', 'true')
+
+    try {
+      const { data } = await authService.updateProfile(formData)
+      updateUser(data.user)
+      setCoverPreview(null)
+      setCoverRemoved(false)
+      if (coverRef.current) coverRef.current.value = ''
+      message.success(t('profile.msg_cover_update_success'))
+    } catch (err: any) {
+      setCoverPreview(previousPreview)
+      setCoverRemoved(previousRemoved)
+      message.error(err.response?.data?.message || t('profile.msg_cover_update_failed'))
+    } finally {
+      setMediaUploading(null)
+    }
+  }
+
   const handleClose = () => {
+    if (preventCloseRef.current) return
     commitPending()
     onClose()
   }
@@ -465,11 +655,12 @@ export default function AccountProfileModal({
     setCoverPreview(null)
     setCoverRemoved(false)
     setActiveTab('profile')
+    setMobileMenuOpen(false)
     passwordForm.resetFields()
     addressForm.resetFields()
     setEditAddress(null)
     setAddresses([])
-  }, [open, user, form, passwordForm, addressForm])
+  }, [open, form, passwordForm, addressForm])
 
   useEffect(() => {
     if (open) {
@@ -477,139 +668,13 @@ export default function AccountProfileModal({
     }
   }, [open, savedAccentColor])
 
-  useEffect(() => {
-    if (!open) return
-
-    let frame = 0
-    let touchStartY = 0
-    const scrollY = window.scrollY
-    const previousBodyPosition = document.body.style.position
-    const previousBodyTop = document.body.style.top
-    const previousBodyWidth = document.body.style.width
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-
-    document.body.style.position = 'fixed'
-    document.body.style.top = `-${scrollY}px`
-    document.body.style.width = '100%'
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-
-    const updateProfileViewport = () => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
-        const viewport = window.visualViewport
-        const vvHeight = viewport?.height || window.innerHeight
-        const vvTop = viewport?.offsetTop || 0
-        const safeBottom = parseInt(
-          getComputedStyle(document.documentElement)
-            .getPropertyValue('--sab') || '0'
-        ) || 0
-        const height = Math.floor(vvHeight) - safeBottom
-        const top = Math.max(8, Math.floor(vvTop) + 8)
-
-        document.documentElement.style.setProperty('--profile-visual-height', `${height}px`)
-        document.documentElement.style.setProperty('--profile-visual-top', `${top}px`)
-      })
-    }
-
-    const handleTouchStart = (event: TouchEvent) => {
-      touchStartY = event.touches[0]?.clientY || 0
-    }
-
-    const handleTouchMove = (event: TouchEvent) => {
-      const scrollNode = profileScrollRef.current
-      const target = event.target as Node | null
-
-      if (!scrollNode || !target || !scrollNode.contains(target)) {
-        const modalNode = document.querySelector('.profile-modal .ant-modal-content')
-        const currentY = event.touches[0]?.clientY || 0
-        const deltaY = currentY - touchStartY
-
-        if (scrollNode && target && modalNode?.contains(target)) {
-          scrollNode.scrollTop -= deltaY
-          touchStartY = currentY
-        }
-
-        event.preventDefault()
-        return
-      }
-
-      const currentY = event.touches[0]?.clientY || 0
-      const deltaY = currentY - touchStartY
-      const atTop = scrollNode.scrollTop <= 0
-      const atBottom = scrollNode.scrollTop + scrollNode.clientHeight >= scrollNode.scrollHeight - 1
-      const cannotScroll = scrollNode.scrollHeight <= scrollNode.clientHeight
-
-      if (cannotScroll || (atTop && deltaY > 0) || (atBottom && deltaY < 0)) {
-        event.preventDefault()
-      }
-    }
-
-    const handleWheel = (event: WheelEvent) => {
-      const scrollNode = profileScrollRef.current
-      const target = event.target as Node | null
-      const modalNode = document.querySelector('.profile-modal .ant-modal-content')
-
-      if (!scrollNode || !target) return
-
-      if (scrollNode.contains(target)) {
-        const atTop = scrollNode.scrollTop <= 0
-        const atBottom = scrollNode.scrollTop + scrollNode.clientHeight >= scrollNode.scrollHeight - 1
-
-        if ((atTop && event.deltaY < 0) || (atBottom && event.deltaY > 0)) {
-          event.preventDefault()
-        }
-        return
-      }
-
-      if (modalNode?.contains(target)) {
-        scrollNode.scrollTop += event.deltaY
-        event.preventDefault()
-        return
-      }
-
-      event.preventDefault()
-    }
-
-    updateProfileViewport()
-    window.visualViewport?.addEventListener('resize', updateProfileViewport)
-    window.visualViewport?.addEventListener('scroll', updateProfileViewport)
-    window.addEventListener('resize', updateProfileViewport)
-    window.addEventListener('orientationchange', updateProfileViewport)
-    document.addEventListener('touchstart', handleTouchStart, { passive: true })
-    document.addEventListener('touchmove', handleTouchMove, { passive: false })
-    document.addEventListener('wheel', handleWheel, { passive: false })
-
-    return () => {
-      cancelAnimationFrame(frame)
-      window.visualViewport?.removeEventListener('resize', updateProfileViewport)
-      window.visualViewport?.removeEventListener('scroll', updateProfileViewport)
-      window.removeEventListener('resize', updateProfileViewport)
-      window.removeEventListener('orientationchange', updateProfileViewport)
-      document.removeEventListener('touchstart', handleTouchStart)
-      document.removeEventListener('touchmove', handleTouchMove)
-      document.removeEventListener('wheel', handleWheel)
-      document.body.style.position = previousBodyPosition
-      document.body.style.top = previousBodyTop
-      document.body.style.width = previousBodyWidth
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-      window.scrollTo(0, scrollY)
-      document.documentElement.style.removeProperty('--profile-visual-height')
-      document.documentElement.style.removeProperty('--profile-visual-top')
-    }
-  }, [open])
-
-  if (!user) return null
-
   const profileThemeStyle = {
-    '--profile-bg-layout': token.colorBgLayout,
-    '--profile-bg-container': 'var(--theme-input-bg)',
-    '--profile-bg-elevated': token.colorBgElevated,
-    '--profile-text': token.colorText,
-    '--profile-text-secondary': token.colorTextSecondary,
-    '--profile-border': 'var(--theme-border-strong)',
+    '--profile-bg-layout': 'var(--gs-bg)',
+    '--profile-bg-container': 'var(--gs-input-bg)',
+    '--profile-bg-elevated': 'var(--gs-card)',
+    '--profile-text': 'var(--gs-text)',
+    '--profile-text-secondary': 'var(--gs-muted)',
+    '--profile-border': 'var(--gs-border)',
     '--profile-mask': token.colorBgMask,
     '--profile-accent': 'var(--theme-accent)',
     '--profile-accent-hover': 'var(--theme-accent-hover)',
@@ -626,21 +691,12 @@ export default function AccountProfileModal({
       if (values.email) formData.append('email', values.email)
       if (values.phone) formData.append('phone', values.phone)
       if (values.dateOfBirth) formData.append('dateOfBirth', values.dateOfBirth)
-      if (fileRef.current?.files?.[0]) {
-        formData.append('avatar', fileRef.current.files[0])
-      }
-      if (coverRef.current?.files?.[0]) {
-        formData.append('coverImage', coverRef.current.files[0])
-      }
-      if (coverRemoved) {
-        formData.append('removeCoverImage', 'true')
-      }
       const { data } = await authService.updateProfile(formData)
       updateUser(data.user)
-      message.success('Cập nhật tài khoản thành công')
+      message.success(t('profile.msg_update_success'))
       handleClose()
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Cập nhật thất bại')
+      message.error(err.response?.data?.message || t('profile.msg_update_failed'))
     } finally {
       setLoading(false)
     }
@@ -648,32 +704,17 @@ export default function AccountProfileModal({
 
   const handleSetPassword = async (values: any) => {
     if (values.newPassword !== values.confirm) {
-      message.error('Mật khẩu không khớp')
+      message.error(t('profile.msg_password_mismatch'))
       return
     }
     setLoading(true)
     try {
       await authService.setPassword({ newPassword: values.newPassword })
-      message.success('Đặt mật khẩu thành công')
+      message.success(t('profile.msg_set_password_success'))
       updateUser({ ...user!, hasPassword: true, password: 'set' })
       passwordForm.resetFields()
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Đặt mật khẩu thất bại')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleEnableSeller = async () => {
-    setLoading(true)
-    try {
-      const { data } = await authService.enableSellerMode()
-      updateUser(data.user)
-      message.success('Đã bật chế độ bán hàng')
-      handleClose()
-      window.location.href = '/dashboard/seller/products'
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'Bật bán hàng thất bại')
+      message.error(err.response?.data?.message || t('profile.msg_set_password_failed'))
     } finally {
       setLoading(false)
     }
@@ -706,16 +747,16 @@ export default function AccountProfileModal({
     try {
       if (editAddress) {
         await updateAddress(editAddress._id, values)
-        message.success('Cập nhật địa chỉ thành công')
+        message.success(t('profile.msg_address_update_success'))
       } else {
         await createAddress({ ...values, isDefault: true })
-        message.success('Đã thêm địa chỉ mới')
+        message.success(t('profile.msg_address_created'))
       }
       setAddressModalOpen(false)
       await loadAddresses()
     } catch (err: any) {
       console.error(err)
-      message.error(err.response?.data?.message || 'Lưu địa chỉ thất bại')
+      message.error(err.response?.data?.message || t('profile.msg_address_save_failed'))
     } finally {
       setLoading(false)
     }
@@ -725,11 +766,11 @@ export default function AccountProfileModal({
     setLoading(true)
     try {
       await deleteAddress(addressId)
-      message.success('Xóa địa chỉ thành công')
+      message.success(t('profile.msg_address_deleted'))
       await loadAddresses()
     } catch (err: any) {
       console.error(err)
-      message.error(err.response?.data?.message || 'Xóa địa chỉ thất bại')
+      message.error(err.response?.data?.message || t('profile.msg_address_delete_failed'))
     } finally {
       setLoading(false)
     }
@@ -739,11 +780,11 @@ export default function AccountProfileModal({
     setLoading(true)
     try {
       await setDefaultAddress(addressId)
-      message.success('Đã đặt địa chỉ mặc định')
+      message.success(t('profile.msg_default_set'))
       await loadAddresses()
     } catch (err: any) {
       console.error(err)
-      message.error(err.response?.data?.message || 'Không thể đặt mặc định')
+      message.error(err.response?.data?.message || t('profile.msg_default_failed'))
     } finally {
       setLoading(false)
     }
@@ -751,7 +792,7 @@ export default function AccountProfileModal({
 
   const handleChangePassword = async (values: any) => {
     if (values.newPassword !== values.confirm) {
-      message.error('Mật khẩu không khớp')
+      message.error(t('profile.msg_password_mismatch'))
       return
     }
     setLoading(true)
@@ -760,10 +801,10 @@ export default function AccountProfileModal({
         currentPassword: values.currentPassword,
         newPassword: values.newPassword,
       })
-      message.success('Đổi mật khẩu thành công')
+      message.success(t('profile.msg_change_password_success'))
       passwordForm.resetFields()
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Đổi mật khẩu thất bại')
+      message.error(err.response?.data?.message || t('profile.msg_change_password_failed'))
     } finally {
       setLoading(false)
     }
@@ -781,10 +822,12 @@ export default function AccountProfileModal({
     }
   }, [])
 
+  if (!user) return null
+
   const handleCopyContact = async () => {
     if (!user?.email && !user?.phone) return
     await navigator.clipboard?.writeText(user.email || user.phone || '')
-    message.success('Đã sao chép thông tin liên hệ')
+    message.success(t('profile.msg_contact_copied'))
   }
 
   const isProfileMobile = !screens.md
@@ -793,12 +836,16 @@ export default function AccountProfileModal({
   const responsiveSectionCardStyle = {
     ...sectionCardStyle,
     marginBottom: isProfileMobile ? 16 : 12,
+    padding: isProfileMobile ? 12 : sectionCardStyle.padding,
+    width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
   } as CSSProperties
   const tabs: ProfileTabItem[] = [
-    { key: 'profile', label: 'Thông tin', icon: <UserOutlined /> },
-    { key: 'address', label: 'Địa chỉ', icon: <EnvironmentOutlined /> },
-    { key: 'password', label: hasPassword ? 'Đổi mật khẩu' : 'Đặt mật khẩu', icon: <LockOutlined /> },
-    { key: 'appearance', label: 'Giao diện', icon: <BgColorsOutlined /> },
+    { key: 'profile', label: t('profile.info'), icon: <UserOutlined /> },
+    { key: 'address', label: t('profile.address'), icon: <EnvironmentOutlined /> },
+    { key: 'password', label: hasPassword ? t('profile.change_password') : t('profile.set_password'), icon: <LockOutlined /> },
+    { key: 'appearance', label: t('profile.appearance'), icon: <BgColorsOutlined /> },
   ]
 
   const renderSectionHeader = (icon: ReactNode, title: string, subtitle: string) => (
@@ -833,6 +880,472 @@ export default function AccountProfileModal({
     </button>
   )
 
+  const sharedContent = (
+    <>
+      <ProfileHeader
+        user={user}
+        avatarPreview={avatarPreview}
+        fileRef={fileRef}
+        coverPreview={coverPreview}
+        coverRef={coverRef}
+        contactText={contactText}
+        onCopyContact={handleCopyContact}
+        onAvatarChange={handleAvatarFileChange}
+        onCoverChange={handleCoverFileChange}
+        onCoverRemove={handleCoverRemove}
+        mediaUploading={mediaUploading}
+        isMobile={isProfileCompact}
+        t={t}
+      />
+
+      <div className="profile-modal-main">
+        <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+        <MobileMenuGrid
+          tabs={tabs}
+          activeTab={activeTab}
+          onChange={(tab) => {
+            setActiveTab(tab)
+            setMobileMenuOpen(false)
+          }}
+          mobileMenuOpen={mobileMenuOpen}
+          onToggle={() => setMobileMenuOpen(prev => !prev)}
+          hideBackdrop={isProfileMobile}
+        />
+
+        <div
+          className="profile-modal-scroll"
+          style={{
+            minHeight: 120,
+            padding: isProfileMobile ? '4px 4px 0' : '16px 20px',
+            paddingBottom: isProfileMobile ? '0' : '16px',
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'var(--theme-border) transparent',
+            overflowX: 'hidden',
+            overflowY: isProfileMobile ? 'visible' : 'auto',
+            width: '100%',
+            maxWidth: '100%',
+            flex: 1,
+          }}
+        >
+          <TabContent activeTab={activeTab}>
+            {activeTab === 'profile' && (
+              <div>
+                <div style={responsiveSectionCardStyle}>
+                  {renderSectionHeader(<UserOutlined />, t('profile.info_title'), t('profile.info_subtitle'))}
+
+                  <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
+                      <Form.Item label={t('profile.name')} name="name" rules={[{ required: true, message: t('profile.name_placeholder') }]}>
+                        <Input prefix={<UserOutlined />} placeholder={t('profile.your_name')} style={profileInputStyle} />
+                      </Form.Item>
+
+                      <Form.Item label={t('profile.phone')} name="phone">
+                        <Input prefix={<PhoneOutlined />} placeholder={t('profile.phone_placeholder')} style={profileInputStyle} />
+                      </Form.Item>
+
+                      <Form.Item
+                        label="Email"
+                        name="email"
+                        rules={[
+                          { type: 'email', message: t('profile.invalid_email') },
+                          { required: !user.email, message: t('profile.email_placeholder') },
+                        ]}
+                      >
+                        <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder={user.email ? t('profile.email_placeholder') : t('profile.add_email_placeholder')} style={user.email ? profileDisabledInputStyle : profileInputStyle} />
+                      </Form.Item>
+
+                      <Form.Item label="Username">
+                        <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} style={profileDisabledInputStyle} />
+                      </Form.Item>
+
+                      <Form.Item label={t('profile.dob')} name="dateOfBirth" className="col-span-full">
+                        <Input
+                          type="date"
+                          style={{
+                            ...profileInputStyle,
+                            width: '100%',
+                            maxWidth: '100%',
+                            boxSizing: 'border-box',
+                            minWidth: 0,
+                          }}
+                        />
+                      </Form.Item>
+                    </div>
+
+                    <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !mt-1 !h-12 !rounded-2xl !text-[15px]`}>
+                      {t('profile.save_changes')}
+                    </Button>
+                  </Form>
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  {renderActionItem(<ShoppingCartOutlined />, t('profile.orders_title'), t('profile.orders_subtitle'), goToOrders)}
+                  <Button
+                    block
+                    icon={<LogoutOutlined />}
+                    onClick={handleLogout}
+                    style={{
+                      marginTop: 8,
+                      height: 44,
+                      borderRadius: 10,
+                      background: 'transparent',
+                      border: '1px solid rgba(239,68,68,0.3)',
+                      color: '#ef4444',
+                      fontWeight: 500,
+                      fontSize: 14,
+                    }}
+                  >
+                    {t('profile.logout')}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'appearance' && (
+              <div style={responsiveSectionCardStyle}>
+                {renderSectionHeader(<BgColorsOutlined />, t('profile.appearance_title'), t('profile.appearance_subtitle'))}
+                <div className="mb-6 border-b border-[var(--theme-border)] pb-5">
+                  <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.personal_theme')}</div>
+                  <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
+                    {t('profile.personal_theme_subtitle')}
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {([
+                      { value: 'system', label: t('profile.theme_system') },
+                      { value: 'light', label: t('profile.theme_light') },
+                      { value: 'dark', label: t('profile.theme_dark') },
+                    ] as Array<{ value: 'system' | 'light' | 'dark'; label: string }>).map((item) => {
+                      const active = (user.themePreference || 'system') === item.value
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          disabled={loading}
+                          onClick={() => handleThemePreferenceChange(item.value)}
+                          className="rounded-xl border px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70"
+                          style={{
+                            background: active ? 'var(--theme-button-bg)' : 'var(--gs-card)',
+                            borderColor: active ? 'var(--theme-button-border)' : 'var(--gs-border)',
+                            color: active ? 'var(--theme-button-text)' : 'var(--gs-text)',
+                            fontWeight: active ? 600 : 700,
+                          }}
+                        >
+                          {item.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
+                  <div>
+                    <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.accent_color')}</div>
+                    <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
+                      {t('profile.accent_subtitle')}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {[
+                      { label: t('profile.bg_mode'), color: previewTheme.bg },
+                      { label: 'Card', color: previewTheme.card },
+                      { label: 'Text', color: previewTheme.text },
+                    ].map((item) => (
+                      <span
+                        key={item.label}
+                        className="h-8 w-8 rounded-lg border"
+                        title={item.label}
+                        style={{ backgroundColor: item.color, borderColor: 'var(--theme-border-strong)' }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5 flex items-center gap-3 max-[560px]:flex-wrap">
+                  <div
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ position: 'relative', zIndex: 9999 }}
+                  >
+                    <input
+                      type="color"
+                      value={accentColor}
+                      onChange={(event) => {
+                        const hex = event.target.value
+                        handleAccentPreview(hex)
+                      }}
+                      onBlur={(event) => handleAccentCommit(event.target.value)}
+                      onMouseUp={(event) => handleAccentCommit(event.currentTarget.value)}
+                      onPointerUp={(event) => handleAccentCommit(event.currentTarget.value)}
+                      onTouchEnd={(event) => handleAccentCommit(event.currentTarget.value)}
+                      className="h-11 w-16 cursor-pointer rounded-xl border bg-transparent p-1"
+                      style={{ borderColor: 'var(--theme-border-strong)' }}
+                      aria-label={t('profile.choose_accent')}
+                    />
+                  </div>
+                  <div className="font-semibold" style={{ color: token.colorText }}>{accentColor.toUpperCase()}</div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {PRESET_ACCENT_COLORS.map((item) => (
+                    <button
+                      key={item.color}
+                      type="button"
+                      onClick={() => handlePresetSelect(item.color)}
+                      className="h-8 w-8 cursor-pointer rounded-full border transition-transform duration-150 hover:scale-110"
+                      style={{
+                        backgroundColor: item.color,
+                        borderColor: accentColor.toLowerCase() === item.color.toLowerCase() ? '#ffffff' : token.colorBorder,
+                      }}
+                      aria-label={t('profile.choose_color', { label: item.label })}
+                      title={item.label}
+                    />
+                  ))}
+                </div>
+
+                <div className="mt-6 border-t border-[var(--theme-border)] pt-6">
+                  <div className="font-extrabold" style={{ color: token.colorText }}>Ngôn ngữ / Language</div>
+                  <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
+                    Chuyển đổi giữa Tiếng Việt và English
+                  </div>
+                  <div className="mt-4 flex items-center gap-3">
+                    <button
+                      onClick={() => i18n.changeLanguage('vi')}
+                      title="Tiếng Việt"
+                      style={{
+                        background: i18n.language === 'vi' ? 'var(--theme-active-bg)' : 'transparent',
+                        border: i18n.language === 'vi' ? '1px solid var(--theme-active-bg)' : '1px solid var(--theme-border-strong)',
+                        borderRadius: 10,
+                        cursor: 'pointer',
+                        padding: '8px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        opacity: i18n.language === 'vi' ? 1 : 0.5,
+                        transition: 'all 0.2s',
+                        fontWeight: i18n.language === 'vi' ? 600 : 400,
+                        color: i18n.language === 'vi' ? 'var(--theme-active-text)' : 'var(--theme-text)',
+                      }}
+                    >
+                      <img src="https://flagcdn.com/16x12/vn.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />
+                      Tiếng Việt
+                    </button>
+                    <button
+                      onClick={() => i18n.changeLanguage('en')}
+                      title="English"
+                      style={{
+                        background: i18n.language === 'en' ? 'var(--theme-active-bg)' : 'transparent',
+                        border: i18n.language === 'en' ? '1px solid var(--theme-active-bg)' : '1px solid var(--theme-border-strong)',
+                        borderRadius: 10,
+                        cursor: 'pointer',
+                        padding: '8px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        opacity: i18n.language === 'en' ? 1 : 0.5,
+                        transition: 'all 0.2s',
+                        fontWeight: i18n.language === 'en' ? 600 : 400,
+                        color: i18n.language === 'en' ? 'var(--theme-active-text)' : 'var(--theme-text)',
+                      }}
+                    >
+                      <img src="https://flagcdn.com/16x12/us.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />
+                      English
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'address' && (
+              <div
+                className={profileFormClass}
+                style={responsiveSectionCardStyle}
+              >
+                {renderSectionHeader(<EnvironmentOutlined />, t('profile.address_title'), t('profile.address_subtitle'))}
+                <div className="flex items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
+                  <Button type="primary" icon={<PlusOutlined />} onClick={openCreateAddress} loading={loading} className="!rounded-lg !border-0 !bg-[var(--profile-accent)] !font-bold !text-[var(--theme-button-text)] hover:!bg-[var(--profile-accent-hover)]">
+                    {t('profile.add_address')}
+                  </Button>
+                </div>
+
+                <div className="mt-4">
+                  {addresses.length === 0 ? (
+                    <Empty description={t('profile.no_address')} />
+                  ) : addresses.map((address) => {
+                    const fullAddress = [
+                      address.street,
+                      address.ward,
+                      address.district,
+                      address.city,
+                    ].filter(Boolean).join(', ')
+
+                    return (
+                      <div
+                        className="mb-2.5 flex items-start gap-3 rounded-xl border p-[14px_16px] max-[480px]:gap-2.5 max-[480px]:p-3"
+                        key={address._id}
+                        style={{
+                          backgroundColor: token.colorBgElevated,
+                          borderColor: address.isDefault ? 'var(--profile-accent-border)' : 'var(--theme-border-strong)',
+                        }}
+                      >
+                        <div className="grid h-9 w-9 flex-none place-items-center rounded-[9px]" style={{ backgroundColor: token.colorBgContainer, color: 'var(--profile-accent)' }}>
+                          <EnvironmentOutlined />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-extrabold" style={{ color: token.colorText }}>{address.fullName}</span>
+                            {address.isDefault && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                                style={{
+                                  backgroundColor: 'var(--profile-accent-bg)',
+                                  borderColor: 'var(--profile-accent-border)',
+                                  color: 'var(--profile-accent)',
+                                }}
+                              >
+                                <StarFilled />
+                                {t('profile.default')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-[7px] inline-flex items-center gap-1.5 text-[13px]" style={{ color: token.colorTextSecondary }}>
+                            <PhoneOutlined />
+                            <span>{address.phone}</span>
+                          </div>
+                          <div className="mt-1.5 text-xs leading-[1.45]" style={{ color: token.colorTextSecondary }}>{fullAddress}</div>
+                        </div>
+                        <div className="ml-auto flex items-center gap-1.5 max-[480px]:flex-col max-[480px]:gap-1">
+                          {!address.isDefault && (
+                            <button
+                              className={addressActionButtonClass}
+                              type="button"
+                              title={t('profile.set_default')}
+                              onClick={() => handleSetDefault(address._id)}
+                            >
+                              <StarOutlined />
+                            </button>
+                          )}
+                          <button
+                            className={addressActionButtonClass}
+                            type="button"
+                            title={t('profile.edit_address')}
+                            onClick={() => openEditAddress(address)}
+                          >
+                            <EditOutlined />
+                          </button>
+                          <button
+                            className={`${addressActionButtonClass} hover:!border-[var(--profile-accent-border)] hover:!bg-[var(--profile-accent-bg)] hover:!text-[var(--profile-accent)]`}
+                            type="button"
+                            title={t('profile.delete_address')}
+                            onClick={() => handleDeleteAddress(address._id)}
+                          >
+                            <DeleteOutlined />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <Modal
+                  title={editAddress ? t('profile.address_modal_edit') : t('profile.address_modal_create')}
+                  open={addressModalOpen}
+                  onCancel={() => setAddressModalOpen(false)}
+                  footer={null}
+                  destroyOnClose
+                  className={addressEditModalClass}
+                  style={profileThemeStyle}
+                >
+                  <Form form={addressForm} layout="vertical" onFinish={handleSaveAddress} initialValues={{ isDefault: false }} className={profileFormClass}>
+                    <Form.Item name="fullName" label={t('profile.form_recipient')} rules={[{ required: true, message: t('profile.form_recipient_required') }]}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="phone" label={t('profile.form_phone')} rules={[{ required: true, message: t('profile.form_phone_required') }, { pattern: /^0\d{9,10}$/, message: t('profile.form_phone_invalid') }]}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="street" label={t('profile.form_street')} rules={[{ required: true, message: t('profile.form_street_required') }]}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="ward" label={t('profile.form_ward')}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="district" label={t('profile.form_district')} rules={[{ required: true, message: t('profile.form_district_required') }]}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="city" label={t('profile.form_city')} rules={[{ required: true, message: t('profile.form_city_required') }]}>
+                      <Input style={profileInputStyle} />
+                    </Form.Item>
+                    <Form.Item name="isDefault" valuePropName="checked">
+                      <Checkbox>{t('profile.form_is_default')}</Checkbox>
+                    </Form.Item>
+                    <Form.Item>
+                      <Space>
+                        <Button type="primary" htmlType="submit" loading={loading}>{t('profile.form_save')}</Button>
+                        <Button onClick={() => setAddressModalOpen(false)}>{t('profile.form_cancel')}</Button>
+                      </Space>
+                    </Form.Item>
+                  </Form>
+                </Modal>
+              </div>
+            )}
+
+            {activeTab === 'password' && !hasPassword && (
+              <div style={responsiveSectionCardStyle}>
+                {renderSectionHeader(<LockOutlined />, t('profile.set_password_title'), t('profile.set_password_subtitle'))}
+
+                <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
+                  <Form.Item label={t('profile.new_password')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Form.Item label={t('profile.confirm_password')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.confirm_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
+                    {t('profile.set_password_btn')}
+                  </Button>
+                </Form>
+              </div>
+            )}
+
+            {activeTab === 'password' && hasPassword && (
+              <div style={responsiveSectionCardStyle}>
+                {renderSectionHeader(<LockOutlined />, t('profile.change_password_title'), t('profile.change_password_subtitle'))}
+
+                <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
+                  <Form.Item label={t('profile.current_password')} name="currentPassword" rules={[{ required: true, message: t('profile.current_password_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.current_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Form.Item label={t('profile.new_password_change')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_change_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Form.Item label={t('profile.confirm_password_change')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_change_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.confirm_password_change_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
+                    {t('profile.change_password_btn')}
+                  </Button>
+                </Form>
+              </div>
+            )}
+          </TabContent>
+        </div>
+      </div>
+    </>
+  )
+
+  if (isProfileMobile) {
+    return (
+      <MobileProfileSheet open={open} onClose={handleClose}>
+        <div style={{ ...profileThemeStyle, color: token.colorText }}>
+          {sharedContent}
+        </div>
+      </MobileProfileSheet>
+    )
+  }
+
   return (
     <Modal
       title={null}
@@ -841,439 +1354,49 @@ export default function AccountProfileModal({
       footer={null}
       maskClosable
       destroyOnClose
-      width={isProfileDesktop ? 760 : isProfileMobile ? 'calc(100vw - 16px)' : 680}
+      width={isProfileDesktop ? 760 : 680}
       className={`profile-modal ${profileModalClass}`}
       wrapClassName={profileModalWrapClass}
       style={{
         ...profileThemeStyle,
         top: 20,
-        margin: isProfileMobile ? 0 : 'auto',
+        margin: 'auto',
         padding: 0,
         maxWidth: '100vw',
       }}
       styles={{
         content: {
-          borderRadius: 16,
           padding: 0,
-          overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           border: '1px solid var(--theme-border)',
-          height: isProfileMobile
-            ? 'calc(var(--profile-visual-height, 92vh) - 16px)'
-            : isProfileCompact
-            ? '82vh'
-            : 'auto',
-          maxHeight: isProfileMobile
-            ? 'calc(var(--profile-visual-height, 92vh) - 16px)'
-            : '90vh',
-        },
+        } as CSSProperties,
         body: {
           padding: 0,
-          height: '100%',
-          minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
-        },
+          flex: 1,
+        } as CSSProperties,
         mask: {
           backdropFilter: 'blur(4px)',
         },
       } as any}
     >
       <div
+        ref={profileScrollRef}
+        className="profile-modal-content-wrapper"
+        data-profile-scroll-container="account-profile-modal"
         style={{
           ...profileThemeStyle,
           color: token.colorText,
-          overflowX: 'hidden',
           width: '100%',
-          maxWidth: '100%',
-          height: isProfileCompact ? '100%' : 'auto',
           display: 'flex',
           flexDirection: 'column',
+          minHeight: 0,
+          flex: 1,
         }}
       >
-        <ProfileHeader
-          user={user}
-          avatarPreview={avatarPreview}
-          fileRef={fileRef}
-          coverPreview={coverPreview}
-          coverRef={coverRef}
-          contactText={contactText}
-          onCopyContact={handleCopyContact}
-          onAvatarChange={setAvatarPreview}
-          onCoverChange={(url) => {
-            setCoverPreview(url)
-            setCoverRemoved(false)
-          }}
-          onCoverRemove={() => {
-            setCoverPreview('')
-            setCoverRemoved(true)
-            if (coverRef.current) coverRef.current.value = ''
-          }}
-          isMobile={isProfileCompact}
-        />
-
-        <div className="profile-modal-main min-h-0 flex-1">
-          <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-          <MobileMenuGrid
-            tabs={tabs}
-            activeTab={activeTab}
-            onChange={(tab) => {
-              setActiveTab(tab)
-              setMobileMenuOpen(false)
-            }}
-            mobileMenuOpen={mobileMenuOpen}
-            onToggle={() => setMobileMenuOpen(prev => !prev)}
-          />
-
-          <div
-            ref={profileScrollRef}
-            className="profile-modal-scroll min-h-0 flex-1 overflow-y-auto"
-            style={{
-              maxHeight: isProfileCompact ? 'calc(var(--profile-visual-height, 100svh) - 320px - env(safe-area-inset-bottom, 20px))' : '70vh',
-              minHeight: 120,
-              padding: isProfileMobile ? '16px 16px 0' : '16px 20px',
-              paddingBottom: isProfileMobile ? 'calc(24px + env(safe-area-inset-bottom, 16px))' : '16px',
-              scrollbarWidth: 'thin',
-              scrollbarColor: 'var(--theme-border) transparent',
-              overflowX: 'hidden',
-              overflowY: 'auto',
-              width: '100%',
-              maxWidth: '100%',
-              WebkitOverflowScrolling: 'touch',
-              flex: 1,
-            }}
-          >
-          <TabContent activeTab={activeTab}>
-          {activeTab === 'profile' && (
-            <div>
-              <div style={responsiveSectionCardStyle}>
-                {renderSectionHeader(<UserOutlined />, 'Thông tin tài khoản', 'Cập nhật hồ sơ cá nhân để sử dụng GymPro thuận tiện hơn.')}
-
-                <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                    <Form.Item label="Tên tài khoản" name="name" rules={[{ required: true, message: 'Nhập tên' }]}>
-                      <Input prefix={<UserOutlined />} placeholder="Tên của bạn" style={profileInputStyle} />
-                    </Form.Item>
-
-                    <Form.Item label="Số điện thoại" name="phone">
-                      <Input prefix={<PhoneOutlined />} placeholder="Thêm số điện thoại" style={profileInputStyle} />
-                    </Form.Item>
-
-                    <Form.Item
-                      label="Email"
-                      name="email"
-                      rules={[
-                        { type: 'email', message: 'Email không hợp lệ' },
-                        { required: !user.email, message: 'Nhập email' },
-                      ]}
-                    >
-                      <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder="Thêm email" style={user.email ? profileDisabledInputStyle : profileInputStyle} />
-                    </Form.Item>
-
-                    <Form.Item label="Username">
-                      <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} style={profileDisabledInputStyle} />
-                    </Form.Item>
-
-                    <Form.Item label="Ngày sinh" name="dateOfBirth" className="col-span-full">
-                      <Input
-                        type="date"
-                        style={{
-                          ...profileInputStyle,
-                          width: '100%',
-                          maxWidth: '100%',
-                          boxSizing: 'border-box',
-                          minWidth: 0,
-                        }}
-                      />
-                    </Form.Item>
-                  </div>
-
-                  <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !mt-1 !h-12 !rounded-2xl !text-[15px]`}>
-                    Lưu thay đổi
-                  </Button>
-                </Form>
-              </div>
-
-              <div style={{ marginBottom: 12 }}>
-                {user.role !== 'seller' && (
-                  renderActionItem(<ShopOutlined />, 'Bật chế độ bán hàng', 'Mở kênh bán sản phẩm và quản lý shop.', handleEnableSeller, loading)
-                )}
-
-                {renderActionItem(<ShoppingCartOutlined />, 'Các đơn hàng', 'Theo dõi lịch sử mua hàng và trạng thái giao hàng.', goToOrders)}
-                {renderActionItem(<UserOutlined />, 'Xem kênh', 'Xem trang cá nhân và nội dung đã chia sẻ.', goToChannel)}
-
-                <Button
-                  block
-                  icon={<LogoutOutlined />}
-                  onClick={handleLogout}
-                  style={{
-                    marginTop: 8,
-                    height: 44,
-                    borderRadius: 10,
-                    background: 'transparent',
-                    border: '1px solid rgba(239,68,68,0.3)',
-                    color: '#ef4444',
-                    fontWeight: 500,
-                    fontSize: 14,
-                  }}
-                >
-                  Đăng xuất
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'appearance' && (
-            <div style={responsiveSectionCardStyle}>
-              {renderSectionHeader(<BgColorsOutlined />, 'Giao diện', 'Tuỳ chỉnh màu sắc theo sở thích.')}
-              <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
-                <div>
-                  <div className="font-extrabold" style={{ color: token.colorText }}>Màu chủ đạo</div>
-                  <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                    Tuỳ chỉnh màu sắc theo sở thích
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {[
-                    { label: 'Nền', color: previewTheme.bg },
-                    { label: 'Card', color: previewTheme.card },
-                    { label: 'Text', color: previewTheme.text },
-                  ].map((item) => (
-                    <span
-                      key={item.label}
-                      className="h-8 w-8 rounded-lg border"
-                      title={item.label}
-                      style={{ backgroundColor: item.color, borderColor: 'var(--theme-border-strong)' }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-5 flex items-center gap-3 max-[560px]:flex-wrap">
-                <div
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ position: 'relative', zIndex: 9999 }}
-                >
-                  <input
-                    type="color"
-                    value={accentColor}
-                    onChange={(event) => {
-                      const hex = event.target.value
-                      handleAccentPreview(hex)
-                    }}
-                    onBlur={(event) => handleAccentCommit(event.target.value)}
-                    onMouseUp={(event) => handleAccentCommit(event.currentTarget.value)}
-                    onPointerUp={(event) => handleAccentCommit(event.currentTarget.value)}
-                    onTouchEnd={(event) => handleAccentCommit(event.currentTarget.value)}
-                    className="h-11 w-16 cursor-pointer rounded-xl border bg-transparent p-1"
-                    style={{ borderColor: 'var(--theme-border-strong)' }}
-                    aria-label="Chọn màu chủ đạo"
-                  />
-                </div>
-                <div className="font-semibold" style={{ color: token.colorText }}>{accentColor.toUpperCase()}</div>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                {PRESET_ACCENT_COLORS.map((item) => (
-                  <button
-                    key={item.color}
-                    type="button"
-                    onClick={() => handlePresetSelect(item.color)}
-                    className="h-8 w-8 cursor-pointer rounded-full border transition-transform duration-150 hover:scale-110"
-                    style={{
-                      backgroundColor: item.color,
-                      borderColor: accentColor === item.color ? '#ffffff' : token.colorBorder,
-                    }}
-                    aria-label={`Chọn màu ${item.label}`}
-                    title={item.label}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'address' && (
-            <div
-              className={profileFormClass}
-              style={responsiveSectionCardStyle}
-            >
-              {renderSectionHeader(<EnvironmentOutlined />, 'Địa chỉ giao hàng', 'Thêm, sửa, xóa và đặt mặc định địa chỉ.')}
-              <div className="flex items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
-                <Button type="primary" icon={<PlusOutlined />} onClick={openCreateAddress} loading={loading} className="!rounded-lg !border-0 !bg-[var(--profile-accent)] !font-bold !text-[var(--theme-button-text)] hover:!bg-[var(--profile-accent-hover)]">
-                  Thêm địa chỉ
-                </Button>
-              </div>
-
-              <div className="mt-4">
-                {addresses.length === 0 ? (
-                  <Empty description="Chưa có địa chỉ giao hàng" />
-                ) : addresses.map((address) => {
-                  const fullAddress = [
-                    address.street,
-                    address.ward,
-                    address.district,
-                    address.city,
-                  ].filter(Boolean).join(', ')
-
-                  return (
-                    <div
-                      className="mb-2.5 flex items-start gap-3 rounded-xl border p-[14px_16px] max-[480px]:gap-2.5 max-[480px]:p-3"
-                      key={address._id}
-                      style={{
-                        backgroundColor: token.colorBgElevated,
-                        borderColor: address.isDefault ? 'var(--profile-accent-border)' : 'var(--theme-border-strong)',
-                      }}
-                    >
-                      <div className="grid h-9 w-9 flex-none place-items-center rounded-[9px]" style={{ backgroundColor: token.colorBgContainer, color: 'var(--profile-accent)' }}>
-                        <EnvironmentOutlined />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-extrabold" style={{ color: token.colorText }}>{address.fullName}</span>
-                          {address.isDefault && (
-                            <span
-                              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
-                              style={{
-                                backgroundColor: 'var(--profile-accent-bg)',
-                                borderColor: 'var(--profile-accent-border)',
-                                color: 'var(--profile-accent)',
-                              }}
-                            >
-                              <StarFilled />
-                              Mặc định
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-[7px] inline-flex items-center gap-1.5 text-[13px]" style={{ color: token.colorTextSecondary }}>
-                          <PhoneOutlined />
-                          <span>{address.phone}</span>
-                        </div>
-                        <div className="mt-1.5 text-xs leading-[1.45]" style={{ color: token.colorTextSecondary }}>{fullAddress}</div>
-                      </div>
-                      <div className="ml-auto flex items-center gap-1.5 max-[480px]:flex-col max-[480px]:gap-1">
-                        {!address.isDefault && (
-                          <button
-                            className={addressActionButtonClass}
-                            type="button"
-                            title="Đặt mặc định"
-                            onClick={() => handleSetDefault(address._id)}
-                          >
-                            <StarOutlined />
-                          </button>
-                        )}
-                        <button
-                          className={addressActionButtonClass}
-                          type="button"
-                          title="Sửa địa chỉ"
-                          onClick={() => openEditAddress(address)}
-                        >
-                          <EditOutlined />
-                        </button>
-                        <button
-                          className={`${addressActionButtonClass} hover:!border-[var(--profile-accent-border)] hover:!bg-[var(--profile-accent-bg)] hover:!text-[var(--profile-accent)]`}
-                          type="button"
-                          title="Xóa địa chỉ"
-                          onClick={() => handleDeleteAddress(address._id)}
-                        >
-                          <DeleteOutlined />
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              <Modal
-                title={editAddress ? 'Sửa địa chỉ' : 'Thêm địa chỉ'}
-                open={addressModalOpen}
-                onCancel={() => setAddressModalOpen(false)}
-                footer={null}
-                destroyOnClose
-                className={addressEditModalClass}
-                style={profileThemeStyle}
-              >
-                <Form form={addressForm} layout="vertical" onFinish={handleSaveAddress} initialValues={{ isDefault: false }} className={profileFormClass}>
-                  <Form.Item name="fullName" label="Tên người nhận" rules={[{ required: true, message: 'Vui lòng nhập tên người nhận' }]}>
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="phone" label="Số điện thoại" rules={[{ required: true, message: 'Vui lòng nhập số điện thoại' }, { pattern: /^0\d{9,10}$/, message: 'Số điện thoại không hợp lệ' }]}>
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="street" label="Địa chỉ cụ thể" rules={[{ required: true, message: 'Vui lòng nhập địa chỉ cụ thể' }]}>
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="ward" label="Phường / xã">
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="district" label="Quận / huyện" rules={[{ required: true, message: 'Vui lòng nhập quận/huyện' }]}>
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="city" label="Tỉnh / thành phố" rules={[{ required: true, message: 'Vui lòng nhập tỉnh/thành phố' }]}>
-                    <Input style={profileInputStyle} />
-                  </Form.Item>
-                  <Form.Item name="isDefault" valuePropName="checked">
-                    <Checkbox>Đặt mặc định</Checkbox>
-                  </Form.Item>
-                  <Form.Item>
-                    <Space>
-                      <Button type="primary" htmlType="submit" loading={loading}>Lưu</Button>
-                      <Button onClick={() => setAddressModalOpen(false)}>Hủy</Button>
-                    </Space>
-                  </Form.Item>
-                </Form>
-              </Modal>
-            </div>
-          )}
-
-          {activeTab === 'password' && !hasPassword && (
-            <div style={responsiveSectionCardStyle}>
-              {renderSectionHeader(<LockOutlined />, 'Đặt mật khẩu', 'Tạo mật khẩu riêng để đăng nhập bằng số điện thoại hoặc email.')}
-
-              <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
-                <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu' }]}>
-                  <Input.Password placeholder="Tối thiểu 6 ký tự" style={profilePasswordInputStyle} />
-                </Form.Item>
-
-                <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
-                  <Input.Password placeholder="Nhập lại mật khẩu" style={profilePasswordInputStyle} />
-                </Form.Item>
-
-                <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                  Đặt mật khẩu
-                </Button>
-              </Form>
-            </div>
-          )}
-
-          {activeTab === 'password' && hasPassword && (
-            <div style={responsiveSectionCardStyle}>
-              {renderSectionHeader(<LockOutlined />, 'Đổi mật khẩu', 'Cập nhật mật khẩu định kỳ để bảo vệ tài khoản.')}
-
-              <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
-                <Form.Item label="Mật khẩu hiện tại" name="currentPassword" rules={[{ required: true, message: 'Nhập mật khẩu hiện tại' }]}>
-                  <Input.Password placeholder="Nhập mật khẩu hiện tại" style={profilePasswordInputStyle} />
-                </Form.Item>
-
-                <Form.Item label="Mật khẩu mới" name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu mới' }]}>
-                  <Input.Password placeholder="Tối thiểu 6 ký tự" style={profilePasswordInputStyle} />
-                </Form.Item>
-
-                <Form.Item label="Xác nhận mật khẩu" name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu' }]}>
-                  <Input.Password placeholder="Nhập lại mật khẩu mới" style={profilePasswordInputStyle} />
-                </Form.Item>
-
-                <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                  Đổi mật khẩu
-                </Button>
-              </Form>
-            </div>
-          )}
-          </TabContent>
-        </div>
-        </div>
+        {sharedContent}
       </div>
     </Modal>
   )

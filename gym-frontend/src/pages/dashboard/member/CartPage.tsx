@@ -9,19 +9,19 @@ import {
   Row,
   message
 } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
-import { useTheme } from '../../../context/ThemeProvider'
 import { useCart } from '../../../context/useCart'
 import type { CartItem } from '../../../types/member/cart'
 
 export default function CartPage() {
+  const { t } = useTranslation()
   const { cart, setCart } = useCart()
   const navigate = useNavigate()
-  const { dark } = useTheme()
-  const panelBg = 'var(--theme-card)'
-  const borderColor = dark ? 'rgba(255,255,255,0.08)' : '#5a5a5a'
-  const mutedText = dark ? '#bbb' : 'rgba(237,235,230,0.5)'
+  const panelBg = 'var(--gs-card)'
+  const borderColor = 'var(--gs-border)'
+  const mutedText = 'var(--gs-text-muted)'
 
   const updateQty = (id: string, weight: string | undefined, qty: number) => {
     const w = weight || ''
@@ -39,7 +39,7 @@ export default function CartPage() {
     setCart((prev: CartItem[]) =>
       prev.filter((i: CartItem) => !(i._id === id && (i.weight || '') === w))
     )
-    message.success('Đã xóa khỏi giỏ hàng')
+    message.success(t('cart.removed'))
   }
 
   const total = cart.reduce(
@@ -48,18 +48,18 @@ export default function CartPage() {
   )
 
   const handleCheckout = () => {
-    navigate('/dashboard/member/checkout')
+    navigate('/checkout')
   }
 
   return (
     <MemberLayout>
       <div className="member-page">
         <h2 style={{ marginBottom: 24 }}>
-          Giỏ hàng của bạn ({cart.length} sản phẩm)
+          {t('cart.title', { count: cart.length })}
         </h2>
 
         {cart.length === 0 ? (
-          <Empty description="Giỏ hàng trống" />
+          <Empty description={t('cart.empty')} />
         ) : (
           <>
             <Row gutter={[16, 16]}>
@@ -80,19 +80,19 @@ export default function CartPage() {
                       ) : undefined
                     }
                   >
-                    <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 8, color: 'var(--gs-text)' }}>
                       {item.name}
                     </div>
 
                     {item.weight && (
                       <div style={{ marginBottom: 8, color: mutedText }}>
-                        Trọng lượng: <b>{item.weight}</b>
+                        {t('cart.weight')} <b>{item.weight}</b>
                       </div>
                     )}
 
                     <div style={{ marginBottom: 8 }}>
-                      Giá:{' '}
-                      <b style={{ color: 'var(--theme-accent)' }}>
+                      {t('cart.price')}{' '}
+                      <b style={{ color: 'var(--gs-text)' }}>
                         {item.price.toLocaleString('vi-VN')}đ
                       </b>
                     </div>
@@ -106,7 +106,7 @@ export default function CartPage() {
                         flexWrap: 'wrap',
                       }}
                     >
-                      <span>Số lượng:</span>
+                      <span>{t('cart.quantity')}</span>
                       <InputNumber
                         min={1}
                         max={item.stock || 99}
@@ -119,20 +119,20 @@ export default function CartPage() {
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
-                      Thành tiền:{' '}
-                      <b style={{ color: 'var(--theme-accent)' }}>
+                      {t('cart.subtotal')}{' '}
+                      <b style={{ color: 'var(--gs-text)' }}>
                         {(item.price * item.quantity).toLocaleString('vi-VN')}đ
                       </b>
                     </div>
 
                     <Popconfirm
-                      title="Xóa sản phẩm này khỏi giỏ?"
+                      title={t('cart.confirm_delete_title')}
                       onConfirm={() => removeItem(item._id, item.weight)}
-                      okText="Xóa"
-                      cancelText="Hủy"
+                      okText={t('cart.confirm_delete_ok')}
+                      cancelText={t('cart.confirm_delete_cancel')}
                     >
                       <Button danger icon={<DeleteOutlined />} block>
-                        Xóa
+                        {t('cart.delete')}
                       </Button>
                     </Popconfirm>
                   </Card>
@@ -151,8 +151,8 @@ export default function CartPage() {
               }}
             >
               <div style={{ fontSize: 18, marginBottom: 16 }}>
-                Tổng cộng:{' '}
-                <b style={{ color: 'var(--theme-accent)', fontSize: 24 }}>
+                {t('cart.total')}{' '}
+                <b style={{ color: 'var(--gs-text)', fontSize: 24 }}>
                   {total.toLocaleString('vi-VN')}đ
                 </b>
               </div>
@@ -163,7 +163,7 @@ export default function CartPage() {
                 onClick={handleCheckout}
                 style={{ width: 'min(100%, 280px)' }}
               >
-                Tiến hành thanh toán
+                {t('cart.checkout')}
               </Button>
             </div>
           </>

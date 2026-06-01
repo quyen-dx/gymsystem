@@ -10,6 +10,7 @@ import {
   getAllUsers,
   getMe,
   hasPassword,
+  isAccountLocked,
   login,
   logout,
   refreshToken,
@@ -26,12 +27,20 @@ import {
 } from '../controllers/authController.js'
 import { adminOnly, protect } from '../middlewares/authMiddleware.js'
 import { buildClientUrl } from '../config/appUrls.js'
+import { disabledFeatureMessage, isFeatureEnabled } from '../services/systemSettingsService.js'
 
 const router = express.Router()
 
 const ensureGoogleOAuthConfigured = (_req, res, next) => {
   if (!isGoogleOAuthConfigured) {
     return res.status(500).json({ message: 'Google OAuth chưa được cấu hình' })
+  }
+  next()
+}
+
+const ensureGoogleOAuthEnabled = async (_req, res, next) => {
+  if (!(await isFeatureEnabled('auth.googleOAuthEnabled'))) {
+    return res.status(403).json({ code: 'FEATURE_DISABLED', message: disabledFeatureMessage })
   }
   next()
 }
@@ -43,30 +52,40 @@ const ensureFacebookOAuthConfigured = (_req, res, next) => {
   next()
 }
 
+const ensureFacebookOAuthEnabled = async (_req, res, next) => {
+  if (!(await isFeatureEnabled('auth.facebookOAuthEnabled'))) {
+    return res.status(403).json({ code: 'FEATURE_DISABLED', message: disabledFeatureMessage })
+  }
+  next()
+}
+
 // Google
-router.get('/google', ensureGoogleOAuthConfigured, passport.authenticate('google', { scope: ['profile', 'email'] }))
+router.get('/google', ensureGoogleOAuthConfigured, ensureGoogleOAuthEnabled, passport.authenticate('google', { scope: ['profile', 'email'], prompt: 'select_account' }))
 router.get(
   '/google/callback',
   ensureGoogleOAuthConfigured,
+  ensureGoogleOAuthEnabled,
   (req, res, next) => {
     passport.authenticate('google', { session: false }, async (err, user) => {
-      if (err) return next(err)
-      if (!user) return res.redirect(buildClientUrl('/login', { error: 'google_oauth_failed' }))
+      if (err) return res.redirect(buildClientUrl('/oauth-success', { error: 'SERVER_ERROR' }))
+      if (!user) return res.redirect(buildClientUrl('/oauth-success', { error: 'GOOGLE_AUTH_FAILED' }))
+      if (isAccountLocked(user)) return res.redirect(buildClientUrl('/oauth-success', { error: 'ACCOUNT_LOCKED' }))
       try {
         const redirectUrl = await buildGoogleOauthRedirect(user, res)
         return res.redirect(redirectUrl)
       } catch (error) {
-        return next(error)
+        return res.redirect(buildClientUrl('/oauth-success', { error: 'SERVER_ERROR' }))
       }
     })(req, res, next)
   }
 )
 
 // Facebook
-router.get('/facebook', ensureFacebookOAuthConfigured, passport.authenticate('facebook'))
+router.get('/facebook', ensureFacebookOAuthConfigured, ensureFacebookOAuthEnabled, passport.authenticate('facebook'))
 router.get(
   '/facebook/callback',
   ensureFacebookOAuthConfigured,
+  ensureFacebookOAuthEnabled,
   (req, res, next) => {
     passport.authenticate('facebook', { session: false }, async (err, user) => {
       if (err) return next(err)

@@ -1,6 +1,7 @@
 import api from './api'
 
 export const getAdminShops = () => api.get('/shops/admin/all')
+export const getShops = () => api.get('/shops')
 export const getShop = (id: string) => api.get(`/shops/${id}`)
 export const addShopReview = (id: string, data: { rating: number; comment: string }) =>
   api.post(`/shops/${id}/reviews`, data)

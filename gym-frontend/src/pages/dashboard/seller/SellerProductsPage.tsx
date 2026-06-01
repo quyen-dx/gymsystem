@@ -14,12 +14,14 @@ import {
   Tag,
 } from 'antd'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { createProduct, deleteProduct, getMyProducts, updateProduct } from '../../../services/productService'
 import { getMyShop, updateMyShop } from '../../../services/shopService'
 import type { AdminProduct } from '../../../types/admin/product'
 
 export default function SellerProductsPage() {
+  const { t } = useTranslation()
   const [products, setProducts] = useState<AdminProduct[]>([])
   const [loading, setLoading] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
@@ -40,7 +42,7 @@ export default function SellerProductsPage() {
       const res = await getMyProducts()
       setProducts(res.data.products || [])
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Không thể tải sản phẩm của shop')
+      message.error(err.response?.data?.message || t('seller_products.load_failed'))
     } finally {
       setLoading(false)
     }
@@ -131,16 +133,16 @@ export default function SellerProductsPage() {
 
       if (editing) {
         await updateProduct(editing._id, payload)
-        message.success('Cập nhật sản phẩm thành công')
+        message.success(t('seller_products.update_success'))
       } else {
         await createProduct(payload)
-        message.success('Thêm sản phẩm thành công')
+        message.success(t('seller_products.create_success'))
       }
 
       setModalOpen(false)
       fetchProducts()
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Thao tác thất bại')
+      message.error(err.response?.data?.message || t('seller_products.action_failed'))
     } finally {
       setSubmitLoading(false)
     }
@@ -149,10 +151,10 @@ export default function SellerProductsPage() {
   const handleDelete = async (id: string) => {
     try {
       await deleteProduct(id)
-      message.success('Đã xoá sản phẩm')
+      message.success(t('seller_products.delete_success'))
       fetchProducts()
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Xoá thất bại')
+      message.error(err.response?.data?.message || t('seller_products.delete_failed'))
     }
   }
 
@@ -169,9 +171,9 @@ export default function SellerProductsPage() {
     try {
       const res = await updateMyShop(values)
       setShop(res.data.shop)
-      message.success('Đã cập nhật thông tin shop')
+      message.success(t('seller_products.shop_update_success'))
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Không thể cập nhật shop')
+      message.error(err.response?.data?.message || t('seller_products.shop_update_failed'))
     } finally {
       setShopSaving(false)
     }
@@ -179,7 +181,7 @@ export default function SellerProductsPage() {
 
   const columns = [
     {
-      title: 'Sản phẩm',
+      title: t('seller_products.product'),
       render: (_: any, p: AdminProduct) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {p.image ? (
@@ -195,14 +197,14 @@ export default function SellerProductsPage() {
               width: 48, height: 48, borderRadius: 8,
               background: '#333', display: 'flex',
               alignItems: 'center', justifyContent: 'center',
-              color: '#888', fontSize: 12,
+              color: 'var(--gs-text-muted)', fontSize: 12,
             }}>
-              No img
+              {t('seller_products.no_image')}
             </div>
           )}
           <div>
             <div style={{ fontWeight: 600 }}>{p.name}</div>
-            <div style={{ fontSize: 12, color: '#888' }}>
+            <div style={{ fontSize: 12, color: 'var(--gs-text-muted)' }}>
               {p.description?.slice(0, 50)}{p.description?.length > 50 ? '...' : ''}
             </div>
           </div>
@@ -210,17 +212,17 @@ export default function SellerProductsPage() {
       ),
     },
     {
-      title: 'Danh mục',
+      title: t('seller_products.category'),
       dataIndex: 'category',
-      render: (c: string) => <Tag>{c || 'Khác'}</Tag>,
+      render: (c: string) => <Tag>{c || t('seller_products.other')}</Tag>,
     },
     {
-      title: 'Giá',
+      title: t('seller_products.price'),
       dataIndex: 'price',
       render: (v: number) => v?.toLocaleString('vi-VN') + 'đ',
     },
     {
-      title: 'Tồn kho',
+      title: t('seller_products.stock'),
       render: (_: any, p: AdminProduct) => {
         const variants = p.weightVariants || []
         if (variants.length > 0) {
@@ -229,7 +231,7 @@ export default function SellerProductsPage() {
               {variants.map((variant) => {
                 const stock = Number(variant.stock || 0)
                 const color = stock <= 0 ? 'red' : stock <= 3 ? 'gold' : 'green'
-                const text = stock <= 0 ? 'Hết hàng' : stock <= 3 ? 'Sắp hết' : 'Còn hàng'
+                const text = stock <= 0 ? t('seller_products.out_of_stock') : stock <= 3 ? t('seller_products.low_stock') : t('seller_products.in_stock')
                 return (
                   <Tag key={variant.label} color={color}>
                     {variant.label}: {stock} - {text}
@@ -240,19 +242,19 @@ export default function SellerProductsPage() {
           )
         }
         const stock = Number(p.stock || 0)
-        return <Tag color={stock > 0 ? 'green' : 'red'}>{stock > 0 ? `${stock} cái` : 'Hết hàng'}</Tag>
+        return <Tag color={stock > 0 ? 'green' : 'red'}>{stock > 0 ? `${stock} ${t('seller_products.piece')}` : t('seller_products.out_of_stock')}</Tag>
       },
     },
     {
-      title: 'Thao tác',
+      title: t('seller_products.actions'),
       render: (_: any, p: AdminProduct) => (
         <Space>
           <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(p)} />
           <Popconfirm
-            title="Xoá sản phẩm này?"
+            title={t('seller_products.delete_confirm')}
             onConfirm={() => handleDelete(p._id)}
-            okText="Xoá"
-            cancelText="Hủy"
+            okText={t('seller_products.delete')}
+            cancelText={t('seller_products.cancel')}
           >
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
@@ -263,98 +265,99 @@ export default function SellerProductsPage() {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Seller</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)]">Sản phẩm của shop</h1>
-        <p className="mt-2 text-sm text-[var(--gs-text-muted)]">Tổng: {products.length} sản phẩm</p>
+      <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('seller_products.seller_label')}</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('seller_products.hero_title')}</h1>
+        <p className="mt-2 text-sm text-[var(--gs-text-muted)]">{t('seller_products.total_products', { count: products.length })}</p>
       </div>
 
-      <div className="mb-6 rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
-        <h2 className="mb-4 text-xl font-semibold">Thông tin shop</h2>
+      <div className="mb-6 rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+        <h2 className="mb-4 text-xl font-semibold">{t('seller_products.shop_info')}</h2>
         <Form layout="vertical" form={shopForm} onFinish={handleSaveShop}>
           <div className="grid gap-4 md:grid-cols-2">
-            <Form.Item label="Tên shop" name="name" rules={[{ required: true, message: 'Nhập tên shop' }]}>
+            <Form.Item label={t('seller_products.shop_name')} name="name" rules={[{ required: true, message: t('seller_products.shop_name_required') }]}> 
               <Input />
             </Form.Item>
-            <Form.Item label="Avatar shop (URL)" name="avatar">
+            <Form.Item label={t('seller_products.shop_avatar')} name="avatar">
               <Input placeholder="https://..." />
             </Form.Item>
           </div>
-          <Form.Item label="Mô tả shop" name="description">
+          <Form.Item label={t('seller_products.shop_description')} name="description">
             <Input.TextArea rows={2} />
           </Form.Item>
           <div className="grid gap-4 md:grid-cols-2">
-            <Form.Item label="Địa chỉ shop" name={['address', 'street']}>
-              <Input placeholder="Số nhà, tên đường" />
+            <Form.Item label={t('seller_products.shop_address')} name={['address', 'street']}>
+              <Input placeholder={t('seller_products.street_placeholder')} />
             </Form.Item>
-            <Form.Item label="Phường / xã" name={['address', 'ward']}>
+            <Form.Item label={t('seller_products.ward')} name={['address', 'ward']}>
               <Input />
             </Form.Item>
-            <Form.Item label="Quận / huyện" name={['address', 'district']}>
+            <Form.Item label={t('seller_products.district')} name={['address', 'district']}>
               <Input />
             </Form.Item>
-            <Form.Item label="Tỉnh / thành phố" name={['address', 'city']}>
+            <Form.Item label={t('seller_products.city')} name={['address', 'city']}>
               <Input />
             </Form.Item>
           </div>
           <Button type="primary" htmlType="submit" loading={shopSaving}>
-            Lưu thông tin shop
+            {t('seller_products.save_shop')}
           </Button>
           {shop?.rating > 0 && (
             <span className="ml-3 text-sm text-[var(--gs-text-muted)]">
-              Đánh giá shop: {shop.rating.toFixed(1)} ({shop.reviewCount || 0})
+              {t('seller_products.shop_rating', { rating: shop.rating.toFixed(1), count: shop.reviewCount || 0 })}
             </span>
           )}
         </Form>
       </div>
 
-      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, gap: 12 }}>
+      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+        <div className="dashboard-filter-bar">
           <Space wrap>
             <Input.Search
-              placeholder="Tìm sản phẩm, danh mục..."
+              placeholder={t('seller_products.search_placeholder')}
               allowClear
-              style={{ width: 320 }}
               onChange={(e) => setSearch(e.target.value)}
             />
             <Select
               allowClear
-              placeholder="Lọc danh mục"
-              style={{ minWidth: 220 }}
+              placeholder={t('seller_products.category_filter')}
+              style={{ minWidth: 180 }}
               value={categoryFilter}
               onChange={setCategoryFilter}
               options={existingCategories.map((category) => ({ label: category, value: category }))}
             />
           </Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            Thêm sản phẩm
+            {t('seller_products.add_product')}
           </Button>
         </div>
 
-        <Table
-          dataSource={filtered}
-          columns={columns}
-          rowKey="_id"
-          loading={loading}
-          pagination={{ pageSize: 10 }}
-        />
+        <div className="member-scroll-x">
+          <Table
+            dataSource={filtered}
+            columns={columns}
+            rowKey="_id"
+            loading={loading}
+            pagination={{ pageSize: 10 }}
+          />
+        </div>
       </div>
 
       <Modal
-        title={editing ? 'Sửa sản phẩm' : 'Thêm sản phẩm'}
+        title={editing ? t('seller_products.edit_product') : t('seller_products.add_product')}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={null}
         destroyOnClose
       >
         <Form layout="vertical" form={form} onFinish={handleSubmit}>
-          <Form.Item label="Tên sản phẩm" name="name" rules={[{ required: true, message: 'Nhập tên' }]}>
-            <Input placeholder="VD: Găng tay tập gym" />
+          <Form.Item label={t('seller_products.product_name')} name="name" rules={[{ required: true, message: t('seller_products.product_name_required') }]}> 
+            <Input placeholder={t('seller_products.product_name_placeholder')} />
           </Form.Item>
-          <Form.Item label="Mô tả" name="description">
-            <Input.TextArea rows={8} placeholder="Mô tả sản phẩm..." />
+          <Form.Item label={t('seller_products.description')} name="description">
+            <Input.TextArea rows={8} placeholder={t('seller_products.description_placeholder')} />
           </Form.Item>
-          <Form.Item label="Ảnh mô tả (mỗi dòng 1 URL)" name="descriptionImagesRaw">
+          <Form.Item label={t('seller_products.description_images')} name="descriptionImagesRaw">
             <Input.TextArea
               rows={4}
               placeholder={"https://detail-img1.jpg\nhttps://detail-img2.jpg"}
@@ -365,35 +368,35 @@ export default function SellerProductsPage() {
             />
           </Form.Item>
           {!hasVariants && (
-            <Form.Item label="Giá (VNĐ)" name="price" rules={[{ required: true, message: 'Nhập giá' }]}>
+            <Form.Item label={t('seller_products.price_vnd')} name="price" rules={[{ required: true, message: t('seller_products.price_required') }]}> 
               <InputNumber
                 style={{ width: '100%' }}
                 min={0}
                 formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                placeholder="VD: 200000"
+                placeholder={t('seller_products.price_placeholder')}
               />
             </Form.Item>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 12 }}>
-            <Form.Item label="Thêm danh mục" name="category">
-              <Input placeholder="VD: Phụ kiện, Dinh dưỡng..." />
+            <Form.Item label={t('seller_products.add_category')} name="category">
+              <Input placeholder={t('seller_products.form_category_placeholder')} />
             </Form.Item>
-            <Form.Item label="Danh mục đã có">
+            <Form.Item label={t('seller_products.existing_category')}>
               <Select
                 allowClear
-                placeholder="Chọn danh mục"
+                placeholder={t('seller_products.choose_category')}
                 options={existingCategories.map((category) => ({ label: category, value: category }))}
                 onChange={(value) => value && form.setFieldValue('category', value)}
               />
             </Form.Item>
           </div>
-          <Form.Item label="Tồn kho" name="stock">
-            <InputNumber style={{ width: '100%' }} min={0} placeholder="VD: 100" />
+          <Form.Item label={t('seller_products.stock')} name="stock">
+            <InputNumber style={{ width: '100%' }} min={0} placeholder={t('seller_products.stock_placeholder')} />
           </Form.Item>
-          <Form.Item label="Ảnh (URL)" name="image">
+          <Form.Item label={t('seller_products.image_url')} name="image">
             <Input placeholder="https://..." />
           </Form.Item>
-          <Form.Item label="Ảnh phụ (mỗi dòng 1 URL)" name="imagesRaw">
+          <Form.Item label={t('seller_products.extra_images')} name="imagesRaw">
             <Input.TextArea
               rows={4}
               placeholder={"https://img1.jpg\nhttps://img2.jpg"}
@@ -403,7 +406,7 @@ export default function SellerProductsPage() {
               }}
             />
           </Form.Item>
-          <Form.Item label="Biến thể trọng lượng">
+          <Form.Item label={t('seller_products.weight_variants')}>
             <Form.List name="weightVariants">
               {(fields, { add, remove }) => (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -413,23 +416,23 @@ export default function SellerProductsPage() {
                         {...field}
                         name={[field.name, 'label']}
                         style={{ flex: 1, marginBottom: 0 }}
-                        rules={[{ required: true, message: 'Nhập trọng lượng' }]}
+                        rules={[{ required: true, message: t('seller_products.weight_required') }]}
                       >
-                        <Input placeholder="VD: 1kg, 2kg, 5kg" />
+                        <Input placeholder={t('seller_products.weight_placeholder')} />
                       </Form.Item>
                       <Form.Item
                         {...field}
                         name={[field.name, 'priceDelta']}
                         style={{ width: 170, marginBottom: 0 }}
                         rules={[
-                          { required: true, message: 'Nhập giá bán cho biến thể' },
-                          { type: 'number', min: 1, message: 'Giá phải lớn hơn 0' },
+                          { required: true, message: t('seller_products.variant_price_required') },
+                          { type: 'number', min: 1, message: t('seller_products.variant_price_min') },
                         ]}
                       >
                         <InputNumber
                           min={1}
                           style={{ width: '100%' }}
-                          placeholder="Giá bán (VNĐ)"
+                          placeholder={t('seller_products.variant_price_placeholder')}
                           formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                           parser={(v) => Number(String(v || '').replace(/\D/g, '')) as any}
                         />
@@ -438,9 +441,9 @@ export default function SellerProductsPage() {
                         {...field}
                         name={[field.name, 'stock']}
                         style={{ width: 130, marginBottom: 0 }}
-                        rules={[{ type: 'number', min: 0, message: 'Tồn kho không hợp lệ' }]}
+                        rules={[{ type: 'number', min: 0, message: t('seller_products.stock_invalid') }]}
                       >
-                        <InputNumber min={0} style={{ width: '100%' }} placeholder="Tồn kho" />
+                        <InputNumber min={0} style={{ width: '100%' }} placeholder={t('seller_products.stock')} />
                       </Form.Item>
                       <Button
                         danger
@@ -451,14 +454,14 @@ export default function SellerProductsPage() {
                     </div>
                   ))}
                   <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ label: '', priceDelta: 0, stock: 0 })}>
-                    Thêm biến thể
+                    {t('seller_products.add_variant')}
                   </Button>
                 </div>
               )}
             </Form.List>
           </Form.Item>
           <Button type="primary" htmlType="submit" block loading={submitLoading}>
-            {editing ? 'Cập nhật' : 'Thêm sản phẩm'}
+            {editing ? t('seller_products.update') : t('seller_products.add_product')}
           </Button>
         </Form>
       </Modal>
