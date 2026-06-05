@@ -71,21 +71,42 @@ const normalizeSessions = (sessions) => {
     if (!Array.isArray(sessions)) return []
     const cutoff = Date.now() - CHAT_RETENTION_DAYS * 24 * 60 * 60 * 1000
     return sessions
-        .map((session) => ({
-        sessionId: String(session.sessionId || `session-${Date.now()}`),
-        title: String(session.title || 'New Chat').slice(0, 120),
-        createdAt: String(session.createdAt || new Date().toISOString()),
-        messages: Array.isArray(session.messages)
-            ? session.messages.slice(-200).map((message) => ({
-                id: String(message.id || `${Date.now()}-${Math.random()}`),
-                userId: String(message.userId || ''),
-                role: ['user', 'assistant', 'system'].includes(message.role) ? message.role : 'system',
-                content: String(message.content || '').slice(0, 8000),
-                createdAt: String(message.createdAt || new Date().toISOString()),
-                ...(message.webSearch && typeof message.webSearch === 'object' ? { webSearch: message.webSearch } : {}),
-            })).filter((message) => message.content)
-            : [],
-        }))
+        .map((session) => {
+            const safeSession = normalizeObject(session)
+            return {
+                sessionId: String(safeSession.sessionId || `session-${Date.now()}`),
+                title: String(safeSession.title || 'New Chat').slice(0, 120),
+                createdAt: String(safeSession.createdAt || new Date().toISOString()),
+                messages: Array.isArray(safeSession.messages)
+                    ? safeSession.messages.slice(-200).map((message) => {
+                        const safeMessage = normalizeObject(message)
+                        return {
+                            id: String(safeMessage.id || `${Date.now()}-${Math.random()}`),
+                            userId: String(safeMessage.userId || ''),
+                            role: ['user', 'assistant', 'system'].includes(safeMessage.role) ? safeMessage.role : 'system',
+                            content: String(safeMessage.content || '').slice(0, 8000),
+                            ...(typeof safeMessage.answer === 'string' ? { answer: safeMessage.answer.slice(0, 8000) } : {}),
+                            createdAt: String(safeMessage.createdAt || new Date().toISOString()),
+                            ...(typeof safeMessage.type === 'string' ? { type: safeMessage.type } : {}),
+                            ...(safeMessage.plan && typeof safeMessage.plan === 'object' ? { plan: safeMessage.plan } : {}),
+                            ...(Array.isArray(safeMessage.plans) ? { plans: safeMessage.plans } : {}),
+                            ...(safeMessage.recommendedPlan && typeof safeMessage.recommendedPlan === 'object' ? { recommendedPlan: safeMessage.recommendedPlan } : {}),
+                            ...(Array.isArray(safeMessage.alternatives) ? { alternatives: safeMessage.alternatives.slice(0, 2) } : {}),
+                            ...(typeof safeMessage.reason === 'string' ? { reason: safeMessage.reason.slice(0, 1200) } : {}),
+                            ...(typeof safeMessage.conclusion === 'string' ? { conclusion: safeMessage.conclusion.slice(0, 1200) } : {}),
+                            ...(safeMessage.data && typeof safeMessage.data === 'object' ? { data: safeMessage.data } : {}),
+                            ...(safeMessage.planPayload && typeof safeMessage.planPayload === 'object' ? { planPayload: safeMessage.planPayload } : {}),
+                            ...(typeof safeMessage.intent === 'string' ? { intent: safeMessage.intent } : {}),
+                            ...(typeof safeMessage.action === 'string' ? { action: safeMessage.action } : {}),
+                            ...(typeof safeMessage.subject === 'string' ? { subject: safeMessage.subject } : {}),
+                            ...(safeMessage.metadata && typeof safeMessage.metadata === 'object' && !Array.isArray(safeMessage.metadata) ? { metadata: safeMessage.metadata } : {}),
+                            ...(Array.isArray(safeMessage.suggestions) ? { suggestions: safeMessage.suggestions.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 4) } : {}),
+                            ...(safeMessage.webSearch && typeof safeMessage.webSearch === 'object' ? { webSearch: normalizeWebSearchPayload(safeMessage.webSearch) } : {}),
+                        }
+                    }).filter((message) => message.content || message.type || message.planPayload)
+                    : [],
+            }
+        })
         .filter((session) => getSessionLastActivityMs(session) >= cutoff)
         .sort((a, b) => getSessionLastActivityMs(b) - getSessionLastActivityMs(a))
         .slice(0, MAX_CHAT_SESSIONS)
@@ -273,6 +294,79 @@ const isGeneralKnowledgeIntent = (query) => {
     return tokens.some((token) => generalKnowledgeIntentWords.has(token))
 }
 
+const normalizeObject = (value) => (
+    value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+)
+
+const normalizeLanguage = (language) => language === 'en' ? 'en' : 'vi'
+
+const normalizeWebSearchPayload = (webSearch) => {
+    const safeWebSearch = normalizeObject(webSearch)
+    return {
+        needed: Boolean(safeWebSearch.needed),
+        used: Boolean(safeWebSearch.used),
+        reason: String(safeWebSearch.reason || 'not_needed'),
+        results: Array.isArray(safeWebSearch.results) ? safeWebSearch.results : [],
+    }
+}
+
+const normalizeSourcesPayload = (sources) => {
+    if (Array.isArray(sources)) {
+        return sources
+            .filter((item) => item && typeof item === 'object' && typeof item.url === 'string' && item.url.trim())
+            .map((item) => ({
+                title: typeof item.title === 'string' ? item.title : '',
+                url: item.url,
+            }))
+            .slice(0, 5)
+    }
+    return normalizeObject(sources)
+}
+
+const cleanAssistantAnswer = (value) => {
+    const cleaned = String(value || '')
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
+        .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+        .replace(/^```[a-z0-9_-]*\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n[ \t]+/g, '\n')
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim()
+    if (/^\s*\{[\s\S]*\}\s*$/.test(cleaned)) {
+        try {
+            const parsed = JSON.parse(cleaned)
+            return typeof parsed?.answer === 'string' ? parsed.answer.trim() : ''
+        } catch {
+            return ''
+        }
+    }
+    return cleaned
+}
+
+const normalizeAiActionResponse = (response, mode = 'gym') => {
+    const safeResponse = normalizeObject(response)
+    const safeData = normalizeObject(safeResponse.data)
+    const plans = Array.isArray(safeResponse.plans) ? safeResponse.plans : []
+    return {
+        ...safeResponse,
+        answer: typeof safeResponse.answer === 'string' ? cleanAssistantAnswer(safeResponse.answer) : '',
+        suggestions: Array.isArray(safeResponse.suggestions)
+            ? safeResponse.suggestions.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 4)
+            : [],
+        mode: safeResponse.mode === 'general' ? 'general' : mode,
+        tool: typeof safeResponse.tool === 'string' ? safeResponse.tool : null,
+        data: safeData,
+        pts: Array.isArray(safeResponse.pts) ? safeResponse.pts : Array.isArray(safeData.pts) ? safeData.pts : [],
+        products: Array.isArray(safeResponse.products) ? safeResponse.products : Array.isArray(safeData.products) ? safeData.products : [],
+        ...(plans.length > 0 ? { plans } : {}),
+        sources: normalizeSourcesPayload(safeResponse.sources),
+        metadata: normalizeObject(safeResponse.metadata),
+        webSearch: normalizeWebSearchPayload(safeResponse.webSearch),
+    }
+}
+
 const updateAiMemoryAfterResponse = async (req, query, mode) => {
     try {
         await updateAiUserMemoryIfDue({
@@ -289,19 +383,23 @@ const sanitizeConversationContext = (value) => {
     const source = value && typeof value === 'object' ? value : {}
     const recentMessages = Array.isArray(source.recentMessages)
         ? source.recentMessages
-            .slice(-12)
+            .slice(-10)
             .filter((message) => message && typeof message.content === 'string')
             .map((message) => ({
                 role: ['user', 'assistant', 'system'].includes(message.role) ? message.role : 'user',
                 content: String(message.content).slice(0, 1200),
                 intent: typeof message.intent === 'string' ? message.intent : undefined,
                 action: typeof message.action === 'string' ? message.action : undefined,
+                subject: typeof message.subject === 'string' ? message.subject : undefined,
             }))
         : []
 
     return {
+        conversationId: typeof source.conversationId === 'string' ? source.conversationId.slice(0, 120) : '',
+        sessionId: typeof source.sessionId === 'string' ? source.sessionId.slice(0, 120) : '',
         recentMessages,
         lastIntent: typeof source.lastIntent === 'string' ? source.lastIntent : '',
+        lastSubject: typeof source.lastSubject === 'string' ? source.lastSubject : '',
         lastAction: typeof source.lastAction === 'string' ? source.lastAction : '',
         lastSearchQuery: typeof source.lastSearchQuery === 'string' ? source.lastSearchQuery.slice(0, 300) : '',
         lastMode: typeof source.lastMode === 'string' ? source.lastMode : '',
@@ -568,10 +666,14 @@ const resolveGymFitnessWebSearch = async (query) => {
 
 const mapPlanResult = (plan) => ({
     _id: plan._id,
-    name: plan.name,
+    nameVi: plan.nameVi,
+    nameEn: plan.nameEn,
     price: plan.price,
     durationDays: plan.durationDays,
-    description: plan.description,
+    descriptionVi: plan.descriptionVi,
+    descriptionEn: plan.descriptionEn,
+    featuresVi: plan.featuresVi || [],
+    featuresEn: plan.featuresEn || [],
     color: plan.color,
 })
 
@@ -585,6 +687,20 @@ export const aiAssistant = async (req, res, next) => {
 
         const normalizedQuery = query.trim()
         const conversationContext = sanitizeConversationContext(req.body?.conversationContext)
+        const requestContext = req.body?.requestContext && typeof req.body.requestContext === 'object'
+            ? req.body.requestContext
+            : {}
+        const language = normalizeLanguage(req.body?.language || requestContext.language)
+        console.log('CHAT REQUEST:', {
+            message: normalizedQuery,
+            assistantType: requestContext.assistantType || 'member',
+            domain: requestContext.domain || 'gym',
+            language,
+            mode: requestContext.mode || 'chat',
+            tab: mode === 'general' ? 'Khác' : 'Gym',
+            intent: requestContext.intent || 'member_question',
+            source: requestContext.source || 'user_message',
+        })
         const effectiveQuery = buildEffectiveQuery(normalizedQuery, conversationContext)
         const aiMode = mode === 'general' ? 'general' : 'gym'
         const memoryContext = buildAiMemoryContext(await getAiUserMemory(req.user?._id))
@@ -592,8 +708,10 @@ export const aiAssistant = async (req, res, next) => {
         if (aiMode === 'gym') {
             const actionResponse = await runGymAiAction({
                 query: effectiveQuery,
+                userMessage: normalizedQuery,
                 user: req.user,
                 conversationContext,
+                language,
             })
 
             await recordAuditLog({
@@ -605,12 +723,11 @@ export const aiAssistant = async (req, res, next) => {
             })
 
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
-            return res.json({
-                ...actionResponse,
-                pts: actionResponse.data?.pts || [],
-                products: actionResponse.data?.products || [],
-                plans: [],
-            })
+        return res.json({
+            ...actionResponse,
+            pts: actionResponse.data?.pts || [],
+            products: actionResponse.data?.products || [],
+        })
         }
 
         if (aiMode !== 'gym' && isShopeeLinkIntent(effectiveQuery)) {
@@ -886,6 +1003,7 @@ export const aiAssistant = async (req, res, next) => {
                     webSearchUsed: webSearch.used,
                     memoryContext,
                     conversationContext,
+                    language,
                 },
             )
             logAiAnswerBeforeSend('general', answer)
@@ -975,6 +1093,7 @@ export const aiAssistant = async (req, res, next) => {
             conversationContext,
             webContext: webSearch.context || '',
             webSearchUsed: webSearch.used,
+            language,
         })
         logAiAnswerBeforeSend(aiMode, answer)
 
@@ -1016,6 +1135,20 @@ export const aiAssistantStream = async (req, res, next) => {
 
         const normalizedQuery = query.trim()
         const conversationContext = sanitizeConversationContext(req.body?.conversationContext)
+        const requestContext = req.body?.requestContext && typeof req.body.requestContext === 'object'
+            ? req.body.requestContext
+            : {}
+        const language = normalizeLanguage(req.body?.language || requestContext.language)
+        console.log('CHAT REQUEST:', {
+            message: normalizedQuery,
+            assistantType: requestContext.assistantType || 'member',
+            domain: requestContext.domain || 'gym',
+            language,
+            mode: requestContext.mode || 'chat',
+            tab: mode === 'general' ? 'Khác' : 'Gym',
+            intent: requestContext.intent || 'member_question',
+            source: requestContext.source || 'user_message',
+        })
         const effectiveQuery = buildEffectiveQuery(normalizedQuery, conversationContext)
         const aiMode = mode === 'general' ? 'general' : 'gym'
         const memoryContext = buildAiMemoryContext(await getAiUserMemory(req.user?._id))
@@ -1036,22 +1169,22 @@ export const aiAssistantStream = async (req, res, next) => {
 
             const actionResponse = await runGymAiAction({
                 query: effectiveQuery,
+                userMessage: normalizedQuery,
                 user: req.user,
                 conversationContext,
+                language,
             })
+            const safeActionResponse = normalizeAiActionResponse(actionResponse, aiMode)
 
             writeSseEvent(res, 'meta', {
                 mode: aiMode,
-                aiAction: Boolean(actionResponse.aiAction),
-                tool: actionResponse.tool || null,
+                aiAction: Boolean(safeActionResponse.aiAction),
+                tool: safeActionResponse.tool || null,
                 status: 'tool_complete',
             })
-            writeSseEvent(res, 'chunk', { text: actionResponse.answer })
+            writeSseEvent(res, 'chunk', { text: safeActionResponse.answer })
             writeSseEvent(res, 'done', {
-                ...actionResponse,
-                pts: actionResponse.data?.pts || [],
-                products: actionResponse.data?.products || [],
-                plans: [],
+                ...safeActionResponse,
             })
 
             await recordAuditLog({
@@ -1059,7 +1192,7 @@ export const aiAssistantStream = async (req, res, next) => {
                 module: 'ai',
                 action: 'create',
                 entity: req.user,
-                details: `AI Gym Action stream query: ${normalizedQuery} | tool: ${actionResponse.tool || 'none'}`,
+                details: `AI Gym Action stream query: ${normalizedQuery} | tool: ${safeActionResponse.tool || 'none'}`,
             })
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
             return res.end()
@@ -1167,6 +1300,7 @@ export const aiAssistantStream = async (req, res, next) => {
                     webSearchUsed: webSearch.used,
                     memoryContext,
                     conversationContext,
+                    language,
                     onChunk: (text) => writeSseEvent(res, 'chunk', { text }),
                 },
             )
@@ -1267,6 +1401,7 @@ export const aiAssistantStream = async (req, res, next) => {
                 conversationContext,
                 webContext: gymWebSearch.context || '',
                 webSearchUsed: gymWebSearch.used,
+                language,
                 onChunk: (text) => writeSseEvent(res, 'chunk', { text }),
             },
         )
@@ -1356,7 +1491,7 @@ export const saveAiChatHistory = async (req, res, next) => {
         const history = await AiChatHistory.findOneAndUpdate(
             { userId: req.user._id },
             { userId: req.user._id, sessions, activeSessionId },
-            { new: true, upsert: true, runValidators: true },
+            { returnDocument: 'after', upsert: true, runValidators: true },
         ).lean()
 
         return res.json({

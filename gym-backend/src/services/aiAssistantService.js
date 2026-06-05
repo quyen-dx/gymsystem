@@ -44,8 +44,8 @@ const SYSTEM_THEME_PRESETS = [
     { themeName: 'yellow', color: '#eab308', keywords: ['vang', 'yellow'] },
     { themeName: 'orange', color: '#f97316', keywords: ['cam', 'orange'] },
     { themeName: 'pink', color: '#ec4899', keywords: ['hong', 'pink'] },
-    { themeName: 'black', color: '#111827', keywords: ['dark mode', 'den', 'black', 'toi'] },
-    { themeName: 'white', color: '#ffffff', keywords: ['light mode', 'trang', 'white', 'sang'] },
+    { themeName: 'black', color: '#111827', keywords: ['dark mode', 'che do toi', 'giao dien toi', 'nen toi', 'den', 'black'] },
+    { themeName: 'white', color: '#ffffff', keywords: ['light mode', 'che do sang', 'giao dien sang', 'nen sang', 'trang', 'white'] },
 ]
 
 const normalizeHexColor = (hex) => {
@@ -53,6 +53,32 @@ const normalizeHexColor = (hex) => {
     if (/^#[0-9a-f]{6}$/.test(value)) return value
     if (/^#[0-9a-f]{3}$/.test(value)) return `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`
     return ''
+}
+
+const normalizeLanguage = (language) => language === 'en' ? 'en' : 'vi'
+
+const getLanguageInstruction = (language) => normalizeLanguage(language) === 'en'
+    ? 'Always answer in English. The website language is English. Do not switch languages based on the user message.'
+    : 'Luôn trả lời bằng tiếng Việt. Ngôn ngữ hiện tại của website là tiếng Việt. Không tự đổi ngôn ngữ theo nội dung user nhập.'
+
+const aiServiceMessages = {
+    vi: {
+        greeting: 'Chào bạn, mình là Doraemon AI của GymPro đây! Hôm nay bạn muốn hỏi về tập luyện, dinh dưỡng hay cần mình hỗ trợ gì khác nào?',
+        noAnswer: 'Mình chưa có câu trả lời phù hợp.',
+        gymOnly: 'Ở chế độ Gym, mình chỉ trả lời dựa trên dữ liệu hệ thống GymPro hiện tại như PT, sản phẩm, gói tập, tập luyện, dinh dưỡng và sức khỏe. Bạn có thể chuyển sang chế độ Tất cả để hỏi nội dung ngoài hệ thống.',
+        noResults: 'Mình không tìm thấy kết quả phù hợp.',
+    },
+    en: {
+        greeting: 'Hi, I am Doraemon AI from GymPro. What would you like help with today: workouts, nutrition, membership, or training progress?',
+        noAnswer: 'I do not have a suitable answer yet.',
+        gymOnly: 'In Gym mode, I only answer using current GymPro data such as trainers, products, membership plans, workouts, nutrition, and health. Switch to Other mode for non-gym questions.',
+        noResults: 'I could not find suitable results.',
+    },
+}
+
+const tAI = (key, language = 'vi') => {
+    const lang = normalizeLanguage(language)
+    return aiServiceMessages[lang]?.[key] || aiServiceMessages.vi[key] || key
 }
 
 const findSystemThemePreset = (normalized) => SYSTEM_THEME_PRESETS.find((preset) =>
@@ -81,7 +107,11 @@ const getThemeDisplayName = (themeName) => ({
     cyan: 'tone xanh ngọc',
 }[themeName] || String(themeName || '').replace(/_/g, ' '))
 
-const getSystemUiCommandResponse = (query, conversationContext = {}) => {
+const getThemeActionMessage = (themeName, language = 'vi') => normalizeLanguage(language) === 'en'
+    ? `Switched to ${themeName === 'black' ? 'dark mode' : themeName === 'white' ? 'light mode' : getThemeDisplayName(themeName)}.`
+    : `Đã đổi giao diện sang ${getThemeDisplayName(themeName)}.`
+
+const getSystemUiCommandResponse = (query, conversationContext = {}, language = 'vi') => {
     const normalized = normalizePromptText(query)
     const preset = findSystemThemePreset(normalized)
     const lastThemeIntent = conversationContext?.lastIntent === 'change_theme'
@@ -94,16 +124,16 @@ const getSystemUiCommandResponse = (query, conversationContext = {}) => {
             || (/\b(sang hon|nhat hon|light hon)\b/.test(normalized) ? { themeName: 'white', color: '#ffffff' } : null)
             || (/\b(dep hon|ngau hon|noi hon|chat hon)\b/.test(normalized) ? { themeName: 'cyberpunk', color: '#ff00ff' } : null)
         : null
-    const hasChangeVerb = /\b(doi|thay|set|chuyen|change|apply|ap dung|cap nhat|chon|lam)\b/.test(normalized)
-    const hasThemeTerm = /\b(mau|theme|giao dien|web|accent|color|tone|tong|nen|mode|ui|system|dark|light)\b/.test(normalized)
+    const hasChangeVerb = /\b(doi|thay|set|chuyen|change|switch|bat|apply|ap dung|cap nhat|chon|lam)\b/.test(normalized)
+    const hasThemeTerm = /\b(mau|theme|giao dien|che do|accent|color|tone|tong|mode|ui|system|dark|light)\b/.test(normalized)
     const isStandaloneTone = Boolean(preset)
         && preset.themeName !== 'gym_dark'
         && preset.keywords.some((keyword) => normalized.trim() === keyword)
     const isThemeIntent = isStandaloneTone
         || Boolean(followUpPreset)
         || (hasChangeVerb && (hasThemeTerm || Boolean(preset)))
-        || (hasThemeTerm && Boolean(preset))
 
+    console.log('DETECTED INTENT:', isThemeIntent ? 'change_theme' : 'member_question')
     if (!isThemeIntent) return null
 
     const resetIntent = /\b(mac dinh|default|reset|khoi phuc)\b/.test(normalized)
@@ -118,7 +148,7 @@ const getSystemUiCommandResponse = (query, conversationContext = {}) => {
         action: 'change_theme',
         themeName: resolved.themeName,
         color: resolved.color,
-        message: `Đã đổi giao diện sang ${getThemeDisplayName(resolved.themeName)}.`,
+        message: getThemeActionMessage(resolved.themeName, language),
     }, null, 2)
 }
 
@@ -274,7 +304,9 @@ Query: "${query}"`
 }
 
 export const generateAssistantResponse = async (query, pts, products, plans, mode = 'gym', options = {}) => {
-    const systemUiCommandResponse = getSystemUiCommandResponse(query, options.conversationContext)
+    const language = normalizeLanguage(options.language)
+    const languageInstruction = getLanguageInstruction(language)
+    const systemUiCommandResponse = getSystemUiCommandResponse(query, options.conversationContext, language)
     if (systemUiCommandResponse) return systemUiCommandResponse
 
     if (!process.env.GEMINI_API_KEY) return GEMINI_FALLBACK_MESSAGE
@@ -296,13 +328,14 @@ export const generateAssistantResponse = async (query, pts, products, plans, mod
 - Không bịa sản phẩm, PT, giá, số điện thoại hoặc email.`
 
     if (normalizedMode === 'gym' && isGreetingQuery(query)) {
-        return 'Chào bạn, mình là Doraemon AI của GymPro đây! Hôm nay bạn muốn hỏi về tập luyện, dinh dưỡng hay cần mình hỗ trợ gì khác nào?'
+        return tAI('greeting', language)
     }
 
     if (normalizedMode === 'general') {
         const prompt = `Bạn là trợ lý AI đa năng của GymPro.
 
 Quy tắc:
+- ${languageInstruction}
 - Trả lời trực tiếp vào câu hỏi.
 - Có thể trả lời toán học, lập trình, đời sống, công nghệ và kiến thức chung.
 - Không roleplay PT và không thêm nội dung gym nếu câu hỏi không liên quan.
@@ -315,7 +348,7 @@ Quy tắc:
 - Nếu người dùng hỏi link Shopee, không hướng dẫn cách copy/tìm thủ công; trả link trực tiếp nếu có, nếu không có thì nói rõ không tìm thấy link trực tiếp.
 - Không tạo link giả. Chỉ dùng URL có trong context web. Nếu không có URL thật, nói rõ không tìm thấy URL đáng tin cậy.
 - Nếu context web không đủ để kết luận, nói rõ phần chưa chắc thay vì đoán.
-- Trả lời bằng tiếng Việt, rõ ràng, logic, ngắn gọn nhưng đủ ý.
+- Trả lời đúng ngôn ngữ bắt buộc ở trên, rõ ràng, logic, ngắn gọn nhưng đủ ý.
 - Không dừng giữa câu, không cắt ngang tên riêng hoặc câu trả lời.
 
 ${styleRules}
@@ -337,7 +370,7 @@ Câu hỏi: "${query}"`
 
         try {
             const text = await generateGeminiText(prompt, summaryMode ? 2200 : webSearchUsed ? 1400 : 900, 0.35, 'assistant-general')
-            return text.trim() || 'Mình chưa có câu trả lời phù hợp.'
+            return text.trim() || tAI('noAnswer', language)
         } catch (error) {
             console.error('Gemini generateAssistantResponse general mode error:', error)
             return GEMINI_FALLBACK_MESSAGE
@@ -345,7 +378,7 @@ Câu hỏi: "${query}"`
     }
 
     if (!isGymRelatedQuery(query)) {
-        return 'Ở chế độ Gym, mình chỉ trả lời dựa trên dữ liệu hệ thống GymPro hiện tại như PT, sản phẩm, gói tập, tập luyện, dinh dưỡng và sức khỏe. Bạn có thể chuyển sang chế độ Tất cả để hỏi nội dung ngoài hệ thống.'
+        return tAI('gymOnly', language)
     }
 
     const buildSummary = (items, label, fields) => {
@@ -365,10 +398,11 @@ Câu hỏi: "${query}"`
     const prompt = `Bạn là một Huấn luyện viên cá nhân (PT) nhiệt tình, thân thiện và chuyên nghiệp cho GymPro.
 
 Phong cách trả lời:
+- ${languageInstruction}
 - Sử dụng giọng nói khích lệ, gần gũi nhưng vẫn chuyên nghiệp.
 - Không bao giờ yêu cầu người dùng nhập thêm từ khóa nếu họ chỉ chào hỏi.
 - Luôn gợi ý hành động tiếp theo rõ ràng và hữu ích.
-- Trả lời bằng tiếng Việt, dễ hiểu, không quá máy móc.
+- Trả lời đúng ngôn ngữ bắt buộc ở trên, dễ hiểu, không quá máy móc.
 - Không dừng giữa câu và không cắt ngang câu trả lời.
 - Chỉ sử dụng dữ liệu hệ thống GymPro bên dưới, không tự lấy hoặc bịa dữ liệu ngoài hệ thống.
 - Nếu có "Context web fitness", chỉ dùng nó như nguồn tham khảo chuyên môn về tập luyện, dinh dưỡng, thể hình và khoa học vận động.
@@ -408,7 +442,7 @@ Câu hỏi: "${query}"`
         })
 
         const text = readGeminiText(response, 'assistant-gym').trim()
-        return text.trim() || 'Mình không tìm thấy kết quả phù hợp.'
+        return text.trim() || tAI('noResults', language)
     } catch (error) {
         console.error('Gemini generateAssistantResponse error:', error)
         return GEMINI_FALLBACK_MESSAGE
@@ -423,7 +457,9 @@ export const generateAssistantResponseStream = async (
     mode = 'gym',
     options = {},
 ) => {
-    const systemUiCommandResponse = getSystemUiCommandResponse(query, options.conversationContext)
+    const language = normalizeLanguage(options.language)
+    const languageInstruction = getLanguageInstruction(language)
+    const systemUiCommandResponse = getSystemUiCommandResponse(query, options.conversationContext, language)
     if (systemUiCommandResponse) {
         await options.onChunk?.(systemUiCommandResponse)
         return systemUiCommandResponse
@@ -452,7 +488,7 @@ export const generateAssistantResponseStream = async (
 - Không bịa sản phẩm, PT, giá, số điện thoại hoặc email.`
 
     if (normalizedMode === 'gym' && isGreetingQuery(query)) {
-        const greeting = 'Chào bạn, mình là Doraemon AI của GymPro đây! Hôm nay bạn muốn hỏi về tập luyện, dinh dưỡng hay cần mình hỗ trợ gì khác nào?'
+        const greeting = tAI('greeting', language)
         await onChunk?.(greeting)
         return greeting
     }
@@ -461,6 +497,7 @@ export const generateAssistantResponseStream = async (
         const prompt = `Bạn là trợ lý AI đa năng của GymPro.
 
 Quy tắc:
+- ${languageInstruction}
 - Trả lời trực tiếp vào câu hỏi.
 - Có thể trả lời toán học, lập trình, đời sống, công nghệ và kiến thức chung.
 - Không roleplay PT và không thêm nội dung gym nếu câu hỏi không liên quan.
@@ -473,7 +510,7 @@ Quy tắc:
 - Nếu người dùng hỏi link Shopee, không hướng dẫn cách copy/tìm thủ công; trả link trực tiếp nếu có, nếu không có thì nói rõ không tìm thấy link trực tiếp.
 - Không tạo link giả. Chỉ dùng URL có trong context web. Nếu không có URL thật, nói rõ không tìm thấy URL đáng tin cậy.
 - Nếu context web không đủ để kết luận, nói rõ phần chưa chắc thay vì đoán.
-- Trả lời bằng tiếng Việt, rõ ràng, logic, ngắn gọn nhưng đủ ý.
+- Trả lời đúng ngôn ngữ bắt buộc ở trên, rõ ràng, logic, ngắn gọn nhưng đủ ý.
 - Không dừng giữa câu, không cắt ngang tên riêng hoặc câu trả lời.
 
 ${styleRules}
@@ -502,7 +539,7 @@ Câu hỏi: "${query}"`
     }
 
     if (!isGymRelatedQuery(query)) {
-        const message = 'Ở chế độ Gym, mình chỉ trả lời dựa trên dữ liệu hệ thống GymPro hiện tại như PT, sản phẩm, gói tập, tập luyện, dinh dưỡng và sức khỏe. Bạn có thể chuyển sang chế độ Tất cả để hỏi nội dung ngoài hệ thống.'
+        const message = tAI('gymOnly', language)
         await onChunk?.(message)
         return message
     }
@@ -524,10 +561,11 @@ Câu hỏi: "${query}"`
     const prompt = `Bạn là một Huấn luyện viên cá nhân (PT) nhiệt tình, thân thiện và chuyên nghiệp cho GymPro.
 
 Phong cách trả lời:
+- ${languageInstruction}
 - Sử dụng giọng nói khích lệ, gần gũi nhưng vẫn chuyên nghiệp.
 - Không bao giờ yêu cầu người dùng nhập thêm từ khóa nếu họ chỉ chào hỏi.
 - Luôn gợi ý hành động tiếp theo rõ ràng và hữu ích.
-- Trả lời bằng tiếng Việt, dễ hiểu, không quá máy móc.
+- Trả lời đúng ngôn ngữ bắt buộc ở trên, dễ hiểu, không quá máy móc.
 - Không dừng giữa câu và không cắt ngang câu trả lời.
 - Chỉ sử dụng dữ liệu hệ thống GymPro bên dưới, không tự lấy hoặc bịa dữ liệu ngoài hệ thống.
 - Nếu có "Context web fitness", chỉ dùng nó như nguồn tham khảo chuyên môn về tập luyện, dinh dưỡng, thể hình và khoa học vận động.

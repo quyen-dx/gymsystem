@@ -1,8 +1,6 @@
-import { GoogleGenAI } from '@google/genai'
+import { getAdminGeminiClient } from '../ai/services/providers/geminiProvider.js'
 
 const AI_MODEL = 'gemini-2.5-flash'
-
-const ADMIN_API_KEY = process.env.GEMINI_API_KEY_ADMIN
 
 const SYSTEM_PROMPT = `Bạn là Admin Assistant của GymPro — trợ lý AI dành riêng cho quản trị viên.
 
@@ -39,11 +37,11 @@ export const adminAiChat = async (req, res) => {
       return res.status(400).json({ message: 'Messages is required' })
     }
 
-    if (!ADMIN_API_KEY) {
+    if (!process.env.GEMINI_API_KEY_ADMIN) {
       return res.status(503).json({ message: 'AI chưa được cấu hình. Vui lòng kiểm tra GEMINI_API_KEY_ADMIN.' })
     }
 
-    const ai = new GoogleGenAI({ apiKey: ADMIN_API_KEY })
+    const ai = getAdminGeminiClient()
     const response = await ai.models.generateContent({
       model: AI_MODEL,
       contents: messages.map((msg) => ({

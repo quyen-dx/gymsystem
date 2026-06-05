@@ -172,11 +172,11 @@ function HomeLandingSectionInner({
     description: pickLocalized(item.description, lang, ''),
   }))
 
-  const testimonials = (safeLanding.testimonials?.length ? safeLanding.testimonials : [
+  const testimonials = [
     { rating: 5, content: t('dashboard.testimonials.item_0_quote'), userName: t('dashboard.testimonials.item_0_name'), userSubtitle: t('dashboard.testimonials.item_0_duration') },
     { rating: 5, content: t('dashboard.testimonials.item_1_quote'), userName: t('dashboard.testimonials.item_1_name'), userSubtitle: t('dashboard.testimonials.item_1_duration') },
     { rating: 5, content: t('dashboard.testimonials.item_2_quote'), userName: t('dashboard.testimonials.item_2_name'), userSubtitle: t('dashboard.testimonials.item_2_duration') },
-  ]).map((item: any) => ({
+  ].map((item: any) => ({
     ...item,
     content: pickLocalized(item.content, lang, ''),
     userSubtitle: pickLocalized(item.userSubtitle, lang, ''),
@@ -192,8 +192,8 @@ function HomeLandingSectionInner({
   const secondaryText = pickLocalized(safeLanding.secondaryCtaText, lang, t('dashboard.cta_checkin'))
   const servicesEyebrow = pickLocalized(safeLanding.servicesEyebrow, lang, t('dashboard.services.overline'))
   const servicesTitle = pickLocalized(safeLanding.servicesTitle, lang, t('dashboard.services.heading'))
-  const testimonialsEyebrow = pickLocalized(safeLanding.testimonialsEyebrow, lang, t('dashboard.testimonials.overline'))
-  const testimonialsTitle = pickLocalized(safeLanding.testimonialsTitle, lang, t('dashboard.testimonials.heading'))
+  const testimonialsEyebrow = t('dashboard.testimonials.overline')
+  const testimonialsTitle = t('dashboard.testimonials.heading')
   const finalTitle = pickLocalized(safeLanding.finalCtaTitle, lang, `${t('dashboard.cta.heading1')}\n${t('dashboard.cta.heading2')}`)
   const finalSubtitle = pickLocalized(safeLanding.finalCtaSubtitle, lang, t('dashboard.cta.subtitle', { firstName }))
   const finalPrimaryText = pickLocalized(safeLanding.finalCtaPrimaryText, lang, t('dashboard.cta.book_pt'))
@@ -243,14 +243,16 @@ function HomeLandingSectionInner({
       {landingFlags.feedbackSectionEnabled && <section className={`mx-auto ${widthClass} max-w-6xl pt-14 md:pt-[74px]`}>
         <p className="mb-2.5 text-xs font-black uppercase tracking-[0.14em] text-[var(--theme-accent)]">{testimonialsEyebrow}</p>
         <h2 className="text-[44px] font-extrabold leading-none">{testimonialsTitle}</h2>
-        <div className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-3 items-start">
+        <div className="mt-7 grid grid-cols-1 items-stretch gap-6 md:grid-cols-2 lg:grid-cols-3">
           {testimonials.map((item: any, index: number) => (
-            <article className="rounded-lg border p-6" key={`${item.userName}-${index}`} style={{ backgroundColor: token.colorBgContainer, borderColor: token.colorBorder }}>
-              <div className="text-sm text-[#e6a317]">{'★'.repeat(item.rating || 5)}</div>
-              <p className="my-[18px] text-[15px] italic leading-7" style={{ color: token.colorTextSecondary }}>&ldquo;{item.content}&rdquo;</p>
-              <div className="flex items-center gap-3">
-                <span className="grid h-[42px] w-[42px] place-items-center overflow-hidden rounded-full font-black" style={{ background: 'var(--theme-elevated)' }}>
-                  {item.avatar ? <img src={item.avatar} className="h-full w-full object-cover" alt="" /> : (item.userName || '?').charAt(0)}
+            <article className="flex h-full min-h-[280px] flex-col justify-between rounded-2xl border p-6" key={`${item.userName}-${index}`} style={{ backgroundColor: token.colorBgContainer, borderColor: token.colorBorder }}>
+              <div>
+                <div className="mb-5 text-sm tracking-[0.08em] text-[#f5b301]" aria-label={`${item.rating || 5} stars`}>{'★'.repeat(item.rating || 5)}</div>
+                <p className="min-h-[120px] text-[15px] italic leading-7" style={{ color: token.colorTextSecondary }}>&ldquo;{item.content}&rdquo;</p>
+              </div>
+              <div className="mt-8 flex items-center gap-4">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full font-black" style={{ background: 'var(--theme-elevated)', color: token.colorText }}>
+                  {(item.userName || '?').charAt(0)}
                 </span>
                 <span>
                   <strong className="block">{item.userName}</strong>

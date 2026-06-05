@@ -349,10 +349,10 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
             )}
           </div>
         </div>
-        <button type="button" className="absolute top-1/2 left-2 z-20 hidden h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-[var(--gs-border)] bg-[var(--gs-card)]/70 text-[var(--hero-text)] backdrop-blur hover:border-[var(--theme-accent)] md:left-4 md:flex md:h-10 md:w-10" onClick={prevSlide}>
+        <button type="button" className="slider-nav slider-nav-prev flex h-8 w-8 place-items-center rounded-full border border-[var(--gs-border)] bg-[var(--gs-card)]/70 text-[var(--hero-text)] backdrop-blur hover:border-[var(--theme-accent)] md:h-10 md:w-10" onClick={prevSlide}>
           <LeftOutlined />
         </button>
-        <button type="button" className="absolute top-1/2 right-2 z-20 hidden h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-[var(--gs-border)] bg-[var(--gs-card)]/70 text-[var(--hero-text)] backdrop-blur hover:border-[var(--theme-accent)] md:right-4 md:flex md:h-10 md:w-10" onClick={nextSlide}>
+        <button type="button" className="slider-nav slider-nav-next flex h-8 w-8 place-items-center rounded-full border border-[var(--gs-border)] bg-[var(--gs-card)]/70 text-[var(--hero-text)] backdrop-blur hover:border-[var(--theme-accent)] md:h-10 md:w-10" onClick={nextSlide}>
           <RightOutlined />
         </button>
         <div className="absolute bottom-8 left-0 right-0 z-20 flex justify-center gap-3">

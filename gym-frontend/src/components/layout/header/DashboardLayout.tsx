@@ -20,12 +20,11 @@ import {
   Button,
   Divider,
   Drawer,
-  Layout,
   Typography,
 } from 'antd'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeProvider'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
@@ -34,8 +33,16 @@ import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
 import LanguageSelect from '../../common/LanguageSelect'
 import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
 
-const { Sider, Content } = Layout
 const { Text } = Typography
+
+const getViewRoleFromPath = (pathname: string, actualRole?: string) => {
+  if (pathname.startsWith('/staff')) return 'staff'
+  if (pathname.startsWith('/pt')) return 'pt'
+  if (pathname.startsWith('/seller')) return 'seller'
+  if (pathname.startsWith('/member') || pathname.startsWith('/user')) return 'member'
+  if (pathname.startsWith('/admin')) return 'admin'
+  return actualRole || 'member'
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
@@ -46,6 +53,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const { dark } = useTheme()
+  const location = useLocation()
+
+  const actualRole = user?.role
+  const viewRole = getViewRoleFromPath(location.pathname, actualRole)
 
   useEffect(() => {
     if (user?.role === 'admin') {
@@ -129,7 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     member: []
   }
 
-  const items = roleMenus[user?.role as string] || []
+  const items = roleMenus[viewRole] || []
 
   const closeSidebar = () => setSidebarOpen(false)
 
@@ -143,7 +154,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         color: 'var(--theme-text)',
       }}
     >
-      {settings.general.logoUrl ? <img src={settings.general.logoUrl} alt={settings.general.siteName} style={{ maxHeight: 30 }} /> : `${settings.general.siteName} DASHBOARD`}
+      {settings.general.logoUrl ? <img src={settings.general.logoUrl} alt={settings.general.siteName} style={{ maxHeight: 30 }} /> : `${t(`role.${viewRole}`)} Dashboard`}
     </div>
   )
 
@@ -163,6 +174,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </NavLink>
         ))}
       </nav>
+
+      {actualRole === 'admin' && viewRole !== 'admin' && (
+        <NavLink
+          to="/admin"
+          className="dashboard-sidebar-item"
+          onClick={closeSidebar}
+          style={{ margin: '4px 0' }}
+        >
+          <span className="dashboard-sidebar-icon"><DashboardOutlined /></span>
+          <span className="dashboard-sidebar-label">{t('admin.backToAdmin')}</span>
+        </NavLink>
+      )}
 
       <Divider />
 
@@ -207,21 +230,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 
   return (
-    <Layout className="dashboard-layout-root" style={{ minHeight: '100dvh' }}>
+    <div className="dashboard-layout-root">
 
       {/* DESKTOP SIDEBAR */}
-      <Sider
-        className="dashboard-desktop-sider"
-        width={260}
-        theme={dark ? 'dark' : 'light'}
-        style={{ background: 'var(--theme-card)', color: 'var(--theme-text)' }}
-      >
+      <div className="dashboard-desktop-sider" style={{ background: 'var(--theme-card)', color: 'var(--theme-text)' }}>
         {sidebarBranding}
         {sidebarMenu}
-      </Sider>
+      </div>
 
-      {/* MAIN: mobile header + content stacked vertically */}
-      <Layout className="dashboard-inner">
+      {/* MAIN: mobile header + content */}
+      <div className="dashboard-inner">
         {/* MOBILE HEADER + DRAWER */}
         <div className="dashboard-mobile-header">
           <Button
@@ -279,7 +297,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </Drawer>
 
         {/* CONTENT */}
-        <Content
+        <div
           className="dashboard-content"
           style={{
             background: 'var(--theme-bg)',
@@ -287,12 +305,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           }}
         >
           {children}
-        </Content>
-      </Layout>
+        </div>
+      </div>
 
       <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
 
       {settings.ai.floatingChatbotEnabled && settings.ai.adminAiEnabled && <AdminAIChatWidget />}
-    </Layout>
+    </div>
   )
 }

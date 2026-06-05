@@ -314,18 +314,15 @@ export default function MemberLayout({
           </div>
         </nav>
 
-        {(user?.role === 'admin' || user?.role === 'pt' || user?.role === 'staff' || user?.role === 'seller') && (
+        {user?.role === 'admin' && !location.pathname.startsWith('/admin') && (
           <button
             type="button"
             className="member-shell-nav-item"
-            onClick={() => {
-              const target = user?.role === 'pt' ? '/pt/schedule' : user?.role === 'staff' ? '/staff/checkin' : user?.role === 'seller' ? '/seller/products' : '/admin'
-              goTo(target)
-            }}
+            onClick={() => goTo('/admin')}
             style={{ marginLeft: 8 }}
           >
             <DashboardOutlined />
-            <span>{t('management', { role: t(`role.${user?.role}`) })}</span>
+            <span>{t('admin.backToAdmin')}</span>
           </button>
         )}
 
@@ -480,7 +477,7 @@ export default function MemberLayout({
           })}
         </nav>
 
-        {(user?.role === 'admin' || user?.role === 'pt' || user?.role === 'staff' || user?.role === 'seller') && (
+        {user?.role === 'admin' && !location.pathname.startsWith('/admin') && (
           <>
             <div style={{ padding: '8px 16px 0' }}>
               <div style={{ height: 1, background: 'var(--theme-border)' }} />
@@ -489,10 +486,10 @@ export default function MemberLayout({
               <button
                 type="button"
                 className="member-drawer-nav-item"
-                onClick={() => goTo(user?.role === 'pt' ? '/pt/schedule' : user?.role === 'staff' ? '/staff/checkin' : user?.role === 'seller' ? '/seller/products' : '/admin')}
+                onClick={() => goTo('/admin')}
               >
                 <DashboardOutlined />
-                <span>{t('management', { role: t(`role.${user?.role}`) })}</span>
+                <span>{t('admin.backToAdmin')}</span>
               </button>
             </nav>
           </>

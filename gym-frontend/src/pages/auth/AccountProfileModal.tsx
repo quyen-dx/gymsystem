@@ -522,24 +522,25 @@ export default function AccountProfileModal({
   const saveAccentColor = async (hex: string) => {
     if (!user || loading) return
     const previousAccent = user.accentColor || savedAccentColor
-    const nextAccent = hex.toUpperCase()
+    const systemDefault = systemSettings.general.defaultAccentColor || '#DB2777'
+    const nextAccent = hex ? hex.toUpperCase() : ''
+    const displayColor = nextAccent || systemDefault
     const payload = { accentColor: nextAccent }
     console.debug('[profile-theme] currentUser before update', user)
     console.debug('[profile-theme] payload sent API', payload)
     preventCloseRef.current = true
-    setAccentColor(nextAccent)
-    applyThemeFull(nextAccent)
+    setAccentColor(displayColor)
+    applyThemeFull(displayColor)
     updateUser({ ...user, accentColor: nextAccent })
 
     setLoading(true)
     try {
       const { data } = await authService.updateProfile(payload)
       console.debug('[profile-theme] response API', data)
-      const persistedAccent = data.user.accentColor || nextAccent
-      updateUser(data.user)
-      console.debug('[profile-theme] currentUser after update', data.user)
+      const persistedAccent = data.user.accentColor || systemDefault
       setAccentColor(persistedAccent)
       applyThemeFull(persistedAccent)
+      updateUser(data.user)
       message.success(t('profile.msg_theme_update_success'))
     } catch (err: any) {
       setAccentColor(previousAccent)
@@ -1082,6 +1083,19 @@ export default function AccountProfileModal({
                     />
                   </div>
                   <div className="font-semibold" style={{ color: token.colorText }}>{accentColor.toUpperCase()}</div>
+                  <button
+                    type="button"
+                    onClick={() => saveAccentColor('')}
+                    disabled={loading}
+                    className="ml-auto rounded-xl border px-3 py-1.5 text-xs font-bold transition disabled:opacity-70"
+                    style={{
+                      background: !user?.accentColor ? 'var(--theme-button-bg)' : 'transparent',
+                      borderColor: !user?.accentColor ? 'var(--theme-button-border)' : 'var(--gs-border)',
+                      color: !user?.accentColor ? 'var(--theme-button-text)' : 'var(--gs-text)',
+                    }}
+                  >
+                    {t('profile.accent_system')}
+                  </button>
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">

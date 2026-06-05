@@ -1,13 +1,14 @@
 import Plan from '../models/Plan.js';
 import Membership from '../models/Membership.js';
 import { recordAuditLog } from '../services/auditLogService.js';
+import { invalidateContextCache } from '../services/conversationContextCache.js';
 
 // ==================== TẠO GÓI TẬP ====================
 export const createPlan = async (req, res) => {
   try {
-    const { name, price, durationDays, description, color } = req.body;
+    const { nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive } = req.body;
 
-    const plan = await Plan.create({ name, price, durationDays, description, color });
+    const plan = await Plan.create({ nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive });
     await recordAuditLog({
       req,
       module: 'plans',
@@ -15,6 +16,7 @@ export const createPlan = async (req, res) => {
       entity: plan,
       details: 'Tạo gói tập',
     });
+    invalidateContextCache('activePlans');
 
     res.status(201).json({ message: 'Tạo gói tập thành công', plan });
   } catch (error) {
@@ -39,10 +41,12 @@ export const getPlans = async (req, res) => {
     const filter = {};
 
     if (search) {
-      filter.name = { $regex: search, $options: 'i' };
+      filter.$or = [
+        { nameVi: { $regex: search, $options: 'i' } },
+        { nameEn: { $regex: search, $options: 'i' } },
+      ];
     }
 
-    // Admin có thể lọc theo trạng thái, còn lại chỉ thấy gói đang active
     if (req.user?.role === 'admin') {
       if (isActive !== undefined) filter.isActive = isActive === 'true';
     } else {
@@ -55,7 +59,6 @@ export const getPlans = async (req, res) => {
       .skip((page - 1) * limit)
       .limit(Number(limit));
 
-    // Lấy số member đang dùng từng gói (chỉ active memberships)
     const plansWithMemberCount = await Promise.all(
       plans.map(async (plan) => {
         const memberCount = await Membership.countDocuments({
@@ -102,17 +105,20 @@ export const getPlanById = async (req, res) => {
 // ==================== CẬP NHẬT GÓI TẬP ====================
 export const updatePlan = async (req, res) => {
   try {
-    const { name, price, durationDays, description, color } = req.body;
+    const { nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive } = req.body;
 
     const plan = await Plan.findById(req.params.id);
-    if (!plan) {
-      return res.status(404).json({ message: 'Không tìm thấy gói tập' });
-    }
+    if (!plan) return res.status(404).json({ message: 'Không tìm thấy gói tập' });
 
-    plan.name = name;
+    plan.nameVi = nameVi;
+    plan.nameEn = nameEn;
     plan.price = price;
     plan.durationDays = durationDays;
-    plan.description = description;
+    plan.descriptionVi = descriptionVi;
+    plan.descriptionEn = descriptionEn;
+    plan.featuresVi = featuresVi || [];
+    plan.featuresEn = featuresEn || [];
+    plan.isActive = isActive !== undefined ? isActive : plan.isActive;
     plan.color = color;
     await plan.save();
     await recordAuditLog({
@@ -122,6 +128,7 @@ export const updatePlan = async (req, res) => {
       entity: plan,
       details: 'Cập nhật thông tin gói tập',
     });
+    invalidateContextCache('activePlans');
 
     res.json({ message: 'Cập nhật gói tập thành công', plan });
   } catch (error) {
@@ -136,7 +143,6 @@ export const updatePlan = async (req, res) => {
 // ==================== XOÁ GÓI TẬP ====================
 export const deletePlan = async (req, res) => {
   try {
-    // Kiểm tra có member đang dùng không
     const activeCount = await Membership.countDocuments({
       planId: req.params.id,
       status: 'active',
@@ -159,6 +165,7 @@ export const deletePlan = async (req, res) => {
       entity: plan,
       details: 'Xóa gói tập',
     });
+    invalidateContextCache('activePlans');
 
     res.json({ message: 'Xóa gói tập thành công' });
   } catch (error) {
@@ -183,6 +190,7 @@ export const togglePlanStatus = async (req, res) => {
       entity: plan,
       details: plan.isActive ? 'Kích hoạt gói tập' : 'Vô hiệu hóa gói tập',
     });
+    invalidateContextCache('activePlans');
 
     res.json({
       message: `Gói tập đã được ${plan.isActive ? 'kích hoạt' : 'vô hiệu hóa'}`,

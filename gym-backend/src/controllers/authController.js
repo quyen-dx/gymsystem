@@ -553,10 +553,13 @@ export const updateProfile = async (req, res) => {
 
     if (accentColor !== undefined) {
       const normalizedAccent = String(accentColor).trim()
-      if (!/^#[0-9A-Fa-f]{6}$/.test(normalizedAccent)) {
+      if (normalizedAccent === '') {
+        updateData.accentColor = ''
+      } else if (!/^#[0-9A-Fa-f]{6}$/.test(normalizedAccent)) {
         throw new AppError('Màu chủ đạo không hợp lệ', 400)
+      } else {
+        updateData.accentColor = normalizedAccent.toUpperCase()
       }
-      updateData.accentColor = normalizedAccent.toUpperCase()
     }
 
     if (req.files?.avatar?.[0]) {

@@ -14,6 +14,7 @@ export const SYSTEM_SETTINGS_DEFAULTS = {
     logoUrl: '',
     defaultLanguage: 'vi',
     defaultTheme: 'dark',
+    defaultAccentColor: '#DB2777',
     maintenanceMode: false,
     maintenanceMessage: {
       vi: 'Chúng tôi đang nâng cấp hệ thống để mang lại trải nghiệm tốt hơn. Vui lòng quay lại sau.',
@@ -117,10 +118,10 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
     const systemTheme = settings.general.defaultTheme === 'light' ? 'light' : 'dark'
     const effectiveTheme = resolveEffectiveTheme(systemTheme, user?.themePreference)
     applyThemeMode(effectiveTheme)
-    if (user?.accentColor) {
-      applyThemeFull(user.accentColor)
-    }
-  }, [settings.general.defaultTheme, user?.themePreference, user?.accentColor])
+    const systemAccent = settings.general.defaultAccentColor || '#DB2777'
+    const effectiveAccent = user?.accentColor || systemAccent
+    applyThemeFull(effectiveAccent)
+  }, [settings.general.defaultTheme, settings.general.defaultAccentColor, user?.themePreference, user?.accentColor])
 
   useEffect(() => {
     refresh().finally(() => setLoading(false))

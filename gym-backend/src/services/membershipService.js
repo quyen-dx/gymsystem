@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import Membership from '../models/Membership.js'
 import Plan from '../models/Plan.js'
 import User from '../models/User.js'
+import { invalidatePersonalContextCache } from './conversationContextCache.js'
 
 const toObjectId = (value, fieldName) => {
     if (!mongoose.Types.ObjectId.isValid(String(value))) {
@@ -72,6 +73,7 @@ const createMembership = async ({ userId, planId }) => {
     })
 
     const remainingDays = calculateRemainingDays(endDate)
+    invalidatePersonalContextCache(memberId)
 
     return {
         created: true,
@@ -79,7 +81,8 @@ const createMembership = async ({ userId, planId }) => {
             id: membership._id,
             memberId: membership.memberId,
             planId: membership.planId,
-            planName: plan.name,
+            planNameVi: plan.nameVi,
+            planNameEn: plan.nameEn,
             startDate: membership.startDate.toISOString(),
             endDate: membership.endDate.toISOString(),
             durationDays: plan.durationDays,
