@@ -25,7 +25,6 @@ import {
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, useLocation } from 'react-router-dom'
-import { useTheme } from '../../../context/ThemeProvider'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
 import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
@@ -52,7 +51,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [pendingCount, setPendingCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const { dark } = useTheme()
   const location = useLocation()
 
   const actualRole = user?.role
