@@ -95,6 +95,10 @@ const PORT = process.env.PORT || 5000
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
+  console.log('Gemini:', !!process.env.GEMINI_API_KEY)
+  console.log('Gemini Admin:', !!process.env.GEMINI_API_KEY_ADMIN)
+  console.log('OpenRouter:', !!process.env.OPENROUTER_API_KEY)
+  console.log('Groq:', !!process.env.GROQ_API_KEY)
 })
 
 connectDB().catch((error) => {

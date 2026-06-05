@@ -136,6 +136,6 @@ export const updateAiUserMemoryIfDue = async ({ userId, query, mode }) => {
                 analyzedMessageCount: messageCount,
             },
         },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
     ).lean()
 }

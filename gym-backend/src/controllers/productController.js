@@ -1,6 +1,7 @@
 import Product from '../models/Product.js'
 import Shop from '../models/Shop.js'
 import { recordAuditLog } from '../services/auditLogService.js'
+import { invalidateContextCache } from '../services/conversationContextCache.js'
 import AppError from '../utils/appError.js'
 
 const normalizeWeightVariants = (variants, fallbackWeights) => {
@@ -192,6 +193,7 @@ export const createProduct = async (req, res, next) => {
       entity: product,
       details: 'Thêm sản phẩm',
     })
+    invalidateContextCache('products')
     res.status(201).json(product)
   } catch (err) { next(err) }
 }
@@ -262,6 +264,7 @@ export const updateProduct = async (req, res, next) => {
       entity: product,
       details: 'Cập nhật thông tin sản phẩm',
     })
+    invalidateContextCache('products')
     res.json(product)
   } catch (err) { next(err) }
 }
@@ -278,6 +281,7 @@ export const deleteProduct = async (req, res, next) => {
       entity: product,
       details: 'Xóa sản phẩm',
     })
+    invalidateContextCache('products')
     res.json({ message: 'Đã xoá sản phẩm' })
   } catch (err) { next(err) }
 }

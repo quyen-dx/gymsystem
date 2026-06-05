@@ -17,14 +17,14 @@ const policySchema = new mongoose.Schema(
 const hasText = (value) => typeof value === 'string' && value.trim().length > 0
 
 policySchema.statics.migrateLegacy = async function () {
-  const docs = await this.collection.find({
+  const docs = await this.find({
     $or: [
       { titleVi: { $exists: false } },
       { titleEn: { $exists: false } },
       { contentVi: { $exists: false } },
       { contentEn: { $exists: false } },
     ],
-  }).toArray()
+  }).lean()
 
   if (docs.length === 0) return { migrated: 0, skipped: 0 }
 
@@ -58,7 +58,7 @@ policySchema.statics.migrateLegacy = async function () {
     const content = policy.content.trim()
     const category = hasText(policy.category) ? policy.category.trim() : ''
 
-    await this.collection.updateOne(
+    await this.updateOne(
       { _id: policy._id },
       {
         $set: {

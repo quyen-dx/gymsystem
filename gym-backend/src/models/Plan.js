@@ -2,9 +2,14 @@ import mongoose from 'mongoose';
 
 const planSchema = new mongoose.Schema(
   {
-    name: {
+    nameVi: {
       type: String,
-      required: [true, 'Tên gói tập là bắt buộc'],
+      required: [true, 'Tên gói (VI) là bắt buộc'],
+      trim: true,
+    },
+    nameEn: {
+      type: String,
+      required: [true, 'Plan name (EN) is required'],
       trim: true,
     },
     price: {
@@ -17,14 +22,27 @@ const planSchema = new mongoose.Schema(
       required: [true, 'Số ngày là bắt buộc'],
       min: [1, 'Số ngày phải ít nhất là 1'],
     },
-    description: {
+    descriptionVi: {
       type: String,
       trim: true,
       default: '',
     },
+    descriptionEn: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    featuresVi: {
+      type: [String],
+      default: [],
+    },
+    featuresEn: {
+      type: [String],
+      default: [],
+    },
     color: {
       type: String,
-      default: '#3B82F6', // màu mặc định xanh
+      default: '#3B82F6',
       match: [/^#[0-9A-Fa-f]{6}$/, 'Màu phải theo định dạng #RRGGBB'],
     },
     isActive: {

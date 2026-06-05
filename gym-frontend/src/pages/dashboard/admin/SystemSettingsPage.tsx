@@ -8,7 +8,33 @@ import { systemSettingsService } from '../../../services/systemSettingsService'
 
 const { Text } = Typography
 
-type SettingType = 'switch' | 'text' | 'select' | 'number' | 'slogans'
+const ColorPickerControl = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
+  const [local, setLocal] = useState(value)
+
+  useEffect(() => {
+    setLocal(value)
+  }, [value])
+
+  const displayHex = (local || '#DB2777').toUpperCase()
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="color"
+        value={local || '#DB2777'}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={() => {
+          if (local !== value) onChange(local)
+        }}
+        className="h-9 w-12 cursor-pointer rounded-lg border bg-transparent p-0.5"
+        style={{ borderColor: 'var(--theme-border-strong)' }}
+      />
+      <span className="font-mono text-xs text-[var(--theme-muted)]">{displayHex}</span>
+    </div>
+  )
+}
+
+type SettingType = 'switch' | 'text' | 'select' | 'number' | 'slogans' | 'color'
 
 type SettingItem = {
   path: string
@@ -42,6 +68,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       { path: 'general.logoUrl', type: 'text' },
       { path: 'general.defaultLanguage', type: 'select', options: langOptions },
       { path: 'general.defaultTheme', type: 'select', options: themeOptions },
+      { path: 'general.defaultAccentColor', type: 'color' },
       { path: 'general.maintenanceMode', type: 'switch' },
       { path: 'general.maintenanceMessage.vi', type: 'text' },
       { path: 'general.maintenanceMessage.en', type: 'text' },
@@ -325,6 +352,14 @@ export default function SystemSettingsPage() {
           min={item.min}
           max={item.max}
           onChange={(nextValue) => setDraft(setByPath(draft, item.path, Number(nextValue) || item.min || 0))}
+        />
+      )
+    }
+    if (item.type === 'color') {
+      return (
+        <ColorPickerControl
+          value={value}
+          onChange={(color) => setDraft(setByPath(draft, item.path, color))}
         />
       )
     }

@@ -4,6 +4,7 @@ import Membership from '../../models/Membership.js'
 import Plan from '../../models/Plan.js'
 import Product from '../../models/Product.js'
 import User from '../../models/User.js'
+import { invalidatePersonalContextCache } from '../../services/conversationContextCache.js'
 import { createMembership as createMembershipService } from '../../services/membershipService.js'
 
 const toObjectId = (value, fieldName) => {
@@ -317,6 +318,7 @@ export const createBookingRequest = async ({ userId, ptId, date, slot, note = ''
     slot: normalizedSlot,
     note: String(note || '').slice(0, 500),
   })
+  invalidatePersonalContextCache(memberId)
 
   return {
     created: true,

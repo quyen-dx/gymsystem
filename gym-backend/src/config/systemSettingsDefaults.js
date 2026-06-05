@@ -14,6 +14,7 @@ export const SYSTEM_SETTINGS_DEFAULTS = {
     logoUrl: '',
     defaultLanguage: 'vi',
     defaultTheme: 'dark',
+    defaultAccentColor: '#DB2777',
     maintenanceMode: false,
     maintenanceMessage: {
       vi: 'Chúng tôi đang nâng cấp hệ thống để mang lại trải nghiệm tốt hơn. Vui lòng quay lại sau.',

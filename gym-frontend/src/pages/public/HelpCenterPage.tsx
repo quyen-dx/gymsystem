@@ -1,10 +1,22 @@
-import { Card, Collapse, Empty, Input, Spin, Tag } from 'antd'
+import { Spin } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { HelpCircle, LifeBuoy, Search, ChevronDown, Users, Calendar, CreditCard, Dumbbell } from 'lucide-react'
 import MemberLayout from '../../components/layout/header/MemberLayout'
 import { systemExperienceService } from '../../services/systemExperienceService'
 
 const normalizeCategory = (cat: string) => cat.trim().replace(/\s+/g, ' ')
+
+const topicIcons: Record<string, React.ReactNode> = {
+  'Tài khoản': <Users size={16} />,
+  'Account': <Users size={16} />,
+  'Đặt lịch': <Calendar size={16} />,
+  'Booking': <Calendar size={16} />,
+  'Gói tập': <Dumbbell size={16} />,
+  'Membership': <Dumbbell size={16} />,
+  'Thanh toán': <CreditCard size={16} />,
+  'Payment': <CreditCard size={16} />,
+}
 
 export default function HelpCenterPage() {
   const { t, i18n } = useTranslation()
@@ -13,11 +25,13 @@ export default function HelpCenterPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
     setSearch('')
     setActiveCategory(null)
+    setOpenId(null)
     systemExperienceService.getFaqs({ lang }).then((res) => setItems(res.data.faqs || [])).finally(() => setLoading(false))
   }, [lang])
 
@@ -54,63 +68,135 @@ export default function HelpCenterPage() {
     })
   }, [items, search, activeCategory, qField, aField, cField])
 
+  const toggleCard = (id: string) => {
+    setOpenId((prev) => (prev === id ? null : id))
+  }
+
   return (
     <MemberLayout>
-      <div className="member-page grid gap-5">
-        <Card className="no-select rounded-[28px] border border-[var(--gs-border)] bg-[var(--theme-card)]">
-          <div className="grid gap-4">
-            <div className="flex items-start gap-4 max-[520px]:gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--theme-accent-muted)] text-2xl">❓</div>
-              <div>
-                <h1 className="m-0 text-3xl font-semibold text-[var(--theme-text)] max-[520px]:text-2xl">{t('system_experience.help.title')}</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--theme-muted)] sm:text-base">
-                  {t('system_experience.help.description')}
-                </p>
-              </div>
+      <div className="support-page">
+        {/* Hero */}
+        <div className="support-hero">
+          <div className="support-hero-left">
+            <span className="support-kicker">
+              <LifeBuoy size={14} />
+              {t('system_experience.help.kicker')}
+            </span>
+            <h1>{t('system_experience.help.title')}</h1>
+            <p>{t('system_experience.help.description')}</p>
+          </div>
+          <div className="support-stats">
+            <div className="support-stats-item">
+              <strong>{totalCount}</strong>
+              <span>{t('system_experience.help.stats_faqs')}</span>
             </div>
+            <div className="support-stats-item">
+              <strong>{categories.length}</strong>
+              <span>{t('system_experience.help.stats_categories')}</span>
+            </div>
+          </div>
+        </div>
 
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setActiveCategory(null)}
-                className={`tap-transparent no-select rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
-                  !activeCategory
-                    ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-[var(--theme-button-text)]'
-                    : 'border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)] hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]'
-                }`}
-              >
-                {t('system_experience.help.filter_all')} ({totalCount})
-              </button>
-              {categories.map(({ display, count }) => (
+        {/* Quick Topics */}
+        {categories.length > 0 && (
+          <div>
+            <div className="support-pills" style={{ marginBottom: 6 }}>
+              {categories.map(({ display }) => (
                 <button
                   key={display}
                   type="button"
                   onClick={() => setActiveCategory(display)}
-                  className={`tap-transparent no-select rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
-                    activeCategory === display
-                      ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-[var(--theme-button-text)]'
-                      : 'border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)] hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]'
-                  }`}
+                  className={`support-quick-topic ${activeCategory === display ? 'active' : ''}`}
                 >
-                  {display} ({count})
+                  {topicIcons[display] || <HelpCircle size={16} />}
+                  {display}
                 </button>
               ))}
             </div>
-
-            <Input.Search allowClear size="large" placeholder={t('system_experience.help.search_placeholder')} value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-        </Card>
+        )}
 
+        {/* Toolbar */}
+        <div className="support-toolbar">
+          {/* Pill Tabs */}
+          <div className="support-pills">
+            <button
+              type="button"
+              onClick={() => setActiveCategory(null)}
+              className={`support-pill ${!activeCategory ? 'active' : ''}`}
+            >
+              {t('system_experience.help.filter_all')} ({totalCount})
+            </button>
+            {categories.map(({ display, count }) => (
+              <button
+                key={display}
+                type="button"
+                onClick={() => setActiveCategory(display)}
+                className={`support-pill ${activeCategory === display ? 'active' : ''}`}
+              >
+                {topicIcons[display] || <HelpCircle size={15} />}
+                {display} ({count})
+              </button>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="support-search">
+            <input
+              type="text"
+              placeholder={t('system_experience.help.search_placeholder')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search ? (
+              <button
+                type="button"
+                className="support-search-clear"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            ) : (
+              <Search className="support-search-icon" />
+            )}
+          </div>
+        </div>
+
+        {/* Content */}
         {loading ? (
-          <Spin />
+          <div className="support-loading">
+            <Spin />
+          </div>
         ) : filtered.length === 0 ? (
-          <Empty description={t('system_experience.help.empty')} />
+          <div className="support-empty">
+            <Search />
+            <p>{t('system_experience.help.empty')}</p>
+            <span>{t('system_experience.help.empty_suggestion')}</span>
+          </div>
         ) : (
-          <Collapse className="policy-center-collapse" items={filtered.map((item) => ({
-            key: item._id,
-            label: <span className="no-select tap-transparent font-semibold text-[var(--theme-text)]">{item[qField]} <Tag className="no-select">{item[cField]}</Tag></span>,
-            children: <p className="select-text m-0 whitespace-pre-wrap leading-7 text-[var(--theme-text)]">{item[aField]}</p>,
-          }))} />
+          <div className="support-list">
+            {filtered.map((item) => {
+              const id = item._id
+              const isOpen = openId === id
+              return (
+                <div key={id} className={`support-card ${isOpen ? 'open' : ''}`}>
+                  <div className="support-card-header" onClick={() => toggleCard(id)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCard(id) } }}>
+                    <div className="support-card-title-area">
+                      <div className="support-card-title">{item[qField]}</div>
+                      <div className="support-card-meta">
+                        <span className="support-card-category">{item[cField]}</span>
+                      </div>
+                    </div>
+                    <ChevronDown className="support-card-arrow" />
+                  </div>
+                  <div className="support-card-body">
+                    <div className="support-card-body-inner">{item[aField]}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         )}
       </div>
     </MemberLayout>

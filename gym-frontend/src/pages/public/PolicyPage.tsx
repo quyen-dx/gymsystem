@@ -1,6 +1,7 @@
-import { Card, Collapse, Empty, Input, Spin } from 'antd'
+import { Spin } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ShieldCheck, FileText, Search, ChevronDown, Info } from 'lucide-react'
 import MemberLayout from '../../components/layout/header/MemberLayout'
 import { systemExperienceService } from '../../services/systemExperienceService'
 
@@ -20,6 +21,7 @@ export default function PolicyPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
   const titleField = lang === 'en' ? 'titleEn' : 'titleVi'
   const contentField = lang === 'en' ? 'contentEn' : 'contentVi'
   const categoryField = lang === 'en' ? 'categoryEn' : 'categoryVi'
@@ -28,6 +30,7 @@ export default function PolicyPage() {
     setLoading(true)
     setSearch('')
     setActiveCategory(null)
+    setOpenId(null)
     systemExperienceService.getPolicies({ lang }).then((res) => setItems(res.data.policies || [])).finally(() => setLoading(false))
   }, [lang])
 
@@ -47,6 +50,15 @@ export default function PolicyPage() {
     return Array.from(map.values()).sort((a, b) => a.display.localeCompare(b.display))
   }, [items, categoryField])
 
+  const totalCount = items.length
+
+  const latestDate = useMemo(() => {
+    if (items.length === 0) return ''
+    const dates = items.map((i) => new Date(i.updatedAt || i.createdAt).getTime()).filter((d) => !Number.isNaN(d))
+    if (dates.length === 0) return ''
+    return formatDate(new Date(Math.max(...dates)).toISOString())
+  }, [items])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return items.filter((item) => {
@@ -60,82 +72,129 @@ export default function PolicyPage() {
     })
   }, [items, search, activeCategory, titleField, contentField, categoryField])
 
+  const toggleCard = (id: string) => {
+    setOpenId((prev) => (prev === id ? null : id))
+  }
+
   return (
     <MemberLayout>
-      <div className="member-page grid gap-5">
-        <Card className="no-select rounded-[28px] border border-[var(--gs-border)] bg-[var(--theme-card)]">
-          <div className="grid gap-4">
-            <div className="flex items-start gap-4 max-[520px]:gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--theme-accent-muted)] text-2xl">📜</div>
-              <div>
-                <h1 className="m-0 text-3xl font-semibold text-[var(--theme-text)] max-[520px]:text-2xl">{t('system_experience.policy.title')}</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--theme-muted)] sm:text-base">
-                  {t('system_experience.policy.description')}
-                </p>
+      <div className="support-page">
+        {/* Hero */}
+        <div className="support-hero">
+          <div className="support-hero-left">
+            <span className="support-kicker">
+              <ShieldCheck size={14} />
+              {t('system_experience.policy.kicker')}
+            </span>
+            <h1>{t('system_experience.policy.title')}</h1>
+            <p>{t('system_experience.policy.description')}</p>
+          </div>
+          <div className="support-stats">
+            <div className="support-stats-item">
+              <strong>{totalCount}</strong>
+              <span>{t('system_experience.policy.stats_total')}</span>
+            </div>
+            {latestDate && (
+              <div className="support-stats-item">
+                <strong style={{ fontSize: 14, fontWeight: 600 }}>{latestDate}</strong>
+                <span>{t('system_experience.policy.stats_updated')}</span>
               </div>
-            </div>
+            )}
+          </div>
+        </div>
 
-            <div className="flex flex-wrap gap-2">
+        {/* Notice */}
+        <div className="support-notice">
+          <Info />
+          {t('system_experience.policy.notice')}
+        </div>
+
+        {/* Toolbar */}
+        <div className="support-toolbar">
+          {/* Pill Tabs */}
+          <div className="support-pills">
+            <button
+              type="button"
+              onClick={() => setActiveCategory(null)}
+              className={`support-pill ${!activeCategory ? 'active' : ''}`}
+            >
+              {t('system_experience.policy.filter_all')} ({totalCount})
+            </button>
+            {categories.map(({ display, count }) => (
               <button
+                key={display}
                 type="button"
-                onClick={() => setActiveCategory(null)}
-                className={`tap-transparent no-select rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
-                  !activeCategory
-                    ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-[var(--theme-button-text)]'
-                    : 'border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)] hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]'
-                }`}
+                onClick={() => setActiveCategory(display)}
+                className={`support-pill ${activeCategory === display ? 'active' : ''}`}
               >
-                {t('system_experience.policy.filter_all')} ({items.length})
+                <FileText size={15} />
+                {display} ({count})
               </button>
-              {categories.map(({ display, count }) => (
-                <button
-                  key={display}
-                  type="button"
-                  onClick={() => setActiveCategory(display)}
-                  className={`tap-transparent no-select rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
-                    activeCategory === display
-                      ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-[var(--theme-button-text)]'
-                      : 'border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)] hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]'
-                  }`}
-                >
-                  {display} ({count})
-                </button>
-              ))}
-            </div>
+            ))}
+          </div>
 
-            <Input.Search
-              allowClear
-              size="large"
+          {/* Search */}
+          <div className="support-search">
+            <input
+              type="text"
               placeholder={t('system_experience.policy.search_placeholder')}
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(e) => setSearch(e.target.value)}
             />
+            {search ? (
+              <button
+                type="button"
+                className="support-search-clear"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            ) : (
+              <Search className="support-search-icon" />
+            )}
           </div>
-        </Card>
+        </div>
 
+        {/* Content */}
         {loading ? (
-          <Spin />
+          <div className="support-loading">
+            <Spin />
+          </div>
         ) : filtered.length === 0 ? (
-          <Empty description={t('system_experience.policy.empty')} />
+          <div className="support-empty">
+            <Search />
+            <p>{t('system_experience.policy.empty')}</p>
+            <span>{t('system_experience.policy.empty_suggestion')}</span>
+          </div>
         ) : (
-          <Collapse
-            className="policy-center-collapse"
-            items={filtered.map((item) => {
-              const title = item[titleField] || item.titleVi || item.titleEn
-              const content = item[contentField] || item.contentVi || item.contentEn
+          <div className="support-list">
+            {filtered.map((item) => {
+              const id = item._id || item.slug
+              const isOpen = openId === id
+              const title = item[titleField] || item.titleVi || item.titleEn || ''
+              const content = item[contentField] || item.contentVi || item.contentEn || ''
+              const category = item[categoryField] || item.categoryVi || item.categoryEn || ''
               const updated = formatDate(item.updatedAt)
-              return {
-                key: item._id || item.slug,
-                label: <span className="no-select tap-transparent font-semibold text-[var(--theme-text)]">{title}</span>,
-                children: (
-                  <div className="grid gap-3">
-                    {updated && <div className="no-select text-sm text-[var(--theme-muted)]">{t('system_experience.policy.updated_label')}: {updated}</div>}
-                    <div className="select-text whitespace-pre-wrap leading-7 text-[var(--theme-text)]">{content}</div>
+              return (
+                <div key={id} className={`support-card ${isOpen ? 'open' : ''}`}>
+                  <div className="support-card-header" onClick={() => toggleCard(id)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCard(id) } }}>
+                    <div className="support-card-title-area">
+                      <div className="support-card-title">{title}</div>
+                      <div className="support-card-meta">
+                        <span className="support-card-category">{category}</span>
+                        {updated && <span className="support-card-date">{t('system_experience.policy.updated_label')}: {updated}</span>}
+                      </div>
+                    </div>
+                    <ChevronDown className="support-card-arrow" />
                   </div>
-                ),
-              }
+                  <div className="support-card-body">
+                    <div className="support-card-body-inner">{content}</div>
+                  </div>
+                </div>
+              )
             })}
-          />
+          </div>
         )}
       </div>
     </MemberLayout>

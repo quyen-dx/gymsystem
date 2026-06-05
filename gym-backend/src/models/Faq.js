@@ -19,14 +19,14 @@ faqSchema.index({ questionVi: 'text', questionEn: 'text', answerVi: 'text', answ
 const hasText = (value) => typeof value === 'string' && value.trim().length > 0
 
 faqSchema.statics.migrateLegacy = async function () {
-  const docs = await this.collection.find({
+  const docs = await this.find({
     $or: [
       { questionVi: { $exists: false } },
       { questionEn: { $exists: false } },
       { answerVi: { $exists: false } },
       { answerEn: { $exists: false } },
     ],
-  }).toArray()
+  }).lean()
 
   if (docs.length === 0) return { migrated: 0, skipped: 0 }
 
@@ -60,7 +60,7 @@ faqSchema.statics.migrateLegacy = async function () {
     const answer = faq.answer.trim()
     const category = hasText(faq.category) ? faq.category.trim() : ''
 
-    await this.collection.updateOne(
+    await this.updateOne(
       { _id: faq._id },
       {
         $set: {
