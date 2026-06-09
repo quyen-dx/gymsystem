@@ -14,10 +14,12 @@ import OauthSuccessPage from './pages/auth/OauthSuccessPage'
 import RegisterPage from './pages/auth/Registerpage'
 import AdminDashboard from './pages/dashboard/admin/AdminDashboard'
 import AdminMembersPage from './pages/dashboard/admin/AdminMembersPage'
+import MemberDetailPage from './pages/dashboard/admin/MemberDetailPage'
 import AdminPartnershipRequestsPage from './pages/dashboard/admin/AdminPartnershipRequestsPage'
 import AdminPlansPage from './pages/dashboard/admin/AdminPlansPage'
 import AdminReports from './pages/dashboard/admin/AdminReports'
 import AdminTrainersPage from './pages/dashboard/admin/AdminTrainersPage'
+import TrainerDetailPage from './pages/dashboard/admin/TrainerDetailPage'
 import AdminUsersPage from './pages/dashboard/admin/AdminUsersPage'
 import FAQManagerPage from './pages/dashboard/admin/FAQManagerPage'
 import FeedbackManagerPage from './pages/dashboard/admin/FeedbackManagerPage'
@@ -265,7 +267,9 @@ function AppWithTheme() {
         <Route path="/admin/shop" element={<Navigate to="/admin/partnerships" />} />
         <Route path="/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
         <Route path="/admin/members" element={<PrivateRoute><AdminMembersPage /></PrivateRoute>} />
+        <Route path="/admin/members/:id" element={<PrivateRoute><MemberDetailPage /></PrivateRoute>} />
         <Route path="/admin/trainers" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersPage /></PrivateRoute>} />
+        <Route path="/admin/trainers/:id" element={<PrivateRoute feature="pt.moduleEnabled"><TrainerDetailPage /></PrivateRoute>} />
         <Route path="/admin/pts" element={<Navigate to="/admin/trainers" replace />} />
         <Route path="/admin/reports" element={<PrivateRoute feature="reports.revenueChartEnabled"><AdminReports /></PrivateRoute>} />
         <Route path="/admin/system-settings" element={<PrivateRoute><SystemSettingsPage /></PrivateRoute>} />

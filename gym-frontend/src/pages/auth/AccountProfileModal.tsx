@@ -1366,8 +1366,8 @@ export default function AccountProfileModal({
       open={open}
       onCancel={handleClose}
       footer={null}
-      maskClosable
-      destroyOnClose
+      mask={{ closable: true }}
+      destroyOnHidden
       width={isProfileDesktop ? 760 : 680}
       className={`profile-modal ${profileModalClass}`}
       wrapClassName={profileModalWrapClass}

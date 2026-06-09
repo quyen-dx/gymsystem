@@ -265,9 +265,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           placement="left"
           open={sidebarOpen}
           onClose={closeSidebar}
-          width={280}
+          size={280}
           closable={false}
-          maskClosable={true}
+          mask={{ closable: true }}
           styles={{ body: { padding: 0, background: 'var(--theme-card)' } }}
         >
           <div className="dashboard-drawer-close">
