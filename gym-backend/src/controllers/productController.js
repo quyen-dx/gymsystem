@@ -166,7 +166,7 @@ export const getProductById = async (req, res, next) => {
 
 export const createProduct = async (req, res, next) => {
   try {
-    const { name, description, descriptionImages, price, image, images, weights, weightVariants, category, stock, partner } = req.body
+    const { name, description, descriptionHtml, descriptionImages, price, image, images, weights, weightVariants, category, stock, partner } = req.body
     const normalizedVariants = normalizeWeightVariants(weightVariants, weights)
     const normalizedStock = normalizedVariants.length > 0
       ? normalizedVariants.reduce((sum, item) => sum + Number(item.stock || 0), 0)
@@ -176,6 +176,7 @@ export const createProduct = async (req, res, next) => {
       shop_id: shopId,
       name,
       description,
+      descriptionHtml,
       descriptionImages,
       price,
       image,
@@ -237,7 +238,7 @@ export const getMyProducts = async (req, res, next) => {
 
 export const updateProduct = async (req, res, next) => {
   try {
-    const { name, description, descriptionImages, price, image, images, weights, weightVariants, category, stock, partner } = req.body
+    const { name, description, descriptionHtml, descriptionImages, price, image, images, weights, weightVariants, category, stock, partner } = req.body
     const normalizedVariants = normalizeWeightVariants(weightVariants, weights)
     const normalizedStock = normalizedVariants.length > 0
       ? normalizedVariants.reduce((sum, item) => sum + Number(item.stock || 0), 0)
@@ -247,6 +248,7 @@ export const updateProduct = async (req, res, next) => {
 
     product.name = name
     product.description = description
+    product.descriptionHtml = descriptionHtml
     product.descriptionImages = descriptionImages
     product.price = price
     product.image = image
@@ -283,6 +285,13 @@ export const deleteProduct = async (req, res, next) => {
     })
     invalidateContextCache('products')
     res.json({ message: 'Đã xoá sản phẩm' })
+  } catch (err) { next(err) }
+}
+
+export const uploadProductImage = async (req, res, next) => {
+  try {
+    if (!req.file) return next(new AppError('Không có file ảnh', 400))
+    res.json({ url: req.file.path })
   } catch (err) { next(err) }
 }
 

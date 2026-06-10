@@ -15,6 +15,7 @@ export interface AdminProduct {
   shop_id?: string | { _id: string; name?: string; user_id?: string }
   name: string
   description: string
+  descriptionHtml?: string
   price: number
   image: string
   images?: string[]

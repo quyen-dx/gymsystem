@@ -28,7 +28,7 @@ export default function MyFeedbackPage() {
     finally { setLoading(false) }
   }
   const beforeUpload = (file: any) => {
-    const validType = ['image/png', 'image/jpg', 'image/jpeg', 'image/webp'].includes(file.type)
+    const validType = ['image/png', 'image/jpg', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'].includes(file.type)
     if (!validType) {
       message.error(t('system_experience.feedback.image_required'))
       return Upload.LIST_IGNORE
@@ -81,7 +81,7 @@ export default function MyFeedbackPage() {
             <Form.Item name="content" label={t('system_experience.feedback.content_label')} rules={[{ required: true }]}><Input.TextArea className="select-text" rows={4} /></Form.Item>
             <Form.Item label={t('system_experience.feedback.attachments')}>
               <Upload
-                accept="image/png,image/jpg,image/jpeg,image/webp"
+                accept="image/png,image/jpg,image/jpeg,image/webp,image/gif,image/svg+xml"
                 beforeUpload={beforeUpload}
                 fileList={fileList}
                 listType="picture-card"

@@ -446,7 +446,7 @@ export default function SellerRevenuePage() {
   return (
     <DashboardLayout>
       <div className="space-y-4 p-4 max-[640px]:p-0">
-        <div className="dashboard-hero rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
+        <div className="dashboard-hero rounded-[28px] border border-[var(--gs-border)]" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--theme-accent, #b6462f) 14%, transparent), transparent)' }}>
           <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Seller</p>
           <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">{t('seller_dashboard.revenue_report')}</h1>
         </div>

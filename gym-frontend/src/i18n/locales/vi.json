@@ -207,23 +207,6 @@
     "add_variant": "Thêm biến thể",
     "update": "Cập nhật"
   },
-  "seller_orders": {
-    "status_pending": "Chờ xác nhận",
-    "status_shipping": "Đang giao hàng",
-    "status_delivered": "Giao thành công",
-    "update_success": "Đã cập nhật trạng thái đơn hàng",
-    "update_failed": "Không thể cập nhật trạng thái",
-    "order_id": "Mã đơn",
-    "buyer": "Người mua",
-    "customer_fallback": "Khách hàng",
-    "no_contact": "Chưa có liên hệ",
-    "products": "Sản phẩm",
-    "quantity": "Số lượng",
-    "total": "Tổng tiền",
-    "status": "Trạng thái",
-    "title": "Đơn hàng bán",
-    "status_filter": "Lọc trạng thái"
-  },
   "wallet": {
     "label": "Ví:",
     "current": "Ví hiện tại",
@@ -703,18 +686,20 @@
   },
   "seller_orders": {
     "title": "Đơn hàng bán",
-    "filter_status": "Lọc trạng thái",
+    "status_filter": "Lọc trạng thái",
     "order_id": "Mã đơn",
     "buyer": "Người mua",
-    "customer": "Khách hàng",
+    "customer_fallback": "Khách hàng",
     "no_contact": "Chưa có liên hệ",
     "products": "Sản phẩm",
-    "product_fallback": "Sản phẩm",
-    "quantity": "Số lượng:",
+    "quantity": "Số lượng",
     "total": "Tổng tiền",
     "status": "Trạng thái",
-    "msg_updated": "Đã cập nhật trạng thái đơn hàng",
-    "msg_update_failed": "Không thể cập nhật trạng thái"
+    "status_pending": "Chờ xác nhận",
+    "status_shipping": "Đang giao hàng",
+    "status_delivered": "Giao thành công",
+    "update_success": "Đã cập nhật trạng thái đơn hàng",
+    "update_failed": "Không thể cập nhật trạng thái"
   },
   "admin": {
     "backToAdmin": "Trở về Admin",

@@ -21,8 +21,10 @@ import AdminReports from './pages/dashboard/admin/AdminReports'
 import AdminTrainersPage from './pages/dashboard/admin/AdminTrainersPage'
 import TrainerDetailPage from './pages/dashboard/admin/TrainerDetailPage'
 import AdminUsersPage from './pages/dashboard/admin/AdminUsersPage'
+import FAQCreatePage from './pages/dashboard/admin/FAQCreatePage'
 import FAQManagerPage from './pages/dashboard/admin/FAQManagerPage'
 import FeedbackManagerPage from './pages/dashboard/admin/FeedbackManagerPage'
+import PolicyCreatePage from './pages/dashboard/admin/PolicyCreatePage'
 import PolicyManagerPage from './pages/dashboard/admin/PolicyManagerPage'
 import SystemSettingsPage from './pages/dashboard/admin/SystemSettingsPage'
 import BookingPage from './pages/dashboard/member/BookingPage'
@@ -44,6 +46,8 @@ import PTClientsPage from './pages/dashboard/pt/PTClientsPage'
 import PTSchedulePage from './pages/dashboard/pt/PTSchedulePage'
 import PTWorkoutsPage from './pages/dashboard/pt/PTWorkoutsPage'
 import SellerOrdersPage from './pages/dashboard/seller/SellerOrdersPage'
+import SellerProductCreatePage from './pages/dashboard/seller/SellerProductCreatePage'
+import SellerProductEditPage from './pages/dashboard/seller/SellerProductEditPage'
 import SellerProductsPage from './pages/dashboard/seller/SellerProductsPage'
 import SellerRevenuePage from './pages/dashboard/seller/SellerRevenuePage'
 import SellerShopPage from './pages/dashboard/seller/SellerShopPage'
@@ -255,7 +259,6 @@ function AppWithTheme() {
         <Route path="/maintenance" element={<MaintenanceRoute />} />
         <Route path="/hop-tac" element={<PartnershipPage />} />
         <Route path="/about" element={<AboutPage />} />
-        <Route path="/gioi-thieu" element={<AboutPage />} />
         <Route path="/help" element={<PrivateRoute><HelpCenterPage /></PrivateRoute>} />
         <Route path="/policies" element={<PrivateRoute><PolicyPage /></PrivateRoute>} />
 
@@ -273,12 +276,16 @@ function AppWithTheme() {
         <Route path="/admin/pts" element={<Navigate to="/admin/trainers" replace />} />
         <Route path="/admin/reports" element={<PrivateRoute feature="reports.revenueChartEnabled"><AdminReports /></PrivateRoute>} />
         <Route path="/admin/system-settings" element={<PrivateRoute><SystemSettingsPage /></PrivateRoute>} />
+        <Route path="/admin/faqs/create" element={<PrivateRoute><FAQCreatePage /></PrivateRoute>} />
         <Route path="/admin/faqs" element={<PrivateRoute><FAQManagerPage /></PrivateRoute>} />
         <Route path="/admin/feedback" element={<PrivateRoute><FeedbackManagerPage /></PrivateRoute>} />
+        <Route path="/admin/policies/create" element={<PrivateRoute><PolicyCreatePage /></PrivateRoute>} />
         <Route path="/admin/policies" element={<PrivateRoute><PolicyManagerPage /></PrivateRoute>} />
         {/* SELLER */}
         <Route path="/seller" element={<Navigate to="/seller/products" />} />
         <Route path="/seller/products" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerProductsPage /></PrivateRoute>} />
+        <Route path="/seller/products/create" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerProductCreatePage /></PrivateRoute>} />
+        <Route path="/seller/products/edit/:id" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerProductEditPage /></PrivateRoute>} />
         <Route path="/seller/orders" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerOrdersPage /></PrivateRoute>} />
         <Route path="/seller/shop" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerShopPage /></PrivateRoute>} />
         <Route path="/seller/revenue" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerRevenuePage /></PrivateRoute>} />

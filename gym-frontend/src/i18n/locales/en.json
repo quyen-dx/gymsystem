@@ -207,23 +207,6 @@
     "add_variant": "Add variant",
     "update": "Update"
   },
-  "seller_orders": {
-    "status_pending": "Pending confirmation",
-    "status_shipping": "Shipping",
-    "status_delivered": "Delivered",
-    "update_success": "Order status updated",
-    "update_failed": "Unable to update status",
-    "order_id": "Order ID",
-    "buyer": "Buyer",
-    "customer_fallback": "Customer",
-    "no_contact": "No contact information",
-    "products": "Products",
-    "quantity": "Quantity",
-    "total": "Total",
-    "status": "Status",
-    "title": "Seller Orders",
-    "status_filter": "Filter status"
-  },
   "wallet": {
     "label": "Wallet:",
     "current": "Current Wallet",
@@ -702,18 +685,20 @@
   },
   "seller_orders": {
     "title": "Seller Orders",
-    "filter_status": "Filter by Status",
+    "status_filter": "Filter by Status",
     "order_id": "Order ID",
     "buyer": "Buyer",
-    "customer": "Customer",
+    "customer_fallback": "Customer",
     "no_contact": "No contact",
     "products": "Products",
-    "product_fallback": "Product",
-    "quantity": "Quantity:",
+    "quantity": "Quantity",
     "total": "Total",
     "status": "Status",
-    "msg_updated": "Order status updated",
-    "msg_update_failed": "Unable to update status"
+    "status_pending": "Pending confirmation",
+    "status_shipping": "Shipping",
+    "status_delivered": "Delivered",
+    "update_success": "Order status updated",
+    "update_failed": "Unable to update status"
   },
   "admin": {
     "backToAdmin": "Back to Admin",
