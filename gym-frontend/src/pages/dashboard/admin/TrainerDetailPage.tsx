@@ -88,8 +88,8 @@ export default function TrainerDetailPage() {
   const today = new Date()
   const todayStr = today.toISOString().split('T')[0]
 
-  const groupedByDate = {}
-  bookings.forEach((b) => {
+  const groupedByDate: Record<string, typeof bookings> = {}
+  bookings.forEach((b: typeof bookings[number]) => {
     const d = new Date(b.date).toISOString().split('T')[0]
     if (!groupedByDate[d]) groupedByDate[d] = []
     groupedByDate[d].push(b)

@@ -70,13 +70,6 @@ export default function FAQCreatePage() {
     return { vi: nvi, en: nen }
   }
 
-  const resetCategoryFields = () => {
-    setSelectedCategoryVi(undefined)
-    setSelectedCategoryEn(undefined)
-    setNewCategoryVi('')
-    setNewCategoryEn('')
-  }
-
   const handleSelectVi = (value: string | undefined) => {
     if (!value) {
       setSelectedCategoryVi(undefined)

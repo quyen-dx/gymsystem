@@ -11,7 +11,7 @@ import {
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { memberService } from '../../../services/memberService'
-import type { MemberListItem } from '../../../types/admin/member'
+import type { MemberFormData, MemberListItem } from '../../../types/admin/member'
 import { UploadOutlined } from '@ant-design/icons'
 
 interface Props {
@@ -73,8 +73,8 @@ export default function MemberFormModal({ open, member, onClose, onSuccess }: Pr
         await memberService.updateMember(member!._id, payload)
         message.success(t('admin.members.update_success'))
       } else {
-        (payload as Record<string, unknown>).password = (values.password as string) || undefined
-        await memberService.createMember(payload as Record<string, unknown>)
+        ;(payload as unknown as MemberFormData).password = (values.password as string) || undefined
+        await memberService.createMember(payload as unknown as MemberFormData)
         message.success(t('admin.members.create_success'))
       }
       onSuccess()

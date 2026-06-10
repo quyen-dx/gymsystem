@@ -160,7 +160,7 @@ export default function ProductDetailPage() {
   }
 
   const allImages = Array.from(
-    new Set([...normalizeImageList(product.images), product.image].filter(Boolean)),
+    new Set([...normalizeImageList(product.images), product.image].filter((s): s is string => !!s)),
   )
   const reviews = product.reviews || []
   const basePrice = product.price ?? 0
