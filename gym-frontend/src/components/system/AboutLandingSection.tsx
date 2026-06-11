@@ -387,7 +387,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
               <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-8">
                 {shops.map((shop) => {
                   const name = shop.name || shop.user_id?.name || ''
-                  const avatar = shop.avatar || shop.user_id?.avatar
+                  const avatar = shop.user_id?.avatar || shop.avatar
                   return (
                     <div
                       key={shop._id}

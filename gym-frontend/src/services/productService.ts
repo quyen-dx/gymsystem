@@ -14,3 +14,11 @@ export const updateProduct = (id: string, data: any) => api.put(`/products/${id}
 export const deleteProduct = (id: string) => api.delete(`/products/${id}`)
 export const addReview = (id: string, data: { rating: number; comment: string }) =>
   api.post(`/products/${id}/reviews`, data)
+export const uploadProductImage = (file: File) => {
+  const formData = new FormData()
+  formData.append('image', file)
+  return api.post('/products/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 30000,
+  })
+}

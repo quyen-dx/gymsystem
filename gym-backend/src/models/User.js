@@ -21,6 +21,15 @@ const userSchema = new mongoose.Schema(
         message: 'Email không hợp lệ',
       },
     },
+    contactEmail: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      validate: {
+        validator: (value) => value == null || value === '' || emailRegex.test(value),
+        message: 'Email lien he khong hop le',
+      },
+    },
     facebookId: {
       type: String,
       unique: true,
@@ -43,6 +52,12 @@ const userSchema = new mongoose.Schema(
     dateOfBirth: {
       type: Date,
       default: null,
+    },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other', ''],
+      default: '',
+      trim: true,
     },
     password: {
       type: String,

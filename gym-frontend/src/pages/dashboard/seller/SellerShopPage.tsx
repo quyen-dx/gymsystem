@@ -2,12 +2,14 @@ import { Avatar, Card, Descriptions, Empty, Spin, Typography, message } from 'an
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
+import { useAuth } from '../../../hooks/useAuth'
 import { getMyShop } from '../../../services/shopService'
 
 const { Text, Title } = Typography
 
 export default function SellerShopPage() {
   const { t } = useTranslation()
+  const { user } = useAuth()
   const [shop, setShop] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -30,7 +32,7 @@ export default function SellerShopPage() {
           ) : (
             <div className="grid gap-6 md:grid-cols-[220px_1fr]">
               <div className="rounded-2xl border border-[var(--gs-border)] bg-[var(--gs-page)] p-5 text-center">
-                <Avatar size={96} src={shop.avatar || undefined}>{shop.name?.charAt(0) || 'S'}</Avatar>
+                <Avatar size={96} src={user?.avatar || shop.avatar || undefined}>{shop.name?.charAt(0) || 'S'}</Avatar>
                 <Title level={5} style={{ marginBottom: 4 }}>{shop.name || t('seller_dashboard.shop_name_fallback')}</Title>
                 <Text type="secondary">{shop.description || t('seller_dashboard.description_empty')}</Text>
               </div>

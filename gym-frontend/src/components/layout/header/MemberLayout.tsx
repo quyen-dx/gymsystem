@@ -246,7 +246,7 @@ export default function MemberLayout({
                             {storeDropdownShops.map((shop) => {
                               const owner = shop.user_id
                               const name = shop.name || owner?.name || t('store_fallback')
-                              const avatar = shop.avatar || owner?.avatar
+                              const avatar = owner?.avatar || shop.avatar
 
                               return (
                                 <button

@@ -15,7 +15,9 @@ import aiRoutes from './src/routes/aiRoutes.js'
 import auditLogRoutes from './src/routes/auditLogRoutes.js'
 import authRoutes from './src/routes/authRoutes.js'
 import cmsRoutes from './src/routes/cmsRoutes.js'
+import memberRoutes from './src/routes/memberRoutes.js'
 import membershipRoutes from './src/routes/membershipRoutes.js'
+import ptRoutes from './src/routes/ptRoutes.js'
 import orderRoutes from './src/routes/orderRoutes.js'
 import partnershipRequestRoutes from './src/routes/partnershipRequestRoutes.js'
 import planRoutes from './src/routes/planRoutes.js'
@@ -35,8 +37,8 @@ app.use(
   }),
 )
 app.post('/api/wallet/stripe-webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+app.use(express.json({ limit: '5mb' }))
+app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 app.use(cookieParser())
 
 app.use(
@@ -57,6 +59,7 @@ app.use(maintenanceModeGuard)
 
 app.use('/api/auth', authRoutes)
 app.use('/api/cms', cmsRoutes)
+app.use('/api/members', memberRoutes)
 app.use('/api/audit-logs', auditLogRoutes)
 app.get('/api/my-products', protect, sellerOnly, getMyProducts)
 app.use('/api/plans', planRoutes)
@@ -68,6 +71,7 @@ app.use('/api/orders', orderRoutes)
 app.use('/api/seller', sellerRoutes)
 app.use('/api/memberships', membershipRoutes)
 app.use('/api/partnership-requests', partnershipRequestRoutes)
+app.use('/api/pts', ptRoutes)
 app.use('/api/ai-assistant', aiRoutes)
 app.use('/api/admin/ai', adminAiRoutes)
 app.use('/api/system-experience', systemExperienceRoutes)

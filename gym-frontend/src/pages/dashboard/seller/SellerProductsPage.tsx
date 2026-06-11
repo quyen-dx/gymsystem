@@ -1,12 +1,10 @@
-import { DeleteOutlined, EditOutlined, MinusCircleOutlined, PlusOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import {
   Button,
   Form,
   Image,
   Input,
-  InputNumber,
   message,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -15,21 +13,17 @@ import {
 } from 'antd'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
-import { createProduct, deleteProduct, getMyProducts, updateProduct } from '../../../services/productService'
+import { deleteProduct, getMyProducts } from '../../../services/productService'
 import { getMyShop, updateMyShop } from '../../../services/shopService'
 import type { AdminProduct } from '../../../types/admin/product'
 
 export default function SellerProductsPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [products, setProducts] = useState<AdminProduct[]>([])
   const [loading, setLoading] = useState(false)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editing, setEditing] = useState<AdminProduct | null>(null)
-  const [form] = Form.useForm()
-  const weightVariants = Form.useWatch('weightVariants', form) || []
-  const hasVariants = Array.isArray(weightVariants) && weightVariants.length > 0
-  const [submitLoading, setSubmitLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>()
   const [shop, setShop] = useState<any>(null)
@@ -57,7 +51,6 @@ export default function SellerProductsPage() {
       shopForm.setFieldsValue({
         name: res.data.shop?.name,
         description: res.data.shop?.description,
-        avatar: res.data.shop?.avatar,
         address: res.data.shop?.address || {},
       })
     } catch (err) {
@@ -66,87 +59,6 @@ export default function SellerProductsPage() {
   }
 
   useEffect(() => { fetchShop() }, [])
-
-  const openCreate = () => {
-    setEditing(null)
-    form.resetFields()
-    form.setFieldsValue({
-      weightVariants: [{ label: '', priceDelta: 0, stock: 0 }],
-    })
-    setModalOpen(true)
-  }
-
-  const openEdit = (record: AdminProduct) => {
-    setEditing(record)
-    form.setFieldsValue({
-      ...record,
-      imagesRaw: (record.images || []).join('\n'),
-      descriptionImagesRaw: (record.descriptionImages || []).join('\n'),
-      weightVariants: record.weightVariants?.length
-        ? record.weightVariants
-        : (record.weights || []).map((label: string) => ({ label, priceDelta: 0, stock: 0 })),
-    })
-    setModalOpen(true)
-  }
-
-  const handleSubmit = async (values: any) => {
-    setSubmitLoading(true)
-    try {
-      const parsedImages = Array.isArray(values.images)
-        ? values.images
-        : (values.imagesRaw || '')
-          .split('\n')
-          .map((s: string) => s.trim())
-          .filter(Boolean)
-
-      const parsedDescriptionImages = Array.isArray(values.descriptionImages)
-        ? values.descriptionImages
-        : (values.descriptionImagesRaw || '')
-          .split('\n')
-          .map((s: string) => s.trim())
-          .filter(Boolean)
-
-      const parsedWeightVariants = (values.weightVariants || [])
-        .map((item: { label?: string; priceDelta?: number; stock?: number }) => ({
-          label: String(item?.label || '').trim(),
-          priceDelta: Number(item?.priceDelta || 0),
-          stock: Number(item?.stock || 0),
-        }))
-        .filter((item: { label: string }) => item.label)
-        .map((item: { label: string; priceDelta: number; stock: number }) => ({
-          ...item,
-          priceDelta: Number.isFinite(item.priceDelta) && item.priceDelta > 0 ? item.priceDelta : 0,
-          stock: Number.isFinite(item.stock) && item.stock > 0 ? item.stock : 0,
-        }))
-
-      const payload = {
-        ...values,
-        price: parsedWeightVariants.length > 0 ? parsedWeightVariants[0].priceDelta : Number(values.price || 0),
-        stock: parsedWeightVariants.length > 0
-          ? parsedWeightVariants.reduce((sum: number, item: { stock: number }) => sum + item.stock, 0)
-          : Number(values.stock || 0),
-        images: parsedImages,
-        descriptionImages: parsedDescriptionImages,
-        weights: parsedWeightVariants.map((item: { label: string }) => item.label),
-        weightVariants: parsedWeightVariants,
-      }
-
-      if (editing) {
-        await updateProduct(editing._id, payload)
-        message.success(t('seller_products.update_success'))
-      } else {
-        await createProduct(payload)
-        message.success(t('seller_products.create_success'))
-      }
-
-      setModalOpen(false)
-      fetchProducts()
-    } catch (err: any) {
-      message.error(err.response?.data?.message || t('seller_products.action_failed'))
-    } finally {
-      setSubmitLoading(false)
-    }
-  }
 
   const handleDelete = async (id: string) => {
     try {
@@ -249,7 +161,7 @@ export default function SellerProductsPage() {
       title: t('seller_products.actions'),
       render: (_: any, p: AdminProduct) => (
         <Space>
-          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(p)} />
+          <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/seller/products/edit/${p._id}`)} />
           <Popconfirm
             title={t('seller_products.delete_confirm')}
             onConfirm={() => handleDelete(p._id)}
@@ -265,23 +177,18 @@ export default function SellerProductsPage() {
 
   return (
     <DashboardLayout>
-      <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
+      <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)]" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--theme-accent, #b6462f) 14%, transparent), transparent)' }}>
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('seller_products.seller_label')}</p>
         <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('seller_products.hero_title')}</h1>
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">{t('seller_products.total_products', { count: products.length })}</p>
       </div>
 
-      <div className="mb-6 rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+      <div className="mb-6 rounded-[24px] border border-[var(--gs-border)] p-6 max-[640px]:p-4" style={{ background: 'var(--gs-card)' }}>
         <h2 className="mb-4 text-xl font-semibold">{t('seller_products.shop_info')}</h2>
         <Form layout="vertical" form={shopForm} onFinish={handleSaveShop}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Form.Item label={t('seller_products.shop_name')} name="name" rules={[{ required: true, message: t('seller_products.shop_name_required') }]}> 
-              <Input />
-            </Form.Item>
-            <Form.Item label={t('seller_products.shop_avatar')} name="avatar">
-              <Input placeholder="https://..." />
-            </Form.Item>
-          </div>
+          <Form.Item label={t('seller_products.shop_name')} name="name" rules={[{ required: true, message: t('seller_products.shop_name_required') }]}> 
+            <Input />
+          </Form.Item>
           <Form.Item label={t('seller_products.shop_description')} name="description">
             <Input.TextArea rows={2} />
           </Form.Item>
@@ -310,7 +217,7 @@ export default function SellerProductsPage() {
         </Form>
       </div>
 
-      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6 max-[640px]:p-4">
+      <div className="rounded-[24px] border border-[var(--gs-border)] p-6 max-[640px]:p-4" style={{ background: 'var(--gs-card)' }}>
         <div className="dashboard-filter-bar">
           <Space wrap>
             <Input.Search
@@ -327,7 +234,7 @@ export default function SellerProductsPage() {
               options={existingCategories.map((category) => ({ label: category, value: category }))}
             />
           </Space>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/seller/products/create')}>
             {t('seller_products.add_product')}
           </Button>
         </div>
@@ -342,129 +249,6 @@ export default function SellerProductsPage() {
           />
         </div>
       </div>
-
-      <Modal
-        title={editing ? t('seller_products.edit_product') : t('seller_products.add_product')}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        footer={null}
-        destroyOnClose
-      >
-        <Form layout="vertical" form={form} onFinish={handleSubmit}>
-          <Form.Item label={t('seller_products.product_name')} name="name" rules={[{ required: true, message: t('seller_products.product_name_required') }]}> 
-            <Input placeholder={t('seller_products.product_name_placeholder')} />
-          </Form.Item>
-          <Form.Item label={t('seller_products.description')} name="description">
-            <Input.TextArea rows={8} placeholder={t('seller_products.description_placeholder')} />
-          </Form.Item>
-          <Form.Item label={t('seller_products.description_images')} name="descriptionImagesRaw">
-            <Input.TextArea
-              rows={4}
-              placeholder={"https://detail-img1.jpg\nhttps://detail-img2.jpg"}
-              onChange={(e) => {
-                const arr = e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
-                form.setFieldValue('descriptionImages', arr)
-              }}
-            />
-          </Form.Item>
-          {!hasVariants && (
-            <Form.Item label={t('seller_products.price_vnd')} name="price" rules={[{ required: true, message: t('seller_products.price_required') }]}> 
-              <InputNumber
-                style={{ width: '100%' }}
-                min={0}
-                formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                placeholder={t('seller_products.price_placeholder')}
-              />
-            </Form.Item>
-          )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 12 }}>
-            <Form.Item label={t('seller_products.add_category')} name="category">
-              <Input placeholder={t('seller_products.form_category_placeholder')} />
-            </Form.Item>
-            <Form.Item label={t('seller_products.existing_category')}>
-              <Select
-                allowClear
-                placeholder={t('seller_products.choose_category')}
-                options={existingCategories.map((category) => ({ label: category, value: category }))}
-                onChange={(value) => value && form.setFieldValue('category', value)}
-              />
-            </Form.Item>
-          </div>
-          <Form.Item label={t('seller_products.stock')} name="stock">
-            <InputNumber style={{ width: '100%' }} min={0} placeholder={t('seller_products.stock_placeholder')} />
-          </Form.Item>
-          <Form.Item label={t('seller_products.image_url')} name="image">
-            <Input placeholder="https://..." />
-          </Form.Item>
-          <Form.Item label={t('seller_products.extra_images')} name="imagesRaw">
-            <Input.TextArea
-              rows={4}
-              placeholder={"https://img1.jpg\nhttps://img2.jpg"}
-              onChange={(e) => {
-                const arr = e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
-                form.setFieldValue('images', arr)
-              }}
-            />
-          </Form.Item>
-          <Form.Item label={t('seller_products.weight_variants')}>
-            <Form.List name="weightVariants">
-              {(fields, { add, remove }) => (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {fields.map((field) => (
-                    <div key={field.key} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <Form.Item
-                        {...field}
-                        name={[field.name, 'label']}
-                        style={{ flex: 1, marginBottom: 0 }}
-                        rules={[{ required: true, message: t('seller_products.weight_required') }]}
-                      >
-                        <Input placeholder={t('seller_products.weight_placeholder')} />
-                      </Form.Item>
-                      <Form.Item
-                        {...field}
-                        name={[field.name, 'priceDelta']}
-                        style={{ width: 170, marginBottom: 0 }}
-                        rules={[
-                          { required: true, message: t('seller_products.variant_price_required') },
-                          { type: 'number', min: 1, message: t('seller_products.variant_price_min') },
-                        ]}
-                      >
-                        <InputNumber
-                          min={1}
-                          style={{ width: '100%' }}
-                          placeholder={t('seller_products.variant_price_placeholder')}
-                          formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                          parser={(v) => Number(String(v || '').replace(/\D/g, '')) as any}
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        {...field}
-                        name={[field.name, 'stock']}
-                        style={{ width: 130, marginBottom: 0 }}
-                        rules={[{ type: 'number', min: 0, message: t('seller_products.stock_invalid') }]}
-                      >
-                        <InputNumber min={0} style={{ width: '100%' }} placeholder={t('seller_products.stock')} />
-                      </Form.Item>
-                      <Button
-                        danger
-                        type="text"
-                        icon={<MinusCircleOutlined />}
-                        onClick={() => remove(field.name)}
-                      />
-                    </div>
-                  ))}
-                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ label: '', priceDelta: 0, stock: 0 })}>
-                    {t('seller_products.add_variant')}
-                  </Button>
-                </div>
-              )}
-            </Form.List>
-          </Form.Item>
-          <Button type="primary" htmlType="submit" block loading={submitLoading}>
-            {editing ? t('seller_products.update') : t('seller_products.add_product')}
-          </Button>
-        </Form>
-      </Modal>
     </DashboardLayout>
   )
 }

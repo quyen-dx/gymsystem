@@ -1,6 +1,8 @@
 import { Button, Form, Input, Modal, Select, Space, Switch, Table, message } from 'antd'
+import { ExclamationCircleOutlined } from '@ant-design/icons'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { systemExperienceService } from '../../../services/systemExperienceService'
 
@@ -15,6 +17,7 @@ export default function PolicyManagerPage() {
   const [items, setItems] = useState<any[]>([])
   const { t, i18n } = useTranslation()
   const lang = i18n.language?.startsWith('en') ? 'en' : 'vi'
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<any>(null)
@@ -79,10 +82,7 @@ export default function PolicyManagerPage() {
   }
 
   const openAddModal = () => {
-    setEditing(null)
-    form.resetFields()
-    resetCategoryFields()
-    setOpen(true)
+    navigate('/admin/policies/create')
   }
 
   const openEditModal = (row: any) => {
@@ -193,7 +193,20 @@ export default function PolicyManagerPage() {
           { title: t('system_experience.admin.slug'), dataIndex: 'slug' },
           { title: t('system_experience.admin.category'), dataIndex: lang === 'en' ? 'categoryEn' : 'categoryVi', render: (_: any, row: any) => lang === 'en' ? (row.categoryEn || row.categoryVi) : (row.categoryVi || row.categoryEn) },
           { title: t('system_experience.admin.publish'), dataIndex: 'isPublished', render: (v) => v ? t('system_experience.admin.published') : t('system_experience.admin.hidden') },
-          { title: t('system_experience.admin.actions'), render: (_, row: any) => <Space><Button onClick={() => openEditModal(row)}>{t('system_experience.admin.edit')}</Button><Button danger onClick={async () => { await systemExperienceService.deletePolicy(row._id); load() }}>{t('system_experience.admin.delete')}</Button></Space> },
+          { title: t('system_experience.admin.actions'), render: (_, row: any) => <Space><Button onClick={() => openEditModal(row)}>{t('system_experience.admin.edit')}</Button><Button danger onClick={() => {
+              Modal.confirm({
+                title: 'Xác nhận xóa chính sách',
+                icon: <ExclamationCircleOutlined />,
+                content: 'Bạn có chắc muốn xóa chính sách này không?',
+                okText: 'Xóa',
+                okType: 'danger',
+                cancelText: 'Hủy',
+                onOk: async () => {
+                  await systemExperienceService.deletePolicy(row._id)
+                  load()
+                },
+              })
+            }}>{t('system_experience.admin.delete')}</Button></Space> },
         ]} pagination={{ current: page, pageSize: 10, onChange: setPage }} />
       </div>
       <Modal width={760} title={editing ? t('system_experience.admin.edit_policy') : t('system_experience.admin.add_policy')} open={open} onOk={save} onCancel={closeModal}>

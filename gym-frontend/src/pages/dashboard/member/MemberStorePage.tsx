@@ -170,7 +170,7 @@ export default function MemberStorePage() {
     .find((shop): shop is ProductShop => typeof shop === 'object' && !!shop)
   const shopOwner = shopDetail?.user_id || firstShop?.user_id
   const shopName = shopDetail?.name || firstShop?.name || shopOwner?.name || t('store.shop_fallback')
-  const shopAvatar = shopDetail?.avatar || firstShop?.avatar || shopOwner?.avatar
+  const shopAvatar = shopOwner?.avatar || shopDetail?.avatar || firstShop?.avatar
   const shopDescription = shopDetail?.description || firstShop?.description
   const shopRating = shopDetail?.rating ?? firstShop?.rating ?? 0
   const shopReviews = shopDetail?.reviews || []
@@ -316,26 +316,31 @@ export default function MemberStorePage() {
       ) : (
         <Row gutter={[16, 16]}>
           {filtered.map((product) => (
-            <Col xs={24} sm={12} md={8} lg={6} key={product._id}>
+            <Col xs={24} sm={12} md={8} lg={6} key={product._id} style={{ display: 'flex' }}>
               <Card
                 hoverable
                 onClick={() => navigate(`/product/${product._id}`)}
                 className="rounded-xl overflow-hidden"
-                style={{ background: 'var(--gs-card)', borderColor: 'var(--gs-border)' }}
+                style={{
+                  background: 'var(--gs-card)', borderColor: 'var(--gs-border)',
+                  display: 'flex', flexDirection: 'column', width: '100%',
+                }}
                 cover={
                   product.image ? (
-                    <img src={product.image} className="h-[200px] w-full object-cover" alt={product.name} />
+                    <img src={product.image} className="h-[200px] w-full object-cover flex-none" alt={product.name} />
                   ) : (
-                    <div className="h-[200px] flex items-center justify-center" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--gs-text-muted)' }}>
+                    <div className="h-[200px] flex-none flex items-center justify-center" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--gs-text-muted)' }}>
                       {t('store.no_image')}
                     </div>
                   )
                 }
+                classNames={{ cover: 'flex-none' }}
+                styles={{ body: { display: 'flex', flexDirection: 'column', flex: 1 } as React.CSSProperties }}
               >
-                <div className="font-bold text-base mb-1 text-[var(--gs-text)]">{product.name}</div>
+                <div className="font-bold text-base text-[var(--gs-text)] line-clamp-2">{product.name}</div>
 
                 {product.rating && product.rating > 0 ? (
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mt-1">
                     <Rate disabled allowHalf value={product.rating} style={{ fontSize: 14 }} />
                     <span className="text-[var(--theme-accent)] text-sm font-medium">
                       {product.rating.toFixed(1)}
@@ -345,12 +350,12 @@ export default function MemberStorePage() {
                     </span>
                   </div>
                 ) : (
-                  <div className="text-xs mb-1" style={{ color: 'var(--gs-text-muted)' }}>
+                  <div className="text-xs mt-1" style={{ color: 'var(--gs-text-muted)' }}>
                     {t('store.no_reviews')}
                   </div>
                 )}
 
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center mt-auto pt-2">
                   <span className="text-[var(--gs-text)] font-bold text-lg">
                     {product.price?.toLocaleString('vi-VN')}đ
                   </span>
@@ -359,11 +364,9 @@ export default function MemberStorePage() {
                   </Tag>
                 </div>
 
-                {product.category && (
-                  <Tag className="mt-2 rounded-md font-medium" color="orange">
-                    {product.category}
-                  </Tag>
-                )}
+                <Tag className="mt-1 rounded-md font-medium" color="orange">
+                  Giao dự kiến: 2-4 ngày
+                </Tag>
               </Card>
             </Col>
           ))}
@@ -444,7 +447,7 @@ export default function MemberStorePage() {
             {shops.map((shop) => {
               const owner = shop.user_id
               const name = shop.name || owner?.name || t('store.shop_fallback')
-              const avatar = shop.avatar || owner?.avatar
+              const avatar = owner?.avatar || shop.avatar
               const productCount = featuredProductCountsByShop[shop._id] ?? 0
               const openStore = () => navigate(`/store/${shop._id}`)
 

@@ -12,7 +12,7 @@ const storage = new CloudinaryStorage({
     cloudinary,
     params: {
         folder: 'gympro/avatars',
-        allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'],
         transformation: [{ width: 400, height: 400, crop: 'fill' }],
     },
 });
@@ -21,7 +21,26 @@ const feedbackStorage = new CloudinaryStorage({
     cloudinary,
     params: {
         folder: 'gympro/feedback',
-        allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'],
+    },
+});
+
+const productStorage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+        folder: 'gympro/products',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'],
+    },
+});
+
+export const productImageUpload = multer({
+    storage: productStorage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        if (!['image/png', 'image/jpg', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'].includes(file.mimetype)) {
+            return cb(new Error('Bắt buộc tải lên file ảnh'));
+        }
+        return cb(null, true);
     },
 });
 
@@ -34,7 +53,7 @@ export const feedbackUpload = multer({
     storage: feedbackStorage,
     limits: { fileSize: 5 * 1024 * 1024, files: 3 },
     fileFilter: (_req, file, cb) => {
-        if (!['image/png', 'image/jpg', 'image/jpeg', 'image/webp'].includes(file.mimetype)) {
+        if (!['image/png', 'image/jpg', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'].includes(file.mimetype)) {
             return cb(new Error('Bắt buộc tải lên file ảnh'));
         }
         return cb(null, true);
