@@ -21,7 +21,6 @@ import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { trainerService } from '../../../services/trainerService'
 import type { PT } from '../../../types/admin/trainer'
-import TrainerFormModal from './TrainerFormModal'
 
 export default function AdminTrainersPage() {
   const { t } = useTranslation()
@@ -32,8 +31,6 @@ export default function AdminTrainersPage() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [specialtyFilter, setSpecialtyFilter] = useState<string | undefined>()
-  const [formModalOpen, setFormModalOpen] = useState(false)
-  const [editingPT, setEditingPT] = useState<PT | null>(null)
 
   const fetchPTs = useCallback(async (p = page, s = search, sp = specialtyFilter) => {
     setLoading(true)
@@ -67,29 +64,7 @@ export default function AdminTrainersPage() {
     fetchPTs(1, search, value)
   }
 
-  const openAdd = () => {
-    setEditingPT(null)
-    setFormModalOpen(true)
-  }
-
-  const openEdit = (pt: PT) => {
-    setEditingPT(pt)
-    setFormModalOpen(true)
-  }
-
-  const onFormSuccess = () => {
-    setFormModalOpen(false)
-    setEditingPT(null)
-    fetchPTs()
-  }
-
   const columns = [
-    {
-      title: '#',
-      width: 60,
-      align: 'center' as const,
-      render: (_: unknown, __: PT, index: number) => (page - 1) * 15 + index + 1,
-    },
     {
       title: t('admin.trainers.columns.name'),
       width: 220,
@@ -171,7 +146,7 @@ export default function AdminTrainersPage() {
             <Button size="small" icon={<EyeOutlined />} onClick={() => navigate(`/admin/trainers/${record._id}`)} />
           </Tooltip>
           <Tooltip title={t('admin.trainers.edit')}>
-            <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
+            <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/admin/trainers/${record._id}/edit`)} />
           </Tooltip>
         </Space>
       ),
@@ -208,7 +183,7 @@ export default function AdminTrainersPage() {
               { value: 'Personal Training', label: 'Personal Training' },
             ]}
           />
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/admin/trainers/create')}>
             {t('admin.trainers.add')}
           </Button>
         </div>
@@ -232,12 +207,6 @@ export default function AdminTrainersPage() {
         </div>
       </div>
 
-      <TrainerFormModal
-        open={formModalOpen}
-        pt={editingPT}
-        onClose={() => { setFormModalOpen(false); setEditingPT(null) }}
-        onSuccess={onFormSuccess}
-      />
     </DashboardLayout>
   )
 }

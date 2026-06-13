@@ -14,11 +14,14 @@ import OauthSuccessPage from './pages/auth/OauthSuccessPage'
 import RegisterPage from './pages/auth/Registerpage'
 import AdminDashboard from './pages/dashboard/admin/AdminDashboard'
 import AdminMembersPage from './pages/dashboard/admin/AdminMembersPage'
+import AdminMembersEditPage from './pages/dashboard/admin/AdminMembersEditPage'
 import MemberDetailPage from './pages/dashboard/admin/MemberDetailPage'
 import AdminPartnershipRequestsPage from './pages/dashboard/admin/AdminPartnershipRequestsPage'
 import AdminPlansPage from './pages/dashboard/admin/AdminPlansPage'
 import AdminReports from './pages/dashboard/admin/AdminReports'
 import AdminTrainersPage from './pages/dashboard/admin/AdminTrainersPage'
+import AdminTrainersCreatePage from './pages/dashboard/admin/AdminTrainersCreatePage'
+import AdminTrainersEditPage from './pages/dashboard/admin/AdminTrainersEditPage'
 import TrainerDetailPage from './pages/dashboard/admin/TrainerDetailPage'
 import AdminUsersPage from './pages/dashboard/admin/AdminUsersPage'
 import FAQCreatePage from './pages/dashboard/admin/FAQCreatePage'
@@ -270,8 +273,11 @@ function AppWithTheme() {
         <Route path="/admin/shop" element={<Navigate to="/admin/partnerships" />} />
         <Route path="/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
         <Route path="/admin/members" element={<PrivateRoute><AdminMembersPage /></PrivateRoute>} />
+        <Route path="/admin/members/:id/edit" element={<PrivateRoute><AdminMembersEditPage /></PrivateRoute>} />
         <Route path="/admin/members/:id" element={<PrivateRoute><MemberDetailPage /></PrivateRoute>} />
         <Route path="/admin/trainers" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersPage /></PrivateRoute>} />
+        <Route path="/admin/trainers/create" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersCreatePage /></PrivateRoute>} />
+        <Route path="/admin/trainers/:id/edit" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersEditPage /></PrivateRoute>} />
         <Route path="/admin/trainers/:id" element={<PrivateRoute feature="pt.moduleEnabled"><TrainerDetailPage /></PrivateRoute>} />
         <Route path="/admin/pts" element={<Navigate to="/admin/trainers" replace />} />
         <Route path="/admin/reports" element={<PrivateRoute feature="reports.revenueChartEnabled"><AdminReports /></PrivateRoute>} />

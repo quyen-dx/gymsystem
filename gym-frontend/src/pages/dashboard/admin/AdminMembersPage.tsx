@@ -1,10 +1,14 @@
 import {
   EditOutlined,
   EyeOutlined,
+  LockOutlined,
+  PlusOutlined,
+  UnlockOutlined,
 } from '@ant-design/icons'
 import {
   Badge,
   Button,
+  Dropdown,
   Input,
   Select,
   Space,
@@ -16,11 +20,14 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import { LineChart, Line, ResponsiveContainer } from 'recharts'
 import api from '../../../services/api'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { memberService } from '../../../services/memberService'
-import type { MemberListItem } from '../../../types/admin/member'
+import type { HealthScore, MemberListItem } from '../../../types/admin/member'
 import MemberFormModal from './MemberFormModal'
+import MemberRegisterPlanModal from './MemberRegisterPlanModal'
+import MemberRenewPlanModal from './MemberRenewPlanModal'
 
 interface PlanOption {
   _id: string
@@ -38,10 +45,19 @@ export default function AdminMembersPage() {
   const [search, setSearch] = useState('')
   const [planFilter, setPlanFilter] = useState<string | undefined>()
   const [statusFilter, setStatusFilter] = useState<string | undefined>()
+  const [remainingFilter, setRemainingFilter] = useState<string | undefined>()
 
   const [plans, setPlans] = useState<PlanOption[]>([])
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [editingMember, setEditingMember] = useState<MemberListItem | null>(null)
+  const [formModalMember, setFormModalMember] = useState<MemberListItem | null>(null)
+  const [registerModalOpen, setRegisterModalOpen] = useState(false)
+  const [registerMemberId, setRegisterMemberId] = useState('')
+  const [registerMemberName, setRegisterMemberName] = useState('')
+  const [renewModalOpen, setRenewModalOpen] = useState(false)
+  const [renewMemberId, setRenewMemberId] = useState('')
+  const [renewMemberName, setRenewMemberName] = useState('')
+  const [renewEndDate, setRenewEndDate] = useState('')
+  const [healthScores, setHealthScores] = useState<Record<string, HealthScore>>({})
 
   useEffect(() => {
     api.get<{ plans: PlanOption[] }>('/plans', { params: { limit: 100 } }).then(({ data }) => {
@@ -49,22 +65,31 @@ export default function AdminMembersPage() {
     }).catch(() => {})
   }, [])
 
-  const fetchMembers = useCallback(async (p = page, s = search, plan = planFilter, status = statusFilter) => {
+  const fetchMembers = useCallback(async (p = page, s = search, plan = planFilter, status = statusFilter, remaining = remainingFilter) => {
     setLoading(true)
     try {
       const params: Record<string, unknown> = { page: p, limit: 15 }
       if (s) params.search = s
       if (plan) params.planId = plan
       if (status) params.status = status
+      if (remaining) params.remainingDays = remaining
       const { data } = await memberService.getMembers(params)
       setMembers(data.members)
       setTotal(data.pagination.total)
+
+      data.members.forEach((m: MemberListItem) => {
+        if (!healthScores[m._id]) {
+          memberService.getMemberHealthScore(m._id)
+            .then(res => setHealthScores(prev => ({ ...prev, [m._id]: res.data.healthScore })))
+            .catch(() => {})
+        }
+      })
     } catch {
       message.error(t('admin.members.messages.fetch_failed'))
     } finally {
       setLoading(false)
     }
-  }, [page, search, planFilter, statusFilter, t])
+  }, [page, search, planFilter, statusFilter, remainingFilter, t])
 
   useEffect(() => {
     fetchMembers()
@@ -73,39 +98,78 @@ export default function AdminMembersPage() {
   const handleSearch = (value: string) => {
     setSearch(value)
     setPage(1)
-    fetchMembers(1, value, planFilter, statusFilter)
+    fetchMembers(1, value, planFilter, statusFilter, remainingFilter)
   }
 
   const handlePlanFilter = (value: string | undefined) => {
     setPlanFilter(value)
     setPage(1)
-    fetchMembers(1, search, value, statusFilter)
+    fetchMembers(1, search, value, statusFilter, remainingFilter)
   }
 
   const handleStatusFilter = (value: string | undefined) => {
     setStatusFilter(value)
     setPage(1)
-    fetchMembers(1, search, planFilter, value)
+    fetchMembers(1, search, planFilter, value, remainingFilter)
+  }
+
+  const handleRemainingFilter = (value: string | undefined) => {
+    setRemainingFilter(value)
+    setPage(1)
+    fetchMembers(1, search, planFilter, statusFilter, value)
+  }
+
+  const openAdd = () => {
+    setFormModalMember(null)
+    setFormModalOpen(true)
   }
 
   const openEdit = (member: MemberListItem) => {
-    setEditingMember(member)
+    setFormModalMember(member)
     setFormModalOpen(true)
   }
 
   const onFormSuccess = () => {
     setFormModalOpen(false)
-    setEditingMember(null)
+    setFormModalMember(null)
     fetchMembers()
   }
 
+  const toggleStatus = async (member: MemberListItem) => {
+    try {
+      await memberService.toggleMemberStatus(member._id)
+      message.success(t('admin.members.toggle_success'))
+      fetchMembers()
+    } catch {
+      message.error(t('admin.members.messages.action_failed'))
+    }
+  }
+
+  const openRegisterPlan = (member: MemberListItem) => {
+    setRegisterMemberId(member._id)
+    setRegisterMemberName(member.name)
+    setRegisterModalOpen(true)
+  }
+
+  const openRenewPlan = (member: MemberListItem) => {
+    setRenewMemberId(member._id)
+    setRenewMemberName(member.name)
+    setRenewEndDate(member.activeMembership?.endDate || '')
+    setRenewModalOpen(true)
+  }
+
+  const getHealthColor = (score: number) => {
+    if (score >= 80) return '#10B981'
+    if (score >= 50) return '#F59E0B'
+    return '#EF4444'
+  }
+
+  const sparklineData = Array.from({ length: 30 }, (_, i) => ({
+    day: i,
+    value: Math.floor(Math.random() * 3),
+  }))
+
   const columns = [
-    {
-      title: '#',
-      width: 60,
-      align: 'center' as const,
-      render: (_: unknown, __: MemberListItem, index: number) => (page - 1) * 15 + index + 1,
-    },
     {
       title: t('admin.members.columns.member'),
       width: 250,
@@ -136,9 +200,7 @@ export default function AdminMembersPage() {
       title: t('admin.members.columns.plan'),
       render: (_: unknown, record: MemberListItem) => {
         if (!record.activeMembership) {
-          return (
-            <Tag style={{ opacity: 0.5 }}>{t('admin.members.no_plan')}</Tag>
-          )
+          return <Tag style={{ opacity: 0.5 }}>{t('admin.members.no_plan')}</Tag>
         }
         const plan = record.activeMembership.planId
         return (
@@ -151,7 +213,7 @@ export default function AdminMembersPage() {
     },
     {
       title: t('admin.members.columns.remaining_days'),
-      width: 100,
+      width: 90,
       align: 'center' as const,
       render: (_: unknown, record: MemberListItem) => {
         if (record.remainingDays <= 0) return <Tag color="error">0</Tag>
@@ -160,11 +222,53 @@ export default function AdminMembersPage() {
       },
     },
     {
-      title: t('admin.members.columns.checkins'),
+      title: 'Sức khỏe',
+      width: 80,
+      align: 'center' as const,
+      render: (_: unknown, record: MemberListItem) => {
+        const hs = healthScores[record._id]
+        if (!hs) return <span style={{ opacity: 0.3 }}>—</span>
+        return (
+          <Tooltip title={`${hs.levelText} (${hs.overall}/100)`}>
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: getHealthColor(hs.overall),
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 11,
+              fontWeight: 700,
+              margin: '0 auto',
+              cursor: 'pointer',
+            }}>
+              {hs.overall}
+            </div>
+          </Tooltip>
+        )
+      },
+    },
+    {
+      title: 'Check-in',
       width: 80,
       align: 'center' as const,
       render: (_: unknown, record: MemberListItem) => (
         <span>{record.checkinCount || <span style={{ opacity: 0.4 }}>0</span>}</span>
+      ),
+    },
+    {
+      title: 'Xu hướng',
+      width: 100,
+      render: () => (
+        <div style={{ width: 80, height: 30 }}>
+          <ResponsiveContainer>
+            <LineChart data={sparklineData}>
+              <Line type="monotone" dataKey="value" stroke="#10B981" strokeWidth={1.5} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       ),
     },
     {
@@ -178,7 +282,7 @@ export default function AdminMembersPage() {
     },
     {
       title: t('admin.members.columns.actions'),
-      width: 100,
+      width: 200,
       render: (_: unknown, record: MemberListItem) => (
         <Space size={4}>
           <Tooltip title={t('admin.members.detail.title')}>
@@ -187,6 +291,20 @@ export default function AdminMembersPage() {
           <Tooltip title={t('admin.members.edit')}>
             <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
           </Tooltip>
+          <Tooltip title={record.isActive ? 'Khóa' : 'Mở khóa'}>
+            <Button size="small" icon={record.isActive ? <LockOutlined /> : <UnlockOutlined />} onClick={() => toggleStatus(record)} />
+          </Tooltip>
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'register', label: 'Đăng ký gói tập', onClick: () => openRegisterPlan(record) },
+                { key: 'renew', label: 'Gia hạn gói', onClick: () => openRenewPlan(record), disabled: !record.activeMembership },
+              ],
+            }}
+            trigger={['click']}
+          >
+            <Button size="small">Gói tập</Button>
+          </Dropdown>
         </Space>
       ),
     },
@@ -214,10 +332,7 @@ export default function AdminMembersPage() {
             style={{ minWidth: 160 }}
             onChange={handlePlanFilter}
             optionFilterProp="label"
-            options={plans.map((p) => ({
-              value: p._id,
-              label: `${p.nameVi || p.nameEn}`,
-            }))}
+            options={plans.map((p) => ({ value: p._id, label: `${p.nameVi || p.nameEn}` }))}
           />
           <Select
             allowClear
@@ -229,7 +344,21 @@ export default function AdminMembersPage() {
               { value: 'locked', label: t('admin.members.filter_status_locked') },
             ]}
           />
-
+          <Select
+            allowClear
+            placeholder="Số ngày còn lại"
+            style={{ minWidth: 140 }}
+            onChange={handleRemainingFilter}
+            options={[
+              { value: '0', label: 'Hết hạn' },
+              { value: '1-7', label: 'Sắp hết hạn (1-7 ngày)' },
+              { value: '8-30', label: 'Trong tháng (8-30 ngày)' },
+              { value: '30+', label: 'Trên 30 ngày' },
+            ]}
+          />
+          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
+            {t('admin.members.add')}
+          </Button>
         </div>
 
         <div className="member-scroll-x">
@@ -244,7 +373,7 @@ export default function AdminMembersPage() {
               pageSize: 15,
               onChange: (p) => {
                 setPage(p)
-                fetchMembers(p, search, planFilter, statusFilter)
+                fetchMembers(p, search, planFilter, statusFilter, remainingFilter)
               },
             }}
           />
@@ -253,9 +382,26 @@ export default function AdminMembersPage() {
 
       <MemberFormModal
         open={formModalOpen}
-        member={editingMember}
-        onClose={() => { setFormModalOpen(false); setEditingMember(null) }}
+        member={formModalMember}
+        onClose={() => { setFormModalOpen(false); setFormModalMember(null) }}
         onSuccess={onFormSuccess}
+      />
+
+      <MemberRegisterPlanModal
+        open={registerModalOpen}
+        memberId={registerMemberId}
+        memberName={registerMemberName}
+        onClose={() => setRegisterModalOpen(false)}
+        onSuccess={() => { setRegisterModalOpen(false); fetchMembers() }}
+      />
+
+      <MemberRenewPlanModal
+        open={renewModalOpen}
+        memberId={renewMemberId}
+        memberName={renewMemberName}
+        currentEndDate={renewEndDate}
+        onClose={() => setRenewModalOpen(false)}
+        onSuccess={() => { setRenewModalOpen(false); fetchMembers() }}
       />
     </DashboardLayout>
   )

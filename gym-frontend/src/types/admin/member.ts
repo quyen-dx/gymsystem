@@ -72,3 +72,12 @@ export interface MemberFormData {
   dateOfBirth?: string
   gender?: string
 }
+
+export interface HealthScore {
+  overall: number
+  checkinScore: number
+  workoutCompletionScore: number
+  checkinCount: number
+  level: string
+  levelText: string
+}
