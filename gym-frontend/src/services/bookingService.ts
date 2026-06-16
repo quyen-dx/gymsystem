@@ -25,6 +25,14 @@ export type CreateBookingPayload = {
   note?: string
 }
 
+export type CreateRecurringBookingPayload = {
+  ptId: string
+  date: string
+  slot: string
+  note?: string
+  weeks: number
+}
+
 export const bookingService = {
   checkConflicts(params: { ptId: string; date: string; slot: string }) {
     return api.get('/bookings/conflicts', { params })
@@ -34,11 +42,39 @@ export const bookingService = {
     return api.post('/bookings', data)
   },
 
+  createRecurringBooking(data: CreateRecurringBookingPayload) {
+    return api.post('/bookings/recurring', data)
+  },
+
   getMyBookings() {
     return api.get('/bookings/my')
   },
 
+  getPTBookings(params?: Record<string, unknown>) {
+    return api.get('/bookings/pt', { params })
+  },
+
+  confirmBooking(id: string) {
+    return api.patch(`/bookings/${id}/confirm`)
+  },
+
+  rejectBooking(id: string, reason: string) {
+    return api.patch(`/bookings/${id}/reject`, { reason })
+  },
+
   cancelBooking(id: string, reason: string) {
     return api.patch(`/bookings/${id}/cancel`, { reason })
+  },
+
+  completeBooking(id: string) {
+    return api.patch(`/bookings/${id}/complete`)
+  },
+
+  joinWaitlist(slotId: string) {
+    return api.post(`/bookings/${slotId}/waitlist`)
+  },
+
+  reviewPT(id: string, rating: number, comment?: string) {
+    return api.post(`/bookings/${id}/review`, { rating, comment })
   },
 }

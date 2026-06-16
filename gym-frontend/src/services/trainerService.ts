@@ -14,6 +14,9 @@ export const trainerService = {
   getPTSchedule: (id: string) =>
     api.get<{ schedule: PTDaySchedule[]; availableSlots: unknown[] }>(`/pts/schedule/${id}`),
 
+  getPTAvailability: (id: string, date: string) =>
+    api.get<{ availability: Record<string, boolean> }>(`/pts/${id}/availability`, { params: { date } }),
+
   createPT: (data: FormData | Record<string, unknown>) =>
     api.post('/pts', data, data instanceof FormData
       ? { headers: { 'Content-Type': 'multipart/form-data' } }

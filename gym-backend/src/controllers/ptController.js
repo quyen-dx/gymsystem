@@ -364,3 +364,66 @@ export const updatePTSchedule = async (req, res) => {
     return sendError(res, error)
   }
 }
+
+export const getPTAvailability = async (req, res) => {
+  try {
+    const { id: userId } = req.params
+    const { date } = req.query
+
+    const user = await User.findById(userId)
+    if (!user || user.role !== 'pt') throw new AppError('Không tìm thấy PT', 404)
+
+    const pt = await PT.findOne({ userId })
+    if (!pt) throw new AppError('Không tìm thấy thông tin PT', 404)
+
+    const queryDate = new Date(date)
+    const dayOfWeek = queryDate.getDay()
+
+    // Get PT's working schedule for this day
+    const schedules = await PTSchedule.find({ ptId: pt._id, dayOfWeek })
+
+    // Get shift mapping
+    const shifts = {
+      morning: { start: 6, end: 12 },
+      afternoon: { start: 12, end: 18 },
+      evening: { start: 18, end: 22 },
+    }
+
+    const availability = {}
+
+    // Generate 10-minute slots for each shift
+    for (const schedule of schedules) {
+      const shift = shifts[schedule.shift]
+      if (!shift) continue
+
+      for (let hour = shift.start; hour < shift.end; hour++) {
+        for (let minute = 0; minute < 60; minute += 10) {
+          const slot = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+          availability[slot] = true
+        }
+      }
+    }
+
+    // Check for existing bookings and mark as unavailable
+    const bookings = await Booking.find({
+      ptId: pt._id,
+      date: queryDate,
+      status: { $in: ['pending', 'confirmed'] },
+    })
+
+    bookings.forEach((booking) => {
+      availability[booking.slot] = false
+    })
+
+    // If no schedules, all slots are unavailable
+    if (schedules.length === 0) {
+      for (const slots of Object.keys(availability)) {
+        availability[slots] = false
+      }
+    }
+
+    res.json({ availability, schedules: schedules.map((s) => s.shift) })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}

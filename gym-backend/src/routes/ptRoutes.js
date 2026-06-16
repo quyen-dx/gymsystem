@@ -8,6 +8,7 @@ import {
   getPTs,
   updatePT,
   updatePTSchedule,
+  getPTAvailability,
 } from '../controllers/ptController.js'
 import { adminOrStaff, protect } from '../middlewares/authMiddleware.js'
 
@@ -15,7 +16,8 @@ const router = express.Router()
 
 router.use(protect)
 
-router.get('/public/list', getPTs)
+router.get('/available', getPTs)
+router.get('/:id/availability', getPTAvailability)
 
 router.get('/', adminOrStaff, getPTs)
 router.get('/schedule/:id', adminOrStaff, getPTSchedule)
