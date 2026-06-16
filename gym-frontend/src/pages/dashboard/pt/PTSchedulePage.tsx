@@ -144,59 +144,6 @@ export default function PTSchedulePage() {
                 </div>
               ))}
             </div>
-
-            <div className="mt-6 rounded-lg border border-[var(--gs-border)] bg-black/30 p-4">
-              <h3 className="mb-3 font-semibold text-[var(--gs-text)]">
-                Thêm giờ làm việc
-              </h3>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Chọn ngày
-                  </label>
-                  <select
-                    value={newSchedule.dayOfWeek}
-                    onChange={(e) =>
-                      setNewSchedule({ ...newSchedule, dayOfWeek: Number(e.target.value) })
-                    }
-                    className="w-full rounded-lg border border-[var(--gs-border)] bg-transparent p-2 text-sm text-[var(--gs-text)]"
-                  >
-                    {DAYS.map((day, idx) => (
-                      <option key={idx} className="bg-gray-900 text-white" value={idx}>
-                        {day}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Chọn ca làm việc
-                  </label>
-                  <select
-                    value={newSchedule.shift}
-                    onChange={(e) =>
-                      setNewSchedule({ ...newSchedule, shift: e.target.value })
-                    }
-                    className="w-full rounded-lg border border-[var(--gs-border)] bg-transparent p-2 text-sm text-[var(--gs-text)]"
-                  >
-                    {SHIFTS.map((shift) => (
-                      <option key={shift.value} className="bg-gray-900 text-white" value={shift.value}>
-                        {shift.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <button
-                  onClick={handleAddSchedule}
-                  className="w-full rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-700"
-                >
-                  Thêm ca làm việc
-                </button>
-              </div>
-            </div>
           </div>
 
           <div className="rounded-xl border border-[var(--gs-border)] bg-white/5 p-6">
