@@ -81,6 +81,7 @@ export const getPTs = async (req, res) => {
         return {
           _id: u._id,
           name: u.name,
+          fullName: u.fullName,
           email: u.email,
           phone: u.phone,
           avatar: u.avatar,
@@ -146,6 +147,7 @@ export const getPTById = async (req, res) => {
       pt: {
         _id: user._id,
         name: user.name,
+        fullName: user.fullName,
         email: user.email,
         phone: user.phone,
         avatar: user.avatar,

@@ -25,6 +25,7 @@ import api from '../../../services/api'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { memberService } from '../../../services/memberService'
 import type { MemberListItem } from '../../../types/admin/member'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 import MemberFormModal from './MemberFormModal'
 import MemberRegisterPlanModal from './MemberRegisterPlanModal'
 import MemberRenewPlanModal from './MemberRenewPlanModal'
@@ -36,7 +37,7 @@ interface PlanOption {
 }
 
 export default function AdminMembersPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const [members, setMembers] = useState<MemberListItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -166,10 +167,10 @@ export default function AdminMembersPage() {
           <div>
             <div style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--gs-text)' }}
               onClick={() => navigate(`/admin/members/${record._id}`)}>
-              {record.name}
+              {getUserDisplayName(record, 'Thành viên')}
             </div>
             <div style={{ fontSize: 12, color: 'var(--gs-text-muted)' }}>
-              {record.phone || record.email || '—'}
+              {record.memberCode ? `${record.memberCode} • ` : ''}{record.phone || record.email || '—'}
             </div>
           </div>
         </Space>
@@ -185,7 +186,7 @@ export default function AdminMembersPage() {
         return (
           <Space size={4}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: plan?.color || '#3B82F6', flexShrink: 0 }} />
-            <span>{plan?.nameVi || plan?.nameEn || '—'}</span>
+            <span>{i18n.language?.startsWith('vi') ? (plan?.nameVi || plan?.nameEn || '—') : (plan?.nameEn || plan?.nameVi || '—')}</span>
           </Space>
         )
       },
@@ -228,19 +229,19 @@ export default function AdminMembersPage() {
           <Tooltip title={t('admin.members.edit')}>
             <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
           </Tooltip>
-          <Tooltip title={record.isActive ? 'Khóa' : 'Mở khóa'}>
+          <Tooltip title={record.isActive ? t('admin.members.lock') : t('admin.members.unlock')}>
             <Button size="small" icon={record.isActive ? <LockOutlined /> : <UnlockOutlined />} onClick={() => toggleStatus(record)} />
           </Tooltip>
           <Dropdown
             menu={{
               items: [
-                { key: 'register', label: 'Đăng ký gói tập', onClick: () => openRegisterPlan(record) },
-                { key: 'renew', label: 'Gia hạn gói', onClick: () => openRenewPlan(record), disabled: !record.activeMembership },
+                { key: 'register', label: t('admin.members.detail.register_plan'), onClick: () => openRegisterPlan(record) },
+                { key: 'renew', label: t('admin.members.detail.renew_plan'), onClick: () => openRenewPlan(record), disabled: !record.activeMembership },
               ],
             }}
             trigger={['click']}
           >
-            <Button size="small">Gói tập</Button>
+            <Button size="small">{t('admin.members.plan_actions')}</Button>
           </Dropdown>
         </Space>
       ),
@@ -283,14 +284,14 @@ export default function AdminMembersPage() {
           />
           <Select
             allowClear
-            placeholder="Số ngày còn lại"
+            placeholder={t('admin.members.filter_remaining_days')}
             style={{ minWidth: 140 }}
             onChange={handleRemainingFilter}
             options={[
-              { value: '0', label: 'Hết hạn' },
-              { value: '1-7', label: 'Sắp hết hạn (1-7 ngày)' },
-              { value: '8-30', label: 'Trong tháng (8-30 ngày)' },
-              { value: '30+', label: 'Trên 30 ngày' },
+              { value: '0', label: t('admin.members.filter_remaining_expired') },
+              { value: '1-7', label: t('admin.members.filter_remaining_soon') },
+              { value: '8-30', label: t('admin.members.filter_remaining_month') },
+              { value: '30+', label: t('admin.members.filter_remaining_over30') },
             ]}
           />
           <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>

@@ -6,6 +6,7 @@ import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
 import { getSellerOrders } from '../../../services/orderService'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const { Text, Title } = Typography
 const formatMoney = (value = 0) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
@@ -215,7 +216,7 @@ export default function SellerRevenuePage() {
   const totalSold = soldProducts.reduce((sum, item) => sum + item.quantity, 0)
   const totalRevenue = soldProducts.reduce((sum, item) => sum + item.revenue, 0)
   const totalOrderLines = soldProducts.reduce((sum, item) => sum + item.orderCount, 0)
-  const sellerName = user?.name || t('seller_dashboard.seller_fallback')
+  const sellerName = getUserDisplayName(user, t('seller_dashboard.seller_fallback'))
   const reportPeriod = `${pad2(reportMonth)}/${reportYear}`
   const hasReportData = soldProducts.length > 0
 

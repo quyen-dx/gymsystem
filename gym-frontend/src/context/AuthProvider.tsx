@@ -7,6 +7,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const refreshUser = async () => {
+    const { data } = await authService.getProfile()
+    setUser(data.user)
+    return data.user
+  }
+
   useEffect(() => {
     let cancelled = false
 
@@ -21,7 +27,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         const { data } = await authService.getProfile()
-        console.debug('[profile-theme] user fetch after modal close/reload', data.user)
         if (!cancelled) setUser(data.user)
       } catch {
         clearAuthSession()
@@ -40,8 +45,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const login = async (payload: LoginPayload) => {
     const { data } = await authService.login(payload)
     setAuthToken(data.accessToken)
-    setUser(data.user)
-    return data.user
+    try {
+      const freshUser = await refreshUser()
+      return freshUser || data.user
+    } catch {
+      setUser(data.user)
+      return data.user
+    }
   }
 
   const logout = async () => {
@@ -57,7 +67,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, updateUser: setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, updateUser: setUser, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

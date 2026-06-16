@@ -7,6 +7,7 @@ import HomeLandingSection from '../../../components/system/HomeLandingSection'
 import { useAuth } from '../../../hooks/useAuth'
 import { systemExperienceService } from '../../../services/systemExperienceService'
 import { normalizeLandingData } from '../../../utils/localization'
+import { getUserFirstName } from '../../../utils/userDisplay'
 
 /**
  * Error Boundary for safe rendering
@@ -40,7 +41,7 @@ export default function MemberDashboard() {
   const [loading, setLoading] = useState(true)
   const [landing, setLanding] = useState<any>(null)
   const langRef = useRef(i18n.language)
-  const firstName = user?.name?.split(' ').pop() || t('dashboard.greeting_fallback')
+  const firstName = getUserFirstName(user, t('dashboard.greeting_fallback'))
 
   useEffect(() => {
     langRef.current = i18n.language

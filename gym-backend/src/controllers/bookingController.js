@@ -192,7 +192,7 @@ export const getMyBookings = async (req, res) => {
     const bookings = await Booking.find({
       memberId: req.user._id,
     })
-      .populate('ptId', 'name email phone avatar')
+      .populate('ptId', 'name fullName email phone avatar')
       .sort({ date: 1, slot: 1 })
 
     return res.json(bookings)
@@ -206,7 +206,7 @@ export const getMyBookings = async (req, res) => {
 
 export const getPTBookings = async (req, res) => {
   try {
-    const { filter, memberId } = req.query
+    const { filter, memberId, status, from } = req.query
 
     const query = {
       ptId: req.user._id,
@@ -228,18 +228,56 @@ export const getPTBookings = async (req, res) => {
       }
     }
 
+    if (status) {
+      query.status = status
+    }
+
+    if (from === 'today') {
+      query.date = { $gte: today }
+    }
+
     if (memberId) {
       query.memberId = memberId
     }
 
     const bookings = await Booking.find(query)
-      .populate('memberId', 'name email phone avatar')
+      .populate('memberId', 'name fullName email phone avatar memberCode')
       .sort({ date: 1, slot: 1 })
 
     return res.json(bookings)
   } catch (error) {
     return res.status(500).json({
       message: 'Lỗi lấy lịch của PT',
+      error: error.message,
+    })
+  }
+}
+
+export const rejectAllPendingBookings = async (req, res) => {
+  try {
+    const today = normalizeDate(new Date())
+
+    const result = await Booking.updateMany(
+      {
+        ptId: req.user._id,
+        status: 'pending',
+        date: { $gte: today },
+      },
+      {
+        $set: {
+          status: 'cancelled',
+          rejectReason: 'PT từ chối tất cả lịch chờ xác nhận',
+        },
+      }
+    )
+
+    return res.json({
+      message: 'Đã từ chối tất cả lịch chờ xác nhận',
+      modifiedCount: result.modifiedCount,
+    })
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Lỗi từ chối lịch',
       error: error.message,
     })
   }

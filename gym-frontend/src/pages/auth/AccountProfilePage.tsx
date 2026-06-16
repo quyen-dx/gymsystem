@@ -5,6 +5,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   EnvironmentOutlined,
+  InfoCircleOutlined,
   LockOutlined,
   LogoutOutlined,
   PhoneOutlined,
@@ -15,28 +16,18 @@ import {
   StarOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, message, Modal, Space, theme } from 'antd'
+import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, message, Modal, Select, Space, Tag, theme } from 'antd'
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import DashboardLayout from '../../components/layout/header/DashboardLayout'
+import MemberLayout from '../../components/layout/header/MemberLayout'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { generateTheme, PRESET_ACCENT_COLORS, resolveEffectiveTheme, useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../hooks/useAuth'
 import { createAddress, deleteAddress, getAddresses, setDefaultAddress, updateAddress } from '../../services/addressService'
 import { authService } from '../../services/authService'
 import { getUserDisplayName, getUserInitialName } from '../../utils/userDisplay'
-
-const getUsernameFromEmail = (email?: string | null) => {
-  if (!email) return ''
-  return email.includes('@') ? email.split('@')[0] : email
-}
-
-const profileModalClass =
-  'max-w-[760px] [&_.ant-modal-content]:!p-0 [&_.ant-modal-content]:!rounded-2xl [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-[var(--profile-border)] [&_.ant-modal-content]:!bg-[var(--profile-bg-elevated)] [&_.ant-modal-content]:!shadow-2xl [&_.ant-modal-close]:!right-3.5 [&_.ant-modal-close]:!top-3.5 [&_.ant-modal-close]:!text-[var(--profile-text-secondary)]'
-
-const profileModalWrapClass =
-  'profile-modal-wrap [&_.ant-modal-mask]:!bg-[var(--profile-mask)] [&_.ant-modal-mask]:backdrop-blur-[10px]'
 
 const profileFormClass =
   '[&_.ant-form-item-label>label]:!text-xs [&_.ant-form-item-label>label]:!font-medium [&_.ant-form-item-label>label]:!uppercase [&_.ant-form-item-label>label]:!tracking-[0.06em] [&_.ant-form-item-label>label]:!text-[var(--theme-muted)] [&_.ant-input]:!min-h-[42px] [&_.ant-input]:!rounded-[12px] [&_.ant-input]:!border-[var(--profile-border)] [&_.ant-input]:!bg-[var(--profile-bg-container)] [&_.ant-input]:!text-[var(--profile-text)] [&_.ant-input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input-affix-wrapper]:!min-h-[42px] [&_.ant-input-affix-wrapper]:!rounded-[12px] [&_.ant-input-affix-wrapper]:!border-[var(--profile-border)] [&_.ant-input-affix-wrapper]:!bg-[var(--profile-bg-container)] [&_.ant-input-affix-wrapper_input]:!bg-transparent [&_.ant-input-affix-wrapper_input]:!text-[var(--profile-text)] [&_.ant-input-affix-wrapper_input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input:focus]:!border-[var(--profile-accent)] [&_.ant-input:focus]:!shadow-none [&_.ant-input-focused]:!border-[var(--profile-accent)] [&_.ant-input-focused]:!shadow-none [&_.ant-input-affix-wrapper-focused]:!border-[var(--profile-accent)] [&_.ant-input-affix-wrapper-focused]:!shadow-none [&_.ant-input[disabled]]:!cursor-not-allowed [&_.ant-input[disabled]]:!bg-[var(--theme-elevated)] [&_.ant-input[disabled]]:!text-[var(--theme-muted)] [&_.ant-input-disabled]:!cursor-not-allowed [&_.ant-input-disabled]:!bg-[var(--theme-elevated)] [&_.ant-input-disabled]:!text-[var(--theme-muted)]'
@@ -273,6 +264,11 @@ const ProfileHeader = ({
 
         <div className="profile-header-meta">
           <h2>{displayName}</h2>
+          {user.memberCode && (
+            <div style={{ fontSize: 12, color: 'var(--theme-muted)', marginTop: 1 }}>
+              {user.memberCode}
+            </div>
+          )}
           <button type="button" onClick={onCopyContact}>
             <span>{contactText}</span>
             {(user.email || user.phone) && <CopyOutlined />}
@@ -297,26 +293,43 @@ const SidebarTabs = ({
   tabs,
   activeTab,
   onChange,
+  onLogout,
+  t,
 }: {
   tabs: ProfileTabItem[]
   activeTab: ProfileTabKey
   onChange: (tab: ProfileTabKey) => void
+  onLogout: () => void
+  t: (key: string, opts?: any) => string
 }) => (
-  <aside className="profile-desktop-tabs">
-    {tabs.map((tab) => {
-      const isActive = activeTab === tab.key
-      return (
-        <button
-          key={tab.key}
-          type="button"
-          className={`profile-side-tab${isActive ? ' active' : ''}`}
-          onClick={() => onChange(tab.key)}
-        >
-          <span>{tab.icon}</span>
-          {tab.label}
-        </button>
-      )
-    })}
+  <aside className="profile-desktop-tabs" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div style={{ flex: 1, minHeight: 0 }}>
+      {tabs.map((tab) => {
+        const isActive = activeTab === tab.key
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            className={`profile-side-tab${isActive ? ' active' : ''}`}
+            onClick={() => onChange(tab.key)}
+          >
+            <span>{tab.icon}</span>
+            {tab.label}
+          </button>
+        )
+      })}
+    </div>
+    <div style={{ borderTop: '1px solid var(--theme-border)', paddingTop: 8, marginTop: 4 }}>
+      <button
+        type="button"
+        className="profile-side-tab"
+        onClick={onLogout}
+        style={{ color: '#ef4444' }}
+      >
+        <span style={{ color: '#ef4444' }}><LogoutOutlined /></span>
+        {t('profile.logout')}
+      </button>
+    </div>
   </aside>
 )
 
@@ -327,6 +340,8 @@ const MobileMenuGrid = ({
   mobileMenuOpen,
   onToggle,
   hideBackdrop,
+  onLogout,
+  t,
 }: {
   tabs: ProfileTabItem[]
   activeTab: ProfileTabKey
@@ -334,6 +349,8 @@ const MobileMenuGrid = ({
   mobileMenuOpen: boolean
   onToggle: () => void
   hideBackdrop?: boolean
+  onLogout: () => void
+  t: (key: string, opts?: any) => string
 }) => (
   <div className="profile-mobile-menu-anchor">
     <div className="profile-mobile-menu-toggle" style={{
@@ -385,6 +402,15 @@ const MobileMenuGrid = ({
               </button>
             )
           })}
+          <button
+            type="button"
+            className="profile-grid-tab"
+            onClick={onLogout}
+            style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)' }}
+          >
+            <span style={{ color: '#ef4444' }}><LogoutOutlined /></span>
+            <strong>{t('profile.logout')}</strong>
+          </button>
         </div>
       </>
     )}
@@ -403,38 +429,7 @@ const TabContent = ({
   </div>
 )
 
-const MobileProfileSheet = ({
-  open,
-  onClose,
-  children,
-}: {
-  open: boolean
-  onClose: () => void
-  children: ReactNode
-}) => {
-  if (!open) return null
-
-  return createPortal(
-    <div className="profile-mobile-sheet">
-      <button className="profile-mobile-sheet-backdrop" onClick={onClose} type="button" aria-label="Close" />
-      <div className="profile-mobile-sheet-content" onClick={(e) => e.stopPropagation()}>
-        <button className="profile-mobile-sheet-close" onClick={onClose} type="button" aria-label="Close">
-          ✕
-        </button>
-        {children}
-      </div>
-    </div>,
-    document.body,
-  )
-}
-
-export default function AccountProfileModal({
-  open,
-  onClose,
-}: {
-  open: boolean
-  onClose: () => void
-}) {
+function ProfileContent() {
   const { t, i18n } = useTranslation()
   const { user, updateUser, refreshUser, logout } = useAuth()
   const { applyAccentFast, applyThemeFull, applyThemeMode, commitPending, accentColor: savedAccentColor } = useTheme()
@@ -456,11 +451,15 @@ export default function AccountProfileModal({
   const [editAddress, setEditAddress] = useState<any>(null)
   const [accentColor, setAccentColor] = useState(savedAccentColor)
   const [mediaUploading, setMediaUploading] = useState<'avatar' | 'cover' | 'cover-remove' | null>(null)
+  const [identityFrontFile, setIdentityFrontFile] = useState<File | null>(null)
+  const [identityBackFile, setIdentityBackFile] = useState<File | null>(null)
+  const [identityFrontPreview, setIdentityFrontPreview] = useState<string | null>(null)
+  const [identityBackPreview, setIdentityBackPreview] = useState<string | null>(null)
+  const [dismissBanner, setDismissBanner] = useState(false)
+  const [formDirty, setFormDirty] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const coverRef = useRef<HTMLInputElement>(null)
-  const profileScrollRef = useRef<HTMLDivElement>(null)
   const preventCloseRef = useRef(false)
-  const watchedEmail = Form.useWatch('email', form)
   const previewTheme = generateTheme(
     accentColor,
     resolveEffectiveTheme(systemSettings.general.defaultTheme === 'light' ? 'light' : 'dark', user?.themePreference),
@@ -476,7 +475,6 @@ export default function AccountProfileModal({
   }, [user?.accentColor])
 
   const goToOrders = () => {
-    handleClose()
     navigate('/orders')
   }
 
@@ -634,19 +632,32 @@ export default function AccountProfileModal({
     }
   }
 
-  const handleClose = () => {
-    if (preventCloseRef.current) return
-    commitPending()
-    onClose()
-  }
-
   useEffect(() => {
-    if (!open || !user) return
+    if (!user) return
     form.setFieldsValue({
       name: user.name,
       email: user.email || '',
       phone: user.phone || '',
       dateOfBirth: user.dateOfBirth ? user.dateOfBirth.slice(0, 10) : '',
+      fullName: user.fullName || '',
+      gender: user.gender || '',
+      nationality: user.nationality || '',
+      language: user.language || 'vi',
+      timezone: user.timezone || '',
+      country: user.country || '',
+      province: user.province || '',
+      detailedAddress: user.detailedAddress || '',
+      emergencyName: user.emergencyContact?.name || '',
+      emergencyPhone: user.emergencyContact?.phone || '',
+      emergencyRelationship: user.emergencyContact?.relationship || '',
+      height: user.healthInfo?.height || '',
+      weight: user.healthInfo?.weight || '',
+      goals: user.healthInfo?.goals || [],
+      activityLevel: user.healthInfo?.activityLevel || '',
+      healthNotes: user.healthInfo?.notes || '',
+      identityType: user.identityType || user.identityVerification?.documentType || '',
+      identityNumber: user.identityNumber || user.identityVerification?.documentNumber || '',
+      identityCountry: user.identityCountry || '',
     })
     setAvatarPreview(null)
     setCoverPreview(null)
@@ -657,13 +668,11 @@ export default function AccountProfileModal({
     addressForm.resetFields()
     setEditAddress(null)
     setAddresses([])
-  }, [open, form, passwordForm, addressForm])
+  }, [form, passwordForm, addressForm])
 
   useEffect(() => {
-    if (open) {
-      setAccentColor(savedAccentColor)
-    }
-  }, [open, savedAccentColor])
+    setAccentColor(savedAccentColor)
+  }, [savedAccentColor])
 
   const profileThemeStyle = {
     '--profile-bg-layout': 'var(--gs-bg)',
@@ -680,19 +689,69 @@ export default function AccountProfileModal({
     '--profile-success': token.colorSuccess,
   } as CSSProperties
 
+  const calcProfileCompletion = (u: typeof user) => {
+    if (!u) return 0
+    let score = 0
+    if (u.fullName) score += 10
+    if (u.phone) score += 10
+    if (u.dateOfBirth) score += 10
+    if (u.gender) score += 5
+    if (u.nationality) score += 10
+    if (u.detailedAddress) score += 15
+    if (u.emergencyContact?.name && u.emergencyContact?.phone) score += 15
+    if (u.identityType && u.identityNumber) score += 25
+    return score
+  }
+
   const handleSave = async (values: any) => {
     setLoading(true)
     try {
-      const formData = new FormData()
-      formData.append('name', values.name || '')
-      if (values.email) formData.append('email', values.email)
-      if (values.phone) formData.append('phone', values.phone)
-      if (values.dateOfBirth) formData.append('dateOfBirth', values.dateOfBirth)
-      if (values.fullName !== undefined) formData.append('fullName', values.fullName || '')
-      await authService.updateProfile(formData)
+      const payload: Record<string, any> = {}
+      payload.name = values.name || ''
+      if (values.email) payload.email = values.email
+      if (values.phone) payload.phone = values.phone
+      if (values.dateOfBirth) payload.dateOfBirth = values.dateOfBirth
+      payload.fullName = values.fullName || ''
+      if (values.gender) payload.gender = values.gender
+      if (values.nationality) payload.nationality = values.nationality
+      if (values.language) payload.language = values.language
+      if (values.timezone) payload.timezone = values.timezone
+      if (values.country) payload.country = values.country
+      if (values.province) payload.province = values.province
+      if (values.detailedAddress) payload.detailedAddress = values.detailedAddress
+      payload.emergencyName = values.emergencyName || ''
+      payload.emergencyPhone = values.emergencyPhone || ''
+      payload.emergencyRelationship = values.emergencyRelationship || ''
+      payload.height = values.height || ''
+      payload.weight = values.weight || ''
+      payload.goals = values.goals || []
+      payload.activityLevel = values.activityLevel || ''
+      payload.healthNotes = values.healthNotes || ''
+      payload.documentType = values.documentType || ''
+      payload.documentNumber = values.documentNumber || ''
+      payload.identityType = values.identityType || ''
+      payload.identityNumber = values.identityNumber || ''
+      payload.identityCountry = values.identityCountry || ''
+
+      // Use FormData if identity images are being uploaded
+      const hasIdentityFiles = identityFrontFile || identityBackFile
+      if (hasIdentityFiles) {
+        const fd = new FormData()
+        Object.entries(payload).forEach(([k, v]) => {
+          if (Array.isArray(v)) fd.append(k, JSON.stringify(v))
+          else fd.append(k, String(v ?? ''))
+        })
+        if (identityFrontFile) fd.append('identityFrontImage', identityFrontFile)
+        if (identityBackFile) fd.append('identityBackImage', identityBackFile)
+        await authService.updateProfile(fd)
+      } else {
+        await authService.updateProfile(payload)
+      }
       await refreshUser()
+      setIdentityFrontFile(null)
+      setIdentityBackFile(null)
+      setFormDirty(false)
       message.success(t('profile.msg_update_success'))
-      handleClose()
     } catch (err: any) {
       message.error(err.response?.data?.message || t('profile.msg_update_failed'))
     } finally {
@@ -809,10 +868,10 @@ export default function AccountProfileModal({
   }
 
   useEffect(() => {
-    if (open && activeTab === 'address') {
+    if (activeTab === 'address') {
       loadAddresses()
     }
-  }, [open, activeTab])
+  }, [activeTab])
 
   useEffect(() => {
     return () => {
@@ -833,11 +892,12 @@ export default function AccountProfileModal({
   const isProfileCompact = !isProfileDesktop
   const responsiveSectionCardStyle = {
     ...sectionCardStyle,
-    marginBottom: isProfileMobile ? 16 : 12,
-    padding: isProfileMobile ? 12 : sectionCardStyle.padding,
+    marginBottom: isProfileMobile ? 16 : 20,
+    padding: isProfileMobile ? 16 : 28,
     width: '100%',
     maxWidth: '100%',
     boxSizing: 'border-box',
+    borderRadius: 16,
   } as CSSProperties
   const tabs: ProfileTabItem[] = [
     { key: 'profile', label: t('profile.info'), icon: <UserOutlined /> },
@@ -878,8 +938,8 @@ export default function AccountProfileModal({
     </button>
   )
 
-  const sharedContent = (
-    <>
+  return (
+    <div style={{ ...profileThemeStyle, color: token.colorText, width: '100%', maxWidth: 1280, margin: '0 auto', minHeight: '100vh', padding: '32px 32px 120px' }} className="profile-page-wrapper max-[768px]:!px-4 max-[768px]:!py-4">
       <ProfileHeader
         user={user}
         avatarPreview={avatarPreview}
@@ -896,105 +956,601 @@ export default function AccountProfileModal({
         t={t}
       />
 
-      <div className="profile-modal-main">
-        <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-        <MobileMenuGrid
-          tabs={tabs}
-          activeTab={activeTab}
-          onChange={(tab) => {
-            setActiveTab(tab)
-            setMobileMenuOpen(false)
-          }}
-          mobileMenuOpen={mobileMenuOpen}
-          onToggle={() => setMobileMenuOpen(prev => !prev)}
-          hideBackdrop={isProfileMobile}
-        />
+      {!dismissBanner && (() => {
+        const pct = calcProfileCompletion(user)
+        if (pct >= 100) return null
+        const statusText = pct < 50 ? t('profile.completion_low') : t('profile.completion_medium')
+        return (
+          <div style={{
+            margin: '16px 0 20px',
+            padding: '18px 24px',
+            borderRadius: 14,
+            background: 'var(--theme-accent-muted)',
+            border: '1px solid var(--theme-accent-border)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 14,
+          }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: 12,
+              background: 'var(--theme-accent)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 20, flexShrink: 0,
+            }}>
+              <LockOutlined />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--theme-text)', marginBottom: 3 }}>
+                {t('profile.completion_title')}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--theme-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+                {t('profile.completion_desc')}
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 text-sm font-medium text-[var(--theme-text)]">
+                  <div style={{
+                    width: 120, height: 8, borderRadius: 4,
+                    background: 'var(--theme-border)',
+                    overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      width: `${pct}%`, height: '100%',
+                      borderRadius: 4,
+                      background: pct < 50 ? 'var(--theme-accent)' : '#f59e0b',
+                      transition: 'width 0.3s',
+                    }} />
+                  </div>
+                  <span>{pct}% — {statusText}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="primary"
+                    size="small"
+                    style={{ borderRadius: 8, fontWeight: 600, fontSize: 12, height: 32 }}
+                    onClick={() => document.getElementById('section-account')?.scrollIntoView({ behavior: 'smooth' })}
+                  >
+                    {t('profile.completion_cta')}
+                  </Button>
+                  <Button
+                    size="small"
+                    style={{ borderRadius: 8, fontWeight: 500, fontSize: 12, height: 32, background: 'transparent', borderColor: 'var(--theme-border)', color: 'var(--theme-muted)' }}
+                    onClick={() => setDismissBanner(true)}
+                  >
+                    {t('profile.completion_later')}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      <div className="flex gap-6 max-[768px]:flex-col" style={{ minHeight: 0 }}>
+        <div className="max-[768px]:hidden" style={{ width: 220, flexShrink: 0 }}>
+          <div style={{ position: 'sticky', top: 88, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 120px)' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} onLogout={handleLogout} t={t} />
+            </div>
+          </div>
+        </div>
+
+        <div className="min-[769px]:hidden">
+          <MobileMenuGrid
+            tabs={tabs}
+            activeTab={activeTab}
+            onChange={(tab) => {
+              setActiveTab(tab)
+              setMobileMenuOpen(false)
+            }}
+            mobileMenuOpen={mobileMenuOpen}
+            onToggle={() => setMobileMenuOpen(prev => !prev)}
+            hideBackdrop={isProfileMobile}
+            onLogout={handleLogout}
+            t={t}
+          />
+        </div>
 
         <div
-          className="profile-modal-scroll"
+          className="flex-1 min-w-0"
           style={{
-            minHeight: 120,
-            padding: isProfileMobile ? '4px 4px 0' : '16px 20px',
-            paddingBottom: isProfileMobile ? '0' : '16px',
-            scrollbarWidth: 'thin',
-            scrollbarColor: 'var(--theme-border) transparent',
-            overflowX: 'hidden',
-            overflowY: isProfileMobile ? 'visible' : 'auto',
-            width: '100%',
-            maxWidth: '100%',
-            flex: 1,
+            padding: isProfileMobile ? 0 : 0,
           }}
         >
           <TabContent activeTab={activeTab}>
             {activeTab === 'profile' && (
               <div>
-                <div style={responsiveSectionCardStyle}>
+                <Form layout="vertical" form={form} onFinish={handleSave} onValuesChange={() => setFormDirty(true)} className={profileFormClass}>
+                 <div style={responsiveSectionCardStyle}>
                   {renderSectionHeader(<UserOutlined />, t('profile.info_title'), t('profile.info_subtitle'))}
 
-                  <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
+                  <Form.Item label={t('profile.member_code')}>
+                    <Input
+                      disabled
+                      suffix={<span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><LockOutlined /><CopyOutlined style={{ cursor: 'pointer', color: 'var(--theme-accent)' }} onClick={() => { navigator.clipboard.writeText(user.memberCode || ''); message.success(t('profile.msg_contact_copied')) }} /></span>}
+                      value={user.memberCode || '—'}
+                      style={{ ...profileDisabledInputStyle, fontWeight: 600, fontSize: 14 }}
+                    />
+                  </Form.Item>
+
+                  <Form.Item name="name" hidden>
+                    <Input />
+                  </Form.Item>
+
+                  <Form.Item label={t('profile.phone')} name="phone">
+                    <Input prefix={<PhoneOutlined />} placeholder={t('profile.phone_placeholder')} style={profileInputStyle} />
+                  </Form.Item>
+
+                  <Form.Item
+                    label="Email"
+                    name="email"
+                    rules={[
+                      { type: 'email', message: t('profile.invalid_email') },
+                      { required: !user.email, message: t('profile.email_placeholder') },
+                    ]}
+                  >
+                    <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder={user.email ? t('profile.email_placeholder') : t('profile.add_email_placeholder')} style={user.email ? profileDisabledInputStyle : profileInputStyle} />
+                  </Form.Item>
+
+                  <Form.Item label={t('profile.dob')} name="dateOfBirth" className="col-span-full">
+                    <Input
+                      type="date"
+                      style={{
+                        ...profileInputStyle,
+                        width: '100%',
+                        maxWidth: '100%',
+                        boxSizing: 'border-box',
+                        minWidth: 0,
+                      }}
+                    />
+                  </Form.Item>
+                </div>
+
+                {/* Personal Information */}
+                <div style={responsiveSectionCardStyle}>
+                  {renderSectionHeader(<UserOutlined />, t('profile.personal_info'), t('profile.personal_info_subtitle'))}
+                  <div className={profileFormClass}>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                      <Form.Item label={t('profile.name')} name="name" rules={[{ required: true, message: t('profile.name_placeholder') }]}>
-                        <Input prefix={<UserOutlined />} placeholder={t('profile.your_name')} style={profileInputStyle} />
+                      <Form.Item label={t('profile.full_name')} name="fullName">
+                        <Input placeholder={t('profile.full_name_placeholder')} style={profileInputStyle} />
                       </Form.Item>
-
-                      <Form.Item label={t('profile.phone')} name="phone">
-                        <Input prefix={<PhoneOutlined />} placeholder={t('profile.phone_placeholder')} style={profileInputStyle} />
+                      <Form.Item label={t('profile.gender')} name="gender">
+                        <Select style={profileInputStyle}>
+                          <Select.Option value="male">{t('profile.gender_male')}</Select.Option>
+                          <Select.Option value="female">{t('profile.gender_female')}</Select.Option>
+                          <Select.Option value="other">{t('profile.gender_other')}</Select.Option>
+                        </Select>
                       </Form.Item>
-
-                      <Form.Item
-                        label="Email"
-                        name="email"
-                        rules={[
-                          { type: 'email', message: t('profile.invalid_email') },
-                          { required: !user.email, message: t('profile.email_placeholder') },
-                        ]}
-                      >
-                        <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder={user.email ? t('profile.email_placeholder') : t('profile.add_email_placeholder')} style={user.email ? profileDisabledInputStyle : profileInputStyle} />
+                      <Form.Item label={t('profile.nationality')} name="nationality">
+                        <Select
+                          showSearch
+                          placeholder={t('profile.nationality_placeholder')}
+                          style={profileInputStyle}
+                          optionFilterProp="label"
+                        >
+                          {[
+                            { value: 'Vietnamese', label: 'Việt Nam' },
+                            { value: 'American', label: 'United States' },
+                            { value: 'British', label: 'United Kingdom' },
+                            { value: 'Canadian', label: 'Canada' },
+                            { value: 'Australian', label: 'Australia' },
+                            { value: 'French', label: 'France' },
+                            { value: 'German', label: 'Germany' },
+                            { value: 'Japanese', label: 'Japan' },
+                            { value: 'Korean', label: 'South Korea' },
+                            { value: 'Chinese', label: 'China' },
+                            { value: 'Singaporean', label: 'Singapore' },
+                            { value: 'Malaysian', label: 'Malaysia' },
+                            { value: 'Thai', label: 'Thailand' },
+                            { value: 'Other', label: 'Other' },
+                          ].map((c) => (
+                            <Select.Option key={c.value} value={c.value}>{c.label}</Select.Option>
+                          ))}
+                        </Select>
                       </Form.Item>
-
-                      <Form.Item label="Username">
-                        <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} style={profileDisabledInputStyle} />
+                      <Form.Item label={t('profile.language_preference')} name="language">
+                        <Select style={profileInputStyle}>
+                          <Select.Option value="vi">Tiếng Việt</Select.Option>
+                          <Select.Option value="en">English</Select.Option>
+                        </Select>
                       </Form.Item>
+                      <Form.Item label={t('profile.timezone')} name="timezone" className="col-span-full">
+                        <Select
+                          showSearch
+                          placeholder={t('profile.timezone_placeholder')}
+                          style={profileInputStyle}
+                          optionFilterProp="label"
+                        >
+                          {[
+                            'UTC-12:00', 'UTC-11:00', 'UTC-10:00', 'UTC-09:00',
+                            'UTC-08:00', 'UTC-07:00', 'UTC-06:00', 'UTC-05:00',
+                            'UTC-04:00', 'UTC-03:00', 'UTC-02:00', 'UTC-01:00',
+                            'UTC+00:00', 'UTC+01:00', 'UTC+02:00', 'UTC+03:00',
+                            'UTC+03:30', 'UTC+04:00', 'UTC+04:30', 'UTC+05:00',
+                            'UTC+05:30', 'UTC+05:45', 'UTC+06:00', 'UTC+06:30',
+                            'UTC+07:00', 'UTC+08:00', 'UTC+08:45', 'UTC+09:00',
+                            'UTC+09:30', 'UTC+10:00', 'UTC+11:00', 'UTC+12:00',
+                            'UTC+13:00', 'UTC+14:00',
+                          ].map((tz) => (
+                            <Select.Option key={tz} value={tz}>{tz}</Select.Option>
+                          ))}
+                        </Select>
+                      </Form.Item>
+                    </div>
+                  </div>
+                </div>
 
-                      <Form.Item label={t('profile.dob')} name="dateOfBirth" className="col-span-full">
-                        <Input
-                          type="date"
-                          style={{
-                            ...profileInputStyle,
-                            width: '100%',
-                            maxWidth: '100%',
-                            boxSizing: 'border-box',
-                            minWidth: 0,
+                {/* Contact Information */}
+                <div style={responsiveSectionCardStyle}>
+                  {renderSectionHeader(<EnvironmentOutlined />, t('profile.contact_info'), t('profile.contact_info_subtitle'))}
+                  <div className={profileFormClass}>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
+                      <Form.Item label={t('profile.country')} name="country">
+                        <Select
+                          showSearch
+                          placeholder={t('profile.country_placeholder')}
+                          style={profileInputStyle}
+                          optionFilterProp="label"
+                        >
+                          {[
+                            { value: 'Vietnam', label: 'Việt Nam' },
+                            { value: 'USA', label: 'United States' },
+                            { value: 'UK', label: 'United Kingdom' },
+                            { value: 'Canada', label: 'Canada' },
+                            { value: 'Australia', label: 'Australia' },
+                            { value: 'France', label: 'France' },
+                            { value: 'Germany', label: 'Germany' },
+                            { value: 'Japan', label: 'Japan' },
+                            { value: 'South Korea', label: 'South Korea' },
+                            { value: 'China', label: 'China' },
+                            { value: 'Singapore', label: 'Singapore' },
+                            { value: 'Malaysia', label: 'Malaysia' },
+                            { value: 'Thailand', label: 'Thailand' },
+                          ].map((c) => (
+                            <Select.Option key={c.value} value={c.value}>{c.label}</Select.Option>
+                          ))}
+                        </Select>
+                      </Form.Item>
+                      <Form.Item label={t('profile.province')} name="province">
+                        <Input placeholder={t('profile.province_placeholder')} style={profileInputStyle} />
+                      </Form.Item>
+                      <Form.Item label={t('profile.detailed_address')} name="detailedAddress" className="col-span-full">
+                        <Input placeholder={t('profile.detailed_address_placeholder')} style={profileInputStyle} />
+                      </Form.Item>
+                    </div>
+                    <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
+                      <div className="mb-3 text-sm font-semibold text-[var(--theme-text)]">
+                        {t('profile.emergency_contact')}
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
+                        <Form.Item label={t('profile.emergency_name')} name="emergencyName">
+                          <Input placeholder={t('profile.emergency_name_placeholder')} style={profileInputStyle} />
+                        </Form.Item>
+                        <Form.Item label={t('profile.emergency_phone')} name="emergencyPhone">
+                          <Input placeholder={t('profile.emergency_phone_placeholder')} style={profileInputStyle} />
+                        </Form.Item>
+                        <Form.Item label={t('profile.emergency_relationship')} name="emergencyRelationship">
+                          <Select placeholder={t('profile.emergency_relationship_placeholder')} style={profileInputStyle}>
+                            <Select.Option value="spouse">{t('profile.rel_spouse')}</Select.Option>
+                            <Select.Option value="parent">{t('profile.rel_parent')}</Select.Option>
+                            <Select.Option value="sibling">{t('profile.rel_sibling')}</Select.Option>
+                            <Select.Option value="relative">{t('profile.rel_relative')}</Select.Option>
+                            <Select.Option value="friend">{t('profile.rel_friend')}</Select.Option>
+                            <Select.Option value="other">{t('profile.rel_other')}</Select.Option>
+                          </Select>
+                        </Form.Item>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Health Information */}
+                <div style={responsiveSectionCardStyle}>
+                  {renderSectionHeader(<PhoneOutlined />, t('profile.health_info'), t('profile.health_info_subtitle'))}
+                  <div className={profileFormClass}>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
+                      <Form.Item label={t('profile.height')} name="height">
+                        <Input type="number" placeholder={t('profile.height_placeholder')} style={profileInputStyle} />
+                      </Form.Item>
+                      <Form.Item label={t('profile.weight')} name="weight">
+                        <Input type="number" placeholder={t('profile.weight_placeholder')} style={profileInputStyle} />
+                      </Form.Item>
+                    </div>
+                    <Form.Item label={t('profile.fitness_goals')} name="goals">
+                      <Select mode="multiple" placeholder={t('profile.fitness_goals')} style={profileInputStyle}>
+                        <Select.Option value="fat_loss">{t('profile.goal_fat_loss')}</Select.Option>
+                        <Select.Option value="muscle_gain">{t('profile.goal_muscle_gain')}</Select.Option>
+                        <Select.Option value="weight_gain">{t('profile.goal_weight_gain')}</Select.Option>
+                        <Select.Option value="maintain">{t('profile.goal_maintain')}</Select.Option>
+                      </Select>
+                    </Form.Item>
+                    <Form.Item label={t('profile.activity_level')} name="activityLevel">
+                      <Select placeholder={t('profile.activity_level')} style={profileInputStyle}>
+                        <Select.Option value="beginner">{t('profile.activity_beginner')}</Select.Option>
+                        <Select.Option value="intermediate">{t('profile.activity_intermediate')}</Select.Option>
+                        <Select.Option value="advanced">{t('profile.activity_advanced')}</Select.Option>
+                      </Select>
+                    </Form.Item>
+                    <Form.Item label={t('profile.health_notes')} name="healthNotes">
+                      <Input.TextArea rows={3} placeholder={t('profile.health_notes_placeholder')} style={profileInputStyle} />
+                    </Form.Item>
+                  </div>
+                </div>
+
+                {/* Identity Verification */}
+                <div style={responsiveSectionCardStyle}>
+                  {renderSectionHeader(<LockOutlined />, t('profile.identity_verification'), t('profile.identity_verification_subtitle'))}
+                  <div className={profileFormClass}>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
+                      <Form.Item label={t('profile.identity_type')} name="identityType">
+                        <Select
+                          placeholder={t('profile.doc_select')}
+                          style={profileInputStyle}
+                          onChange={(val: string) => {
+                            if (val && val !== 'other') form.setFieldValue('identityCountry', '')
                           }}
+                        >
+                          <Select.Option value="cccd">{t('profile.doc_cccd')}</Select.Option>
+                          <Select.Option value="cmnd">{t('profile.doc_cmnd')}</Select.Option>
+                          <Select.Option value="passport">{t('profile.doc_passport')}</Select.Option>
+                          <Select.Option value="other">{t('profile.doc_other')}</Select.Option>
+                        </Select>
+                      </Form.Item>
+                      <Form.Item label={t('profile.identity_number')} name="identityNumber">
+                        <Input
+                          placeholder={t('profile.document_number_placeholder')}
+                          style={profileInputStyle}
+                          type={user.role === 'admin' ? 'text' : 'password'}
                         />
+                      </Form.Item>
+                      <Form.Item label={t('profile.identity_country')} name="identityCountry">
+                        <Select
+                          showSearch
+                          placeholder={t('profile.identity_country_placeholder')}
+                          style={profileInputStyle}
+                          optionFilterProp="label"
+                        >
+                          {[
+                            { value: 'Vietnam', label: 'Việt Nam' },
+                            { value: 'USA', label: 'United States' },
+                            { value: 'UK', label: 'United Kingdom' },
+                            { value: 'Canada', label: 'Canada' },
+                            { value: 'Australia', label: 'Australia' },
+                            { value: 'France', label: 'France' },
+                            { value: 'Germany', label: 'Germany' },
+                            { value: 'Japan', label: 'Japan' },
+                            { value: 'South Korea', label: 'South Korea' },
+                            { value: 'China', label: 'China' },
+                            { value: 'Singapore', label: 'Singapore' },
+                            { value: 'Malaysia', label: 'Malaysia' },
+                            { value: 'Thailand', label: 'Thailand' },
+                          ].map((c) => (
+                            <Select.Option key={c.value} value={c.value}>{c.label}</Select.Option>
+                          ))}
+                        </Select>
                       </Form.Item>
                     </div>
 
-                    <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !mt-1 !h-12 !rounded-2xl !text-[15px]`}>
-                      {t('profile.save_changes')}
-                    </Button>
-                  </Form>
+                    <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
+                      <div className="mb-3 text-sm font-semibold text-[var(--theme-text)]">
+                        {t('profile.identity_images')}
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 max-[480px]:grid-cols-1">
+                        <div>
+                          <div className="mb-1 text-xs text-[var(--theme-muted)]">{t('profile.identity_front')}</div>
+                          <label
+                            style={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'center',
+                              justifyContent: 'center', gap: 6,
+                              minHeight: 100, borderRadius: 10,
+                              border: '1px dashed var(--theme-border)',
+                              background: 'var(--theme-input-bg)',
+                              cursor: 'pointer', overflow: 'hidden',
+                            }}
+                          >
+                            {identityFrontPreview || user.identityFrontImage ? (
+                              <img
+                                src={identityFrontPreview || user.identityFrontImage}
+                                alt="front"
+                                style={{ width: '100%', height: 120, objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <>
+                                <PlusOutlined style={{ fontSize: 20, color: 'var(--theme-muted)' }} />
+                                <span style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
+                                  {t('profile.identity_upload')}
+                                </span>
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              hidden
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) {
+                                  setIdentityFrontFile(file)
+                                  setIdentityFrontPreview(URL.createObjectURL(file))
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <div>
+                          <div className="mb-1 text-xs text-[var(--theme-muted)]">{t('profile.identity_back')}</div>
+                          <label
+                            style={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'center',
+                              justifyContent: 'center', gap: 6,
+                              minHeight: 100, borderRadius: 10,
+                              border: '1px dashed var(--theme-border)',
+                              background: 'var(--theme-input-bg)',
+                              cursor: 'pointer', overflow: 'hidden',
+                            }}
+                          >
+                            {identityBackPreview || user.identityBackImage ? (
+                              <img
+                                src={identityBackPreview || user.identityBackImage}
+                                alt="back"
+                                style={{ width: '100%', height: 120, objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <>
+                                <PlusOutlined style={{ fontSize: 20, color: 'var(--theme-muted)' }} />
+                                <span style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
+                                  {t('profile.identity_upload')}
+                                </span>
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              hidden
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) {
+                                  setIdentityBackFile(file)
+                                  setIdentityBackPreview(URL.createObjectURL(file))
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {(user.identityType || user.identityStatus) && (
+                      <div className="mt-4 flex items-center gap-2 text-sm flex-wrap">
+                        {(() => {
+                          const st = (user.identityStatus || '') as string
+                          if (!st) return <Tag color="default">{t('profile.identity_not_submitted')}</Tag>
+                          if (st === 'pending') return <Tag color="processing">{t('profile.identity_pending')}</Tag>
+                          if (st === 'approved') return <Tag color="success">{t('profile.identity_approved')}</Tag>
+                          if (st === 'rejected') {
+                            return <>
+                              <Tag color="error">{t('profile.identity_rejected')}</Tag>
+                              {user.identityRejectReason && (
+                                <span className="text-xs text-[var(--theme-muted)] ml-1">
+                                  ({t('profile.identity_reject_reason')}: {user.identityRejectReason})
+                                </span>
+                              )}
+                            </>
+                          }
+                          return null
+                        })()}
+                        {user.identityReviewedAt && (
+                          <span className="text-xs text-[var(--theme-muted)]">
+                            {new Date(user.identityReviewedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {form.getFieldValue('identityType') === 'cccd' && user.nationality === 'Vietnamese' && (
+                      <div className="mt-2 text-xs text-[var(--theme-accent)]">
+                        <InfoCircleOutlined className="mr-1" />
+                        {t('profile.identity_suggest_vn')}
+                      </div>
+                    )}
+                    {form.getFieldValue('identityType') === 'passport' && user.nationality !== 'Vietnamese' && user.nationality && (
+                      <div className="mt-2 text-xs text-[var(--theme-accent)]">
+                        <InfoCircleOutlined className="mr-1" />
+                        {t('profile.identity_suggest_foreign')}
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                </Form>
+
+                {/* Gym Profile */}
+                <div style={responsiveSectionCardStyle}>
+                  {renderSectionHeader(<ShoppingCartOutlined />, t('profile.gym_profile'), t('profile.gym_profile_subtitle'))}
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
+                      <span className="text-[var(--theme-muted)]">{t('profile.join_date')}</span>
+                      <span className="font-medium text-[var(--theme-text)]">
+                        {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
+                      <span className="text-[var(--theme-muted)]">{t('profile.member_tier')}</span>
+                      <span className="font-medium text-[var(--theme-text)]">{t('profile.default')}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
+                      <span className="text-[var(--theme-muted)]">{t('profile.current_plan')}</span>
+                      <span className="font-medium text-[var(--theme-text)]">-</span>
+                    </div>
+                    <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
+                      <span className="text-[var(--theme-muted)]">{t('profile.assigned_pt')}</span>
+                      <span className="font-medium text-[var(--theme-text)]">-</span>
+                    </div>
+                    <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
+                      <span className="text-[var(--theme-muted)]">{t('profile.total_sessions')}</span>
+                      <span className="font-medium text-[var(--theme-text)]">-</span>
+                    </div>
+                    <div className="flex justify-between pb-2">
+                      <span className="text-[var(--theme-muted)]">{t('profile.loyalty_points')}</span>
+                      <span className="font-medium text-[var(--theme-text)]">-</span>
+                    </div>
+                  </div>
+                </div>
+
+                {formDirty && (
+                  <>
+                    <div className="max-[768px]:hidden" style={{
+                      position: 'sticky', bottom: 0, zIndex: 10,
+                      background: 'var(--theme-elevated)',
+                      border: '1px solid var(--theme-border)',
+                      padding: '12px 24px',
+                      marginTop: 4, marginBottom: 0,
+                      borderRadius: 14,
+                      display: 'flex', justifyContent: 'flex-end', gap: 10,
+                      backdropFilter: 'blur(12px)',
+                    }}>
+                      <Button
+                        onClick={() => { form.resetFields(); setFormDirty(false) }}
+                        style={{ height: 44, borderRadius: 10, fontWeight: 500, paddingInline: 24 }}
+                      >
+                        {t('profile.cancel')}
+                      </Button>
+                      <Button
+                        type="primary"
+                        loading={loading}
+                        style={{ height: 44, borderRadius: 10, fontWeight: 600, paddingInline: 32, background: 'var(--theme-accent)', borderColor: 'var(--theme-accent-border)' }}
+                        onClick={() => form.submit()}
+                      >
+                        {t('profile.save_changes')}
+                      </Button>
+                    </div>
+                    <div className="min-[769px]:hidden fixed bottom-0 left-0 right-0 z-50" style={{
+                      background: 'var(--theme-elevated)',
+                      borderTop: '1px solid var(--theme-border)',
+                      padding: '12px 16px',
+                      paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+                      display: 'flex', gap: 10,
+                    }}>
+                      <Button
+                        block
+                        onClick={() => { form.resetFields(); setFormDirty(false) }}
+                        style={{ height: 44, borderRadius: 10, fontWeight: 500 }}
+                      >
+                        {t('profile.cancel')}
+                      </Button>
+                      <Button
+                        block
+                        type="primary"
+                        loading={loading}
+                        style={{ height: 44, borderRadius: 10, fontWeight: 600, background: 'var(--theme-accent)', borderColor: 'var(--theme-accent-border)' }}
+                        onClick={() => form.submit()}
+                      >
+                        {t('profile.save_changes')}
+                      </Button>
+                    </div>
+                  </>
+                )}
 
                 <div style={{ marginBottom: 12 }}>
                   {renderActionItem(<ShoppingCartOutlined />, t('profile.orders_title'), t('profile.orders_subtitle'), goToOrders)}
-                  <Button
-                    block
-                    icon={<LogoutOutlined />}
-                    onClick={handleLogout}
-                    style={{
-                      marginTop: 8,
-                      height: 44,
-                      borderRadius: 10,
-                      background: 'transparent',
-                      border: '1px solid rgba(239,68,68,0.3)',
-                      color: '#ef4444',
-                      fontWeight: 500,
-                      fontSize: 14,
-                    }}
-                  >
-                    {t('profile.logout')}
-                  </Button>
                 </div>
               </div>
             )}
@@ -1332,7 +1888,7 @@ export default function AccountProfileModal({
                   </Form.Item>
 
                   <Form.Item label={t('profile.confirm_password_change')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_change_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.confirm_password_change_hint')} style={profilePasswordInputStyle} />
+                    <Input.Password placeholder={t('profile.confirm_password_hint')} style={profilePasswordInputStyle} />
                   </Form.Item>
 
                   <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
@@ -1344,71 +1900,30 @@ export default function AccountProfileModal({
           </TabContent>
         </div>
       </div>
-    </>
+    </div>
   )
+}
 
-  if (isProfileMobile) {
+export default function AccountProfilePage() {
+  const { user } = useAuth()
+
+  if (!user) return null
+
+  if (user.role === 'member') {
     return (
-      <MobileProfileSheet open={open} onClose={handleClose}>
-        <div style={{ ...profileThemeStyle, color: token.colorText }}>
-          {sharedContent}
+      <MemberLayout>
+        <div className="member-page">
+          <ProfileContent />
         </div>
-      </MobileProfileSheet>
+      </MemberLayout>
     )
   }
 
   return (
-    <Modal
-      title={null}
-      open={open}
-      onCancel={handleClose}
-      footer={null}
-      mask={{ closable: true }}
-      destroyOnHidden
-      width={isProfileDesktop ? 760 : 680}
-      className={`profile-modal ${profileModalClass}`}
-      wrapClassName={profileModalWrapClass}
-      style={{
-        ...profileThemeStyle,
-        top: 20,
-        margin: 'auto',
-        padding: 0,
-        maxWidth: '100vw',
-      }}
-      styles={{
-        content: {
-          padding: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          border: '1px solid var(--theme-border)',
-        } as CSSProperties,
-        body: {
-          padding: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          flex: 1,
-        } as CSSProperties,
-        mask: {
-          backdropFilter: 'blur(4px)',
-        },
-      } as any}
-    >
-      <div
-        ref={profileScrollRef}
-        className="profile-modal-content-wrapper"
-        data-profile-scroll-container="account-profile-modal"
-        style={{
-          ...profileThemeStyle,
-          color: token.colorText,
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: 0,
-          flex: 1,
-        }}
-      >
-        {sharedContent}
+    <DashboardLayout>
+      <div className="min-h-0 flex-1">
+        <ProfileContent />
       </div>
-    </Modal>
+    </DashboardLayout>
   )
 }

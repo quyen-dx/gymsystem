@@ -24,13 +24,13 @@ import {
 } from 'antd'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
-import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
 import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
 import LanguageSelect from '../../common/LanguageSelect'
 import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
+import { getUserDisplayName, getUserInitialName } from '../../../utils/userDisplay'
 
 const { Text } = Typography
 
@@ -40,6 +40,7 @@ const getViewRoleFromPath = (pathname: string, actualRole?: string) => {
   if (pathname.startsWith('/seller')) return 'seller'
   if (pathname.startsWith('/member') || pathname.startsWith('/user')) return 'member'
   if (pathname.startsWith('/admin')) return 'admin'
+  if (actualRole === 'super_admin') return 'admin'
   return actualRole || 'member'
 }
 
@@ -47,7 +48,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, logout } = useAuth()
   const { t } = useTranslation()
   const { settings, isEnabled } = useSystemSettings()
-  const [accountOpen, setAccountOpen] = useState(false)
+  const navigate = useNavigate()
   const [pendingCount, setPendingCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -55,9 +56,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const actualRole = user?.role
   const viewRole = getViewRoleFromPath(location.pathname, actualRole)
+  const displayName = getUserDisplayName(user, t('profile.account_name'))
+  const avatarName = getUserInitialName(user, 'U')
 
   useEffect(() => {
-    if (user?.role === 'admin') {
+    if (user?.role === 'super_admin' || user?.role === 'admin') {
       getPendingPartnershipRequestCount()
         .then((res) => setPendingCount(res.data.count || 0))
         .catch(() => { })
@@ -172,7 +175,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         ))}
       </nav>
 
-      {actualRole === 'admin' && viewRole !== 'admin' && (
+      {(actualRole === 'super_admin' || actualRole === 'admin') && viewRole !== 'admin' && (
         <NavLink
           to="/admin"
           className="dashboard-sidebar-item"
@@ -199,19 +202,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             marginBottom: 12,
             cursor: 'pointer',
           }}
-          onClick={() => { setAccountOpen(true); closeSidebar() }}
+          onClick={() => { navigate('/account/profile'); closeSidebar() }}
         >
           <Avatar
             size={44}
             src={
               user?.avatar ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarName)}`
             }
           />
 
           <div>
             <div style={{ fontWeight: 600, color: 'var(--theme-text)' }}>
-              {user?.name}
+              {displayName}
             </div>
             <Text type="secondary" style={{ fontSize: 12 }}>
               {user?.role}
@@ -220,7 +223,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <Button icon={<LogoutOutlined />} danger block onClick={logout}>
-          Đăng xuất
+          {t('nav.logout')}
         </Button>
       </div>
     </>
@@ -251,10 +254,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             size={32}
             src={
               user?.avatar ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarName)}`
             }
             style={{ cursor: 'pointer' }}
-            onClick={() => setAccountOpen(true)}
+            onClick={() => navigate('/account/profile')}
           />
         </div>
 
@@ -304,8 +307,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </div>
-
-      <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
 
       {settings.ai.floatingChatbotEnabled && settings.ai.adminAiEnabled && <AdminAIChatWidget />}
     </div>

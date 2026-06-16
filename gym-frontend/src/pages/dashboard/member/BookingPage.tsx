@@ -60,7 +60,7 @@ export default function BookingPage() {
       setPts(res.data.pts || [])
     } catch (error) {
       console.error(error)
-      setMessage('Không tải được danh sách PT')
+      setMessage(t('booking.error_load_pts'))
     }
   }
 
@@ -101,7 +101,7 @@ export default function BookingPage() {
         res.data?.data?.hasConflict
 
       if (hasConflict) {
-        setConflictMessage('Slot này đã bị trùng lịch, vui lòng chọn slot khác')
+        setConflictMessage(t('booking.error_conflict'))
       } else {
         setConflictMessage('')
       }
@@ -113,12 +113,12 @@ export default function BookingPage() {
 
   const handleCreateBooking = async () => {
     if (!ptId || !date || !slot) {
-      setMessage('Vui lòng chọn PT, ngày và khung giờ')
+      setMessage(t('booking.error_required_fields'))
       return
     }
 
     if (conflictMessage) {
-      setMessage('Không thể đặt lịch vì đang bị trùng lịch')
+      setMessage(t('booking.error_conflict'))
       return
     }
 
@@ -134,7 +134,7 @@ export default function BookingPage() {
           note,
           weeks,
         })
-        setMessage(`Đặt lịch ${weeks} tuần thành công, đang chờ PT xác nhận`)
+        setMessage(t('booking.success_recurring', { weeks }))
       } else {
         await bookingService.createBooking({
           ptId,
@@ -142,7 +142,7 @@ export default function BookingPage() {
           slot,
           note,
         })
-        setMessage('Đặt lịch thành công, đang chờ PT xác nhận')
+        setMessage(t('booking.success_booking'))
       }
 
       setSlot('')
@@ -153,7 +153,7 @@ export default function BookingPage() {
     } catch (error: any) {
       console.error(error)
       setMessage(
-        error?.response?.data?.message || 'Đặt lịch thất bại',
+        error?.response?.data?.message || t('booking.error_booking'),
       )
     } finally {
       setLoading(false)
@@ -161,18 +161,18 @@ export default function BookingPage() {
   }
 
   const handleCancelBooking = async (id: string) => {
-    const reason = window.prompt('Nhập lý do hủy lịch:')
+    const reason = window.prompt(t('booking.cancel_reason_prompt'))
 
     if (!reason) return
 
     try {
       await bookingService.cancelBooking(id, reason)
-      setMessage('Hủy lịch thành công')
+      setMessage(t('booking.success_cancel'))
       await loadMyBookings()
     } catch (error: any) {
       console.error(error)
       setMessage(
-        error?.response?.data?.message || 'Hủy lịch thất bại',
+        error?.response?.data?.message || t('booking.error_cancel'),
       )
     }
   }
@@ -180,31 +180,31 @@ export default function BookingPage() {
   const handleJoinWaitlist = async (slotId: string) => {
     try {
       await bookingService.joinWaitlist(slotId)
-      setMessage('Bạn đã được thêm vào danh sách chờ')
+      setMessage(t('booking.success_waitlist'))
       setWaitlist([...waitlist, slotId])
     } catch (error: any) {
       console.error(error)
-      setMessage(error?.response?.data?.message || 'Không thể tham gia danh sách chờ')
+      setMessage(error?.response?.data?.message || t('booking.error_waitlist'))
     }
   }
 
   const handleReviewBooking = async (id: string) => {
     if (rating < 1 || rating > 5) {
-      setMessage('Vui lòng chọn đánh giá từ 1-5 sao')
+      setMessage(t('booking.error_review_rating'))
       return
     }
 
     try {
       setLoading(true)
       await bookingService.reviewPT(id, rating, comment)
-      setMessage('Đánh giá thành công')
+      setMessage(t('booking.success_review'))
       setReviewingId(null)
       setRating(5)
       setComment('')
       await loadMyBookings()
     } catch (error: any) {
       console.error(error)
-      setMessage(error?.response?.data?.message || 'Đánh giá thất bại')
+      setMessage(error?.response?.data?.message || t('booking.error_review'))
     } finally {
       setLoading(false)
     }
@@ -213,13 +213,13 @@ export default function BookingPage() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'pending':
-        return 'Chờ xác nhận'
+        return t('booking.status_pending')
       case 'confirmed':
-        return 'Đã xác nhận'
+        return t('booking.status_confirmed')
       case 'cancelled':
-        return 'Đã hủy'
+        return t('booking.status_cancelled')
       case 'completed':
-        return 'Hoàn thành'
+        return t('booking.status_completed')
       default:
         return status
     }
@@ -258,19 +258,6 @@ export default function BookingPage() {
   return (
     <MemberLayout>
       <div className="member-page space-y-6">
-        <div className="rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8 max-[640px]:p-5">
-          <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">
-            {t('booking.module') || 'Booking'}
-          </p>
-
-          <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)]">
-            Đặt lịch PT
-          </h1>
-
-          <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
-            Chọn PT, ngày tập và khung giờ phù hợp để đặt lịch tập luyện.
-          </p>
-        </div>
 
         {message && (
           <div className="rounded-2xl border border-[var(--gs-border)] bg-white/5 p-4 text-sm text-[var(--gs-text)]">
@@ -288,7 +275,7 @@ export default function BookingPage() {
                 : 'text-[var(--gs-text-muted)] hover:text-[var(--gs-text)]'
             }`}
           >
-            Đặt lịch mới
+            {t('booking.new_booking')}
           </button>
           <button
             onClick={() => setActiveTab('list')}
@@ -298,7 +285,7 @@ export default function BookingPage() {
                 : 'text-[var(--gs-text-muted)] hover:text-[var(--gs-text)]'
             }`}
           >
-            Lịch của tôi ({bookings.length})
+            {t('booking.my_schedule', { count: bookings.length })}
           </button>
         </div>
 
@@ -306,13 +293,13 @@ export default function BookingPage() {
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-6">
               <h2 className="text-xl font-semibold text-[var(--gs-text)]">
-                Tạo lịch mới
+                {t('booking.create_title')}
               </h2>
 
               <div className="mt-5 space-y-4">
                 <div>
                   <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Chọn PT
+                    {t('booking.select_pt')}
                   </label>
 
                   <select
@@ -321,7 +308,7 @@ export default function BookingPage() {
                     className="w-full rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)]"
                   >
                     <option className="bg-white text-black" value="">
-                      -- Chọn PT --
+                      {t('booking.select_pt_placeholder')}
                     </option>
 
                     {pts.map((pt) => (
@@ -338,14 +325,17 @@ export default function BookingPage() {
                     onClick={() => setShowSchedule(!showSchedule)}
                     className="text-sm text-orange-400 hover:underline"
                   >
-                    {showSchedule ? 'Ẩn' : 'Xem'} lịch làm việc của PT
+                    {showSchedule
+                      ? t('booking.hide_schedule')
+                      : t('booking.show_schedule')}{' '}
+                    {t('booking.pt_work_schedule')}
                   </button>
                 )}
 
                 {showSchedule && (
                   <div className="rounded-xl border border-[var(--gs-border)] bg-black/20 p-4 text-sm">
                     <p className="mb-2 font-semibold text-[var(--gs-text)]">
-                      Lịch làm việc của PT
+                      {t('booking.pt_work_schedule')}
                     </p>
                     <div className="mt-3 grid grid-cols-4 gap-3">
                       {Object.entries(ptSchedule).slice(0, 20).map(([slot, available]) => (
@@ -368,7 +358,7 @@ export default function BookingPage() {
                                 : 'text-red-300'
                             }`}
                           >
-                            {available ? 'Còn lịch trống' : 'Đã kín lịch'}
+                            {available ? t('booking.available') : t('booking.unavailable')}
                           </div>
                         </div>
                       ))}
@@ -392,7 +382,7 @@ export default function BookingPage() {
 
                 <div>
                   <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Ngày tập
+                    {t('booking.training_date')}
                   </label>
 
                   <input
@@ -405,7 +395,7 @@ export default function BookingPage() {
 
                 <div>
                   <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Khung giờ
+                    {t('booking.time_slot')}
                   </label>
 
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -434,7 +424,7 @@ export default function BookingPage() {
                       onClick={() => handleJoinWaitlist(`${ptId}_${date}_${slot}`)}
                       className="mt-2 block text-orange-400 hover:underline"
                     >
-                      Tham gia danh sách chờ
+                      {t('booking.join_waitlist')}
                     </button>
                   </div>
                 )}
@@ -447,13 +437,13 @@ export default function BookingPage() {
                       onChange={(e) => setIsRecurring(e.target.checked)}
                       className="h-4 w-4"
                     />
-                    <span className="text-sm text-[var(--gs-text)]">Đặt lịch lặp lại hàng tuần</span>
+                    <span className="text-sm text-[var(--gs-text)]">{t('booking.recurring_weekly')}</span>
                   </label>
 
                   {isRecurring && (
                     <div className="mt-3">
                       <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                        Số tuần: {weeks}
+                        {t('booking.weeks_count', { count: weeks })}
                       </label>
                       <input
                         type="range"
@@ -464,7 +454,7 @@ export default function BookingPage() {
                         className="w-full"
                       />
                       <p className="mt-2 text-xs text-[var(--gs-text-muted)]">
-                        Sẽ đặt lịch cho {weeks} tuần liên tiếp (mỗi tuần 1 buổi)
+                        {t('booking.book_weeks', { weeks })}
                       </p>
                     </div>
                   )}
@@ -472,14 +462,14 @@ export default function BookingPage() {
 
                 <div>
                   <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Ghi chú mục tiêu
+                    {t('booking.note_goal')}
                   </label>
 
                   <textarea
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     rows={4}
-                    placeholder="Ví dụ: muốn giảm mỡ, tăng cơ, tập chân..."
+                    placeholder={t('booking.note_placeholder')}
                     className="w-full rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)] outline-none"
                   />
                 </div>
@@ -490,14 +480,18 @@ export default function BookingPage() {
                   disabled={loading || !!conflictMessage}
                   className="w-full rounded-xl bg-orange-600 px-5 py-3 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loading ? 'Đang đặt lịch...' : isRecurring ? `Đặt lịch ${weeks} tuần` : 'Đặt lịch'}
+                  {loading
+                    ? t('booking.booking_loading')
+                    : isRecurring
+                    ? t('booking.booking_weeks', { weeks })
+                    : t('booking.booking')}
                 </button>
               </div>
             </div>
 
             <div className="rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-6">
               <h2 className="text-xl font-semibold text-[var(--gs-text)]">
-                Thông tin đã chọn
+                {t('booking.selected_info')}
               </h2>
 
               <div className="mt-5 space-y-3 text-sm text-[var(--gs-text-muted)]">
@@ -506,27 +500,27 @@ export default function BookingPage() {
                   <span className="text-[var(--gs-text)]">
                     {selectedPT
                       ? selectedPT.name || selectedPT.email || 'PT'
-                      : 'Chưa chọn'}
+                      : t('booking.not_selected')}
                   </span>
                 </p>
 
                 {selectedPT && (
                   <>
                     <p>
-                      Rating:{' '}
+                      {t('booking.pt_rating_label')}{' '}
                       <span className="text-yellow-400">
                         {selectedPT.rating || 0} ⭐
                       </span>
                     </p>
                     <p>
-                      Kinh nghiệm:{' '}
+                      {t('booking.experience_label')}{' '}
                       <span className="text-[var(--gs-text)]">
                         {selectedPT.experienceYears || 0} năm
                       </span>
                     </p>
                     {selectedPT.specialties && selectedPT.specialties.length > 0 && (
                       <p>
-                        Chuyên môn:{' '}
+                        {t('booking.specialties_label')}{' '}
                         <span className="text-[var(--gs-text)]">
                           {selectedPT.specialties.join(', ')}
                         </span>
@@ -536,29 +530,29 @@ export default function BookingPage() {
                 )}
 
                 <p>
-                  Ngày:{' '}
+                  {t('booking.date_label')}{' '}
                   <span className="text-[var(--gs-text)]">
-                    {date ? new Date(date).toLocaleDateString('vi-VN') : 'Chưa chọn'}
+                    {date ? new Date(date).toLocaleDateString('vi-VN') : t('booking.not_selected')}
                   </span>
                 </p>
 
                 <p>
-                  Giờ:{' '}
+                  {t('booking.time_label')}{' '}
                   <span className="text-[var(--gs-text)]">
-                    {slot || 'Chưa chọn'}
+                    {slot || t('booking.not_selected')}
                   </span>
                 </p>
 
                 <p>
-                  Trạng thái sau khi đặt:{' '}
-                  <span className="text-yellow-300">Chờ PT xác nhận</span>
+                  {t('booking.status_after_booking')}{' '}
+                  <span className="text-yellow-300">{t('booking.pending_confirmation')}</span>
                 </p>
 
                 {isRecurring && (
                   <p>
-                    Lặp lại:{' '}
+                    {t('booking.recurring_label')}{' '}
                     <span className="text-orange-300">
-                      {weeks} tuần hàng tuần
+                      {t('booking.weeks_weekly', { weeks })}
                     </span>
                   </p>
                 )}
@@ -570,13 +564,13 @@ export default function BookingPage() {
         {activeTab === 'list' && (
           <div className="rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-6">
             <h2 className="text-xl font-semibold text-[var(--gs-text)]">
-              Lịch của tôi
+              {t('booking.my_schedule_title')}
             </h2>
 
             <div className="mt-5 space-y-4">
               {bookings.length === 0 && (
                 <p className="text-sm text-[var(--gs-text-muted)]">
-                  Bạn chưa có lịch đặt nào.
+                  {t('booking.no_bookings')}
                 </p>
               )}
 
@@ -589,12 +583,12 @@ export default function BookingPage() {
                     // Review form
                     <div className="space-y-3">
                       <h3 className="font-semibold text-[var(--gs-text)]">
-                        Đánh giá buổi tập
+                        {t('booking.review_session')}
                       </h3>
 
                       <div>
                         <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                          Đánh giá (1-5 sao):
+                          {t('booking.rating_label')}
                         </label>
                         <div className="flex gap-2">
                           {[1, 2, 3, 4, 5].map((star) => (
@@ -613,13 +607,13 @@ export default function BookingPage() {
 
                       <div>
                         <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                          Nhận xét:
+                          {t('booking.comment_label')}
                         </label>
                         <textarea
                           value={comment}
                           onChange={(e) => setComment(e.target.value)}
                           rows={3}
-                          placeholder="Chia sẻ cảm nhận của bạn..."
+                          placeholder={t('booking.comment_placeholder')}
                           className="w-full rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)] outline-none"
                         />
                       </div>
@@ -631,14 +625,14 @@ export default function BookingPage() {
                           disabled={loading}
                           className="flex-1 rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-60"
                         >
-                          {loading ? 'Đang gửi...' : 'Gửi đánh giá'}
+                          {loading ? t('booking.booking_loading') : t('booking.submit_review')}
                         </button>
                         <button
                           type="button"
                           onClick={() => setReviewingId(null)}
                           className="flex-1 rounded-xl border border-[var(--gs-border)] px-4 py-2 text-sm text-[var(--gs-text-muted)] hover:bg-white/5"
                         >
-                          Hủy
+                          {t('booking.cancel')}
                         </button>
                       </div>
                     </div>
@@ -655,22 +649,22 @@ export default function BookingPage() {
                           </p>
 
                           <p className="mt-1 text-sm text-[var(--gs-text-muted)]">
-                            Ngày: {new Date(booking.date).toLocaleDateString('vi-VN')}
+                            {t('booking.date_label')} {new Date(booking.date).toLocaleDateString('vi-VN')}
                           </p>
 
                           <p className="text-sm text-[var(--gs-text-muted)]">
-                            Giờ: {booking.slot}
+                            {t('booking.time_label')} {booking.slot}
                           </p>
 
                           {booking.note && (
                             <p className="text-sm text-[var(--gs-text-muted)]">
-                              Ghi chú: {booking.note}
+                              {t('booking.note_label')} {booking.note}
                             </p>
                           )}
 
                           {booking.isViolation && (
                             <p className="mt-1 text-xs text-red-300">
-                              ⚠️ Hủy lịch trong vòng 24 giờ trước buổi tập
+                              {t('booking.violation_warning')}
                             </p>
                           )}
                         </div>
@@ -693,7 +687,7 @@ export default function BookingPage() {
                             onClick={() => setReviewingId(booking._id)}
                             className="rounded-xl border border-orange-500/40 px-4 py-2 text-sm text-orange-300 hover:bg-orange-500/10"
                           >
-                            Đánh giá
+                            {t('booking.rate')}
                           </button>
                         )}
 
@@ -704,7 +698,7 @@ export default function BookingPage() {
                               onClick={() => handleCancelBooking(booking._id)}
                               className="rounded-xl border border-red-500/40 px-4 py-2 text-sm text-red-300 hover:bg-red-500/10"
                             >
-                              Hủy lịch
+                              {t('booking.cancel_booking')}
                             </button>
                           )}
                       </div>

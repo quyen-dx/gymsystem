@@ -18,6 +18,8 @@ import { isProviderQuotaError } from './providerHelper.js'
 import { generateSmartSuggestions } from './suggestionEngine.js'
 
 const normalizeLanguage = (language) => language === 'en' ? 'en' : 'vi'
+const getUserDisplayName = (user, fallback = '') =>
+  String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
 
 const detectAnswerLanguage = (userMessage = '', appLanguage = 'vi') => {
   const fallback = normalizeLanguage(appLanguage)
@@ -523,7 +525,7 @@ const getRecentBookings = async (memberId, limit = 12) => {
 
 const serializeUserBrief = (user) => ({
   id: String(user?._id || ''),
-  name: user?.name || '',
+  name: getUserDisplayName(user),
   email: user?.email || '',
   phone: user?.phone || '',
   role: user?.role || '',
@@ -745,7 +747,7 @@ const getFeedbackHistory = async (user, limit = 6) => {
   const userId = toObjectIdOrNull(user?._id)
   if (!userId) return []
   const filter = getRole(user) === 'admin' ? {} : { user: userId }
-  const feedback = await Feedback.find(filter).sort({ createdAt: -1 }).limit(limit).populate('user', 'name').lean()
+  const feedback = await Feedback.find(filter).sort({ createdAt: -1 }).limit(limit).populate('user', 'name fullName displayName').lean()
   return feedback.map((item) => ({
     id: String(item._id),
     title: item.title,
@@ -753,7 +755,7 @@ const getFeedbackHistory = async (user, limit = 6) => {
     priority: item.priority,
     status: item.status,
     adminReply: item.adminReply || '',
-    userName: item.user?.name || '',
+    userName: getUserDisplayName(item.user),
     createdAt: item.createdAt,
   }))
 }
@@ -872,7 +874,7 @@ const fetchMemberContextByIntent = async ({ intent, user, reasoningMode = false 
     intent: safeIntent,
     member: {
       id: String(user?._id || ''),
-      name: user?.name || '',
+      name: getUserDisplayName(user),
       role: user?.role || 'member',
     },
     availableData: {},
@@ -885,7 +887,7 @@ const fetchMemberContextByIntent = async ({ intent, user, reasoningMode = false 
     const membership = serializeMembership(await getLatestMembership(memberId))
     base.availableData.profile = {
       id: String(user?._id || ''),
-      name: user?.name || '',
+      name: getUserDisplayName(user),
       email: user?.email || '',
       phone: user?.phone || '',
       role: user?.role || 'member',
@@ -3644,7 +3646,7 @@ const buildInitialToolData = async ({ user, query, language }) => {
     role,
     permissions: getPermissionsForRole(role),
     profile: {
-      name: user?.name || '',
+      name: getUserDisplayName(user),
       email: user?.email || '',
       phone: user?.phone || '',
       themePreference: user?.themePreference || 'system',

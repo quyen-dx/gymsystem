@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { getSellerOrders, updateSellerOrderStatus } from '../../../services/orderService'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const { Text, Title } = Typography
 
@@ -66,7 +67,7 @@ export default function SellerOrdersPage() {
             key: 'userId',
             render: (user: any) => (
                 <Space direction="vertical" size={0}>
-                    <Text strong>{user?.name || t('seller_orders.customer_fallback')}</Text>
+                    <Text strong>{getUserDisplayName(user, t('seller_orders.customer_fallback'))}</Text>
                     <Text type="secondary">{user?.phone || user?.email || t('seller_orders.no_contact')}</Text>
                 </Space>
             ),

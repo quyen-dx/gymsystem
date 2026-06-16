@@ -20,6 +20,7 @@ export interface MemberMembership {
 export interface MemberUser {
   _id: string
   name: string
+  fullName?: string
   email: string | null
   phone: string | null
   avatar: string
@@ -31,6 +32,7 @@ export interface MemberUser {
   createdAt: string
   updatedAt: string
   gender?: string
+  memberCode?: string
 }
 
 export interface MemberListItem extends MemberUser {

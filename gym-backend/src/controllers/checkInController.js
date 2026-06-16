@@ -4,6 +4,9 @@ import Membership from '../models/Membership.js'
 import User from '../models/User.js'
 import Plan from '../models/Plan.js'
 import { recordUserActivity } from '../services/userActivityService.js'
+
+const getUserDisplayName = (user, fallback = '') =>
+  String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
 import AppError from '../utils/appError.js'
 
 const QR_TOKEN_TTL = Number(process.env.QR_TOKEN_TTL) || 30
@@ -146,6 +149,7 @@ export const verifyQRToken = async (req, res) => {
       member: {
         _id: member._id,
         name: member.name,
+        fullName: member.fullName,
         email: member.email,
         phone: member.phone,
         avatar: member.avatar,
@@ -205,7 +209,7 @@ export const confirmCheckin = async (req, res) => {
       userId: member._id,
       type: 'checkin',
       title: 'Điểm danh',
-      description: `Check-in thành công tại quầy (staff: ${req.user.name || staffId})`,
+      description: `Check-in thành công tại quầy (staff: ${getUserDisplayName(req.user, staffId)})`,
       metadata: { checkinId: checkin._id, staffId },
     })
 
@@ -263,7 +267,7 @@ export const getTodayCheckins = async (req, res) => {
     const checkins = await CheckIn.find({
       checkinTime: { $gte: today, $lt: tomorrow },
     })
-      .populate('memberId', 'name email phone avatar')
+      .populate('memberId', 'name fullName email phone avatar')
       .populate('staffId', 'name')
       .sort({ checkinTime: -1 })
       .lean()

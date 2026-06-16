@@ -297,7 +297,7 @@ export const getOrderById = async (orderId, userId) => {
     const filter = userId ? { _id: orderId, userId } : { _id: orderId }
     return Order.findOne(filter)
         .populate('items.productId', 'name image images')
-        .populate('userId', 'name phone email')
+        .populate('userId', 'name fullName phone email')
         .populate('shopId', 'name avatar user_id')
 }
 
@@ -326,7 +326,7 @@ export const getOrdersBySeller = async (sellerId) => {
 
     return Order.find({ shopId: shop._id })
         .populate('items.productId', 'name image images')
-        .populate('userId', 'name phone email')
+        .populate('userId', 'name fullName phone email')
         .populate('shopId', 'name avatar')
         .sort({ createdAt: -1 })
 }
@@ -337,7 +337,7 @@ export const getSellerOrderById = async (orderId, sellerId) => {
 
     return Order.findOne({ _id: orderId, shopId: shop._id })
         .populate('items.productId', 'name image images')
-        .populate('userId', 'name phone email')
+        .populate('userId', 'name fullName phone email')
         .populate('shopId', 'name avatar')
 }
 
@@ -420,6 +420,6 @@ export const updateSellerOrderStatus = async ({ orderId, sellerId, status }) => 
 
     return Order.findById(orderId)
         .populate('items.productId', 'name image images')
-        .populate('userId', 'name phone email')
+        .populate('userId', 'name fullName phone email')
         .populate('shopId', 'name avatar')
 }

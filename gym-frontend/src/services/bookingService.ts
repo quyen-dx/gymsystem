@@ -58,6 +58,10 @@ export const bookingService = {
     return api.patch(`/bookings/${id}/confirm`)
   },
 
+  rejectAllPendingBookings() {
+    return api.patch('/bookings/pt/reject-all')
+  },
+
   rejectBooking(id: string, reason: string) {
     return api.patch(`/bookings/${id}/reject`, { reason })
   },

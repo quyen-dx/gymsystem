@@ -4,6 +4,9 @@ import { recordAuditLog } from '../services/auditLogService.js'
 import { invalidateContextCache } from '../services/conversationContextCache.js'
 import AppError from '../utils/appError.js'
 
+const getUserDisplayName = (user, fallback = '') =>
+  String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
+
 const normalizeWeightVariants = (variants, fallbackWeights) => {
   if (Array.isArray(variants) && variants.length > 0) {
     return variants
@@ -71,7 +74,7 @@ const hydrateProductReviews = (product) => {
     return {
       ...review,
       userId: reviewer?._id || review.userId,
-      name: reviewer?.name || review.name,
+      name: getUserDisplayName(reviewer, review.name),
       avatar: reviewer?.avatar || review.avatar || '',
     }
   })
@@ -100,7 +103,7 @@ export const getAllProducts = async (req, res, next) => {
       query = query.populate({
         path: 'shop_id',
         select: 'name avatar description address rating reviewCount user_id',
-        populate: { path: 'user_id', select: 'name avatar' },
+        populate: { path: 'user_id', select: 'name fullName displayName avatar' },
       })
     }
     const sort = sortPrice === 'asc'
@@ -148,9 +151,9 @@ export const getProductById = async (req, res, next) => {
       .populate({
         path: 'shop_id',
         select: 'name avatar description address rating reviewCount user_id',
-        populate: { path: 'user_id', select: 'name avatar' },
+        populate: { path: 'user_id', select: 'name fullName displayName avatar' },
       })
-      .populate('reviews.userId', 'name avatar')
+      .populate('reviews.userId', 'name fullName displayName avatar')
     if (!product) return next(new AppError('Không tìm thấy sản phẩm', 404))
 
     // Sản phẩm liên quan cùng category
@@ -307,7 +310,7 @@ export const addReview = async (req, res, next) => {
 
     product.reviews.push({
       userId: req.user._id,
-      name: req.user.name,
+      name: getUserDisplayName(req.user),
       avatar: req.user.avatar || '',
       rating,
       comment,
@@ -322,9 +325,9 @@ export const addReview = async (req, res, next) => {
       {
         path: 'shop_id',
         select: 'name avatar description address rating reviewCount user_id',
-        populate: { path: 'user_id', select: 'name avatar' },
+        populate: { path: 'user_id', select: 'name fullName displayName avatar' },
       },
-      { path: 'reviews.userId', select: 'name avatar' },
+      { path: 'reviews.userId', select: 'name fullName displayName avatar' },
     ])
     res.status(201).json({ message: 'Đánh giá thành công', product: hydrateProductReviews(product) })
   } catch (err) { next(err) }

@@ -115,13 +115,14 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    if (!user) return
     const systemTheme = settings.general.defaultTheme === 'light' ? 'light' : 'dark'
-    const effectiveTheme = resolveEffectiveTheme(systemTheme, user?.themePreference)
+    const effectiveTheme = resolveEffectiveTheme(systemTheme, user.themePreference)
     applyThemeMode(effectiveTheme)
     const systemAccent = settings.general.defaultAccentColor || '#DB2777'
-    const effectiveAccent = user?.accentColor || systemAccent
+    const effectiveAccent = user.accentColor || systemAccent
     applyThemeFull(effectiveAccent)
-  }, [settings.general.defaultTheme, settings.general.defaultAccentColor, user?.themePreference, user?.accentColor])
+  }, [settings.general.defaultTheme, settings.general.defaultAccentColor, user?.themePreference, user?.accentColor, user])
 
   useEffect(() => {
     refresh().finally(() => setLoading(false))

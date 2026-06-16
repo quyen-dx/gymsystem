@@ -9,6 +9,7 @@ import {
   enableSellerMode,
   getAllUsers,
   getMe,
+  getUserById,
   hasPassword,
   isAccountLocked,
   login,
@@ -24,6 +25,9 @@ import {
   updateUserRole,
   verifyForgotPasswordOtp,
   verifyRegisterOtp,
+  getPendingVerifications,
+  approveVerification,
+  rejectVerification,
 } from '../controllers/authController.js'
 import { adminOnly, protect } from '../middlewares/authMiddleware.js'
 import { buildClientUrl } from '../config/appUrls.js'
@@ -116,6 +120,8 @@ router.get('/has-password', protect, hasPassword)
 router.put('/update-profile', protect, upload.fields([
   { name: 'avatar', maxCount: 1 },
   { name: 'coverImage', maxCount: 1 },
+  { name: 'identityFrontImage', maxCount: 1 },
+  { name: 'identityBackImage', maxCount: 1 },
 ]), updateProfile)
 router.put('/change-password', protect, changePassword)
 router.post('/add-password', protect, setPassword)
@@ -124,8 +130,13 @@ router.post('/logout', logout)
 router.post('/seller/enable', protect, enableSellerMode)
 
 router.get('/users', protect, adminOnly, getAllUsers)
+router.get('/users/:id', protect, adminOnly, getUserById)
 router.patch('/users/:id/role', protect, adminOnly, updateUserRole)
 router.patch('/users/:id/toggle-status', protect, adminOnly, toggleUserStatus)
 router.delete('/users/:id', protect, adminOnly, deleteUser)
+
+router.get('/verifications/pending', protect, adminOnly, getPendingVerifications)
+router.post('/verifications/:id/approve', protect, adminOnly, approveVerification)
+router.post('/verifications/:id/reject', protect, adminOnly, rejectVerification)
 
 export default router

@@ -1,5 +1,9 @@
 import Shop from '../models/Shop.js'
 import User from '../models/User.js'
+import Address from '../models/Address.js'
+import Membership from '../models/Membership.js'
+import Booking from '../models/Booking.js'
+import Order from '../models/Order.js'
 import { recordAuditLog } from '../services/auditLogService.js'
 import {
   consumeOtp,
@@ -57,7 +61,7 @@ const getMaintenancePayload = (settings) => ({
   maintenanceMessage: settings.general.maintenanceMessage,
 })
 
-const isAdminUser = (user) => String(user?.role || '').toLowerCase() === 'admin'
+const isAdminUser = (user) => ['super_admin', 'admin'].includes(String(user?.role || '').toLowerCase())
 
 const isMaintenanceBlocked = async (user) => {
   const settings = await getSystemSettingsValue()
@@ -95,6 +99,9 @@ const sanitizeUser = (user) => {
   delete responseUser.refreshToken
   return responseUser
 }
+
+const getUserDisplayName = (user, fallback = '') =>
+  String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
 
 const buildAuthResponse = async (user, res) => {
   const accessToken = generateAccessToken(user._id, user.role)
@@ -490,6 +497,18 @@ export const getMe = async (req, res) => {
   const responseUser = user ? user.toObject() : req.user.toObject()
   delete responseUser.password
   delete responseUser.refreshToken
+
+  // Privacy: only admin/super_admin can see full identity numbers; others see masked
+  if (!['super_admin', 'admin'].includes(req.user.role) && responseUser.identityNumber) {
+    const num = responseUser.identityNumber
+    responseUser.identityNumber = num.length > 4 ? '*'.repeat(num.length - 4) + num.slice(-4) : '****'
+  }
+  // Strip sensitive identity fields for non-admin/super_admin
+  if (!['super_admin', 'admin'].includes(req.user.role)) {
+    delete responseUser.identityFrontImage
+    delete responseUser.identityBackImage
+  }
+
   return res.json({ user: { ...responseUser, hasPassword } })
 }
 
@@ -501,11 +520,54 @@ export const hasPassword = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     await assertFeatureEnabled('members.allowProfileUpdate')
-    const { name, phone, email, dateOfBirth, themePreference, accentColor } = req.body
+    const {
+      name, phone, email, dateOfBirth, themePreference, accentColor,
+      fullName, gender, nationality, language, timezone,
+      country, province, detailedAddress,
+      emergencyName, emergencyPhone,
+      height, weight, goals, activityLevel, healthNotes,
+      documentType, documentNumber,
+      identityType, identityNumber, identityCountry,
+      emergencyRelationship,
+    } = req.body
     const updateData = {}
-    console.debug('[profile-theme] update-profile payload', req.body)
 
     if (name) updateData.name = name.trim()
+    if (fullName !== undefined) updateData.fullName = fullName.trim()
+    if (gender !== undefined) updateData.gender = gender
+    if (nationality !== undefined) updateData.nationality = nationality.trim()
+    if (language !== undefined) updateData.language = language
+    if (timezone !== undefined) updateData.timezone = timezone.trim()
+    if (country !== undefined) updateData.country = country.trim()
+    if (province !== undefined) updateData.province = province.trim()
+    if (detailedAddress !== undefined) updateData.detailedAddress = detailedAddress.trim()
+
+    if (emergencyName !== undefined || emergencyPhone !== undefined || emergencyRelationship !== undefined) {
+      updateData['emergencyContact.name'] = (emergencyName || '').trim()
+      updateData['emergencyContact.phone'] = (emergencyPhone || '').trim()
+      updateData['emergencyContact.relationship'] = (emergencyRelationship || '').trim()
+    }
+
+    if (height !== undefined) updateData['healthInfo.height'] = height === '' ? null : Number(height)
+    if (weight !== undefined) updateData['healthInfo.weight'] = weight === '' ? null : Number(weight)
+    if (goals !== undefined) {
+      updateData['healthInfo.goals'] = Array.isArray(goals) ? goals : goals ? [goals] : []
+    }
+    if (activityLevel !== undefined) updateData['healthInfo.activityLevel'] = activityLevel
+    if (healthNotes !== undefined) updateData['healthInfo.notes'] = healthNotes.trim()
+
+    if (documentType !== undefined) updateData.identityType = documentType
+    if (documentNumber !== undefined) updateData.identityNumber = documentNumber.trim()
+    if (identityType !== undefined) updateData.identityType = identityType
+    if (identityNumber !== undefined) updateData.identityNumber = identityNumber.trim()
+    if (identityCountry !== undefined) updateData.identityCountry = identityCountry.trim()
+
+    if (req.files?.identityFrontImage?.[0]) {
+      updateData.identityFrontImage = req.files.identityFrontImage[0].path
+    }
+    if (req.files?.identityBackImage?.[0]) {
+      updateData.identityBackImage = req.files.identityBackImage[0].path
+    }
 
     if (email !== undefined) {
       const normalizedEmail = email?.trim().toLowerCase()
@@ -585,8 +647,6 @@ export const updateProfile = async (req, res) => {
     if (!user) {
       throw new AppError('Không tìm thấy người dùng để cập nhật', 404)
     }
-    console.debug('[profile-theme] update-profile response user', user)
-
     return res.json({ message: 'Cập nhật thông tin thành công', user })
   } catch (error) {
     return sendError(res, error)
@@ -794,7 +854,7 @@ export const enableSellerMode = async (req, res) => {
     if (!shop) {
       shop = await Shop.create({
         user_id: req.user._id,
-        name: req.body?.shopName?.trim() || `${req.user.name || 'Seller'} Shop`,
+        name: req.body?.shopName?.trim() || `${getUserDisplayName(req.user, 'Seller')} Shop`,
         description: req.body?.description || '',
       })
     }
@@ -826,7 +886,7 @@ const findEditableUserById = async (id) => {
 
   const settings = await getSystemSettingsValue()
   if (settings.members.protectPrimaryAdmin && user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL) {
-    throw new AppError('Tài khoản admin này được bảo vệ và không thể chỉnh sửa', 403)
+    throw new AppError('Tài khoản Super Admin này được bảo vệ và không thể chỉnh sửa', 403)
   }
 
   return user
@@ -841,19 +901,28 @@ export const updateUserRole = async (req, res) => {
     const { role } = req.body
 
     const normalizedRole = role === 'user' ? 'member' : role
-    if (!['admin', 'pt', 'staff', 'member', 'seller'].includes(normalizedRole)) {
+    if (!['super_admin', 'admin', 'pt', 'staff', 'member', 'seller'].includes(normalizedRole)) {
       throw new AppError('Role không hợp lệ', 400)
     }
 
     const user = await findEditableUserById(req.params.id)
     const previousRole = user.role
 
+    // Only super_admin can modify admin or super_admin users
+    if (['super_admin', 'admin'].includes(user.role) && req.user.role !== 'super_admin') {
+      throw new AppError('Chỉ Super Admin mới có quyền thao tác với Admin khác', 403)
+    }
+    // Only super_admin can set role to admin or super_admin
+    if (['super_admin', 'admin'].includes(normalizedRole) && req.user.role !== 'super_admin') {
+      throw new AppError('Chỉ Super Admin mới có quyền cấp quyền Admin hoặc Super Admin', 403)
+    }
+
     if (normalizedRole === 'seller') {
       let shop = await Shop.findOne({ user_id: user._id })
       if (!shop) {
         shop = await Shop.create({
           user_id: user._id,
-          name: `${user.name || 'Seller'} Shop`,
+          name: `${getUserDisplayName(user, 'Seller')} Shop`,
           description: '',
         })
       }
@@ -890,6 +959,12 @@ export const toggleUserStatus = async (req, res) => {
     }
 
     const user = await findEditableUserById(req.params.id)
+
+    // Only super_admin can lock/unlock admin or super_admin users
+    if (['super_admin', 'admin'].includes(user.role) && req.user.role !== 'super_admin') {
+      throw new AppError('Chỉ Super Admin mới có quyền thao tác với Admin khác', 403)
+    }
+
     user.isActive = !user.isActive
     user.isLocked = !user.isActive
     user.status = user.isActive ? 'active' : 'locked'
@@ -918,6 +993,12 @@ export const deleteUser = async (req, res) => {
     }
 
     const user = await findEditableUserById(req.params.id)
+
+    // Only super_admin can delete admin or super_admin users
+    if (['super_admin', 'admin'].includes(user.role) && req.user.role !== 'super_admin') {
+      throw new AppError('Chỉ Super Admin mới có quyền thao tác với Admin khác', 403)
+    }
+
     await user.deleteOne()
     await recordAuditLog({
       req,
@@ -928,6 +1009,148 @@ export const deleteUser = async (req, res) => {
     })
 
     return res.json({ message: 'Xóa người dùng thành công' })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const getPendingVerifications = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search = '' } = req.query
+    const query = {
+      identityType: { $ne: '' },
+      identityStatus: { $in: ['', 'pending'] },
+    }
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { identityNumber: { $regex: search, $options: 'i' } },
+      ]
+    }
+    const skip = (Number(page) - 1) * Number(limit)
+    const [users, total] = await Promise.all([
+      User.find(query)
+        .select('name fullName displayName email avatar identityType identityNumber identityCountry identityFrontImage identityBackImage identityStatus identityRejectReason createdAt')
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+      User.countDocuments(query),
+    ])
+    return res.json({
+      data: users,
+      total,
+      page: Number(page),
+      totalPages: Math.ceil(total / Number(limit)),
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const approveVerification = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+    if (!user) throw new AppError('Không tìm thấy người dùng', 404)
+    if (!user.identityType) throw new AppError('Người dùng chưa gửi giấy tờ xác minh', 400)
+
+    user.identityStatus = 'approved'
+    user.identityReviewedBy = req.user._id
+    user.identityReviewedAt = new Date()
+    await user.save()
+
+    await recordAuditLog({
+      req,
+      module: 'users',
+      action: 'update',
+      entity: user,
+      details: `Duyệt xác minh giấy tờ: ${user.identityType} - ${user.identityNumber ? '***' + user.identityNumber.slice(-4) : ''}`,
+    })
+
+    return res.json({ message: 'Xác minh giấy tờ đã được duyệt', user })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const rejectVerification = async (req, res) => {
+  try {
+    const { reason } = req.body
+    if (!reason) throw new AppError('Vui lòng nhập lý do từ chối', 400)
+
+    const user = await User.findById(req.params.id)
+    if (!user) throw new AppError('Không tìm thấy người dùng', 404)
+    if (!user.identityType) throw new AppError('Người dùng chưa gửi giấy tờ xác minh', 400)
+
+    user.identityStatus = 'rejected'
+    user.identityRejectReason = reason.trim()
+    user.identityReviewedBy = req.user._id
+    user.identityReviewedAt = new Date()
+    await user.save()
+
+    await recordAuditLog({
+      req,
+      module: 'users',
+      action: 'update',
+      entity: user,
+      details: `Từ chối xác minh giấy tờ: ${reason}`,
+    })
+
+    return res.json({ message: 'Đã từ chối xác minh giấy tờ', user })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+    if (!user) {
+      throw new AppError('Không tìm thấy người dùng', 404)
+    }
+
+    // Permission check: Admin cannot view details of other Admins or Super Admins
+    if (req.user.role === 'admin') {
+      if (user.role === 'admin' || user.role === 'super_admin') {
+        if (req.user._id.toString() !== user._id.toString()) {
+          throw new AppError('Bạn không có quyền xem chi tiết quản trị viên khác', 403)
+        }
+      }
+    }
+
+    // Fetch related data
+    const addresses = await Address.find({ userId: user._id })
+    const activeMembership = await Membership.findOne({
+      memberId: user._id,
+      status: 'active',
+    }).populate('planId')
+
+    const membershipHistory = await Membership.find({
+      memberId: user._id,
+    }).populate('planId').sort({ createdAt: -1 })
+
+    const recentBookings = await Booking.find({
+      memberId: user._id,
+    }).populate('ptId', 'name fullName displayName email avatar phone').sort({ date: -1 }).limit(10)
+
+    const orderHistory = await Order.find({
+      userId: user._id,
+    }).sort({ createdAt: -1 }).limit(10)
+
+    const totalWorkouts = await Booking.countDocuments({
+      memberId: user._id,
+      status: 'completed',
+    })
+
+    return res.json({
+      user,
+      addresses,
+      activeMembership,
+      membershipHistory,
+      recentBookings,
+      orderHistory,
+      totalWorkouts,
+    })
   } catch (error) {
     return sendError(res, error)
   }

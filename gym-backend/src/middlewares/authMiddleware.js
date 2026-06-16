@@ -52,9 +52,10 @@ export const authorize = (...roles) => {
   };
 };
 
-export const adminOnly = authorize('admin');
+export const adminOnly = authorize('super_admin', 'admin');
+export const superAdminOnly = authorize('super_admin');
 export const sellerOnly = authorize('seller');
-export const sellerOrAdmin = authorize('seller', 'admin');
-export const adminOrStaff = authorize('admin', 'staff');
-export const adminOrPT = authorize('admin', 'pt');
-export const allRoles = authorize('admin', 'pt', 'staff', 'member', 'seller');
+export const sellerOrAdmin = authorize('seller', 'super_admin', 'admin');
+export const adminOrStaff = authorize('super_admin', 'admin', 'staff');
+export const adminOrPT = authorize('super_admin', 'admin', 'pt');
+export const allRoles = authorize('super_admin', 'admin', 'pt', 'staff', 'member', 'seller');

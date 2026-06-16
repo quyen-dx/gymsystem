@@ -60,10 +60,17 @@ export const getMembers = async (req, res) => {
     if (search) {
       const phone = search.replace(/\s/g, '')
       const isPhoneSearch = /^(0|\+84)\d{8,9}$/.test(phone)
+      const isMemberCodeSearch = /^GP\d+$/i.test(search.trim())
       if (isPhoneSearch) {
         filter.phone = { $regex: phone.replace(/^0/, '(+84|0)'), $options: 'i' }
+      } else if (isMemberCodeSearch) {
+        filter.memberCode = { $regex: search.trim(), $options: 'i' }
       } else {
-        filter.name = { $regex: search, $options: 'i' }
+        filter.$or = [
+          { name: { $regex: search, $options: 'i' } },
+          { memberCode: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+        ]
       }
     }
 

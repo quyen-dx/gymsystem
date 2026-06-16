@@ -26,6 +26,52 @@ const actionColors: Record<AuditAction, string> = {
   delete: 'red',
 }
 
+function translateDetail(value: string | undefined, t: ReturnType<typeof useTranslation>['t']): string {
+  if (!value) return '-'
+
+  const staticMap: Record<string, string> = {
+    'Mở khóa tài khoản': t('admin_history.details.user_unlocked'),
+    'Khóa tài khoản': t('admin_history.details.user_locked'),
+    'Xóa tài khoản người dùng': t('admin_history.details.user_deleted'),
+    'Thêm PT mới': t('admin_history.details.pt_created'),
+    'Cập nhật thông tin PT': t('admin_history.details.pt_updated'),
+    'Xóa PT (vô hiệu hóa)': t('admin_history.details.pt_deleted'),
+    'Thêm member mới': t('admin_history.details.member_created'),
+    'Cập nhật thông tin member': t('admin_history.details.member_updated'),
+    'Mở khóa member': t('admin_history.details.member_unlocked'),
+    'Khóa member': t('admin_history.details.member_locked'),
+    'Tạo gói tập': t('admin_history.details.plan_created'),
+    'Cập nhật thông tin gói tập': t('admin_history.details.plan_updated'),
+    'Xóa gói tập': t('admin_history.details.plan_deleted'),
+    'Kích hoạt gói tập': t('admin_history.details.plan_activated'),
+    'Vô hiệu hóa gói tập': t('admin_history.details.plan_deactivated'),
+    'Thêm sản phẩm': t('admin_history.details.product_created'),
+    'Cập nhật thông tin sản phẩm': t('admin_history.details.product_updated'),
+    'Xóa sản phẩm': t('admin_history.details.product_deleted'),
+    'Cập nhật cài đặt hệ thống toàn website': t('admin_history.details.settings_updated'),
+    'Reset cài đặt hệ thống về mặc định': t('admin_history.details.settings_reset'),
+  }
+
+  if (staticMap[value]) return staticMap[value]
+
+  const roleMatch = value.match(/^Đổi role từ (.+) sang (.+)$/)
+  if (roleMatch) return t('admin_history.details.user_role_changed', { from: roleMatch[1], to: roleMatch[2] })
+
+  const registerMatch = value.match(/^Đăng ký gói tập "(.+)" cho member$/)
+  if (registerMatch) return t('admin_history.details.member_plan_registered', { plan: registerMatch[1] })
+
+  const renewMatch = value.match(/^Gia hạn gói "(.+)" cho member \(từ (.+)\)$/)
+  if (renewMatch) return t('admin_history.details.member_plan_renewed', { plan: renewMatch[1], from: renewMatch[2] })
+
+  const bulkRenewMatch = value.match(/^Gia hạn hàng loạt (\d+) member với gói "(.+)"$/)
+  if (bulkRenewMatch) return t('admin_history.details.member_plan_renewed_bulk', { count: bulkRenewMatch[1], plan: bulkRenewMatch[2] })
+
+  const partnershipMatch = value.match(/^Duyệt yêu cầu hợp tác từ "(.+)" — đã tạo shop "(.+)"$/)
+  if (partnershipMatch) return t('admin_history.details.partnership_approved', { brand: partnershipMatch[1], shop: partnershipMatch[2] })
+
+  return value
+}
+
 export default function AdminHistoryButton({
   module,
   title,
@@ -139,7 +185,7 @@ export default function AdminHistoryButton({
             {
               title: t('admin_history.columns.details'),
               dataIndex: 'details',
-              render: (value: string) => value || '-',
+              render: (value: string) => translateDetail(value, t),
             },
           ]}
         />

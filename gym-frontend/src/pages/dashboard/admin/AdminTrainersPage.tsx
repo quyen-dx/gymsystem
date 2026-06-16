@@ -21,6 +21,7 @@ import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { trainerService } from '../../../services/trainerService'
 import type { PT } from '../../../types/admin/trainer'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 export default function AdminTrainersPage() {
   const { t } = useTranslation()
@@ -82,7 +83,7 @@ export default function AdminTrainersPage() {
           <div>
             <div style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--gs-text)' }}
               onClick={() => navigate(`/admin/trainers/${record._id}`)}>
-              {record.name}
+              {getUserDisplayName(record, 'PT')}
             </div>
             <div style={{ fontSize: 12, color: 'var(--gs-text-muted)' }}>
               {record.email || record.phone || '—'}
