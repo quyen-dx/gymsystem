@@ -123,7 +123,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ...(isEnabled('pt.moduleEnabled') ? [
         { key: '/pt/clients', label: t('nav.clients'), icon: <TeamOutlined /> },
         { key: '/pt/workouts', label: t('nav.workout'), icon: <FileTextOutlined /> },
-        { key: '/pt/bookings', label: t('nav.bookings'), icon: <CalendarOutlined /> },
       ] : []),
     ],
     seller: [
