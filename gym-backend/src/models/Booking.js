@@ -36,6 +36,32 @@ const bookingSchema = new mongoose.Schema(
       default: 'pending',
       index: true,
     },
+    cancelReason: {
+      type: String,
+      default: '',
+    },
+
+    rejectReason: {
+      type: String,
+      default: '',
+    },
+
+    isViolation: {
+      type: Boolean,
+      default: false,
+    },
+
+    rating: {
+      type: Number,
+      min: 1,
+      max: 5,
+    },
+
+    reviewComment: {
+      type: String,
+      default: '',
+    },
+    completedAt: Date,
   },
   { timestamps: true },
 )
