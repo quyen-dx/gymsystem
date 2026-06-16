@@ -28,7 +28,6 @@ export default function PTSchedulePage() {
   const [schedules, setSchedules] = useState<PTScheduleData[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
-  const [newSchedule, setNewSchedule] = useState({ dayOfWeek: 0, shift: 'morning' })
   const [message, setMessage] = useState('')
 
   const DAYS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
@@ -68,17 +67,6 @@ export default function PTSchedulePage() {
       ])
     } catch (error) {
       console.error(error)
-    }
-  }
-
-  const handleAddSchedule = async () => {
-    try {
-      setMessage('Cập nhật lịch làm việc thành công')
-      setNewSchedule({ dayOfWeek: 0, shift: 'morning' })
-      await loadSchedule()
-    } catch (error: any) {
-      console.error(error)
-      setMessage(error?.response?.data?.message || 'Cập nhật thất bại')
     }
   }
 
