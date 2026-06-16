@@ -1001,7 +1001,7 @@ html[data-theme="light"] .member-shell-content .ant-btn-default {
 .support-quick-topics {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .support-quick-topic {
@@ -1253,6 +1253,44 @@ html[data-theme="light"] .member-shell-content .ant-btn-default {
   .support-empty {
     padding: 36px 16px;
   }
+
+  .support-quick-topic {
+    padding: 6px 13px;
+    font-size: 12px;
+  }
+
+  .support-quick-topic svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .support-card-title {
+    font-size: 13px;
+  }
+
+  .support-card-body-inner {
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .support-notice {
+    font-size: 12px;
+    padding: 10px 14px;
+  }
+
+  .support-notice svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .support-stats-item {
+    min-width: 60px;
+  }
+
+  .support-kicker {
+    font-size: 10px;
+    padding: 3px 10px;
+  }
 }
 
 @media (max-width: 1180px) {
@@ -1366,6 +1404,62 @@ html[data-theme="light"] .member-shell-content .ant-btn-default {
 
   .ant-space {
     row-gap: 8px;
+  }
+}
+
+@media (max-width: 420px) {
+  .support-hero {
+    padding: 16px 12px;
+    border-radius: 14px;
+  }
+
+  .support-hero h1 {
+    font-size: 20px;
+  }
+
+  .support-hero p {
+    font-size: 12px;
+    margin-top: 6px;
+  }
+
+  .support-stats {
+    gap: 16px;
+  }
+
+  .support-stats-item strong {
+    font-size: 16px;
+  }
+
+  .support-stats-item span {
+    font-size: 11px;
+  }
+
+  .support-card-header {
+    padding: 12px 14px;
+  }
+
+  .support-card-body {
+    padding: 0 14px 14px;
+  }
+
+  .support-card-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .support-search input {
+    height: 40px;
+    font-size: 12px;
+    padding: 0 36px 0 12px;
+  }
+
+  .support-page {
+    gap: 12px;
+  }
+
+  .support-toolbar {
+    gap: 10px;
   }
 }
 

@@ -100,7 +100,7 @@ export default function HelpCenterPage() {
         {/* Quick Topics */}
         {categories.length > 0 && (
           <div>
-            <div className="support-pills" style={{ marginBottom: 6 }}>
+            <div className="support-quick-topics" style={{ marginBottom: 6 }}>
               {categories.map(({ display }) => (
                 <button
                   key={display}
