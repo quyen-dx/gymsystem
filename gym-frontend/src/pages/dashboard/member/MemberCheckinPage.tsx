@@ -1,5 +1,4 @@
 import {
-  CheckCircleOutlined,
   CloseCircleOutlined,
   CopyOutlined,
   ReloadOutlined,

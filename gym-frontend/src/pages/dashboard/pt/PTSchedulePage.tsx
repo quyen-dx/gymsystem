@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { bookingService } from '../../../services/bookingService'
-import { trainerService } from '../../../services/trainerService'
 
 interface PTBooking {
   _id: string
@@ -47,11 +46,11 @@ export default function PTSchedulePage() {
       if (!Array.isArray(data)) data = []
       
       // Filter by selected date
-      const filtered = data.filter(b =>
+      const filtered = data.filter((b: PTBooking) =>
         new Date(b.date).toDateString() === new Date(selectedDate).toDateString()
       )
       
-      setBookings(filtered.sort((a, b) => a.slot.localeCompare(b.slot)))
+      setBookings(filtered.sort((a: PTBooking, b: PTBooking) => a.slot.localeCompare(b.slot)))
     } catch (error) {
       console.error(error)
       setMessage('Không thể tải lịch booking')

@@ -39,7 +39,7 @@ export default function StaffCheckinPage() {
       const reader = new BrowserQRCodeReader()
       const controls = await reader.decodeFromVideoDevice(
         undefined,
-        videoRef.current,
+        videoRef.current ?? undefined,
         (result) => {
           if (result?.getText()) {
             controls.stop()

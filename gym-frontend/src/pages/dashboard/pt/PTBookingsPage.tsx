@@ -45,7 +45,7 @@ export default function PTBookingsPage() {
       
       // Filter by member if memberFilter is set
       if (memberFilter) {
-        data = data.filter(b =>
+        data = data.filter((b: PTBooking) =>
           b.memberId?.name?.toLowerCase().includes(memberFilter.toLowerCase()) ||
           b.memberId?.email?.toLowerCase().includes(memberFilter.toLowerCase())
         )

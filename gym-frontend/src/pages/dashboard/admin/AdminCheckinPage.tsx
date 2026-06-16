@@ -1,7 +1,6 @@
 import {
   CalendarOutlined,
   CheckCircleOutlined,
-  TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { Card, Col, Row, Segmented, Spin, Statistic, Tooltip, message } from 'antd'
