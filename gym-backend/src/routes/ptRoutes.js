@@ -15,6 +15,8 @@ const router = express.Router()
 
 router.use(protect)
 
+router.get('/public/list', getPTs)
+
 router.get('/', adminOrStaff, getPTs)
 router.get('/schedule/:id', adminOrStaff, getPTSchedule)
 

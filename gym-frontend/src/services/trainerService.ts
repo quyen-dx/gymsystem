@@ -4,6 +4,9 @@ import type { PT, PTBooking, PTDaySchedule } from '../types/admin/trainer'
 export const trainerService = {
   getPTs: (params?: Record<string, unknown>) =>
     api.get<{ pts: PT[]; pagination: { total: number; page: number; limit: number; totalPages: number } }>('/pts', { params }),
+  
+   getAvailablePTs: (params?: Record<string, unknown>) =>
+  api.get<{ pts: PT[]; pagination: { total: number; page: number; limit: number; totalPages: number } }>('/pts/available', { params }),
 
   getPTById: (id: string) =>
     api.get<{ pt: PT; bookings: PTBooking[] }>(`/pts/${id}`),
