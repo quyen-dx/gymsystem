@@ -91,7 +91,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
   const [touchStart, setTouchStart] = useState<number | null>(null)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [shops, setShops] = useState<any[]>([])
-  const mobileMenuRef = useRef<HTMLElement>(null)
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
   const gymName = systemSettings.general.siteName
   const logoUrl = systemSettings.general.logoUrl
   const aboutTitle = pick(landing?.aboutTitle, lang, t('about.intro.titleFallback'))

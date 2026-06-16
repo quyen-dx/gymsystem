@@ -4,7 +4,6 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   EnvironmentOutlined,
-  FileTextOutlined,
   HistoryOutlined,
   InfoCircleOutlined,
   LockOutlined,
@@ -13,7 +12,6 @@ import {
   PhoneOutlined,
   SafetyCertificateOutlined,
   SolutionOutlined,
-  TeamOutlined,
   TrophyOutlined,
   UnlockOutlined,
   UserOutlined,
@@ -42,7 +40,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import api from '../../../services/api'
 import { AuthContext } from '../../../context/auth.context'
-import type { AdminUser, UserDetailResponse } from '../../../types/admin/user'
+import type { UserDetailResponse } from '../../../types/admin/user'
 import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const { Text, Title } = Typography
@@ -153,7 +151,7 @@ export default function AdminUserDetailPage() {
       render: (pt: any) => (
         <Space>
           <Avatar size="small" src={pt?.avatar} icon={<UserOutlined />} />
-          <Text>{pt?.name || '—'}</Text>
+          <Text>{getUserDisplayName(pt, '—')}</Text>
         </Space>
       ),
     },
@@ -375,7 +373,7 @@ export default function AdminUserDetailPage() {
                         src={user.identityFrontImage}
                         className="rounded-lg border shadow-sm"
                       />
-                      <div className="mt-1"><Text size="small" type="secondary">{t('admin.verifications.doc_front')}</Text></div>
+                      <div className="mt-1"><Text type="secondary" style={{ fontSize: 12 }}>{t('admin.verifications.doc_front')}</Text></div>
                     </div>
                   )}
                   {user.identityBackImage && (
@@ -385,7 +383,7 @@ export default function AdminUserDetailPage() {
                         src={user.identityBackImage}
                         className="rounded-lg border shadow-sm"
                       />
-                      <div className="mt-1"><Text size="small" type="secondary">{t('admin.verifications.doc_back')}</Text></div>
+                      <div className="mt-1"><Text type="secondary" style={{ fontSize: 12 }}>{t('admin.verifications.doc_back')}</Text></div>
                     </div>
                   )}
                 </Space>
@@ -406,7 +404,7 @@ export default function AdminUserDetailPage() {
               </Descriptions.Item>
               <Descriptions.Item label={t('admin.users.detail.active_plan')} span={2}>
                  {activeMembership ? (
-                   <Text strong color="blue">{activeMembership.planId?.nameVi || activeMembership.planId?.nameEn} (Hết hạn: {new Date(activeMembership.endDate).toLocaleDateString('vi-VN')})</Text>
+                   <Text strong style={{ color: '#1677ff' }}>{activeMembership.planId?.nameVi || activeMembership.planId?.nameEn} (Hết hạn: {new Date(activeMembership.endDate).toLocaleDateString('vi-VN')})</Text>
                  ) : (
                    <Text type="secondary">{t('admin.members.detail.no_membership')}</Text>
                  )}
@@ -415,7 +413,7 @@ export default function AdminUserDetailPage() {
                  {recentBookings && recentBookings.length > 0 ? (
                     <Space>
                       <Avatar size="small" src={recentBookings[0].ptId?.avatar} icon={<UserOutlined />} />
-                      <Text>{recentBookings[0].ptId?.name}</Text>
+                      <Text>{getUserDisplayName(recentBookings[0].ptId, '—')}</Text>
                     </Space>
                  ) : '—'}
               </Descriptions.Item>
@@ -470,9 +468,16 @@ export default function AdminUserDetailPage() {
                     addresses.map((addr: any) => (
                       <Col xs={24} sm={12} md={8} key={addr._id}>
                         <Card size="small" className="h-full border-dashed">
-                          <Text strong block>{addr.fullName} {addr.isDefault && <Tag color="blue" size="small">Mặc định</Tag>}</Text>
-                          <Text type="secondary" block>{addr.phone}</Text>
-                          <Text block className="mt-1">{addr.street}, {addr.ward}, {addr.district}, {addr.city}</Text>
+                          <div>
+                            <Text strong>{addr.fullName}</Text>
+                            {addr.isDefault && <Tag color="blue" style={{ marginLeft: 6 }}>Mặc định</Tag>}
+                          </div>
+                          <div>
+                            <Text type="secondary">{addr.phone}</Text>
+                          </div>
+                          <div className="mt-1">
+                            <Text>{addr.street}, {addr.ward}, {addr.district}, {addr.city}</Text>
+                          </div>
                         </Card>
                       </Col>
                     ))

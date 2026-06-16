@@ -23,6 +23,10 @@ export interface AdminUser {
   identityStatus?: string
   identityType?: string
   identityNumber?: string
+  identityCountry?: string
+  identityFrontImage?: string
+  identityBackImage?: string
+  identityRejectReason?: string
   emergencyContact?: {
     name: string
     phone: string
