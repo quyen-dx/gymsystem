@@ -8,6 +8,7 @@ import {
   Upload,
   message,
 } from 'antd'
+import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { memberService } from '../../../services/memberService'
@@ -35,7 +36,7 @@ export default function MemberFormModal({ open, member, onClose, onSuccess }: Pr
           name: member.name,
           email: member.email || '',
           phone: member.phone || '',
-          dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null,
+          dateOfBirth: member.dateOfBirth ? dayjs(member.dateOfBirth) : null,
           gender: member.gender || undefined,
         })
       } else {

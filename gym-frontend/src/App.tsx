@@ -12,13 +12,17 @@ import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import LoginPage from './pages/auth/LoginPage'
 import OauthSuccessPage from './pages/auth/OauthSuccessPage'
 import RegisterPage from './pages/auth/Registerpage'
+import AdminCheckinPage from './pages/dashboard/admin/AdminCheckinPage'
 import AdminDashboard from './pages/dashboard/admin/AdminDashboard'
 import AdminMembersPage from './pages/dashboard/admin/AdminMembersPage'
+import AdminMembersEditPage from './pages/dashboard/admin/AdminMembersEditPage'
 import MemberDetailPage from './pages/dashboard/admin/MemberDetailPage'
 import AdminPartnershipRequestsPage from './pages/dashboard/admin/AdminPartnershipRequestsPage'
 import AdminPlansPage from './pages/dashboard/admin/AdminPlansPage'
 import AdminReports from './pages/dashboard/admin/AdminReports'
 import AdminTrainersPage from './pages/dashboard/admin/AdminTrainersPage'
+import AdminTrainersCreatePage from './pages/dashboard/admin/AdminTrainersCreatePage'
+import AdminTrainersEditPage from './pages/dashboard/admin/AdminTrainersEditPage'
 import TrainerDetailPage from './pages/dashboard/admin/TrainerDetailPage'
 import AdminUsersPage from './pages/dashboard/admin/AdminUsersPage'
 import FAQCreatePage from './pages/dashboard/admin/FAQCreatePage'
@@ -29,6 +33,7 @@ import PolicyManagerPage from './pages/dashboard/admin/PolicyManagerPage'
 import SystemSettingsPage from './pages/dashboard/admin/SystemSettingsPage'
 import BookingPage from './pages/dashboard/member/BookingPage'
 import CartPage from './pages/dashboard/member/CartPage'
+import MemberCheckinPage from './pages/dashboard/member/MemberCheckinPage'
 import CheckoutPage from './pages/dashboard/member/CheckoutPage'
 import DepositPage from './pages/dashboard/member/DepositPage'
 import HealthPage from './pages/dashboard/member/HealthPage'
@@ -127,24 +132,7 @@ function MaintenanceRoute() {
   return <MaintenancePage />
 }
 
-function MemberCheckinPage() {
-  const { t } = useTranslation()
-  return (
-    <MemberLayout>
-      <div className="member-page">
-        <div className="rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8 max-[640px]:p-5">
-          <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">
-            {t('checkin_page.overline')}
-          </p>
-          <h1 className="mt-3 text-2xl font-semibold text-[var(--gs-text)]">{t('checkin_page.title')}</h1>
-          <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
-            {t('checkin_page.under_development')}
-          </p>
-        </div>
-      </div>
-    </MemberLayout>
-  )
-}
+
 
 
 
@@ -270,11 +258,15 @@ function AppWithTheme() {
         <Route path="/admin/shop" element={<Navigate to="/admin/partnerships" />} />
         <Route path="/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
         <Route path="/admin/members" element={<PrivateRoute><AdminMembersPage /></PrivateRoute>} />
+        <Route path="/admin/members/:id/edit" element={<PrivateRoute><AdminMembersEditPage /></PrivateRoute>} />
         <Route path="/admin/members/:id" element={<PrivateRoute><MemberDetailPage /></PrivateRoute>} />
         <Route path="/admin/trainers" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersPage /></PrivateRoute>} />
+        <Route path="/admin/trainers/create" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersCreatePage /></PrivateRoute>} />
+        <Route path="/admin/trainers/:id/edit" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersEditPage /></PrivateRoute>} />
         <Route path="/admin/trainers/:id" element={<PrivateRoute feature="pt.moduleEnabled"><TrainerDetailPage /></PrivateRoute>} />
         <Route path="/admin/pts" element={<Navigate to="/admin/trainers" replace />} />
         <Route path="/admin/reports" element={<PrivateRoute feature="reports.revenueChartEnabled"><AdminReports /></PrivateRoute>} />
+        <Route path="/admin/checkin" element={<PrivateRoute><AdminCheckinPage /></PrivateRoute>} />
         <Route path="/admin/system-settings" element={<PrivateRoute><SystemSettingsPage /></PrivateRoute>} />
         <Route path="/admin/faqs/create" element={<PrivateRoute><FAQCreatePage /></PrivateRoute>} />
         <Route path="/admin/faqs" element={<PrivateRoute><FAQManagerPage /></PrivateRoute>} />
@@ -319,6 +311,7 @@ function AppWithTheme() {
         <Route path="/health" element={<PrivateRoute feature="workout.healthLogEnabled"><HealthPage /></PrivateRoute>} />
         <Route path="/workout" element={<PrivateRoute feature="workout.workoutPlanEnabled"><WorkoutPage /></PrivateRoute>} />
         <Route path="/checkin" element={<PrivateRoute feature="checkin.qrCheckinEnabled"><MemberCheckinPage /></PrivateRoute>} />
+        <Route path="/member/checkin" element={<Navigate to="/checkin" replace />} />
         <Route path="/feedback" element={<PrivateRoute><MyFeedbackPage /></PrivateRoute>} />
         <Route path="/my-feedback" element={<PrivateRoute><MyFeedbackPage /></PrivateRoute>} />
         <Route path="/my-activity" element={<PrivateRoute><MyActivityPage /></PrivateRoute>} />

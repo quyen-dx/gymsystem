@@ -9,6 +9,7 @@ import {
   Upload,
   message,
 } from 'antd'
+import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { trainerService } from '../../../services/trainerService'
@@ -41,7 +42,7 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
           name: pt.name,
           email: pt.email || '',
           phone: pt.phone || '',
-          dateOfBirth: pt.dateOfBirth ? new Date(pt.dateOfBirth) : null,
+          dateOfBirth: pt.dateOfBirth ? dayjs(pt.dateOfBirth) : null,
           gender: pt.gender || undefined,
           specialties: pt.specialties || [],
           bio: pt.bio || '',

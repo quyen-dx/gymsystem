@@ -14,6 +14,7 @@ import adminAiRoutes from './src/routes/adminAiRoutes.js'
 import aiRoutes from './src/routes/aiRoutes.js'
 import auditLogRoutes from './src/routes/auditLogRoutes.js'
 import authRoutes from './src/routes/authRoutes.js'
+import checkInRoutes from './src/routes/checkInRoutes.js'
 import cmsRoutes from './src/routes/cmsRoutes.js'
 import memberRoutes from './src/routes/memberRoutes.js'
 import membershipRoutes from './src/routes/membershipRoutes.js'
@@ -61,6 +62,7 @@ app.use(maintenanceModeGuard)
 app.use('/api/auth', authRoutes)
 app.use('/api/cms', cmsRoutes)
 app.use('/api/members', memberRoutes)
+app.use('/api/checkin', checkInRoutes)
 app.use('/api/audit-logs', auditLogRoutes)
 app.get('/api/my-products', protect, sellerOnly, getMyProducts)
 app.use('/api/plans', planRoutes)

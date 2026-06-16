@@ -3,7 +3,10 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  EditOutlined,
+  LockOutlined,
   OrderedListOutlined,
+  UnlockOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import {
@@ -27,7 +30,9 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { memberService } from '../../../services/memberService'
-import type { MemberDetail, MemberMembership, TimelineEvent } from '../../../types/admin/member'
+import type { HealthScore, MemberDetail, MemberMembership, TimelineEvent } from '../../../types/admin/member'
+import MemberRegisterPlanModal from './MemberRegisterPlanModal'
+import MemberRenewPlanModal from './MemberRenewPlanModal'
 
 const { Text, Title } = Typography
 
@@ -37,18 +42,24 @@ export default function MemberDetailPage() {
   const navigate = useNavigate()
   const [member, setMember] = useState<MemberDetail | null>(null)
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
+  const [healthScore, setHealthScore] = useState<HealthScore | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const [registerModalOpen, setRegisterModalOpen] = useState(false)
+  const [renewModalOpen, setRenewModalOpen] = useState(false)
 
   const fetchMember = useCallback(async () => {
     if (!id) return
     setLoading(true)
     try {
-      const [detailRes, timelineRes] = await Promise.all([
+      const [detailRes, timelineRes, healthRes] = await Promise.all([
         memberService.getMemberById(id),
         memberService.getMemberTimeline(id),
+        memberService.getMemberHealthScore(id).catch(() => ({ data: { healthScore: null } })),
       ])
       setMember(detailRes.data.member)
       setTimeline(timelineRes.data.timeline)
+      setHealthScore(healthRes.data.healthScore)
     } catch {
       message.error(t('admin.members.messages.fetch_detail_failed'))
     } finally {
@@ -59,6 +70,17 @@ export default function MemberDetailPage() {
   useEffect(() => {
     fetchMember()
   }, [fetchMember])
+
+  const toggleStatus = async () => {
+    if (!member) return
+    try {
+      await memberService.toggleMemberStatus(member._id)
+      message.success(t('admin.members.toggle_success'))
+      fetchMember()
+    } catch {
+      message.error(t('admin.members.messages.action_failed'))
+    }
+  }
 
   if (loading) {
     return (
@@ -150,14 +172,34 @@ export default function MemberDetailPage() {
 
   return (
     <DashboardLayout>
-      <Button
-        type="text"
-        icon={<ArrowLeftOutlined />}
-        onClick={() => navigate('/admin/members')}
-        style={{ marginBottom: 16 }}
-      >
-        {t('admin.members.detail.back')}
-      </Button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Button
+          type="text"
+          icon={<ArrowLeftOutlined />}
+          onClick={() => navigate('/admin/members')}
+          style={{ color: 'var(--gs-text)', fontSize: 15 }}
+        >
+          {t('admin.members.detail.back')}
+        </Button>
+        <Space>
+          <Button icon={<EditOutlined />} onClick={() => navigate(`/admin/members/${member._id}/edit`)}>
+            {t('admin.members.edit')}
+          </Button>
+          <Button
+            icon={member.isActive ? <LockOutlined /> : <UnlockOutlined />}
+            onClick={toggleStatus}
+            danger={member.isActive}
+          >
+            {member.isActive ? 'Khóa' : 'Mở khóa'}
+          </Button>
+          <Button type="primary" onClick={() => setRegisterModalOpen(true)}>
+            Đăng ký gói tập
+          </Button>
+          <Button onClick={() => setRenewModalOpen(true)} disabled={!activeMembership}>
+            Gia hạn
+          </Button>
+        </Space>
+      </div>
 
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('admin.members.module')}</p>
@@ -183,6 +225,34 @@ export default function MemberDetailPage() {
                 {member.isActive ? t('admin.members.status.active') : t('admin.members.status.locked')}
               </Tag>
             </div>
+
+            {healthScore && (
+              <div style={{ marginTop: 16, padding: '12px 0', borderTop: '1px solid var(--gs-border)' }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>Điểm sức khỏe</Text>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <div style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: '50%',
+                    background: healthScore.overall >= 80 ? '#10B981' : healthScore.overall >= 50 ? '#F59E0B' : '#EF4444',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 18,
+                    fontWeight: 700,
+                  }}>
+                    {healthScore.overall}
+                  </div>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{healthScore.levelText}</div>
+                    <div style={{ fontSize: 12, color: 'var(--gs-text-muted)' }}>
+                      {healthScore.checkinCount} check-in
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {activeMembership ? (
               <div style={{ marginTop: 16, padding: '12px 0', borderTop: '1px solid var(--gs-border)' }}>
@@ -261,6 +331,23 @@ export default function MemberDetailPage() {
           </Card>
         </Col>
       </Row>
+
+      <MemberRegisterPlanModal
+        open={registerModalOpen}
+        memberId={member._id}
+        memberName={member.name}
+        onClose={() => setRegisterModalOpen(false)}
+        onSuccess={() => { setRegisterModalOpen(false); fetchMember() }}
+      />
+
+      <MemberRenewPlanModal
+        open={renewModalOpen}
+        memberId={member._id}
+        memberName={member.name}
+        currentEndDate={activeMembership?.endDate || ''}
+        onClose={() => setRenewModalOpen(false)}
+        onSuccess={() => { setRenewModalOpen(false); fetchMember() }}
+      />
     </DashboardLayout>
   )
 }
