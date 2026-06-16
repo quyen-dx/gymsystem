@@ -44,6 +44,20 @@ export const productImageUpload = multer({
     },
 });
 
+const selfieStorage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+        folder: 'gympro/selfies',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+        transformation: [{ width: 640, height: 480, crop: 'fill' }],
+    },
+});
+
+export const selfieUpload = multer({
+    storage: selfieStorage,
+    limits: { fileSize: 2 * 1024 * 1024 },
+});
+
 export const upload = multer({
     storage,
     limits: { fileSize: 2 * 1024 * 1024 },

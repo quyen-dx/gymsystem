@@ -1,4 +1,5 @@
 import { Button, DatePicker, Form, Input, Select, Upload, message } from 'antd'
+import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -6,7 +7,7 @@ import { memberService } from '../../../services/memberService'
 import type { MemberListItem } from '../../../types/admin/member'
 import { UploadOutlined, ArrowLeftOutlined } from '@ant-design/icons'
 
-const PHONE_REGEX = /^(?:\+?84|0)(?:3[2-9]|5[6|8|9]|7[0|6-9]|8[1-5]|9[0-9])[0-9]{7}$/
+const PHONE_REGEX = /^0\d{9,10}$/
 
 interface Props {
   member?: MemberListItem | null
@@ -28,7 +29,7 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
         name: member.name,
         email: member.email || '',
         phone: member.phone || '',
-        dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null,
+        dateOfBirth: member.dateOfBirth ? dayjs(member.dateOfBirth) : null,
         gender: member.gender || undefined,
       })
     } else {

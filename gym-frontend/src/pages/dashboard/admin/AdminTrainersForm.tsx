@@ -1,4 +1,5 @@
 import { Button, DatePicker, Form, Input, InputNumber, Select, Upload, message } from 'antd'
+import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -11,7 +12,7 @@ const SPECIALTY_OPTIONS = [
   'Cardio', 'Strength Training', 'HIIT', 'Dance', 'Meditation',
 ]
 
-const PHONE_REGEX = /^(?:\+?84|0)(?:3[2-9]|5[6|8|9]|7[0|6-9]|8[1-5]|9[0-9])[0-9]{7}$/
+const PHONE_REGEX = /^0\d{9,10}$/
 interface Props {
   pt?: PT | null
   onSuccess?: () => void
@@ -34,7 +35,7 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
         name: pt.name,
         email: pt.email || '',
         phone: pt.phone || '',
-        dateOfBirth: pt.dateOfBirth ? new Date(pt.dateOfBirth) : null,
+        dateOfBirth: pt.dateOfBirth ? dayjs(pt.dateOfBirth) : null,
         gender: pt.gender || undefined,
         specialties: pt.specialties || [],
         bio: pt.bio || '',

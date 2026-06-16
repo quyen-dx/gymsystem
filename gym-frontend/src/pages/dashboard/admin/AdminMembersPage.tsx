@@ -20,11 +20,11 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { LineChart, Line, ResponsiveContainer } from 'recharts'
+
 import api from '../../../services/api'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { memberService } from '../../../services/memberService'
-import type { HealthScore, MemberListItem } from '../../../types/admin/member'
+import type { MemberListItem } from '../../../types/admin/member'
 import MemberFormModal from './MemberFormModal'
 import MemberRegisterPlanModal from './MemberRegisterPlanModal'
 import MemberRenewPlanModal from './MemberRenewPlanModal'
@@ -57,8 +57,6 @@ export default function AdminMembersPage() {
   const [renewMemberId, setRenewMemberId] = useState('')
   const [renewMemberName, setRenewMemberName] = useState('')
   const [renewEndDate, setRenewEndDate] = useState('')
-  const [healthScores, setHealthScores] = useState<Record<string, HealthScore>>({})
-
   useEffect(() => {
     api.get<{ plans: PlanOption[] }>('/plans', { params: { limit: 100 } }).then(({ data }) => {
       setPlans(data.plans || [])
@@ -76,14 +74,6 @@ export default function AdminMembersPage() {
       const { data } = await memberService.getMembers(params)
       setMembers(data.members)
       setTotal(data.pagination.total)
-
-      data.members.forEach((m: MemberListItem) => {
-        if (!healthScores[m._id]) {
-          memberService.getMemberHealthScore(m._id)
-            .then(res => setHealthScores(prev => ({ ...prev, [m._id]: res.data.healthScore })))
-            .catch(() => {})
-        }
-      })
     } catch {
       message.error(t('admin.members.messages.fetch_failed'))
     } finally {
@@ -158,17 +148,6 @@ export default function AdminMembersPage() {
     setRenewModalOpen(true)
   }
 
-  const getHealthColor = (score: number) => {
-    if (score >= 80) return '#10B981'
-    if (score >= 50) return '#F59E0B'
-    return '#EF4444'
-  }
-
-  const sparklineData = Array.from({ length: 30 }, (_, i) => ({
-    day: i,
-    value: Math.floor(Math.random() * 3),
-  }))
-
   const columns = [
     {
       title: t('admin.members.columns.member'),
@@ -222,53 +201,11 @@ export default function AdminMembersPage() {
       },
     },
     {
-      title: 'Sức khỏe',
-      width: 80,
-      align: 'center' as const,
-      render: (_: unknown, record: MemberListItem) => {
-        const hs = healthScores[record._id]
-        if (!hs) return <span style={{ opacity: 0.3 }}>—</span>
-        return (
-          <Tooltip title={`${hs.levelText} (${hs.overall}/100)`}>
-            <div style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              background: getHealthColor(hs.overall),
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 11,
-              fontWeight: 700,
-              margin: '0 auto',
-              cursor: 'pointer',
-            }}>
-              {hs.overall}
-            </div>
-          </Tooltip>
-        )
-      },
-    },
-    {
       title: 'Check-in',
       width: 80,
       align: 'center' as const,
       render: (_: unknown, record: MemberListItem) => (
         <span>{record.checkinCount || <span style={{ opacity: 0.4 }}>0</span>}</span>
-      ),
-    },
-    {
-      title: 'Xu hướng',
-      width: 100,
-      render: () => (
-        <div style={{ width: 80, height: 30 }}>
-          <ResponsiveContainer>
-            <LineChart data={sparklineData}>
-              <Line type="monotone" dataKey="value" stroke="#10B981" strokeWidth={1.5} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
       ),
     },
     {

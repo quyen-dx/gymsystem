@@ -1152,6 +1152,17 @@
         "action_failed": "Action failed"
       }
     },
+    "checkin": {
+      "title": "Check-in",
+      "total_checkins": "Total check-ins",
+      "unique_members": "Active members",
+      "period": "Period",
+      "today": "Today",
+      "this_week": "7 days",
+      "this_month": "30 days",
+      "heatmap_title": "7-day Check-in Heatmap",
+      "load_failed": "Failed to load check-in stats"
+    },
     "reports": {
       "module": "Module 7",
       "title": "Reports",
@@ -1186,8 +1197,27 @@
   "staff": {
     "checkin": {
       "overline": "Staff",
-      "title": "Check-in",
-      "under_development": "Feature under development"
+      "title": "QR Check-in",
+      "start_hint": "Press start to open camera for QR scanning",
+      "start_camera": "Open Camera",
+      "stop_camera": "Close Camera",
+      "camera_error": "Unable to access camera",
+      "today_title": "Today's check-in history",
+      "no_checkins_today": "No check-ins today",
+      "manual_title": "Manual QR input",
+      "manual_placeholder": "Paste QR token to test",
+      "manual_submit": "Verify",
+      "confirm": "Confirm Check-in",
+      "cancel": "Cancel",
+      "selfie_title": "Take a selfie",
+      "selfie_hint": "Please take a selfie as check-in evidence",
+      "take_selfie": "Take Photo",
+      "skip": "Skip",
+      "success_title": "Check-in successful!",
+      "streak_days": "day streak",
+      "checkin_another": "Check-in another member",
+      "error_title": "Check-in failed",
+      "try_again": "Try Again"
     },
     "members": {
       "overline": "Staff",
@@ -1274,8 +1304,14 @@
   },
   "checkin_page": {
     "overline": "QR Check-in",
-    "title": "Member Check-in",
-    "under_development": "QR Check-in feature is under development."
+    "title": "Member QR Check-in",
+    "under_development": "QR Check-in feature is under development.",
+    "auto_refresh": "Auto refresh every 30 seconds",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "streak": "🔥 {{count}}-day streak",
+    "error_title": "QR Error",
+    "load_failed": "Unable to generate QR code. Please try again."
   },
   "booking": {
     "module": "Module 5",

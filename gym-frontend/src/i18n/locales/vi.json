@@ -1153,6 +1153,17 @@
         "action_failed": "Thao tác thất bại"
       }
     },
+    "checkin": {
+      "title": "Check-in",
+      "total_checkins": "Tổng check-in",
+      "unique_members": "Hội viên đã check-in",
+      "period": "Kỳ",
+      "today": "Hôm nay",
+      "this_week": "7 ngày",
+      "this_month": "30 ngày",
+      "heatmap_title": "Heatmap check-in 7 ngày",
+      "load_failed": "Không thể tải thống kê check-in"
+    },
     "reports": {
       "module": "Module 7",
       "title": "Thông tin",
@@ -1187,8 +1198,27 @@
   "staff": {
     "checkin": {
       "overline": "Staff",
-      "title": "Điểm danh",
-      "under_development": "Chức năng đang phát triển"
+      "title": "Điểm danh QR",
+      "start_hint": "Nhấn nút để mở camera quét QR",
+      "start_camera": "Mở camera",
+      "stop_camera": "Tắt camera",
+      "camera_error": "Không thể truy cập camera",
+      "today_title": "Lịch sử check-in hôm nay",
+      "no_checkins_today": "Chưa có check-in hôm nay",
+      "manual_title": "Nhập mã QR thủ công",
+      "manual_placeholder": "Dán token QR để test",
+      "manual_submit": "Kiểm tra",
+      "confirm": "Xác nhận Check-in",
+      "cancel": "Huỷ",
+      "selfie_title": "Chụp ảnh selfie",
+      "selfie_hint": "Vui lòng chụp ảnh để làm bằng chứng check-in",
+      "take_selfie": "Chụp ảnh",
+      "skip": "Bỏ qua",
+      "success_title": "Check-in thành công!",
+      "streak_days": "ngày liên tiếp",
+      "checkin_another": "Check-in cho hội viên khác",
+      "error_title": "Check-in thất bại",
+      "try_again": "Thử lại"
     },
     "members": {
       "overline": "Staff",
@@ -1275,8 +1305,14 @@
   },
   "checkin_page": {
     "overline": "QR điểm danh",
-    "title": "Điểm danh hội viên",
-    "under_development": "Chức năng QR điểm danh đang được phát triển."
+    "title": "QR Check-in",
+    "under_development": "Chức năng QR điểm danh đang được phát triển.",
+    "auto_refresh": "Tự động làm mới sau mỗi 30 giây",
+    "refresh": "Làm mới",
+    "retry": "Thử lại",
+    "streak": "🔥 Chuỗi {{count}} ngày",
+    "error_title": "Mã QR lỗi",
+    "load_failed": "Không thể tạo mã QR. Vui lòng thử lại."
   },
   "booking": {
     "module": "Module 5",
