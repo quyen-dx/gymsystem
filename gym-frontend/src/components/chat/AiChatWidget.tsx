@@ -1,5 +1,5 @@
 import { CheckOutlined, CopyOutlined, DeleteOutlined, EditOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoreOutlined, PaperClipOutlined, PlusOutlined, RobotOutlined, SendOutlined } from '@ant-design/icons'
-import { Avatar, Badge, Button, Drawer, Dropdown, Input, Modal, Space, Spin, Tooltip, Typography, message as antdMessage } from 'antd'
+import { Avatar, Badge, Button, Drawer, Dropdown, Input, Modal, Spin, Tooltip, Typography, message as antdMessage } from 'antd'
 import type { CSSProperties, ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
