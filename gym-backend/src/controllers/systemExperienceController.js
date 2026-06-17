@@ -152,6 +152,7 @@ export const updateLandingContent = async (req, res) => {
     if (payload[key] !== undefined) landing[key] = payload[key]
   })
   await landing.save()
+  invalidateContextCache('landingCms')
   res.json({ message: 'Cập nhật landing CMS thành công', landing })
 }
 
@@ -176,6 +177,7 @@ export const updateCmsPage = async (req, res) => {
     if (payload[key] !== undefined) landing[key] = payload[key]
   })
   await landing.save()
+  invalidateContextCache('landingCms')
   res.json({ message: 'Cập nhật landing CMS thành công', pageId, landing })
 }
 

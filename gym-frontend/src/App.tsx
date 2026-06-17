@@ -32,6 +32,7 @@ import FeedbackManagerPage from './pages/dashboard/admin/FeedbackManagerPage'
 import PolicyCreatePage from './pages/dashboard/admin/PolicyCreatePage'
 import PolicyManagerPage from './pages/dashboard/admin/PolicyManagerPage'
 import SystemSettingsPage from './pages/dashboard/admin/SystemSettingsPage'
+import AiChatPage from './pages/dashboard/member/AiChatPage'
 import BookingPage from './pages/dashboard/member/BookingPage'
 import CartPage from './pages/dashboard/member/CartPage'
 import MemberCheckinPage from './pages/dashboard/member/MemberCheckinPage'
@@ -295,6 +296,7 @@ function AppWithTheme() {
         {/* MEMBER */}
         <Route path="/" element={<HomeRoute />} />
         <Route path="/dashboard" element={<PrivateRoute><MemberDashboard /></PrivateRoute>} />
+        <Route path="/ai-chat" element={<PrivateRoute feature="ai.floatingChatbotEnabled"><AiChatPage /></PrivateRoute>} />
         <Route path="/deposit" element={<PrivateRoute feature="billing.qrPaymentEnabled"><DepositPage /></PrivateRoute>} />
         <Route path="/checkout" element={<PrivateRoute feature="shop.cartEnabled"><CheckoutPage /></PrivateRoute>} />
         <Route path="/orders" element={<PrivateRoute><OrderHistoryPage /></PrivateRoute>} />

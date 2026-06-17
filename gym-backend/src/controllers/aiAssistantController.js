@@ -3,9 +3,14 @@ import Product from '../models/Product.js'
 import User from '../models/User.js'
 import AiChatHistory from '../models/AiChatHistory.js'
 import {
+    analyzeBodyImages,
+    analyzeInBodyImage,
+    classifyImageType,
     classifyQueryIntent,
     generateAssistantResponse,
     generateAssistantResponseStream,
+    generateRecommendationsFromAnalysis,
+    visionChat,
 } from '../services/aiAssistantService.js'
 import {
     buildAiMemoryContext,
@@ -102,8 +107,21 @@ const normalizeSessions = (sessions) => {
                             ...(safeMessage.metadata && typeof safeMessage.metadata === 'object' && !Array.isArray(safeMessage.metadata) ? { metadata: safeMessage.metadata } : {}),
                             ...(Array.isArray(safeMessage.suggestions) ? { suggestions: safeMessage.suggestions.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 4) } : {}),
                             ...(safeMessage.webSearch && typeof safeMessage.webSearch === 'object' ? { webSearch: normalizeWebSearchPayload(safeMessage.webSearch) } : {}),
+                            ...(Array.isArray(safeMessage.attachments) ? {
+                                attachments: safeMessage.attachments
+                                    .filter((item) => item && typeof item === 'object')
+                                    .map((item) => ({
+                                        type: item.type === 'image' ? 'image' : 'image',
+                                        url: String(item.url || '').slice(0, 1000),
+                                        name: String(item.name || '').slice(0, 160),
+                                        mimeType: String(item.mimeType || '').slice(0, 80),
+                                        size: Number.isFinite(Number(item.size)) ? Number(item.size) : 0,
+                                    }))
+                                    .filter((item) => item.url)
+                                    .slice(0, 4),
+                            } : {}),
                         }
-                    }).filter((message) => message.content || message.type || message.planPayload)
+                    }).filter((message) => message.content || message.type || message.planPayload || (Array.isArray(message.attachments) && message.attachments.length > 0))
                     : [],
             }
         })
@@ -128,7 +146,113 @@ const buildSearchRegex = (values) => {
 }
 
 const isPrivacyQuestion = (query) => {
-    return /(số điện thoại|email|thông tin cá nhân|địa chỉ|liên hệ|contact|phone)/i.test(query)
+    const normalized = normalizeSearchText(query)
+    const asksSensitive = /\b(email|so dien thoai|phone|contact|thong tin ca nhan|tai khoan|password|mat khau|token|cookie|jwt)\b/.test(normalized)
+    if (!asksSensitive) return false
+    const asksOwnData = /\b(cua toi|my|mine|me)\b/.test(normalized)
+    if (asksOwnData && !/\b(password|mat khau|token|cookie|jwt)\b/.test(normalized)) return false
+    return /\b(nguoi khac|member khac|user khac|hoi vien khac|tat ca|danh sach|other user|another user|all members|password|mat khau|token|cookie|jwt)\b/.test(normalized)
+}
+
+export const uploadAiChatImage = async (req, res, next) => {
+    try {
+        if (!req.file) return next(new AppError('Không có file ảnh', 400))
+        return res.json({
+            attachment: {
+                type: 'image',
+                url: req.file.path,
+                name: req.file.originalname || '',
+                mimeType: req.file.mimetype || '',
+                size: req.file.size || 0,
+            },
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+const fetchGymDataForRecommendations = async () => {
+    const [plans, pts] = await Promise.all([
+        Plan.find({ isActive: true })
+            .select('nameVi nameEn price durationDays descriptionVi descriptionEn featuresVi featuresEn color')
+            .sort({ price: 1 })
+            .lean(),
+        User.find({ role: 'pt', isActive: true })
+            .select('name specialties rating experienceYears bio')
+            .sort({ rating: -1 })
+            .lean(),
+    ])
+    return { plans, pts }
+}
+
+export const analyzeBody = async (req, res, next) => {
+    try {
+        const { attachments, language } = req.body
+        if (!Array.isArray(attachments) || attachments.length === 0) {
+            return next(new AppError('Vui lòng gửi ít nhất 1 ảnh để phân tích', 400))
+        }
+
+        const imageUrls = attachments
+            .filter((att) => att && typeof att.url === 'string')
+            .map((att) => att.url)
+
+        if (imageUrls.length === 0) {
+            return next(new AppError('Không tìm thấy URL ảnh hợp lệ', 400))
+        }
+
+        const [result, gymData] = await Promise.all([
+            analyzeBodyImages(imageUrls, language),
+            fetchGymDataForRecommendations(),
+        ])
+
+        let recommendations = null
+        if (gymData.plans.length > 0 || gymData.pts.length > 0) {
+            try {
+                recommendations = await generateRecommendationsFromAnalysis(result, 'body', gymData, language)
+            } catch (recError) {
+                console.error('Failed to generate body recommendations:', recError)
+            }
+        }
+
+        return res.json({ result, recommendations })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const analyzeInBody = async (req, res, next) => {
+    try {
+        const { attachments, language } = req.body
+        if (!Array.isArray(attachments) || attachments.length === 0) {
+            return next(new AppError('Vui lòng gửi ít nhất 1 ảnh phiếu InBody', 400))
+        }
+
+        const imageUrls = attachments
+            .filter((att) => att && typeof att.url === 'string')
+            .map((att) => att.url)
+
+        if (imageUrls.length === 0) {
+            return next(new AppError('Không tìm thấy URL ảnh hợp lệ', 400))
+        }
+
+        const [result, gymData] = await Promise.all([
+            analyzeInBodyImage(imageUrls, language),
+            fetchGymDataForRecommendations(),
+        ])
+
+        let recommendations = null
+        if (gymData.plans.length > 0 || gymData.pts.length > 0) {
+            try {
+                recommendations = await generateRecommendationsFromAnalysis(result, 'inbody', gymData, language)
+            } catch (recError) {
+                console.error('Failed to generate InBody recommendations:', recError)
+            }
+        }
+
+        return res.json({ result, recommendations })
+    } catch (error) {
+        next(error)
+    }
 }
 
 const normalizeSearchText = (value) => String(value || '')
@@ -941,7 +1065,7 @@ export const aiAssistant = async (req, res, next) => {
         if (isPrivacyQuestion(normalizedQuery)) {
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
             return res.json({
-                answer: 'Tôi không thể cung cấp thông tin cá nhân của người dùng khác.',
+                answer: 'Mình không thể cung cấp thông tin cá nhân của người dùng khác để bảo vệ quyền riêng tư.',
                 pts: [],
                 products: [],
                 plans: [],
@@ -1149,6 +1273,45 @@ export const aiAssistantStream = async (req, res, next) => {
             intent: requestContext.intent || 'member_question',
             source: requestContext.source || 'user_message',
         })
+        const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : []
+
+        if (attachments.length > 0) {
+            initSseResponse(res)
+
+            req.on('close', () => {
+                console.log('[AI Vision stream] client closed connection')
+            })
+
+            try {
+                const classification = await classifyImageType(
+                    attachments.filter((a) => a && typeof a.url === 'string').map((a) => a.url)
+                )
+
+                writeSseEvent(res, 'meta', {
+                    mode: 'vision',
+                    imageType: classification.type,
+                    imageReason: classification.reason,
+                })
+
+                const result = await visionChat(normalizedQuery, attachments, language)
+
+                writeSseEvent(res, 'chunk', { text: result.text })
+
+                writeSseEvent(res, 'done', {
+                    answer: result.text,
+                    mode: 'vision',
+                    imageType: result.imageType,
+                    ...(result.data ? { data: result.data } : {}),
+                })
+
+                return res.end()
+            } catch (visionError) {
+                console.error('AI Vision stream error:', visionError)
+                writeSseEvent(res, 'error', { message: visionError?.message || 'Lỗi phân tích ảnh' })
+                return res.end()
+            }
+        }
+
         const effectiveQuery = buildEffectiveQuery(normalizedQuery, conversationContext)
         const aiMode = mode === 'general' ? 'general' : 'gym'
         const memoryContext = buildAiMemoryContext(await getAiUserMemory(req.user?._id))
@@ -1229,7 +1392,7 @@ export const aiAssistantStream = async (req, res, next) => {
         }
 
         if (isPrivacyQuestion(normalizedQuery)) {
-            const answer = 'Tôi không thể cung cấp thông tin cá nhân của người dùng khác.'
+            const answer = 'Mình không thể cung cấp thông tin cá nhân của người dùng khác để bảo vệ quyền riêng tư.'
             writeSseEvent(res, 'chunk', { text: answer })
             writeSseEvent(res, 'done', { answer, mode: aiMode })
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)

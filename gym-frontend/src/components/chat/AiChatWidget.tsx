@@ -1,23 +1,21 @@
-import { CheckOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, EditOutlined, ExpandAltOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoreOutlined, PlusOutlined, SendOutlined } from '@ant-design/icons'
-import { Avatar, Badge, Button, Drawer, Dropdown, Input, Modal, Segmented, Select, Space, Spin, Tooltip, Typography } from 'antd'
-import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, TouchEvent as ReactTouchEvent } from 'react'
+import { CheckOutlined, CopyOutlined, DeleteOutlined, EditOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoreOutlined, PaperClipOutlined, PlusOutlined, RobotOutlined, SendOutlined } from '@ant-design/icons'
+import { Avatar, Badge, Button, Drawer, Dropdown, Input, Modal, Space, Spin, Tooltip, Typography, message as antdMessage } from 'antd'
+import type { CSSProperties, ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hooks/useAuth'
-import { useDraggable } from '../../hooks/useDraggable'
-import { deleteAiChatSession, getAiChatHistory, renameAiChatSession, requestAiAssistant, requestAiAssistantStream, saveAiChatHistory, type AiMode } from '../../services/aiService'
-import type { AiToolPayload, ChatMessage, ChatSession, ConversationContext, PlanPayload, StoredChatState, WebSearchResult } from '../../types/aichat/aichat'
+import { deleteAiChatSession, getAiChatHistory, renameAiChatSession, requestAiAssistant, requestAiAssistantStream, saveAiChatHistory, uploadAiChatImage, type AiMode, type InBodyAnalysisResult } from '../../services/aiService'
+import { InBodyAnalysisCard } from './InBodyAnalysisCard'
+import type { AiToolPayload, ChatAttachment, ChatMessage, ChatSession, ConversationContext, PlanPayload, StoredChatState, WebSearchResult } from '../../types/aichat/aichat'
 
 import { AssistantMessageBubble } from './AssistantMessageBubble'
 
 const STORAGE_KEY_PREFIX = 'chat_history_'
-const MASCOT_WIDTH = 100
-const MASCOT_HEIGHT = 100
-const CHAT_PANEL_BACKGROUND_IMAGE = 'https://genk.mediacdn.vn/2019/7/3/photo-1-1562129061617297549771.jpg'
-const AI_AVATAR_IMAGE = 'https://vcdn1-giaitri.vnecdn.net/2023/04/28/doraemon4-1682675790-8961-1682675801.jpg?w=500&h=300&q=100&dpr=1&fit=crop&s=3dxqum5l0xkhHX-R0z_a1g'
+const ACCEPTED_AI_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+const MAX_AI_IMAGE_SIZE = 5 * 1024 * 1024
 const MEMBER_SUGGESTED_PROMPT_KEYS = [
     'today_workout',
     'weekly_schedule',
@@ -533,6 +531,22 @@ const normalizeSuggestions = (suggestions: unknown) => (
         : []
 )
 
+const normalizeChatAttachments = (attachments: unknown): ChatAttachment[] => (
+    Array.isArray(attachments)
+        ? attachments
+            .filter(isRecord)
+            .map((item) => ({
+                type: 'image' as const,
+                url: typeof item.url === 'string' ? item.url.trim() : '',
+                name: typeof item.name === 'string' ? item.name : '',
+                mimeType: typeof item.mimeType === 'string' ? item.mimeType : '',
+                size: Number.isFinite(Number(item.size)) ? Number(item.size) : 0,
+            }))
+            .filter((item) => item.url)
+            .slice(0, 4)
+        : []
+)
+
 const getAiResponseSubject = (response: unknown) => {
     const safeResponse = isRecord(response) ? response : {}
     const metadata = isRecord(safeResponse.metadata) ? safeResponse.metadata : {}
@@ -547,6 +561,7 @@ const getAiResponseSubject = (response: unknown) => {
 const normalizeChatMessage = (message: ChatMessage): ChatMessage => {
     const safeMessage: Record<string, any> = isRecord(message) ? message : {}
     const suggestions = normalizeSuggestions(safeMessage.suggestions)
+    const attachments = normalizeChatAttachments(safeMessage.attachments)
     const planFields = getAiResponsePlanFields(safeMessage)
     const alternatives = Array.isArray(safeMessage.alternatives) ? safeMessage.alternatives.slice(0, 2) : undefined
     return {
@@ -572,6 +587,7 @@ const normalizeChatMessage = (message: ChatMessage): ChatMessage => {
         ...(isRecord(safeMessage.data) ? { data: safeMessage.data } : {}),
         ...(Array.isArray(safeMessage.cards) ? { cards: safeMessage.cards } : {}),
         ...(isRecord(safeMessage.aiAction) ? { aiAction: safeMessage.aiAction } : {}),
+        ...(attachments.length > 0 ? { attachments } : {}),
         ...(alternatives ? { alternatives } : {}),
         ...(typeof safeMessage.conclusion === 'string' ? { conclusion: safeMessage.conclusion } : {}),
         ...planFields,
@@ -643,7 +659,7 @@ const buildConversationContext = (messages: ChatMessage[], currentMode: AiMode, 
     return context
 }
 
-const playDoraemonClickSound = () => {
+const playAiClickSound = () => {
     try {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
         if (!AudioContextClass) return
@@ -665,42 +681,125 @@ const playDoraemonClickSound = () => {
     } catch { }
 }
 
-const DoraemonChatMascot = ({ width = MASCOT_WIDTH, height = MASCOT_HEIGHT }: { width?: number; height?: number }) => (
-    <div style={{ width, height, position: 'relative', borderRadius: '9999px', overflow: 'hidden' }}>
-        <img
-            src="https://upload.wikimedia.org/wikipedia/en/b/bd/Doraemon_character.png"
-            alt="Doraemon"
-            style={{
-                width,
-                height,
-                objectFit: 'cover',
-                display: 'block',
-                position: 'absolute',
-                top: 0, left: 0,
-                filter: 'brightness(0.9) saturate(0.95) drop-shadow(0 8px 20px rgba(0,116,170,0.5))',
-                opacity: 1,
-                transform: 'scale(1) translateY(0)',
-                transition: 'filter 180ms ease, transform 180ms ease',
-            }}
-        />
-    </div>
-)
-
-const DoraemonMiniAvatar = () => (
-    <img
-        src={AI_AVATAR_IMAGE}
-        alt="Doraemon"
-        style={{ width: 22, height: 22, borderRadius: '50%', display: 'block', objectFit: 'cover' }}
+const AiAssistantAvatar = ({ size = 28 }: { size?: number }) => (
+    <Avatar
+        size={size}
+        icon={<RobotOutlined />}
+        style={{
+            background: 'var(--theme-button-bg)',
+            color: 'var(--theme-button-text)',
+            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
+        }}
     />
 )
 
-export default function AiChatWidget() {
+type AiChatWidgetProps = {
+    variant?: 'floating' | 'page'
+}
+
+function AiChatFloatingButton() {
+    const navigate = useNavigate()
+    const { t } = useTranslation()
+
+    if (typeof document === 'undefined') return null
+
+    return createPortal(
+        <>
+            <style>{`
+                .ai-gympro-floating-chat {
+                    position: fixed;
+                    right: max(18px, env(safe-area-inset-right));
+                    bottom: max(18px, env(safe-area-inset-bottom));
+                    z-index: 11000;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 10px;
+                    min-height: 52px;
+                    max-width: calc(100vw - 36px);
+                    padding: 7px 16px 7px 8px;
+                    border: 1px solid var(--theme-button-border);
+                    border-radius: 999px;
+                    background: var(--theme-button-bg);
+                    color: var(--theme-button-text);
+                    box-shadow: 0 16px 42px rgba(0, 116, 170, 0.26);
+                    cursor: pointer;
+                    font: inherit;
+                    font-weight: 800;
+                    letter-spacing: 0;
+                    transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+                    touch-action: manipulation;
+                }
+                .ai-gympro-floating-chat:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 20px 54px rgba(0, 116, 170, 0.34);
+                    filter: brightness(1.04);
+                }
+                .ai-gympro-floating-chat:focus-visible {
+                    outline: 3px solid var(--theme-accent-muted);
+                    outline-offset: 3px;
+                }
+                .ai-gympro-floating-chat-avatar {
+                    display: grid;
+                    place-items: center;
+                    width: 38px;
+                    height: 38px;
+                    min-width: 38px;
+                    border-radius: 999px;
+                    overflow: hidden;
+                    background: color-mix(in srgb, var(--theme-card) 84%, transparent);
+                    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.28);
+                }
+                .ai-gympro-floating-chat-text {
+                    white-space: nowrap;
+                    line-height: 1;
+                }
+                @media (max-width: 560px) {
+                    .ai-gympro-floating-chat {
+                        width: 56px;
+                        height: 56px;
+                        min-height: 56px;
+                        padding: 8px;
+                        justify-content: center;
+                    }
+                    .ai-gympro-floating-chat-text {
+                        position: absolute;
+                        width: 1px;
+                        height: 1px;
+                        padding: 0;
+                        margin: -1px;
+                        overflow: hidden;
+                        clip: rect(0, 0, 0, 0);
+                        white-space: nowrap;
+                        border: 0;
+                    }
+                }
+            `}</style>
+            <button
+                type="button"
+                className="ai-gympro-floating-chat"
+                aria-label={t('ai.askAI') || 'Ask AI'}
+                onClick={() => {
+                    playAiClickSound()
+                    navigate('/ai-chat')
+                }}
+            >
+                <span className="ai-gympro-floating-chat-avatar">
+                    <RobotOutlined />
+                </span>
+                <span className="ai-gympro-floating-chat-text">{t('ai.askAI') || 'Ask AI'}</span>
+            </button>
+        </>,
+        document.body,
+    )
+}
+
+export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps) {
+    if (variant !== 'page') return <AiChatFloatingButton />
+
     const { dark, tokens, applyTheme } = useTheme()
     const { user } = useAuth()
     const { t, i18n } = useTranslation()
     const navigate = useNavigate()
-    const [visible, setVisible] = useState(false)
-    const [expanded, setExpanded] = useState(false)
     const [sessions, setSessions] = useState<ChatSession[]>([])
     const [activeSessionId, setActiveSessionId] = useState<string>('')
     const [query, setQuery] = useState('')
@@ -714,8 +813,10 @@ export default function AiChatWidget() {
     const [copiedMessageIds, setCopiedMessageIds] = useState<Set<string>>(new Set())
     const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
     const [editingTitle, setEditingTitle] = useState('')
-    const [mode, setMode] = useState<AiMode>('gym')
+    const [selectedImage, setSelectedImage] = useState<{ file: File; previewUrl: string } | null>(null)
+    const [visionImageType, setVisionImageType] = useState<string | null>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
+    const imageInputRef = useRef<HTMLInputElement>(null)
     const hydratedServerHistoryRef = useRef('')
     const streamTextBufferRef = useRef('')
     const streamTypingTimerRef = useRef<number | null>(null)
@@ -798,12 +899,11 @@ export default function AiChatWidget() {
     }, [sessions, activeSessionId, user?._id])
 
     useEffect(() => {
-        if (!visible) return
         window.requestAnimationFrame(() => {
             const element = scrollRef.current
             if (element) element.scrollTop = element.scrollHeight
         })
-    }, [sessions, visible, loading, aiActionLoading])
+    }, [sessions, loading, aiActionLoading])
 
     useEffect(() => {
         return () => {
@@ -811,10 +911,11 @@ export default function AiChatWidget() {
                 window.clearInterval(streamTypingTimerRef.current)
                 streamTypingTimerRef.current = null
             }
+            if (selectedImage?.previewUrl) URL.revokeObjectURL(selectedImage.previewUrl)
             document.body.style.userSelect = ''
             document.body.style.touchAction = ''
         }
-    }, [])
+    }, [selectedImage?.previewUrl])
 
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout>
@@ -844,7 +945,7 @@ export default function AiChatWidget() {
                 return {
                     ...session,
                     title: session.title === 'New Chat' && safeMessage.role === 'user'
-                        ? getSessionTitle(safeMessage.content)
+                        ? getSessionTitle(safeMessage.content || safeMessage.attachments?.[0]?.name || 'Image')
                         : session.title,
                     messages: [...(Array.isArray(session.messages) ? session.messages : []), safeMessage],
                 }
@@ -970,7 +1071,6 @@ export default function AiChatWidget() {
         setActiveSessionId(newSession.sessionId)
         setQuery('')
         setErrorInfo(null)
-        setExpanded(true)
         setSessionDrawerOpen(false)
         cancelEditingSession()
     }
@@ -1013,23 +1113,6 @@ export default function AiChatWidget() {
         })
     }
 
-    const toggleWidget = () => {
-        playDoraemonClickSound()
-        if (!visible) { setVisible(true); setExpanded(true); return }
-        if (!expanded) { setExpanded(true); return }
-        setVisible(false); setExpanded(false)
-    }
-
-    const handleFloatingWidgetClick = (event: ReactMouseEvent<HTMLDivElement>) => {
-        event.stopPropagation()
-    }
-
-    const closeWidget = () => {
-        setVisible(false)
-        setExpanded(false)
-        setErrorInfo(null)
-    }
-
     const executeAiAction = (actionPayload: ReturnType<typeof parseAiActionPayload>) => {
         if (!actionPayload) return
         if (actionPayload.action === 'change_theme') {
@@ -1042,6 +1125,33 @@ export default function AiChatWidget() {
         }
     }
 
+    const clearSelectedImage = () => {
+        setSelectedImage((current) => {
+            if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl)
+            return null
+        })
+        if (imageInputRef.current) imageInputRef.current.value = ''
+    }
+
+    const handleImageFileChange = (fileList: FileList | null) => {
+        const file = fileList?.[0]
+        if (!file) return
+        if (!ACCEPTED_AI_IMAGE_TYPES.includes(file.type)) {
+            antdMessage.error('Chỉ hỗ trợ ảnh JPG, JPEG, PNG hoặc WEBP')
+            if (imageInputRef.current) imageInputRef.current.value = ''
+            return
+        }
+        if (file.size > MAX_AI_IMAGE_SIZE) {
+            antdMessage.error('Ảnh tối đa 5MB')
+            if (imageInputRef.current) imageInputRef.current.value = ''
+            return
+        }
+        setSelectedImage((current) => {
+            if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl)
+            return { file, previewUrl: URL.createObjectURL(file) }
+        })
+    }
+
     const handleRetry = async () => {
         if (!lastQuery) return
         setQuery(lastQuery)
@@ -1050,26 +1160,59 @@ export default function AiChatWidget() {
 
     const handleSend = async (messageText?: string, options: { source?: 'suggested_prompt'; modeOverride?: AiMode } = {}) => {
         const trimmed = (messageText ?? query).trim()
-        if (!trimmed) return
-        const effectiveMode = options.modeOverride || mode
-        if (options.source === 'suggested_prompt' && mode !== 'gym') setMode('gym')
+        const imageToSend = selectedImage
+        if (!trimmed && !imageToSend) return
+        const effectiveMode: AiMode = 'gym'
         const fromSuggestion = options.source === 'suggested_prompt'
+        let attachments: ChatAttachment[] = []
+        if (imageToSend) {
+            setLoading(true)
+            setErrorInfo(null)
+            try {
+                const { data } = await uploadAiChatImage(imageToSend.file)
+                const attachment = isRecord(data?.attachment) ? data.attachment : {}
+                const url = typeof attachment.url === 'string' ? attachment.url : ''
+                if (!url) throw new Error('Missing uploaded image URL')
+                attachments = [{
+                    type: 'image',
+                    url,
+                    name: typeof attachment.name === 'string' ? attachment.name : imageToSend.file.name,
+                    mimeType: typeof attachment.mimeType === 'string' ? attachment.mimeType : imageToSend.file.type,
+                    size: Number.isFinite(Number(attachment.size)) ? Number(attachment.size) : imageToSend.file.size,
+                }]
+                clearSelectedImage()
+            } catch (error: any) {
+                setLoading(false)
+                const message = error?.response?.data?.message || error?.message || 'Không thể upload ảnh'
+                setErrorInfo({ code: error?.response?.status || 500, message })
+                return
+            }
+        }
+
+        setVisionImageType(null)
+
         const userMessage: ChatMessage = {
             id: `${Date.now()}-user`,
             userId: user?._id ?? 'guest',
             role: 'user',
             content: trimmed,
             createdAt: new Date().toISOString(),
+            ...(attachments.length > 0 ? { attachments } : {}),
         }
         addMessageToSession(userMessage)
         setLastQuery(trimmed)
         if (!fromSuggestion) setQuery('')
+        if (!trimmed) {
+            setLoading(false)
+            setAiActionLoading(false)
+            return
+        }
         const conversationContext = buildConversationContext([...activeMessages, userMessage], effectiveMode, activeSession?.sessionId)
         const assistantType = 'member'
         const domain = 'gym'
         const chatMode = 'chat'
         const currentLanguage = i18n.language?.startsWith('en') ? 'en' : 'vi'
-        const tab = effectiveMode === 'gym' ? t('ai.gymTab') : t('ai.otherTab')
+        const tab = t('ai.gymTab')
         const intent = 'member_question'
         console.log('Prompt:', trimmed)
         console.log('DETECTED INTENT:', intent)
@@ -1107,6 +1250,7 @@ export default function AiChatWidget() {
             let suppressedActionText = ''
             const response = await requestAiAssistantStream(trimmed, effectiveMode, {
                 conversationContext,
+                attachments: attachments.length > 0 ? attachments : undefined,
                 requestContext: {
                     assistantType,
                     domain,
@@ -1117,6 +1261,9 @@ export default function AiChatWidget() {
                     intent,
                 },
                 onMeta: (data) => {
+                    if (data?.imageType) {
+                        setVisionImageType(data.imageType)
+                    }
                     if (data?.aiAction || data?.toolCalling) {
                         setAiActionLoading(data.status !== 'tool_complete')
                         setActiveAiTool(data.tool || '')
@@ -1253,47 +1400,12 @@ export default function AiChatWidget() {
     // ─── Layout calculations ───────────────────────────────────────────────────
     const compactChat = viewport.width <= 720
     const mobileChat = viewport.width <= 560
-    const showSessionSidebar = expanded && !compactChat
-    const sidebarWidth = sidebarCollapsed ? 64 : 240
-    const mascotButtonWidth = viewport.width >= 1024 ? 100 : viewport.width >= 768 ? 64 : 56
-    const mascotButtonHeight = mascotButtonWidth
-    const defaultChatPosition = {
-        x: Math.max(0, viewport.width - mascotButtonWidth - 24),
-        y: Math.max(0, viewport.height - mascotButtonHeight - 24),
-    }
-    const {
-        pos: draggableChatPosition,
-        onStart: startDraggingChat,
-        hasMoved: hasDraggedChat,
-    } = useDraggable(defaultChatPosition, mascotButtonWidth)
-    const panelWidth = mobileChat
-        ? '100vw'
-        : viewport.width < 1024
-            ? 'calc(100vw - 32px)'
-            : viewport.width >= 1280
-                ? 'min(1080px, 78vw)'
-                : 860
-    const panelHeight = mobileChat
-        ? '100dvh'
-        : viewport.width < 1024
-            ? 'calc(100dvh - 80px)'
-            : 'min(760px, calc(100dvh - 80px))'
-    const panelBackground = 'color-mix(in srgb, var(--theme-card) 75%, transparent)'
-    const panelBandBackground = 'color-mix(in srgb, var(--theme-bg) 60%, transparent)'
-    const panelTint = dark
-        ? 'linear-gradient(135deg, rgba(10,10,15,0.82), rgba(20,22,30,0.64))'
-        : 'linear-gradient(135deg, rgba(46,46,46,0.58), rgba(72,72,72,0.46))'
-    const panelImageFilter = dark
-        ? 'blur(12px) brightness(0.82) saturate(1.2) contrast(1.45)'
-        : 'blur(12px) brightness(0.78) saturate(1.08) contrast(1.24)'
+    const showSessionSidebar = !compactChat
+    const sidebarWidth = sidebarCollapsed ? 72 : 280
+    const panelBackground = 'var(--theme-bg)'
     const panelText = tokens.text
     const panelMutedText = tokens.muted
-    const panelBorder = '1px solid var(--theme-accent-border)'
-    const assistantBubbleBackground = '#20232c'
-    const inputBackground = 'color-mix(in srgb, var(--theme-elevated) 80%, transparent)'
-    const inputBorder = 'var(--theme-accent-border)'
-    const mascotCursor = 'pointer'
-    const panelAlignRight = draggableChatPosition.x > viewport.width / 2
+    const panelBorder = '1px solid var(--theme-border)'
     const newChatActionBackground = dark ? '#FFFFFF' : '#000000'
     const newChatActionColor = dark ? '#000000' : '#FFFFFF'
     const newChatActionBorder = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
@@ -1357,14 +1469,6 @@ export default function AiChatWidget() {
                 return next
             })
         }, 2000)
-    }
-
-    const startDraggingFromHeader = (event: ReactMouseEvent<HTMLDivElement> | ReactTouchEvent<HTMLDivElement>) => {
-        const target = event.target as HTMLElement
-        if (target.closest('button, input, textarea, select, a, [role="button"], .ant-select, .ant-dropdown-trigger, .ant-segmented, .ant-drawer, .ant-modal')) {
-            return
-        }
-        startDraggingChat(event)
     }
 
     // ─── Session list renderer (shared between sidebar & drawer) ──────────────
@@ -1449,49 +1553,27 @@ export default function AiChatWidget() {
         </>
     )
 
-    if (typeof document === 'undefined') return null
-
-    return createPortal(
+    const widgetContent = (
         <>
             <style>{`
-                .doraemon-chat-trigger {
-                    position: relative;
-                    z-index: 2;
-                    width: ${MASCOT_WIDTH}px;
-                    height: ${MASCOT_HEIGHT}px;
-                    border: 0;
-                    padding: 0;
-                    background: transparent;
-                    box-shadow: none;
-                    cursor: grab;
-                    transform: translateZ(0);
-                    transition: transform 180ms ease, filter 180ms ease;
-                    touch-action: manipulation;
-                    user-select: none;
-                    -webkit-user-select: none;
-                }
-                .ai-chat-overlay {
-                    position: fixed;
-                    inset: 0;
-                    background: transparent;
-                    z-index: 10990;
-                }
                 .ai-chat-anchor {
-                    position: fixed;
-                    z-index: 11000;
+                    width: 100%;
+                    height: 100%;
+                    min-width: 0;
                 }
                 .ai-chat-wrapper {
                     position: relative;
                     width: 100%;
                     height: 100%;
-                    overflow: visible;
+                    min-width: 0;
+                    overflow: hidden;
                 }
                 .chat-sidebar {
                     width: var(--sidebar-width);
                     transition: width 0.2s ease;
                 }
                 .chat-sidebar.collapsed {
-                    width: 64px;
+                    width: 72px;
                 }
                 .ai-chat-content {
                     display: flex;
@@ -1501,63 +1583,76 @@ export default function AiChatWidget() {
                     flex: 1;
                     min-width: 0;
                 }
-                .ai-chat-popup {
-                    position: absolute;
-                    bottom: 100%;
+                .ai-chat-page-panel,
+                .ai-chat-page-panel * {
+                    box-sizing: border-box;
+                }
+                .ai-chat-page-content {
+                    background: var(--theme-bg);
+                }
+                .ai-chat-message-scroll {
+                    background: var(--theme-bg);
+                }
+                .ai-chat-message-inner,
+                .ai-chat-composer-inner {
+                    width: min(100%, 840px);
+                    margin: 0 auto;
+                }
+                .ai-chat-composer {
+                    border-top: 1px solid transparent;
+                    background: linear-gradient(to top, var(--theme-bg) 82%, color-mix(in srgb, var(--theme-bg) 82%, transparent));
+                }
+                .ai-chat-composer-shell {
+                    display: grid;
+                    grid-template-columns: auto minmax(0, 1fr) auto;
+                    align-items: end;
+                    gap: 8px;
+                    padding: 10px 12px;
+                    border: 1px solid var(--theme-border);
+                    border-radius: 24px;
+                    background: var(--theme-card);
+                    box-shadow: 0 10px 28px rgba(0,0,0,0.08);
+                }
+                .ai-chat-composer-shell textarea {
+                    min-height: 32px !important;
+                    max-height: 180px;
+                    padding: 5px 0 !important;
+                    border: 0 !important;
+                    box-shadow: none !important;
+                    resize: none !important;
+                }
+                .ai-chat-image-preview {
+                    display: inline-grid;
+                    grid-template-columns: 92px auto;
+                    align-items: start;
+                    gap: 10px;
+                    max-width: min(100%, 360px);
+                    padding: 8px;
                     margin-bottom: 10px;
-                    z-index: 11010;
+                    border: 1px solid var(--theme-border);
+                    border-radius: 14px;
+                    background: var(--theme-card);
                 }
-                .doraemon-chat-trigger:hover,
-                .doraemon-chat-trigger.is-dragging,
-                .doraemon-chat-trigger:not(.is-active):hover {
-                    transform: translateY(-4px) scale(1.08);
-                }
-                .doraemon-chat-trigger.is-active {
-                    transform: translateZ(0);
-                }
-                .doraemon-chat-mascot,
-                .doraemon-chat-mascot svg {
-                    width: ${MASCOT_WIDTH}px;
-                    height: ${MASCOT_HEIGHT}px;
+                .ai-chat-image-preview img,
+                .ai-chat-message-image {
                     display: block;
+                    max-width: 100%;
+                    border-radius: 12px;
+                    object-fit: cover;
                 }
-                .doraemon-chat-mascot svg { overflow: visible; }
-                .mascot-body {
-                    transform-origin: 70px 105px;
-                    animation: doraemonIdle 3.2s ease-in-out infinite;
+                .ai-chat-image-preview img {
+                    width: 92px;
+                    height: 72px;
                 }
-                .mascot-right-arm {
-                    transform-origin: 96px 100px;
-                    transition: transform 180ms ease;
+                .ai-chat-message-attachments {
+                    display: grid;
+                    gap: 8px;
+                    margin-bottom: 10px;
                 }
-                .mascot-mouth-happy { opacity: 0; transition: opacity 160ms ease; }
-                .doraemon-chat-trigger:hover .mascot-right-arm,
-                .doraemon-chat-trigger.is-active .mascot-right-arm,
-                .doraemon-chat-mascot.is-active .mascot-right-arm {
-                    animation: doraemonWave 850ms ease-in-out infinite;
-                }
-                .doraemon-chat-trigger:hover .mascot-mouth-idle,
-                .doraemon-chat-trigger.is-active .mascot-mouth-idle,
-                .doraemon-chat-mascot.is-active .mascot-mouth-idle { opacity: 0; }
-                .doraemon-chat-trigger:hover .mascot-mouth-happy,
-                .doraemon-chat-trigger.is-active .mascot-mouth-happy,
-                .doraemon-chat-mascot.is-active .mascot-mouth-happy { opacity: 1; }
-                .doraemon-chat-trigger:hover .mascot-eye,
-                .doraemon-chat-trigger.is-active .mascot-eye {
-                    animation: doraemonEyeJoy 850ms ease-in-out infinite;
-                }
-                @keyframes doraemonIdle {
-                    0%, 100% { transform: rotate(-2deg) translateY(0); }
-                    50% { transform: rotate(1.5deg) translateY(-2px); }
-                }
-                @keyframes doraemonWave {
-                    0%, 100% { transform: rotate(0deg) translate(0, 0); }
-                    35% { transform: rotate(-18deg) translate(-1px, -3px); }
-                    70% { transform: rotate(10deg) translate(1px, 1px); }
-                }
-                @keyframes doraemonEyeJoy {
-                    0%, 100% { transform: translateY(0); }
-                    50% { transform: translateY(-1px); }
+                .ai-chat-message-image {
+                    max-height: 280px;
+                    width: auto;
+                    border: 1px solid var(--theme-border);
                 }
 
                 /* Drawer phien chat nam tren khung chat (11010) va duoi modal xoa (12000). */
@@ -1617,12 +1712,12 @@ export default function AiChatWidget() {
                 }
 
                 .ai-assistant-bubble {
-                    background: color-mix(in srgb, var(--theme-card) 88%, transparent);
-                    border: 1px solid var(--theme-border);
-                    box-shadow: 0 14px 36px rgba(0,0,0,0.42);
-                    border-radius: 16px;
-                    padding: 18px 20px;
-                    max-width: 76%;
+                    background: transparent;
+                    border: 0;
+                    box-shadow: none;
+                    border-radius: 0;
+                    padding: 0;
+                    max-width: 100%;
                     color: var(--theme-text);
                 }
 
@@ -1741,174 +1836,54 @@ export default function AiChatWidget() {
 
             `}</style>
 
-            {visible && <div className="ai-chat-overlay" onClick={closeWidget} />}
-
             <div
                 className="ai-chat-anchor"
                 style={{
-                    position: 'fixed',
-                    left: draggableChatPosition.x,
-                    top: draggableChatPosition.y,
-                    zIndex: 11000,
-                    width: mascotButtonWidth,
-                    height: mascotButtonHeight,
-                    maxHeight: '80vh',
+                    position: 'relative',
+                    width: '100%',
+                    height: '100%',
+                    maxHeight: 'none',
                     display: 'flex',
                     flexDirection: 'column',
                     margin: 0,
+                    minWidth: 0,
                 }}
             >
                 <div className="ai-chat-wrapper">
-                    {/* MASCOT BUTTON */}
-                    <Tooltip placement="left">
-                        <button
-                            type="button"
-                            className={`doraemon-chat-trigger ${visible ? 'is-active' : ''}`}
-                            aria-label={t('ai.ariaLabel')}
-                            style={{
-                                width: mascotButtonWidth,
-                                height: mascotButtonHeight,
-                                cursor: mascotCursor,
-                                touchAction: 'none',
-                            }}
-                            onMouseDown={startDraggingChat}
-                            onTouchStart={startDraggingChat}
-                            onClick={(event) => {
-                                event.stopPropagation()
-                                if (!hasDraggedChat.current) toggleWidget()
-                            }}
-                        >
-                            <DoraemonChatMascot width={mascotButtonWidth} height={mascotButtonHeight} />
-                        </button>
-                    </Tooltip>
-
-                    {/* CHAT PANELl */}
                     <div
-                        className="ai-chat-panel ai-chat-modal ai-chat-popup"
-                        onClick={handleFloatingWidgetClick}
+                        className="ai-chat-panel ai-chat-surface ai-chat-page-panel"
                         style={{
-                            position: mobileChat ? 'fixed' : undefined,
-                            left: mobileChat ? 0 : panelAlignRight ? 'auto' : 0,
-                            right: mobileChat ? 'auto' : panelAlignRight ? 0 : 'auto',
-                            top: mobileChat ? 0 : undefined,
-                            bottom: mobileChat ? 'auto' : undefined,
-                            width: panelWidth,
-                            maxWidth: mobileChat ? '100vw' : viewport.width < 1024 ? 'calc(100vw - 32px)' : 'calc(100vw - 48px)',
-                            height: panelHeight,
-                            maxHeight: mobileChat ? '100dvh' : viewport.width < 1024 ? 'calc(100dvh - 80px)' : 'calc(100dvh - 48px)',
-                            zIndex: 11010,
-                            // Chat panel must float above the member header/menu.
-                            borderRadius: mobileChat ? 0 : 16,
+                            position: 'relative',
+                            left: 0,
+                            top: 0,
+                            width: '100%',
+                            maxWidth: '100%',
+                            height: '100%',
+                            maxHeight: 'none',
+                            zIndex: 'auto',
+                            borderRadius: 0,
                             background: panelBackground,
                             color: 'var(--theme-text)',
-                            border: panelBorder,
-                            boxShadow: visible
-                                ? '0 28px 100px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.08)'
-                                : '0 24px 80px rgba(0,0,0,0.18)',
-                            transform: visible ? 'scale(1)' : 'scale(0.75)',
-                            opacity: visible ? 1 : 0,
-                            visibility: visible ? 'visible' : 'hidden',
-                            transition: 'all 220ms ease',
+                            border: 0,
+                            boxShadow: 'none',
+                            transform: 'none',
+                            opacity: 1,
+                            visibility: 'visible',
+                            transition: 'none',
                             overflow: 'hidden',
                             isolation: 'isolate',
                             display: 'flex',
                             flexDirection: 'column',
-                            backdropFilter: 'blur(20px)',
-                            WebkitBackdropFilter: 'blur(20px)',
+                            backdropFilter: 'none',
+                            WebkitBackdropFilter: 'none',
                             cursor: 'default',
                             userSelect: 'text',
                             WebkitUserSelect: 'text',
                         }}
                     >
-                        {CHAT_PANEL_BACKGROUND_IMAGE && (
-                            <img
-                                className="ai-chat-panel-bg-image"
-                                src={CHAT_PANEL_BACKGROUND_IMAGE}
-                                alt=""
-                                aria-hidden="true"
-                                style={{
-                                    position: 'absolute',
-                                    inset: -18,
-                                    width: 'calc(100% + 36px)',
-                                    height: 'calc(100% + 36px)',
-                                    objectFit: 'cover',
-                                    transform: 'scale(1.03)',
-                                    zIndex: 0,
-                                    pointerEvents: 'none',
-                                    filter: panelImageFilter,
-                                    opacity: dark ? 0.72 : 0.76,
-                                }}
-                            />
-                        )}
-                        <div style={{
-                            position: 'absolute',
-                            inset: 0,
-                            zIndex: 0,
-                            pointerEvents: 'none',
-                            background: panelTint,
-                        }} />
-
-                        {/* Panel content */}
                         <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
-                            {/* HEADER */}
-                            <div
-                                onMouseDown={startDraggingFromHeader}
-                                onTouchStart={startDraggingFromHeader}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    gap: 12,
-                                    padding: mobileChat ? '12px 14px' : '16px 18px',
-                                    background: 'var(--theme-button-bg)',
-                                    backdropFilter: 'blur(10px)',
-                                    WebkitBackdropFilter: 'blur(10px)',
-                                    color: 'var(--theme-button-text)',
-                                    flexShrink: 0,
-                                    cursor: 'grab',
-                                    userSelect: 'none',
-                                    WebkitUserSelect: 'none',
-                                    touchAction: 'none',
-                                }}>
-                                <div style={{ minWidth: 0 }}>
-                                    <Typography.Title level={5} style={{ margin: 0, color: 'var(--theme-button-text)', fontSize: mobileChat ? 14 : 16 }}>
-                                        {t('ai.chatTitle')}
-                                    </Typography.Title>
-
-                                </div>
-                                <Space
-                                    size={mobileChat ? 2 : 8}
-                                    style={{ flexShrink: 0 }}
-                                >
-                                    {/* FIX: Nút "Phiên" chỉ hiện trên mobile/tablet, mở drawer với z-index cao */}
-                                    {compactChat && (
-                                        <Button
-                                            size="small"
-                                            type="text"
-                                            style={{ color: 'var(--theme-button-text)', fontWeight: 600 }}
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                setSessionDrawerOpen(true)
-                                            }}
-                                        >
-                                            {t('ai.sessions', { count: sessions.length })}
-                                        </Button>
-                                    )}
-                                    {!compactChat && (
-                                        <Button
-                                            size="small"
-                                            type="text"
-                                            icon={<ExpandAltOutlined />}
-                                            style={{ color: 'var(--theme-button-text)' }}
-                                            onClick={() => setExpanded(!expanded)}
-                                        />
-                                    )}
-                                    <Button size="small" type="text" icon={<CloseOutlined />} style={{ color: 'var(--theme-button-text)' }} onClick={closeWidget} />
-                                </Space>
-                            </div>
-
-                            <div className="ai-chat-content" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+                            <div className="ai-chat-content ai-chat-page-content" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
                                 {/* SIDEBAR (desktop only) */}
                                 {showSessionSidebar && (
@@ -1917,9 +1892,9 @@ export default function AiChatWidget() {
                                         width: sidebarWidth,
                                         minWidth: sidebarWidth,
                                         borderRight: panelBorder,
-                                        background: panelBandBackground,
-                                        backdropFilter: 'blur(12px)',
-                                        WebkitBackdropFilter: 'blur(12px)',
+                                        background: 'color-mix(in srgb, var(--theme-card) 58%, var(--theme-bg))',
+                                        backdropFilter: 'none',
+                                        WebkitBackdropFilter: 'none',
                                         display: 'flex',
                                         flexDirection: 'column',
                                         overflow: 'hidden',
@@ -1927,24 +1902,63 @@ export default function AiChatWidget() {
                                     } as CSSProperties}>
                                         <div
                                             style={{
-                                                padding: sidebarCollapsed ? '10px 8px' : '12px 14px',
+                                                padding: sidebarCollapsed ? '10px 8px' : '12px 16px 10px',
                                                 borderBottom: panelBorder,
                                                 display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: sidebarCollapsed ? 'center' : 'space-between',
-                                                gap: 8,
+                                                flexDirection: 'column',
+                                                gap: sidebarCollapsed ? 0 : 8,
+                                                flexShrink: 0,
                                             }}
                                         >
-                                            {!sidebarCollapsed && <Typography.Text strong style={{ color: panelText }}>{t('ai.sessionSidebarTitle')}</Typography.Text>}
-                                            <Space size={4}>
-                                                <Button
-                                                    size="small"
-                                                    type="text"
-                                                    icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                                                    onClick={() => setSidebarCollapsed((value) => !value)}
-                                                    style={{ color: panelText }}
-                                                />
-                                                {!sidebarCollapsed && (
+                                            {!sidebarCollapsed ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <Button
+                                                        size="small"
+                                                        type="text"
+                                                        block
+                                                        className="ai-new-chat-action-button focus:ring-2 focus:ring-offset-2"
+                                                        icon={<PlusOutlined />}
+                                                        style={{
+                                                            height: 36,
+                                                            color: newChatActionColor,
+                                                            background: newChatActionBackground,
+                                                            border: `1px solid ${newChatActionBorder}`,
+                                                            borderRadius: 9,
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            boxShadow: 'none',
+                                                            transition: 'background 160ms ease, transform 160ms ease, box-shadow 160ms ease',
+                                                            gap: 6,
+                                                            fontSize: 13,
+                                                            fontWeight: 500,
+                                                            paddingInline: 12,
+                                                        }}
+                                                        onMouseEnter={(event) => applyNewChatActionHover(event.currentTarget, true)}
+                                                        onMouseLeave={(event) => applyNewChatActionHover(event.currentTarget, false)}
+                                                        onFocus={(event) => applyNewChatActionFocus(event.currentTarget, true)}
+                                                        onBlur={(event) => applyNewChatActionFocus(event.currentTarget, false)}
+                                                        onClick={createNewChat}
+                                                    >
+                                                        {t('ai.newChat') || 'New Chat'}
+                                                    </Button>
+                                                    <Button
+                                                        size="small"
+                                                        type="text"
+                                                        icon={<MenuFoldOutlined />}
+                                                        onClick={() => setSidebarCollapsed((value) => !value)}
+                                                        style={{ color: panelText, flexShrink: 0, width: 36, height: 36 }}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                                                    <Button
+                                                        size="small"
+                                                        type="text"
+                                                        icon={<MenuUnfoldOutlined />}
+                                                        onClick={() => setSidebarCollapsed((value) => !value)}
+                                                        style={{ color: panelText, width: 36, height: 36 }}
+                                                    />
                                                     <Button
                                                         size="small"
                                                         type="text"
@@ -1957,25 +1971,9 @@ export default function AiChatWidget() {
                                                         onBlur={(event) => applyNewChatActionFocus(event.currentTarget, false)}
                                                         onClick={createNewChat}
                                                     />
-                                                )}
-                                            </Space>
+                                                </div>
+                                            )}
                                         </div>
-                                        {sidebarCollapsed && (
-                                            <div style={{ display: 'grid', placeItems: 'center', padding: '10px 0', borderBottom: panelBorder }}>
-                                                <Button
-                                                    size="small"
-                                                    type="text"
-                                                    className="ai-new-chat-action-button focus:ring-2 focus:ring-offset-2"
-                                                    icon={<PlusOutlined />}
-                                                    style={newChatActionButtonStyle}
-                                                    onMouseEnter={(event) => applyNewChatActionHover(event.currentTarget, true)}
-                                                    onMouseLeave={(event) => applyNewChatActionHover(event.currentTarget, false)}
-                                                    onFocus={(event) => applyNewChatActionFocus(event.currentTarget, true)}
-                                                    onBlur={(event) => applyNewChatActionFocus(event.currentTarget, false)}
-                                                    onClick={createNewChat}
-                                                />
-                                            </div>
-                                        )}
                                         <div style={{ flex: 1, overflowY: 'auto' }}>
                                             {sessions.map((session) => {
                                                 const isActive = session.sessionId === activeSession?.sessionId
@@ -2086,6 +2084,14 @@ export default function AiChatWidget() {
                                         flexShrink: 0,
                                         flexWrap: 'wrap',
                                     }}>
+                                        {!showSessionSidebar && (
+                                            <Button
+                                                type="text"
+                                                icon={<MenuUnfoldOutlined />}
+                                                onClick={() => setSessionDrawerOpen(true)}
+                                                style={{ color: panelText, width: 36, height: 36, flexShrink: 0 }}
+                                            />
+                                        )}
                                         <div style={{ minWidth: 0, flex: 1 }}>
                                             <Typography.Text strong style={{ color: panelText, fontSize: mobileChat ? 13 : 14, display: 'block' }}>
                                                 {activeSession?.title || t('ai.defaultSessionTitle')}
@@ -2096,25 +2102,7 @@ export default function AiChatWidget() {
                                                     : t('ai.newChatEmpty')}
                                             </Typography.Text>
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                            <Segmented
-                                                value={mode}
-                                                onChange={(value) => setMode(value as AiMode)}
-                                                options={[
-                                                    { label: t('ai.gymTab'), value: 'gym' },
-                                                    { label: t('ai.otherTab'), value: 'general' },
-                                                ]}
-                                                size="small"
-                                            />
-                                            {!showSessionSidebar && !compactChat && (
-                                                <Select
-                                                    value={activeSession?.sessionId}
-                                                    onChange={selectSession}
-                                                    style={{ width: 140 }}
-                                                    options={sessions.map((s) => ({ label: s.title, value: s.sessionId }))}
-                                                />
-                                            )}
-                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}></div>
                                     </div>
 
                                     {/* MESSAGES */}
@@ -2126,9 +2114,9 @@ export default function AiChatWidget() {
                                             padding: mobileChat ? 10 : 16,
                                             paddingBottom: mobileChat ? 128 : 96,
                                             scrollPaddingBottom: mobileChat ? 128 : 96,
-                                            background: panelBandBackground,
-                                            backdropFilter: 'blur(12px)',
-                                            WebkitBackdropFilter: 'blur(12px)',
+                                            background: panelBackground,
+                                            backdropFilter: 'none',
+                                            WebkitBackdropFilter: 'none',
                                             cursor: 'text',
                                             pointerEvents: 'auto',
                                             userSelect: 'text',
@@ -2136,7 +2124,7 @@ export default function AiChatWidget() {
                                         }}
                                     >
                                         {activeMessages.length === 0 ? (
-                                            <div style={{ display: 'grid', gap: 16, margin: mobileChat ? '8px 0' : '14px 0' }}>
+                                            <div className="ai-chat-message-inner" style={{ display: 'grid', gap: 16, margin: mobileChat ? '24px auto' : '42px auto' }}>
                                                 <div style={{ textAlign: 'center', display: 'grid', gap: 6 }}>
                                                     <Typography.Text strong style={{ color: panelText, fontSize: mobileChat ? 15 : 16 }}>
                                                         {t('ai.startTitle')}
@@ -2145,6 +2133,9 @@ export default function AiChatWidget() {
                                                         {t('ai.startDescription')}
                                                     </Typography.Text>
                                                 </div>
+                                                <Typography.Text style={{ color: panelMutedText, fontSize: 13, textAlign: 'center', display: 'block' }}>
+                                                    {t('ai.startHint') || 'Bạn có thể hỏi hoặc gửi ảnh để tôi phân tích.'}
+                                                </Typography.Text>
                                                 <div
                                                     style={{
                                                         display: 'grid',
@@ -2199,7 +2190,7 @@ export default function AiChatWidget() {
                                             activeMessages.map((message, index) => {
                                                 const isUser = message.role === 'user'
                                                 const messageContent = normalizeChatContent(message.content)
-                                                const bubbleBg = isUser ? 'var(--theme-accent)' : assistantBubbleBackground
+                                                const bubbleBg = isUser ? 'var(--theme-accent)' : 'transparent'
                                                 const bubbleColor = isUser
                                                     ? 'var(--theme-button-text)'
                                                     : (dark ? '#ffffff' : '#111827')
@@ -2226,6 +2217,7 @@ export default function AiChatWidget() {
                                                         : sourceCards.length > 0
                                                             ? stripWebSourceSection(messageContent)
                                                             : safeAssistantContent
+                                                const messageAttachments = normalizeChatAttachments(message.attachments)
                                                 const messageSuggestions = !isUser && message.role === 'assistant' && index === lastAssistantMessageIndex
                                                     ? normalizeSuggestions(message.suggestions)
                                                         .filter((suggestion) => normalizeCommandText(suggestion) !== latestUserPromptNormalized)
@@ -2240,7 +2232,8 @@ export default function AiChatWidget() {
                                                             flexDirection: 'column',
                                                             alignItems: isUser ? 'flex-end' : 'flex-start',
                                                             justifyContent: isUser ? 'flex-end' : 'flex-start',
-                                                            marginBottom: 10,
+                                                            width: 'min(100%, 840px)',
+                                                            margin: '0 auto 22px',
                                                         }}
                                                     >
                                                         <div className={isUser ? '' : 'ai-assistant-bubble'} style={{
@@ -2258,8 +2251,8 @@ export default function AiChatWidget() {
                                                             border: isUser
                                                                 ? 'none'
                                                                 : undefined,
-                                                            backdropFilter: isUser ? undefined : 'blur(10px)',
-                                                            WebkitBackdropFilter: isUser ? undefined : 'blur(10px)',
+                                                            backdropFilter: 'none',
+                                                            WebkitBackdropFilter: 'none',
                                                             boxShadow: isUser
                                                                 ? '0 4px 14px rgba(0,0,0,0.08)'
                                                                 : undefined,
@@ -2273,9 +2266,28 @@ export default function AiChatWidget() {
                                                             WebkitUserSelect: 'text',
                                                         }}>
                                                             {message.role === 'assistant' && (
-                                                                <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                                    <Avatar size={22} style={{ backgroundColor: '#0aa7e6' }} icon={<DoraemonMiniAvatar />} />
-                                                                    <Typography.Text strong style={{ color: bubbleColor }}>Doraemon</Typography.Text>
+                                                                <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                    <AiAssistantAvatar size={24} />
+                                                                    <Typography.Text strong style={{ color: bubbleColor }}>AI GymPro</Typography.Text>
+                                                                </div>
+                                                            )}
+                                                            {messageAttachments.length > 0 && (
+                                                                <div className="ai-chat-message-attachments">
+                                                                    {messageAttachments.map((attachment) => (
+                                                                        <a
+                                                                            key={attachment.url}
+                                                                            href={attachment.url}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            onClick={(event) => event.stopPropagation()}
+                                                                        >
+                                                                            <img
+                                                                                className="ai-chat-message-image"
+                                                                                src={attachment.url}
+                                                                                alt={attachment.name || 'Uploaded image'}
+                                                                            />
+                                                                        </a>
+                                                                    ))}
                                                                 </div>
                                                             )}
                                                             <div className="ai-chat-message-content">
@@ -2308,8 +2320,22 @@ export default function AiChatWidget() {
                                                                                                 textDecoration: 'none',
                                                                                             }}
                                                                                         >
-                                                                                            <img src={String(item?.image || AI_AVATAR_IMAGE)} alt={name}
-                                                                                                style={{ width: 54, height: 54, borderRadius: 10, objectFit: 'cover' }} />
+                                                                                            {item?.image ? (
+                                                                                                <img src={String(item.image)} alt={name}
+                                                                                                    style={{ width: 54, height: 54, borderRadius: 10, objectFit: 'cover' }} />
+                                                                                            ) : (
+                                                                                                <div style={{
+                                                                                                    width: 54,
+                                                                                                    height: 54,
+                                                                                                    borderRadius: 10,
+                                                                                                    display: 'grid',
+                                                                                                    placeItems: 'center',
+                                                                                                    background: 'var(--theme-accent-muted)',
+                                                                                                    color: 'var(--theme-accent)',
+                                                                                                }}>
+                                                                                                    <RobotOutlined />
+                                                                                                </div>
+                                                                                            )}
                                                                                             <div style={{ minWidth: 0 }}>
                                                                                                 <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
                                                                                                     {name}
@@ -2390,12 +2416,15 @@ export default function AiChatWidget() {
                                                                                 })}
                                                                             </div>
                                                                         )}
-                                                                        {!toolPayload && isUser && (
-                                                                            visibleContent
-                                                                                ? renderMarkdownText(visibleContent, bubbleColor)
-                                                                                : <Typography.Text style={{ color: panelMutedText }}>{t('ai.loading')}</Typography.Text>
+                                                                        {message.data?.inBodyAnalysis && !isUser && (
+                                                                            <InBodyAnalysisCard
+                                                                                result={message.data.inBodyAnalysis as InBodyAnalysisResult}
+                                                                            />
                                                                         )}
-                                                                        {!toolPayload && !isUser && (
+                                                                        {!message.data?.inBodyAnalysis && !toolPayload && isUser && (
+                                                                            visibleContent ? renderMarkdownText(visibleContent, bubbleColor) : null
+                                                                        )}
+                                                                        {!message.data?.inBodyAnalysis && !toolPayload && !isUser && (
                                                                             <AssistantMessageBubble message={message} content={visibleContent} />
                                                                         )}
                                                                         {!toolPayload && !actionPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark, t)}
@@ -2472,7 +2501,7 @@ export default function AiChatWidget() {
                                                     <Typography.Text style={{ color: 'var(--theme-muted)', fontSize: 12 }}>
                                                         {loadingPhase === 'reasoning'
                                                             ? 'Đang suy luận câu trả lời phù hợp...'
-                                                            : 'Doraemon đang xem dữ liệu GymPro...'}
+                                                            : 'AI GymPro đang đọc dữ liệu hệ thống...'}
                                                         {activeAiTool ? `: ${activeAiTool}` : ''}
                                                     </Typography.Text>
                                                 </div>
@@ -2481,14 +2510,32 @@ export default function AiChatWidget() {
                                     </div>
 
                                     {/* INPUT */}
-                                    <div style={{
-                                        borderTop: panelBorder,
-                                        padding: mobileChat ? '10px 12px' : '14px 16px',
-                                        background: panelBackground,
-                                        backdropFilter: 'blur(12px)',
-                                        WebkitBackdropFilter: 'blur(12px)',
+                                    <div className="ai-chat-composer" style={{
+                                        padding: mobileChat ? '10px 12px 14px' : '14px 24px 18px',
                                         flexShrink: 0,
                                     }}>
+                                        <div className="ai-chat-composer-inner">
+                                        {visionImageType && selectedImage && (
+                                            <div style={{
+                                                marginBottom: 10,
+                                                padding: '8px 14px',
+                                                borderRadius: 14,
+                                                background: 'color-mix(in srgb, var(--theme-accent) 10%, transparent)',
+                                                border: '1px solid color-mix(in srgb, var(--theme-accent) 24%, transparent)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                gap: 10,
+                                            }}>
+                                                <Typography.Text style={{ color: 'var(--theme-accent)', fontSize: 13, fontWeight: 600 }}>
+                                                    📷{' '}
+                                                    {visionImageType === 'inbody' ? (t('ai.analyzingInBody') || 'Đang phân tích InBody...') :
+                                                     visionImageType === 'food' ? (t('ai.analyzingFood') || 'Đang phân tích bữa ăn...') :
+                                                     visionImageType === 'exercise' ? (t('ai.analyzingExercise') || 'Đang phân tích bài tập...') :
+                                                     (t('ai.analyzingImage') || 'Đang phân tích ảnh...')}
+                                                </Typography.Text>
+                                            </div>
+                                        )}
                                         {errorInfo && (
                                             <div style={{
                                                 marginBottom: 10,
@@ -2512,57 +2559,76 @@ export default function AiChatWidget() {
                                                 </Button>
                                             </div>
                                         )}
-                                        <Input.TextArea
-                                            value={query}
-                                            onChange={(e) => setQuery(e.target.value)}
-                                            onPressEnter={(e) => {
-                                                if (!e.shiftKey) { e.preventDefault(); handleSend() }
-                                            }}
-                                            placeholder={t('ai.inputPlaceholder')}
-                                            rows={mobileChat ? 2 : 3}
-                                            disabled={loading}
-                                            style={{
-                                                borderRadius: 14,
-                                                marginBottom: 10,
-                                                background: inputBackground,
-                                                border: `1px solid ${inputBorder}`,
-                                                backdropFilter: 'blur(8px)',
-                                                WebkitBackdropFilter: 'blur(8px)',
-                                                color: panelText,
-                                                fontSize: mobileChat ? 14 : 15,
-                                            }}
+                                        {selectedImage && (
+                                            <div className="ai-chat-image-preview">
+                                                <img src={selectedImage.previewUrl} alt={selectedImage.file.name} />
+                                                <div style={{ minWidth: 0, display: 'grid', gap: 6 }}>
+                                                    <Typography.Text strong ellipsis style={{ color: panelText, fontSize: 13 }}>
+                                                        {selectedImage.file.name}
+                                                    </Typography.Text>
+                                                    <Typography.Text style={{ color: panelMutedText, fontSize: 12 }}>
+                                                        {(selectedImage.file.size / 1024 / 1024).toFixed(2)} MB
+                                                    </Typography.Text>
+                                                    <Button
+                                                        size="small"
+                                                        type="text"
+                                                        onClick={clearSelectedImage}
+                                                        style={{ justifySelf: 'start', color: panelMutedText, paddingInline: 0 }}
+                                                    >
+                                                        {t('ai.removeImage') || 'Remove'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <input
+                                            ref={imageInputRef}
+                                            type="file"
+                                            accept="image/jpeg,image/jpg,image/png,image/webp"
+                                            style={{ display: 'none' }}
+                                            onChange={(event) => handleImageFileChange(event.target.files)}
                                         />
-                                        <div style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                            flexWrap: 'wrap',
-                                        }}>
-                                            {!mobileChat && (
-                                                <Typography.Text style={{ fontSize: 12, color: panelMutedText }}>
-                                                    {t('ai.enterToSend')} · {t('ai.shiftEnterNewLine')}
-                                                </Typography.Text>
-                                            )}
-                                            <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                                        <div className="ai-chat-composer-shell">
+                                            <Tooltip title={t('ai.attach') || 'Attach'}>
                                                 <Button
                                                     type="text"
-                                                    size={mobileChat ? 'small' : 'middle'}
-                                                    onClick={createNewChat}
-                                                    style={{ color: panelText }}
-                                                >
-                                                {t('ai.newButton')}
-                                            </Button>
+                                                    icon={<PaperClipOutlined />}
+                                                    onClick={() => imageInputRef.current?.click()}
+                                                    disabled={loading}
+                                                    style={{ color: panelMutedText, width: 36, height: 36, minWidth: 36 }}
+                                                />
+                                            </Tooltip>
+                                            <Input.TextArea
+                                                value={query}
+                                                onChange={(e) => setQuery(e.target.value)}
+                                                onPressEnter={(e) => {
+                                                    if (!e.shiftKey) { e.preventDefault(); handleSend() }
+                                                }}
+                                                placeholder={selectedImage ? (t('ai.imageAttachedPlaceholder') || 'Thêm ghi chú (không bắt buộc)') : t('ai.inputPlaceholder')}
+                                                autoSize={{ minRows: 1, maxRows: mobileChat ? 4 : 6 }}
+                                                disabled={loading}
+                                                style={{
+                                                    background: 'transparent',
+                                                    color: panelText,
+                                                    fontSize: mobileChat ? 15 : 16,
+                                                    lineHeight: 1.55,
+                                                }}
+                                            />
+                                            <Tooltip title={t('ai.send')}>
                                                 <Button
                                                     icon={<SendOutlined />}
-                                                    size={mobileChat ? 'small' : 'middle'}
                                                     onClick={() => handleSend()}
                                                     loading={loading}
-                                                    style={{ background: 'var(--theme-button-bg)', color: 'var(--theme-button-text)', border: 'none' }}
-                                                >
-                                                    {t('ai.send')}
-                                                </Button>
-                                            </div>
+                                                    disabled={!query.trim() && !selectedImage}
+                                                    shape="circle"
+                                                    style={{ background: 'var(--theme-button-bg)', color: 'var(--theme-button-text)', border: 'none', width: 38, height: 38, minWidth: 38 }}
+                                                />
+                                            </Tooltip>
+                                        </div>
+                                        {!mobileChat && (
+                                            <Typography.Text style={{ display: 'block', marginTop: 8, textAlign: 'center', fontSize: 12, color: panelMutedText }}>
+                                                {t('ai.enterToSend')} · {t('ai.shiftEnterNewLine')}
+                                            </Typography.Text>
+                                        )}
                                         </div>
                                     </div>
                                 </div>
@@ -2625,11 +2691,44 @@ export default function AiChatWidget() {
                     },
                 }}
             >
+                <div style={{ padding: '12px 16px 10px', borderBottom: '1px solid var(--theme-border)', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+                    <Button
+                        size="small"
+                        type="text"
+                        block
+                        className="ai-new-chat-action-button focus:ring-2 focus:ring-offset-2"
+                        icon={<PlusOutlined />}
+                        style={{
+                            height: 36,
+                            color: newChatActionColor,
+                            background: newChatActionBackground,
+                            border: `1px solid ${newChatActionBorder}`,
+                            borderRadius: 9,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: 'none',
+                            transition: 'background 160ms ease, transform 160ms ease, box-shadow 160ms ease',
+                            gap: 6,
+                            fontSize: 13,
+                            fontWeight: 500,
+                            paddingInline: 12,
+                        }}
+                        onMouseEnter={(event) => applyNewChatActionHover(event.currentTarget, true)}
+                        onMouseLeave={(event) => applyNewChatActionHover(event.currentTarget, false)}
+                        onFocus={(event) => applyNewChatActionFocus(event.currentTarget, true)}
+                        onBlur={(event) => applyNewChatActionFocus(event.currentTarget, false)}
+                        onClick={() => { createNewChat(); setSessionDrawerOpen(false) }}
+                    >
+                        {t('ai.newChat') || 'New Chat'}
+                    </Button>
+                </div>
                 {renderSessionList()}
             </Drawer>
-        </>,
-        document.body,
+        </>
     )
+
+    return widgetContent
 }
 
 

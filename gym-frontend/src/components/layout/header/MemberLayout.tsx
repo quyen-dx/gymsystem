@@ -498,7 +498,7 @@ export default function MemberLayout({
 
       </Drawer>
 
-      {!menuOpen && settings.ai.floatingChatbotEnabled && <AiChatWidget />}
+      {!menuOpen && settings.ai.floatingChatbotEnabled && location.pathname !== '/ai-chat' && <AiChatWidget />}
     </Layout >
   )
 }

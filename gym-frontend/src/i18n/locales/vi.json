@@ -1767,10 +1767,10 @@
   },
   "chat": {
     "mode_general": "Khác",
-    "header_title": "Hỏi Doraemon",
+    "header_title": "AI GymPro",
     "badge_gym_assistant": "Gym Assistant",
     "badge_ai_action": "AI Action",
-    "header_subtitle": "Chồn đến từ thế kỉ 22",
+    "header_subtitle": "Trợ lý AI của hệ thống GymPro",
     "session_button": "Phiên ({{count}})",
     "session_sidebar_title": "Phiên chat",
     "session_drawer_title": "Phiên chat",
@@ -1819,7 +1819,7 @@
     "action_processed": "Mình đã xử lý xong yêu cầu của bạn."
   },
   "ai": {
-    "chatTitle": "Hỏi Doraemon",
+    "chatTitle": "AI GymPro",
     "sessions": "Phiên ({{count}})",
     "sessionSidebarTitle": "Phiên chat",
     "sessionDrawerTitle": "Phiên chat",
@@ -1828,8 +1828,11 @@
     "newChat": "Mới",
     "startTitle": "Tôi có thể giúp gì cho bạn hôm nay?",
     "startDescription": "Trợ lý AI dành cho hội viên GymPro. Hỏi về lịch tập, gói tập, sức khỏe và tiến độ tập luyện của bạn.",
+    "startHint": "Bạn có thể hỏi hoặc gửi ảnh để tôi phân tích.",
     "inputPlaceholder": "Nhập câu hỏi...",
     "send": "Gửi",
+    "attach": "Đính kèm",
+    "removeImage": "Xóa ảnh",
     "newButton": "Mới",
     "enterToSend": "Enter để gửi",
     "shiftEnterNewLine": "Shift+Enter xuống dòng",
@@ -1849,6 +1852,7 @@
     "deleteModalTitle": "Xóa cuộc trò chuyện",
     "deleteModalContent": "Bạn có chắc muốn xóa cuộc trò chuyện này không?",
     "defaultSessionTitle": "New Chat",
+    "askAI": "Hỏi AI",
     "ariaLabel": "Chat với AI",
     "sourceWeb": "Nguồn web",
     "ptFallback": "Huấn luyện viên",
@@ -1885,7 +1889,16 @@
       "next30DaysGoal": "Gợi ý mục tiêu tập luyện cho tôi"
     },
     "copy": "Sao chép",
-    "copied": "Đã sao chép"
+    "copied": "Đã sao chép",
+    "analyzeBody": "Phân tích cơ thể",
+    "analyzeInBody": "Đọc phiếu InBody",
+    "analyzeBodyPlaceholder": "Phân tích cơ thể của tôi",
+    "analyzeInBodyPlaceholder": "Đọc chỉ số InBody của tôi",
+    "analyzingInBody": "Đang phân tích InBody...",
+    "analyzingFood": "Đang phân tích bữa ăn...",
+    "analyzingExercise": "Đang phân tích bài tập...",
+    "analyzingImage": "Đang phân tích ảnh...",
+    "imageAttachedPlaceholder": "Thêm ghi chú (không bắt buộc)"
   },
   "auth": {
     "phoneAlreadyExists": "Số điện thoại đã được sử dụng",

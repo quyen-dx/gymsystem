@@ -2,7 +2,7 @@ import axios from 'axios'
 import api from './api'
 import { clearAuthSession, getAuthToken, refreshAccessToken } from './api'
 import { API_URL } from '../config/env'
-import type { ConversationContext } from '../types/aichat/aichat'
+import type { ChatAttachment, ConversationContext } from '../types/aichat/aichat'
 
 const aiCache = new Map<string, any>()
 const AI_CACHE_VERSION = 'tool-v10-member-orchestration'
@@ -78,6 +78,7 @@ type RequestAiAssistantStreamOptions = {
     onFallback?: (data: any) => void
     signal?: AbortSignal
     conversationContext?: ConversationContext
+    attachments?: ChatAttachment[]
     requestContext?: Record<string, string>
 }
 
@@ -202,6 +203,7 @@ export const requestAiAssistantStream = async (
             language: getRequestLanguage(options.requestContext),
             conversationContext: options.conversationContext,
             requestContext: options.requestContext,
+            ...(options.attachments ? { attachments: options.attachments } : {}),
         }),
         signal: options.signal,
     })
@@ -329,6 +331,73 @@ export const renameAiChatSession = (sessionId: string, title: string) =>
 
 export const deleteAiChatSession = (sessionId: string) =>
     api.delete(`/ai-assistant/session/${sessionId}`)
+
+export const uploadAiChatImage = (file: File) => {
+    const formData = new FormData()
+    formData.append('image', file)
+    return api.post('/ai-assistant/upload-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000,
+    })
+}
+
+export type GymRecommendation = {
+    goal: string
+    recommendedPlan: { name: string; reason: string } | null
+    recommendedPT: { name: string; reason: string } | null
+    roadmap: string
+}
+
+export type BodyAnalysisResult = {
+    bodyType: string
+    estimatedCondition: string
+    strengths: string[]
+    improvements: string[]
+    recommendedGoal: string
+    explanation: string
+    recommendations?: GymRecommendation
+}
+
+export const analyzeBodyImages = async (
+    attachments: ChatAttachment[],
+    language = 'vi',
+): Promise<BodyAnalysisResult> => {
+    const { data } = await api.post('/ai-assistant/analyze-body', { attachments, language })
+    if (data?.result && typeof data.result === 'object') {
+        return data.result as BodyAnalysisResult
+    }
+    throw new Error('Invalid body analysis response')
+}
+
+export type InBodyMetrics = {
+    weight: string | null
+    bodyFatPercent: string | null
+    skeletalMuscle: string | null
+    bmi: string | null
+    visceralFat: string | null
+}
+
+export type InBodyAnalysisResult = {
+    unreadable: boolean
+    message?: string
+    metrics?: InBodyMetrics
+    interpretation?: string
+    assessment?: string
+    recommendation?: 'giảm mỡ' | 'tăng cơ' | 'duy trì'
+    explanation?: string
+    recommendations?: GymRecommendation
+}
+
+export const analyzeInBodyImages = async (
+    attachments: ChatAttachment[],
+    language = 'vi',
+): Promise<InBodyAnalysisResult> => {
+    const { data } = await api.post('/ai-assistant/analyze-inbody', { attachments, language })
+    if (data?.result && typeof data.result === 'object') {
+        return data.result as InBodyAnalysisResult
+    }
+    throw new Error('Invalid InBody analysis response')
+}
 
 export type ActivePlanInfo = {
   name: string

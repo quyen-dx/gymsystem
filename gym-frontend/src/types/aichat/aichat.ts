@@ -82,6 +82,15 @@ export type ChatMessage = {
     metadata?: Record<string, unknown>
     planPayload?: PlanPayload
     plans?: PlanPayloadPlan[]
+    attachments?: ChatAttachment[]
+}
+
+export type ChatAttachment = {
+    type: 'image'
+    url: string
+    name?: string
+    mimeType?: string
+    size?: number
 }
 
 export type ConversationContext = {

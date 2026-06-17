@@ -1764,10 +1764,10 @@
   },
   "chat": {
     "mode_general": "Other",
-    "header_title": "Ask Doraemon",
+    "header_title": "AI GymPro",
     "badge_gym_assistant": "Gym Assistant",
     "badge_ai_action": "AI Action",
-    "header_subtitle": "Doraemon from the 22nd century",
+    "header_subtitle": "GymPro system AI assistant",
     "session_button": "Sessions ({{count}})",
     "session_sidebar_title": "Sessions",
     "session_drawer_title": "Sessions",
@@ -1816,7 +1816,7 @@
     "action_processed": "I've processed your request successfully."
   },
   "ai": {
-    "chatTitle": "Ask Doraemon",
+    "chatTitle": "AI GymPro",
     "sessions": "Sessions ({{count}})",
     "sessionSidebarTitle": "Sessions",
     "sessionDrawerTitle": "Sessions",
@@ -1825,8 +1825,11 @@
     "newChat": "New",
     "startTitle": "How can I help you today?",
     "startDescription": "GymPro AI Assistant for members. Ask about your workouts, membership plan, health metrics, and training progress.",
+    "startHint": "Ask or send an image and I'll analyze it for you.",
     "inputPlaceholder": "Type your question...",
     "send": "Send",
+    "attach": "Attach",
+    "removeImage": "Remove image",
     "newButton": "New",
     "enterToSend": "Enter to send",
     "shiftEnterNewLine": "Shift+Enter for new line",
@@ -1846,6 +1849,7 @@
     "deleteModalTitle": "Delete conversation",
     "deleteModalContent": "Are you sure you want to delete this conversation?",
     "defaultSessionTitle": "New Chat",
+    "askAI": "Ask AI",
     "ariaLabel": "Chat with AI",
     "sourceWeb": "Web source",
     "ptFallback": "Trainer",
@@ -1882,7 +1886,16 @@
       "next30DaysGoal": "Suggest training goals for me"
     },
     "copy": "Copy",
-    "copied": "Copied"
+    "copied": "Copied",
+    "analyzeBody": "Analyze body",
+    "analyzeInBody": "Read InBody sheet",
+    "analyzeBodyPlaceholder": "Analyze my body",
+    "analyzeInBodyPlaceholder": "Read my InBody results",
+    "analyzingInBody": "Analyzing InBody...",
+    "analyzingFood": "Analyzing meal...",
+    "analyzingExercise": "Analyzing exercise...",
+    "analyzingImage": "Analyzing image...",
+    "imageAttachedPlaceholder": "Add a note (optional)"
   },
   "auth": {
     "phoneAlreadyExists": "Phone number is already in use",

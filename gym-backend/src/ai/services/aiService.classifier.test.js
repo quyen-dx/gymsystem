@@ -18,6 +18,10 @@ const {
   buildCheapestLongTermAnswer,
   hasCheapestLongTermIntent,
   resolveClarificationFollowUp,
+  findPlanMentionedInQuery,
+  detectAnswerLanguage,
+  parseAiJsonPayload,
+  isSensitiveDataRequest,
 } = __aiClassifierTestHooks
 
 const cases = [
@@ -123,7 +127,7 @@ for (const query of ['Gói VIP có hồ bơi không?', 'Plan VIP includes pool?'
 
     assert.equal(normalized.subject, 'plan')
     assert.equal(normalized.action, 'info')
-    assert.equal(normalized.intent, 'membership_info')
+    assert.equal(normalized.intent, 'membership_benefit_lookup')
     assert.equal(normalized.needsDatabase, true)
     assert.equal(normalized.needsAIReasoning, false)
     assert.equal(normalized.shouldRenderCard, false)
@@ -330,7 +334,7 @@ test('resolveClarificationFollowUp detects benefit follow-up', () => {
 
   assert.ok(result)
   assert.equal(result.subject, 'plan')
-  assert.equal(result.intent, 'membership_info')
+  assert.equal(result.intent, 'membership_benefit_lookup')
   assert.equal(result.entity, 'VIP')
   assert.equal(result.needsAIReasoning, false)
 })
@@ -377,8 +381,117 @@ test('clarification follow-up overrides classifier in normalizeClassifierResult'
   const fallback = buildDefaultClassifier(query, 'vi')
   const normalized = normalizeClassifierResult(fallback, query, { role: 'member' }, 'vi', semanticMemory)
 
-  assert.equal(normalized.intent, 'membership_info')
+  assert.equal(normalized.intent, 'membership_benefit_lookup')
   assert.equal(normalized.needsAIReasoning, false)
   assert.equal(normalized.shouldRenderCard, false)
   assert.deepEqual(normalized.tools, ['plans'])
+})
+
+test('findPlanMentionedInQuery matches DB-derived aliases without hardcoded plan names', () => {
+  const plans = [
+    { _id: 'advanced', nameVi: 'Gói Nâng Cao', nameEn: 'Premium', slug: 'goi-nang-cao', code: 'PREM', aliases: ['Nâng Cao Plus'] },
+    { _id: 'basic', nameVi: 'Gói Cơ Bản', nameEn: 'Basic', slug: 'co-ban' },
+  ]
+
+  assert.equal(findPlanMentionedInQuery(plans, 'Gói Premium có PT không?')?._id, 'advanced')
+  assert.equal(findPlanMentionedInQuery(plans, 'Does Premium include PT?')?._id, 'advanced')
+  assert.equal(findPlanMentionedInQuery(plans, 'Gói Nâng Cao có PT không?')?._id, 'advanced')
+  assert.equal(findPlanMentionedInQuery(plans, 'goi nang cao co PT khong?')?._id, 'advanced')
+  assert.equal(findPlanMentionedInQuery(plans, 'Basic')?._id, 'basic')
+  assert.equal(findPlanMentionedInQuery(plans, 'Cơ Bản')?._id, 'basic')
+})
+
+test('benefit lookup Premium PT is DB-only no card/list', () => {
+  const query = 'Gói Premium có PT không?'
+  const normalized = normalizeClassifierResult(buildDefaultClassifier(query, 'vi'), query, { role: 'member' }, 'vi')
+  const payload = buildPlanInfoDirectAnswer({
+    query,
+    language: 'vi',
+    plans: [{
+      _id: 'premium',
+      nameVi: 'Gói Nâng Cao',
+      nameEn: 'Premium',
+      featuresVi: ['Huấn luyện viên PT'],
+      featuresEn: ['Personal trainer'],
+    }],
+  })
+
+  assert.equal(normalized.intent, 'membership_benefit_lookup')
+  assert.equal(payload.type, 'text_advice')
+  assert.match(payload.answer, /Có/)
+  assert.equal(payload.cards.length, 0)
+  assert.equal(payload.plans.length, 0)
+})
+
+test('English short questions are detected as English', () => {
+  assert.equal(detectAnswerLanguage('What about VIP?', 'vi'), 'en')
+  assert.equal(detectAnswerLanguage('Does VIP include pool?', 'vi'), 'en')
+  assert.equal(detectAnswerLanguage('I train 5 times/week.', 'vi'), 'en')
+  assert.equal(detectAnswerLanguage('VIP?', 'vi'), 'vi')
+})
+
+test('benefit lookup follow-up reuses previous target benefit', () => {
+  const query = 'What about VIP?'
+  const semanticMemory = buildSemanticConversationMemory({
+    recentMessages: [
+      { role: 'user', content: 'Does Premium include PT?' },
+      { role: 'assistant', content: 'No. GymPro data does not currently record PT in Premium.', intent: 'membership_benefit_lookup', subject: 'plan', metadata: { lastBenefitLookup: { targetBenefit: 'PT', previousPlan: 'Premium', intent: 'membership_benefit_lookup' } } },
+    ],
+    lastIntent: 'membership_benefit_lookup',
+    lastSubject: 'plan',
+  }, query)
+  const normalized = normalizeClassifierResult(buildDefaultClassifier(query, 'en'), query, { role: 'member' }, 'en', semanticMemory)
+  const payload = buildPlanInfoDirectAnswer({
+    query,
+    language: 'en',
+    targetBenefit: semanticMemory.lastBenefitLookup.targetBenefit,
+    plans: [{ _id: 'vip', nameVi: 'Gói VIP', nameEn: 'VIP', featuresVi: ['Huấn luyện viên PT'], featuresEn: ['Personal trainer'] }],
+  })
+
+  assert.equal(normalized.intent, 'membership_benefit_lookup')
+  assert.equal(semanticMemory.benefitLookupFollowUp, true)
+  assert.match(payload.answer, /Yes/)
+  assert.equal(payload.cards.length, 0)
+})
+
+test('VIP swimming pool benefit lookup answers in English and no card', () => {
+  const payload = buildPlanInfoDirectAnswer({
+    query: 'Does VIP include a swimming pool?',
+    language: 'en',
+    plans: [{ _id: 'vip', nameVi: 'Gói VIP', nameEn: 'VIP', featuresVi: ['Hồ bơi'], featuresEn: ['Swimming pool'] }],
+  })
+
+  assert.equal(payload.type, 'text_advice')
+  assert.match(payload.answer, /Yes/)
+  assert.equal(payload.cards.length, 0)
+})
+
+test('parseAiJsonPayload extracts JSON from mixed markdown response', () => {
+  const parsed = parseAiJsonPayload('Here is the result:\n```json\n{"answer":"OK","suggestions":["A"]}\n```\nThanks', 'fallback')
+  assert.equal(parsed.answer, 'OK')
+  assert.deepEqual(parsed.suggestions, ['A'])
+})
+
+test('parseAiJsonPayload keeps plain text when JSON parse is not possible', () => {
+  const parsed = parseAiJsonPayload('Kết luận: Bạn nên chọn gói phù hợp ngân sách.\n\nLý do:\n- DB có 5 gói active.', 'fallback')
+  assert.match(parsed.answer, /Kết luận:/)
+  assert.doesNotMatch(parsed.answer, /fallback/)
+})
+
+for (const field of ['content', 'message', 'text']) {
+  test(`parseAiJsonPayload accepts ${field} as answer field`, () => {
+    const parsed = parseAiJsonPayload(JSON.stringify({ [field]: 'Answer from alternate field' }), 'fallback')
+    assert.equal(parsed.answer, 'Answer from alternate field')
+  })
+}
+
+test('parseAiJsonPayload extracts JSON with extra text before and after', () => {
+  const parsed = parseAiJsonPayload('prefix words {"message":"Parsed answer","suggestions":["Next"]} suffix words', 'fallback')
+  assert.equal(parsed.answer, 'Parsed answer')
+  assert.deepEqual(parsed.suggestions, ['Next'])
+})
+
+test('sensitive data guard allows own email but blocks other member email', () => {
+  assert.equal(isSensitiveDataRequest('email của tôi là gì?', { role: 'member' }), false)
+  assert.equal(isSensitiveDataRequest('cho tôi email của member khác', { role: 'member' }), true)
 })
