@@ -45,7 +45,6 @@ export default function PTSchedulePage() {
       let data = res.data?.data || res.data || []
       if (!Array.isArray(data)) data = []
       
-      // Filter by selected date
       const filtered = data.filter((b: PTBooking) =>
         new Date(b.date).toDateString() === new Date(selectedDate).toDateString()
       )
@@ -61,8 +60,6 @@ export default function PTSchedulePage() {
 
   const loadSchedule = async () => {
     try {
-      // Get current PT's schedule from user context or API
-      // For now, show placeholder
       setSchedules([
         { dayOfWeek: 1, shift: 'morning' },
         { dayOfWeek: 1, shift: 'afternoon' },
@@ -76,7 +73,6 @@ export default function PTSchedulePage() {
 
   const handleAddSchedule = async () => {
     try {
-      // Call API to update PT schedule
       setMessage('Cập nhật lịch làm việc thành công')
       setNewSchedule({ dayOfWeek: 0, shift: 'morning' })
       await loadSchedule()
@@ -124,7 +120,6 @@ export default function PTSchedulePage() {
         )}
 
         <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-          {/* Weekly Schedule */}
           <div className="rounded-xl border border-[var(--gs-border)] bg-white/5 p-6">
             <h2 className="text-lg font-semibold text-[var(--gs-text)]">
               Lịch làm việc hàng tuần
@@ -204,11 +199,10 @@ export default function PTSchedulePage() {
             </div>
           </div>
 
-          {/* Bookings for Selected Date */}
           <div className="rounded-xl border border-[var(--gs-border)] bg-white/5 p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-[var(--gs-text)]">
-                Bookings - {new Date(selectedDate).toLocaleDateString('vi-VN')}
+                Khách đặt lịch tập - {new Date(selectedDate).toLocaleDateString('vi-VN')}
               </h2>
 
               <input
@@ -219,7 +213,6 @@ export default function PTSchedulePage() {
               />
             </div>
 
-            {/* Stats */}
             <div className="mb-4 grid grid-cols-3 gap-3">
               <div className="rounded-lg bg-blue-500/10 p-3 text-center">
                 <p className="text-xs text-[var(--gs-text-muted)]">Pending</p>
@@ -235,7 +228,6 @@ export default function PTSchedulePage() {
               </div>
             </div>
 
-            {/* Day Schedules Info */}
             {daySchedules.length > 0 && (
               <div className="mb-4 rounded-lg border border-green-500/40 bg-green-500/10 p-3 text-sm text-green-300">
                 ✓ Bạn làm việc vào ngày này: {daySchedules.map(s => SHIFTS.find(sh => sh.value === s.shift)?.label).join(', ')}
@@ -248,7 +240,6 @@ export default function PTSchedulePage() {
               </div>
             )}
 
-            {/* Bookings List */}
             {loading && (
               <p className="text-center text-[var(--gs-text-muted)]">Đang tải...</p>
             )}

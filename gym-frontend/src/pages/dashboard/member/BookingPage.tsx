@@ -345,11 +345,34 @@ export default function BookingPage() {
                 {showSchedule && (
                   <div className="rounded-xl border border-[var(--gs-border)] bg-black/20 p-4 text-sm">
                     <p className="mb-2 font-semibold text-[var(--gs-text)]">
-                      Availability theo tuần:
+                      Lịch làm việc của PT
                     </p>
-                    <p className="text-xs text-[var(--gs-text-muted)]">
-                      Green: Còn slot | Red: Hết slot
-                    </p>
+                    <div className="mt-3 grid grid-cols-4 gap-3">
+                      {Object.entries(ptSchedule).slice(0, 20).map(([slot, available]) => (
+                        <div
+                          key={slot}
+                          className={`rounded-xl border p-3 text-center ${
+                            available
+                              ? 'border-green-500/30 bg-green-500/10'
+                              : 'border-red-500/30 bg-red-500/10'
+                          }`}
+                        >
+                          <div className="font-medium text-[var(--gs-text)]">
+                            {slot}
+                          </div>
+
+                          <div
+                            className={`mt-2 text-xs font-semibold ${
+                              available
+                                ? 'text-green-300'
+                                : 'text-red-300'
+                            }`}
+                          >
+                            {available ? 'Còn lịch trống' : 'Đã kín lịch'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                     <div className="mt-3 grid grid-cols-5 gap-2">
                       {Object.entries(ptSchedule).slice(0, 20).map(([slot, available]) => (
                         <div

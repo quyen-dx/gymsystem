@@ -45,7 +45,6 @@ import OrderTrackingPage from './pages/dashboard/member/OrderTrackingPage'
 import ProductDetailPage from './pages/dashboard/member/ProductDetailPage'
 
 import WorkoutPage from './pages/dashboard/member/WorkoutPage'
-import PTBookingsPage from './pages/dashboard/pt/PTBookingsPage'
 import PTClientsPage from './pages/dashboard/pt/PTClientsPage'
 import PTSchedulePage from './pages/dashboard/pt/PTSchedulePage'
 import PTWorkoutsPage from './pages/dashboard/pt/PTWorkoutsPage'
@@ -293,7 +292,6 @@ function AppWithTheme() {
         <Route path="/pt/clients" element={<PrivateRoute feature="pt.moduleEnabled"><PTClientsPage /></PrivateRoute>} />
         <Route path="/pt/student" element={<Navigate to="/pt/clients" replace />} />
         <Route path="/pt/workouts" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutsPage /></PrivateRoute>} />
-        <Route path="/pt/bookings" element={<PrivateRoute feature="pt.moduleEnabled"><PTBookingsPage /></PrivateRoute>} />
 
         {/* MEMBER */}
         <Route path="/" element={<HomeRoute />} />
