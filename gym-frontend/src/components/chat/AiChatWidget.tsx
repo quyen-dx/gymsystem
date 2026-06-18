@@ -15,8 +15,6 @@ import { AssistantMessageBubble } from './AssistantMessageBubble'
 import PTCard from './PTCard'
 import {
     extractAiAnswer,
-    parseJsonLikeString,
-    stripUnsafeModelOutput,
 } from '../../utils/aiUtils'
 
 const STORAGE_KEY_PREFIX = 'chat_history_'
@@ -220,7 +218,7 @@ const splitAiAssistantResponse = (rawContent: unknown, currentContent = '', t: (
     }
 }
 
-const extractAiResponseContent = (response: unknown, fallback = '', t?: (key: string) => string) => {
+const extractAiResponseContent = (response: unknown, fallback = '') => {
     const answer = extractAiAnswer(response)
     if (answer === 'Phản hồi AI chưa đúng định dạng.' || answer === 'Không nhận được phản hồi.') {
         return fallback || answer
@@ -817,7 +815,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
     const [query, setQuery] = useState('')
     const [loading, setLoading] = useState(false)
     const [aiActionLoading, setAiActionLoading] = useState(false)
-    const [activeAiTool, setActiveAiTool] = useState('')
+    const [, setActiveAiTool] = useState('')
     const [aiStatus, setAiStatus] = useState<{ status: string; message: string } | null>(null)
     const [errorInfo, setErrorInfo] = useState<{ code: number; message: string } | null>(null)
     const [retryCountdown, setRetryCountdown] = useState(0)
