@@ -58,7 +58,7 @@ export default function OrderTrackingPage() {
                     ) : (
                         <div>{t('order_tracking.not_found')}</div>
                     )}
-                    <Button style={{ marginTop: 16 }} onClick={() => navigate('/orders')}>
+                    <Button style={{ marginTop: 16 }} onClick={() => navigate('/cart?tab=orders')}>
                         {t('order_tracking.back_to_orders')}
                     </Button>
                 </Card>

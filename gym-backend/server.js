@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import express from 'express'
@@ -29,6 +30,7 @@ import systemExperienceRoutes from './src/routes/systemExperienceRoutes.js'
 import systemSettingsRoutes from './src/routes/systemSettingsRoutes.js'
 import walletRoutes from './src/routes/walletRoutes.js'
 import bookingRoutes from './src/routes/bookingRoutes.js'
+
 
 const app = express()
 
@@ -80,6 +82,7 @@ app.use('/api/admin/ai', adminAiRoutes)
 app.use('/api/system-experience', systemExperienceRoutes)
 app.use('/api/system-settings', systemSettingsRoutes)
 app.use('/api/bookings', bookingRoutes)
+
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', message: 'GymPro API is running' })

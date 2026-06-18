@@ -1,25 +1,27 @@
 import {
+  ArrowLeftOutlined,
   BgColorsOutlined,
   CameraOutlined,
   CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   EnvironmentOutlined,
+  HeartOutlined,
   InfoCircleOutlined,
   LockOutlined,
   LogoutOutlined,
+  MenuOutlined,
   PhoneOutlined,
   PlusOutlined,
-  RightOutlined,
-  ShoppingCartOutlined,
+  SafetyCertificateOutlined,
   StarFilled,
   StarOutlined,
+  TrophyOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, message, Modal, Select, Space, Tag, theme } from 'antd'
+import { Avatar, Button, Checkbox, Drawer, Empty, Form, Grid, Input, message, Modal, Select, Space, Tag, theme } from 'antd'
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../components/layout/header/DashboardLayout'
 import MemberLayout from '../../components/layout/header/MemberLayout'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
@@ -30,7 +32,7 @@ import { authService } from '../../services/authService'
 import { getUserDisplayName, getUserInitialName } from '../../utils/userDisplay'
 
 const profileFormClass =
-  '[&_.ant-form-item-label>label]:!text-xs [&_.ant-form-item-label>label]:!font-medium [&_.ant-form-item-label>label]:!uppercase [&_.ant-form-item-label>label]:!tracking-[0.06em] [&_.ant-form-item-label>label]:!text-[var(--theme-muted)] [&_.ant-input]:!min-h-[42px] [&_.ant-input]:!rounded-[12px] [&_.ant-input]:!border-[var(--profile-border)] [&_.ant-input]:!bg-[var(--profile-bg-container)] [&_.ant-input]:!text-[var(--profile-text)] [&_.ant-input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input-affix-wrapper]:!min-h-[42px] [&_.ant-input-affix-wrapper]:!rounded-[12px] [&_.ant-input-affix-wrapper]:!border-[var(--profile-border)] [&_.ant-input-affix-wrapper]:!bg-[var(--profile-bg-container)] [&_.ant-input-affix-wrapper_input]:!bg-transparent [&_.ant-input-affix-wrapper_input]:!text-[var(--profile-text)] [&_.ant-input-affix-wrapper_input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input:focus]:!border-[var(--profile-accent)] [&_.ant-input:focus]:!shadow-none [&_.ant-input-focused]:!border-[var(--profile-accent)] [&_.ant-input-focused]:!shadow-none [&_.ant-input-affix-wrapper-focused]:!border-[var(--profile-accent)] [&_.ant-input-affix-wrapper-focused]:!shadow-none [&_.ant-input[disabled]]:!cursor-not-allowed [&_.ant-input[disabled]]:!bg-[var(--theme-elevated)] [&_.ant-input[disabled]]:!text-[var(--theme-muted)] [&_.ant-input-disabled]:!cursor-not-allowed [&_.ant-input-disabled]:!bg-[var(--theme-elevated)] [&_.ant-input-disabled]:!text-[var(--theme-muted)]'
+  '[&_.ant-form-item-label>label]:!text-xs [&_.ant-form-item-label>label]:!font-medium [&_.ant-form-item-label>label]:!uppercase [&_.ant-form-item-label>label]:!tracking-[0.06em] [&_.ant-form-item-label>label]:!text-[var(--theme-muted)] [&_.ant-input]:!h-[42px] [&_.ant-input]:!rounded-[12px] [&_.ant-input]:!border-[var(--profile-border)] [&_.ant-input]:!bg-[var(--profile-bg-container)] [&_.ant-input]:!text-[var(--profile-text)] [&_.ant-input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input-affix-wrapper]:!h-[42px] [&_.ant-input-affix-wrapper]:!flex [&_.ant-input-affix-wrapper]:!items-center [&_.ant-input-affix-wrapper]:!rounded-[12px] [&_.ant-input-affix-wrapper]:!border-[var(--profile-border)] [&_.ant-input-affix-wrapper]:!bg-[var(--profile-bg-container)] [&_.ant-input-affix-wrapper_.ant-input]:!border-none [&_.ant-input-affix-wrapper_.ant-input]:!rounded-none [&_.ant-input-affix-wrapper_.ant-input]:!h-auto [&_.ant-input-affix-wrapper_.ant-input]:!shadow-none [&_.ant-input-affix-wrapper_.ant-input]:!bg-transparent [&_.ant-input-affix-wrapper_.ant-input]:!text-[var(--profile-text)] [&_.ant-input-affix-wrapper_.ant-input::placeholder]:!text-[var(--theme-placeholder)] [&_.ant-input:focus]:!border-[var(--profile-accent)] [&_.ant-input:focus]:!shadow-none [&_.ant-input-focused]:!border-[var(--profile-accent)] [&_.ant-input-focused]:!shadow-none [&_.ant-input-affix-wrapper-focused]:!border-[var(--profile-accent)] [&_.ant-input-affix-wrapper-focused]:!shadow-none [&_.ant-input[disabled]]:!cursor-not-allowed [&_.ant-input[disabled]]:!bg-[var(--theme-elevated)] [&_.ant-input[disabled]]:!text-[var(--theme-muted)] [&_.ant-input-disabled]:!cursor-not-allowed [&_.ant-input-disabled]:!bg-[var(--theme-elevated)] [&_.ant-input-disabled]:!text-[var(--theme-muted)] [&_.ant-select-single]:!h-[42px] [&_.ant-select-single_.ant-select-selector]:!h-[42px] [&_.ant-select-single_.ant-select-selector]:!min-h-[42px] [&_.ant-select-single_.ant-select-selector]:!flex [&_.ant-select-single_.ant-select-selector]:!items-center [&_.ant-select-single_.ant-select-selector]:!rounded-[12px] [&_.ant-select-single_.ant-select-selector]:!border-[var(--profile-border)] [&_.ant-select-single_.ant-select-selector]:!bg-[var(--profile-bg-container)] [&_.ant-select-selection-item]:!leading-[42px] [&_.ant-select-selection-item]:!flex [&_.ant-select-selection-item]:!items-center [&_.ant-select-selection-placeholder]:!leading-[42px] [&_.ant-select-selection-placeholder]:!flex [&_.ant-select-selection-placeholder]:!items-center [&_.ant-picker]:!h-[42px] [&_.ant-picker]:!flex [&_.ant-picker]:!items-center [&_.ant-picker]:!rounded-[12px] [&_.ant-picker]:!border-[var(--profile-border)] [&_.ant-picker]:!bg-[var(--profile-bg-container)] [&_.ant-btn-link]:!text-[var(--theme-text)] [&_.ant-btn-link:hover]:!text-[var(--theme-accent)]'
 
 const primaryButtonClass =
   '!h-11 !rounded-full !border-0 !bg-[var(--theme-button-bg)] !font-extrabold !text-[var(--theme-button-text)] !shadow-none hover:!bg-[var(--theme-accent-hover)]'
@@ -97,22 +99,8 @@ const sectionIconStyle = {
   flexShrink: 0,
 } as CSSProperties
 
-const actionItemStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  padding: '12px 16px',
-  background: 'var(--theme-elevated)',
-  border: '1px solid var(--theme-border)',
-  borderRadius: 10,
-  cursor: 'pointer',
-  marginBottom: 8,
-  transition: 'border-color 0.2s, background 0.2s',
-  width: '100%',
-  textAlign: 'left',
-} as CSSProperties
-
-type ProfileTabKey = 'profile' | 'address' | 'password' | 'appearance'
+type ProfileTabKey = 'account' | 'personal' | 'contact' | 'health' | 'verification' | 'gym' | 'address' | 'password' | 'appearance'
+type PersonalSubTab = 'basic' | 'contact' | 'emergency' | 'verification'
 
 type ProfileTabItem = {
   key: ProfileTabKey
@@ -134,7 +122,6 @@ const ProfileHeader = ({
   onCoverChange,
   onCoverRemove,
   mediaUploading,
-  isMobile,
   t,
 }: {
   user: any
@@ -148,7 +135,6 @@ const ProfileHeader = ({
   onCoverChange: (file: File) => void
   onCoverRemove: () => void
   mediaUploading: 'avatar' | 'cover' | 'cover-remove' | null
-  isMobile: boolean
   t: (key: string, opts?: any) => string
 }) => {
   const displayName = getUserDisplayName(user, t('profile.account_name'))
@@ -160,131 +146,61 @@ const ProfileHeader = ({
       : user?.coverImage || DEFAULT_COVER
 
   return (
-    <header className="profile-modal-header">
-      <div
-        className="profile-cover"
-        style={{
-          backgroundImage: coverSrc ? `url(${coverSrc})` : 'none',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          position: 'relative',
-          cursor: 'pointer',
-        }}
-        onClick={() => coverRef.current?.click()}
-      >
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.5) 100%)',
-        }} />
-
-        <div
-          style={{
-            position: 'absolute',
-            top: 8, right: 40,
-            display: 'flex',
-            gap: 6,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            disabled={mediaUploading === 'cover'}
-            onClick={() => coverRef.current?.click()}
-            style={{
-              background: 'rgba(0,0,0,0.5)',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: 8,
-              color: '#fff',
-              padding: '4px 10px',
-              fontSize: 12,
-              cursor: mediaUploading === 'cover' ? 'not-allowed' : 'pointer',
-              opacity: mediaUploading === 'cover' ? 0.7 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
-            <CameraOutlined /> {mediaUploading === 'cover' ? t('common.loading') : t('profile.change_cover')}
-          </button>
-
-          {(coverPreview || user?.coverImage) && coverPreview !== '' && (
-            <button
-              type="button"
-              disabled={mediaUploading === 'cover-remove'}
-              onClick={() => onCoverRemove()}
-              style={{
-                background: 'rgba(239,68,68,0.6)',
-                backdropFilter: 'blur(8px)',
-                border: '1px solid rgba(239,68,68,0.4)',
-                borderRadius: 8,
-                color: '#fff',
-                padding: '4px 10px',
-                fontSize: 12,
-                cursor: mediaUploading === 'cover-remove' ? 'not-allowed' : 'pointer',
-                opacity: mediaUploading === 'cover-remove' ? 0.7 : 1,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              <DeleteOutlined /> {mediaUploading === 'cover-remove' ? t('common.loading') : t('profile.remove')}
-            </button>
-          )}
-        </div>
-
-        <input
-          ref={coverRef}
-          type="file"
-          hidden
-          accept="image/*"
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (file) onCoverChange(file)
-          }}
-        />
+    <header className="profile-header">
+      <div className="profile-cover-bg" style={{ backgroundImage: coverSrc ? `url(${coverSrc})` : undefined }}>
+        {!coverSrc && <div className="profile-cover-placeholder" />}
       </div>
+      <div className="profile-cover-overlay" />
+
+      <div className="profile-cover-actions" onClick={(e) => e.stopPropagation()}>
+        <button type="button" disabled={mediaUploading === 'cover'}
+          onClick={() => coverRef.current?.click()}
+          className="profile-cover-btn"
+          title={mediaUploading === 'cover' ? undefined : t('profile.change_cover')}
+        >
+          <CameraOutlined />
+          <span className="profile-cover-btn-label">{mediaUploading === 'cover' ? t('common.loading') : t('profile.change_cover')}</span>
+        </button>
+        {(coverPreview || user?.coverImage) && coverPreview !== '' && (
+          <button type="button" disabled={mediaUploading === 'cover-remove'}
+            onClick={() => onCoverRemove()}
+            className="profile-cover-btn profile-cover-btn-remove"
+            title={mediaUploading === 'cover-remove' ? undefined : t('profile.remove')}
+          >
+            <DeleteOutlined />
+            <span className="profile-cover-btn-label">{mediaUploading === 'cover-remove' ? t('common.loading') : t('profile.remove')}</span>
+          </button>
+        )}
+        <input ref={coverRef} type="file" hidden accept="image/*"
+          onChange={(e) => { const file = e.target.files?.[0]; if (file) onCoverChange(file) }} />
+      </div>
+
       <div className="profile-header-content">
-        <div className="profile-avatar-wrap cursor-pointer" onClick={() => mediaUploading !== 'avatar' && fileRef.current?.click()}>
+        <div className="profile-avatar-wrap" onClick={() => mediaUploading !== 'avatar' && fileRef.current?.click()}>
           <Avatar
-            size={isMobile ? 78 : 88}
-            src={
-              avatarPreview ||
-              user.avatar ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarName)}`
-            }
+            src={avatarPreview || user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarName)}`}
             icon={<UserOutlined />}
-            className="profile-avatar-image"
+            className="profile-avatar-img"
           />
-          <span className="profile-avatar-status" />
-          <div className="profile-avatar-camera">
-            {mediaUploading === 'avatar' ? t('common.loading') : <CameraOutlined />}
+          <div className="profile-avatar-edit" onClick={(e) => { e.stopPropagation(); fileRef.current?.click() }}>
+            {mediaUploading === 'avatar' ? (
+              <span style={{ fontSize: 10, lineHeight: 1.2, textAlign: 'center' }}>{t('common.loading')}</span>
+            ) : (
+              <CameraOutlined />
+            )}
           </div>
         </div>
-
-        <div className="profile-header-meta">
-          <h2>{displayName}</h2>
-          {user.memberCode && (
-            <div style={{ fontSize: 12, color: 'var(--theme-muted)', marginTop: 1 }}>
-              {user.memberCode}
-            </div>
-          )}
-          <button type="button" onClick={onCopyContact}>
+        <div className="profile-header-text">
+          <h2 className="profile-header-name">{displayName}</h2>
+          {user.memberCode && <div className="profile-header-id">ID: {user.memberCode}</div>}
+          <button type="button" className="profile-header-contact" onClick={onCopyContact}>
             <span>{contactText}</span>
-            {(user.email || user.phone) && <CopyOutlined />}
+            {(user.email || user.phone) && <CopyOutlined style={{ fontSize: 13 }} />}
           </button>
         </div>
       </div>
-      <input
-        ref={fileRef}
-        type="file"
-        hidden
-        accept="image/*"
-        onChange={(event) => {
-          const file = event.target.files?.[0]
-          if (file) onAvatarChange(file)
-        }}
-      />
+      <input ref={fileRef} type="file" hidden accept="image/*"
+        onChange={(event) => { const file = event.target.files?.[0]; if (file) onAvatarChange(file) }} />
     </header>
   )
 }
@@ -303,6 +219,9 @@ const SidebarTabs = ({
   t: (key: string, opts?: any) => string
 }) => (
   <aside className="profile-desktop-tabs" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div style={{ padding: '0 4px 12px', fontSize: 20, fontWeight: 700, color: 'var(--theme-text)' }}>
+      {t('profile.settings_title')}
+    </div>
     <div style={{ flex: 1, minHeight: 0 }}>
       {tabs.map((tab) => {
         const isActive = activeTab === tab.key
@@ -333,88 +252,58 @@ const SidebarTabs = ({
   </aside>
 )
 
-const MobileMenuGrid = ({
+const MobileMenuDrawer = ({
   tabs,
   activeTab,
   onChange,
-  mobileMenuOpen,
-  onToggle,
-  hideBackdrop,
   onLogout,
+  open,
+  onClose,
   t,
 }: {
   tabs: ProfileTabItem[]
   activeTab: ProfileTabKey
   onChange: (tab: ProfileTabKey) => void
-  mobileMenuOpen: boolean
-  onToggle: () => void
-  hideBackdrop?: boolean
   onLogout: () => void
+  open: boolean
+  onClose: () => void
   t: (key: string, opts?: any) => string
 }) => (
-  <div className="profile-mobile-menu-anchor">
-    <div className="profile-mobile-menu-toggle" style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '8px 12px',
-    }}>
-      <span style={{ fontSize: 13, color: 'var(--theme-muted)', fontWeight: 500 }}>
-        {tabs.find(t => t.key === activeTab)?.label}
-      </span>
+  <Drawer
+    title={<span style={{ fontSize: 16, fontWeight: 700 }}>{t('profile.settings_title')}</span>}
+    placement="left"
+    open={open}
+    onClose={onClose}
+    width={280}
+    styles={{ body: { padding: '8px 0' } }}
+  >
+    {tabs.map((tab) => {
+      const isActive = activeTab === tab.key
+      return (
+        <button
+          key={tab.key}
+          type="button"
+          className={`profile-side-tab${isActive ? ' active' : ''}`}
+          style={{ width: '100%', textAlign: 'left', borderRadius: 0, padding: '12px 20px' }}
+          onClick={() => { onChange(tab.key); onClose() }}
+        >
+          <span>{tab.icon}</span>
+          {tab.label}
+        </button>
+      )
+    })}
+    <div style={{ borderTop: '1px solid var(--theme-border)', marginTop: 8, paddingTop: 8 }}>
       <button
         type="button"
-        onClick={onToggle}
-        style={{
-          background: 'var(--theme-elevated)',
-          border: '1px solid var(--theme-border)',
-          borderRadius: 8,
-          padding: '4px 10px',
-          color: 'var(--theme-text)',
-          cursor: 'pointer',
-          fontSize: 16,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-        }}
+        className="profile-side-tab"
+        onClick={() => { onLogout(); onClose() }}
+        style={{ width: '100%', textAlign: 'left', borderRadius: 0, padding: '12px 20px', color: '#ef4444' }}
       >
-        {mobileMenuOpen ? '✕' : '☰'}
+        <span style={{ color: '#ef4444' }}><LogoutOutlined /></span>
+        {t('profile.logout')}
       </button>
     </div>
-
-    {mobileMenuOpen && (
-      <>
-        {!hideBackdrop && (
-          <button type="button" className="profile-mobile-menu-backdrop" aria-label="Close menu" onClick={onToggle} />
-        )}
-        <div className="profile-mobile-grid">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.key
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                className={`profile-grid-tab${isActive ? ' active' : ''}`}
-                onClick={() => onChange(tab.key)}
-              >
-                <span>{tab.icon}</span>
-                <strong>{tab.label}</strong>
-              </button>
-            )
-          })}
-          <button
-            type="button"
-            className="profile-grid-tab"
-            onClick={onLogout}
-            style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)' }}
-          >
-            <span style={{ color: '#ef4444' }}><LogoutOutlined /></span>
-            <strong>{t('profile.logout')}</strong>
-          </button>
-        </div>
-      </>
-    )}
-  </div>
+  </Drawer>
 )
 
 const TabContent = ({
@@ -436,7 +325,6 @@ function ProfileContent() {
   const { settings: systemSettings } = useSystemSettings()
   const { token } = theme.useToken()
   const screens = Grid.useBreakpoint()
-  const navigate = useNavigate()
   const [form] = Form.useForm()
   const [passwordForm] = Form.useForm()
   const [addressForm] = Form.useForm()
@@ -444,8 +332,8 @@ function ProfileContent() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [coverRemoved, setCoverRemoved] = useState(false)
-  const [activeTab, setActiveTab] = useState<ProfileTabKey>('profile')
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<ProfileTabKey>('account')
+  const [personalSubTab, setPersonalSubTab] = useState<PersonalSubTab>('basic')
   const [addresses, setAddresses] = useState<any[]>([])
   const [addressModalOpen, setAddressModalOpen] = useState(false)
   const [editAddress, setEditAddress] = useState<any>(null)
@@ -457,6 +345,23 @@ function ProfileContent() {
   const [identityBackPreview, setIdentityBackPreview] = useState<string | null>(null)
   const [dismissBanner, setDismissBanner] = useState(false)
   const [formDirty, setFormDirty] = useState(false)
+  const [changeEmailModalOpen, setChangeEmailModalOpen] = useState(false)
+  const [emailChangeStep, setEmailChangeStep] = useState<'email' | 'otp'>('email')
+  const [newEmail, setNewEmail] = useState('')
+  const [otpValue, setOtpValue] = useState('')
+  const [emailChangeLoading, setEmailChangeLoading] = useState(false)
+  const [forgotPasswordModalOpen, setForgotPasswordModalOpen] = useState(false)
+  const [forgotPasswordMethod, setForgotPasswordMethod] = useState<'email' | 'phone' | null>(null)
+  const [forgotPasswordStep, setForgotPasswordStep] = useState<'method' | 'reset'>('method')
+  const [forgotPasswordOtp, setForgotPasswordOtp] = useState('')
+  const [forgotPasswordNewPassword, setForgotPasswordNewPassword] = useState('')
+  const [forgotPasswordConfirmPassword, setForgotPasswordConfirmPassword] = useState('')
+  const [otpSending, setOtpSending] = useState(false)
+  const [otpSendingMethod, setOtpSendingMethod] = useState<'email' | 'phone' | null>(null)
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobileSubTabPicker, setMobileSubTabPicker] = useState(true)
   const fileRef = useRef<HTMLInputElement>(null)
   const coverRef = useRef<HTMLInputElement>(null)
   const preventCloseRef = useRef(false)
@@ -473,10 +378,6 @@ function ProfileContent() {
       setAccentColor(user.accentColor)
     }
   }, [user?.accentColor])
-
-  const goToOrders = () => {
-    navigate('/orders')
-  }
 
   const handlePresetSelect = (hex: string) => {
     void saveAccentColor(hex)
@@ -650,6 +551,7 @@ function ProfileContent() {
       emergencyName: user.emergencyContact?.name || '',
       emergencyPhone: user.emergencyContact?.phone || '',
       emergencyRelationship: user.emergencyContact?.relationship || '',
+      emergencyContactCountry: user.emergencyContact?.country || '',
       height: user.healthInfo?.height || '',
       weight: user.healthInfo?.weight || '',
       goals: user.healthInfo?.goals || [],
@@ -662,8 +564,7 @@ function ProfileContent() {
     setAvatarPreview(null)
     setCoverPreview(null)
     setCoverRemoved(false)
-    setActiveTab('profile')
-    setMobileMenuOpen(false)
+    setActiveTab('account')
     passwordForm.resetFields()
     addressForm.resetFields()
     setEditAddress(null)
@@ -722,6 +623,7 @@ function ProfileContent() {
       payload.emergencyName = values.emergencyName || ''
       payload.emergencyPhone = values.emergencyPhone || ''
       payload.emergencyRelationship = values.emergencyRelationship || ''
+      payload.emergencyContactCountry = values.emergencyContactCountry || ''
       payload.height = values.height || ''
       payload.weight = values.weight || ''
       payload.goals = values.goals || []
@@ -751,7 +653,7 @@ function ProfileContent() {
       setIdentityFrontFile(null)
       setIdentityBackFile(null)
       setFormDirty(false)
-      message.success(t('profile.msg_update_success'))
+      message.success(t('profile.msg_save_success'))
     } catch (err: any) {
       message.error(err.response?.data?.message || t('profile.msg_update_failed'))
     } finally {
@@ -867,6 +769,60 @@ function ProfileContent() {
     }
   }
 
+  const handleForgotPasswordSendOtp = async (method: 'email' | 'phone') => {
+    if (otpSending) return
+    setOtpSending(true)
+    setOtpSendingMethod(method)
+    try {
+      await authService.requestPasswordResetOtp({ method })
+      message.success(t('profile.otp_sent'))
+      setForgotPasswordMethod(method)
+      setForgotPasswordStep('reset')
+      setResendCooldown(60)
+    } catch (err: any) {
+      message.error(err.response?.data?.message || t('profile.msg_update_failed'))
+    } finally {
+      setOtpSending(false)
+      setOtpSendingMethod(null)
+    }
+  }
+
+  const handleForgotPasswordConfirm = async () => {
+    if (forgotPasswordNewPassword.length < 6) {
+      message.error(t('profile.new_password_min'))
+      return
+    }
+    if (forgotPasswordNewPassword !== forgotPasswordConfirmPassword) {
+      message.error(t('profile.confirm_password_match'))
+      return
+    }
+    if (!forgotPasswordOtp) {
+      message.error(t('profile.otp_code'))
+      return
+    }
+    setForgotPasswordLoading(true)
+    try {
+      await authService.resetPasswordWithOtp({
+        method: forgotPasswordMethod || 'email',
+        otp: forgotPasswordOtp,
+        newPassword: forgotPasswordNewPassword,
+      })
+      message.success(t('profile.reset_password_success'))
+      setForgotPasswordModalOpen(false)
+      passwordForm.resetFields()
+    } catch (err: any) {
+      message.error(err.response?.data?.message || t('profile.msg_update_failed'))
+    } finally {
+      setForgotPasswordLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const id = setInterval(() => setResendCooldown((c) => c - 1), 1000)
+    return () => clearInterval(id)
+  }, [resendCooldown])
+
   useEffect(() => {
     if (activeTab === 'address') {
       loadAddresses()
@@ -888,8 +844,6 @@ function ProfileContent() {
   }
 
   const isProfileMobile = !screens.md
-  const isProfileDesktop = Boolean(screens.lg)
-  const isProfileCompact = !isProfileDesktop
   const responsiveSectionCardStyle = {
     ...sectionCardStyle,
     marginBottom: isProfileMobile ? 16 : 20,
@@ -898,12 +852,56 @@ function ProfileContent() {
     maxWidth: '100%',
     boxSizing: 'border-box',
     borderRadius: 16,
+    overflowX: 'hidden',
   } as CSSProperties
+
+  const handleRequestEmailChange = async () => {
+    if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      message.error(t('profile.invalid_email'))
+      return
+    }
+    if (newEmail === user?.email) {
+      message.error(t('profile.invalid_email'))
+      return
+    }
+    setEmailChangeLoading(true)
+    try {
+      await authService.requestEmailChange({ newEmail })
+      message.success(t('profile.email_sent_otp'))
+      setEmailChangeStep('otp')
+    } catch (err: any) {
+      message.error(err.response?.data?.message || t('profile.msg_update_failed'))
+    } finally {
+      setEmailChangeLoading(false)
+    }
+  }
+
+  const handleConfirmEmailChange = async () => {
+    if (!otpValue) {
+      message.error(t('profile.otp_code'))
+      return
+    }
+    setEmailChangeLoading(true)
+    try {
+      await authService.confirmEmailChange({ newEmail, otp: otpValue })
+      message.success(t('profile.email_change_success'))
+      setChangeEmailModalOpen(false)
+      if (user && updateUser) {
+        updateUser({ ...user, email: newEmail })
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.message || t('profile.msg_update_failed'))
+    } finally {
+      setEmailChangeLoading(false)
+    }
+  }
+
   const tabs: ProfileTabItem[] = [
-    { key: 'profile', label: t('profile.info'), icon: <UserOutlined /> },
-    { key: 'address', label: t('profile.address'), icon: <EnvironmentOutlined /> },
-    { key: 'password', label: hasPassword ? t('profile.change_password') : t('profile.set_password'), icon: <LockOutlined /> },
-    { key: 'appearance', label: t('profile.appearance'), icon: <BgColorsOutlined /> },
+    { key: 'account', label: t('profile.account_security_title'), icon: <SafetyCertificateOutlined /> },
+    { key: 'personal', label: t('profile.personal_info'), icon: <UserOutlined /> },
+    { key: 'health', label: t('profile.health_info'), icon: <HeartOutlined /> },
+    { key: 'gym', label: t('profile.gym_profile'), icon: <TrophyOutlined /> },
+    { key: 'appearance', label: t('profile.appearance_title'), icon: <BgColorsOutlined /> },
   ]
 
   const renderSectionHeader = (icon: ReactNode, title: string, subtitle: string) => (
@@ -916,317 +914,334 @@ function ProfileContent() {
     </div>
   )
 
-  const renderActionItem = (
-    icon: ReactNode,
-    title: string,
-    description: string,
-    onClick: () => void,
-    disabled = false,
-  ) => (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{ ...actionItemStyle, opacity: disabled ? 0.65 : 1 }}
-    >
-      <div style={{ ...sectionIconStyle, width: 36, height: 36, fontSize: 16 }}>{icon}</div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--theme-text)' }}>{title}</div>
-        <div style={{ fontSize: 11, color: 'var(--theme-muted)', marginTop: 2 }}>{description}</div>
-      </div>
-      <RightOutlined style={{ color: 'var(--theme-muted)', fontSize: 12 }} />
-    </button>
-  )
-
   return (
-    <div style={{ ...profileThemeStyle, color: token.colorText, width: '100%', maxWidth: 1280, margin: '0 auto', minHeight: '100vh', padding: '32px 32px 120px' }} className="profile-page-wrapper max-[768px]:!px-4 max-[768px]:!py-4">
-      <ProfileHeader
-        user={user}
-        avatarPreview={avatarPreview}
-        fileRef={fileRef}
-        coverPreview={coverPreview}
-        coverRef={coverRef}
-        contactText={contactText}
-        onCopyContact={handleCopyContact}
-        onAvatarChange={handleAvatarFileChange}
-        onCoverChange={handleCoverFileChange}
-        onCoverRemove={handleCoverRemove}
-        mediaUploading={mediaUploading}
-        isMobile={isProfileCompact}
-        t={t}
-      />
-
-      {!dismissBanner && (() => {
-        const pct = calcProfileCompletion(user)
-        if (pct >= 100) return null
-        const statusText = pct < 50 ? t('profile.completion_low') : t('profile.completion_medium')
-        return (
-          <div style={{
-            margin: '16px 0 20px',
-            padding: '18px 24px',
-            borderRadius: 14,
-            background: 'var(--theme-accent-muted)',
-            border: '1px solid var(--theme-accent-border)',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 14,
-          }}>
-            <div style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: 'var(--theme-accent)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 20, flexShrink: 0,
-            }}>
-              <LockOutlined />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--theme-text)', marginBottom: 3 }}>
-                {t('profile.completion_title')}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--theme-muted)', marginBottom: 10, lineHeight: 1.5 }}>
-                {t('profile.completion_desc')}
-              </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2 text-sm font-medium text-[var(--theme-text)]">
-                  <div style={{
-                    width: 120, height: 8, borderRadius: 4,
-                    background: 'var(--theme-border)',
-                    overflow: 'hidden',
-                  }}>
-                    <div style={{
-                      width: `${pct}%`, height: '100%',
-                      borderRadius: 4,
-                      background: pct < 50 ? 'var(--theme-accent)' : '#f59e0b',
-                      transition: 'width 0.3s',
-                    }} />
-                  </div>
-                  <span>{pct}% — {statusText}</span>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="primary"
-                    size="small"
-                    style={{ borderRadius: 8, fontWeight: 600, fontSize: 12, height: 32 }}
-                    onClick={() => document.getElementById('section-account')?.scrollIntoView({ behavior: 'smooth' })}
-                  >
-                    {t('profile.completion_cta')}
-                  </Button>
-                  <Button
-                    size="small"
-                    style={{ borderRadius: 8, fontWeight: 500, fontSize: 12, height: 32, background: 'transparent', borderColor: 'var(--theme-border)', color: 'var(--theme-muted)' }}
-                    onClick={() => setDismissBanner(true)}
-                  >
-                    {t('profile.completion_later')}
-                  </Button>
-                </div>
-              </div>
-            </div>
+    <div style={{ ...profileThemeStyle, color: token.colorText, width: '100%', minHeight: '100vh', padding: '24px 32px 120px' }} className="profile-page-wrapper max-[768px]:!px-4 max-[768px]:!py-4">
+      {formDirty && (
+        <div style={{
+          position: 'fixed',
+          top: 'calc(var(--member-header-height, 64px) + 16px)',
+          left: isProfileMobile ? 12 : '50%',
+          right: isProfileMobile ? 12 : 'auto',
+          transform: isProfileMobile ? 'none' : 'translateX(-50%)',
+          zIndex: 1000,
+          width: isProfileMobile ? 'auto' : 'calc(100% - 64px)',
+          maxWidth: isProfileMobile ? 'none' : 860,
+          background: 'var(--theme-elevated)',
+          border: '1px solid var(--theme-border)',
+          borderRadius: 12,
+          padding: '10px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--theme-muted)', flex: 1, lineHeight: 1.4 }}>
+            {t('profile.unsaved_changes')}
+          </span>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <Button
+              style={{ background: 'transparent', borderColor: 'var(--theme-border)' }}
+              onClick={() => { form.resetFields(); setFormDirty(false) }}
+            >
+              {t('profile.cancel')}
+            </Button>
+            <Button
+              type="primary"
+              loading={loading}
+              onClick={() => form.submit()}
+            >
+              {t('profile.save_changes')}
+            </Button>
           </div>
-        )
-      })()}
+                  </div>
+                  )}
+      {formDirty && <div style={{ height: isProfileMobile ? 60 : 0 }} />}
 
-      <div className="flex gap-6 max-[768px]:flex-col" style={{ minHeight: 0 }}>
-        <div className="max-[768px]:hidden" style={{ width: 220, flexShrink: 0 }}>
-          <div style={{ position: 'sticky', top: 88, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 120px)' }}>
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-              <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} onLogout={handleLogout} t={t} />
-            </div>
+      <div className="profile-settings-layout">
+        <div className="profile-settings-sidebar">
+          <div className="profile-settings-sidebar-inner">
+            <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} onLogout={handleLogout} t={t} />
           </div>
         </div>
 
-        <div className="min-[769px]:hidden">
-          <MobileMenuGrid
+        <div className="profile-settings-mobile-tabs">
+          <MobileMenuDrawer
             tabs={tabs}
             activeTab={activeTab}
             onChange={(tab) => {
               setActiveTab(tab)
-              setMobileMenuOpen(false)
+              if (tab === 'personal') setMobileSubTabPicker(true)
             }}
-            mobileMenuOpen={mobileMenuOpen}
-            onToggle={() => setMobileMenuOpen(prev => !prev)}
-            hideBackdrop={isProfileMobile}
             onLogout={handleLogout}
+            open={mobileMenuOpen}
+            onClose={() => setMobileMenuOpen(false)}
             t={t}
           />
         </div>
 
         <div
-          className="flex-1 min-w-0"
+          className="profile-settings-content"
           style={{
             padding: isProfileMobile ? 0 : 0,
           }}
         >
+          <div className="profile-settings-content-inner">
+          {isProfileMobile && (
+            <div className="profile-mobile-header">
+              <button type="button" className="profile-mobile-menu-btn" onClick={() => setMobileMenuOpen(true)}>
+                <MenuOutlined />
+              </button>
+              <span className="profile-mobile-header-title">
+                {tabs.find(t => t.key === activeTab)?.label || t('profile.settings_title')}
+              </span>
+            </div>
+          )}
           <TabContent activeTab={activeTab}>
-            {activeTab === 'profile' && (
-              <div>
-                <Form layout="vertical" form={form} onFinish={handleSave} onValuesChange={() => setFormDirty(true)} className={profileFormClass}>
-                 <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<UserOutlined />, t('profile.info_title'), t('profile.info_subtitle'))}
-
-                  <Form.Item label={t('profile.member_code')}>
-                    <Input
-                      disabled
-                      suffix={<span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><LockOutlined /><CopyOutlined style={{ cursor: 'pointer', color: 'var(--theme-accent)' }} onClick={() => { navigator.clipboard.writeText(user.memberCode || ''); message.success(t('profile.msg_contact_copied')) }} /></span>}
-                      value={user.memberCode || '—'}
-                      style={{ ...profileDisabledInputStyle, fontWeight: 600, fontSize: 14 }}
-                    />
-                  </Form.Item>
-
-                  <Form.Item name="name" hidden>
-                    <Input />
-                  </Form.Item>
-
-                  <Form.Item label={t('profile.phone')} name="phone">
-                    <Input prefix={<PhoneOutlined />} placeholder={t('profile.phone_placeholder')} style={profileInputStyle} />
-                  </Form.Item>
-
-                  <Form.Item
-                    label="Email"
-                    name="email"
-                    rules={[
-                      { type: 'email', message: t('profile.invalid_email') },
-                      { required: !user.email, message: t('profile.email_placeholder') },
-                    ]}
-                  >
-                    <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder={user.email ? t('profile.email_placeholder') : t('profile.add_email_placeholder')} style={user.email ? profileDisabledInputStyle : profileInputStyle} />
-                  </Form.Item>
-
-                  <Form.Item label={t('profile.dob')} name="dateOfBirth" className="col-span-full">
-                    <Input
-                      type="date"
-                      style={{
-                        ...profileInputStyle,
-                        width: '100%',
-                        maxWidth: '100%',
-                        boxSizing: 'border-box',
-                        minWidth: 0,
-                      }}
-                    />
-                  </Form.Item>
-                </div>
-
-                {/* Personal Information */}
-                <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<UserOutlined />, t('profile.personal_info'), t('profile.personal_info_subtitle'))}
-                  <div className={profileFormClass}>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                      <Form.Item label={t('profile.full_name')} name="fullName">
-                        <Input placeholder={t('profile.full_name_placeholder')} style={profileInputStyle} />
-                      </Form.Item>
-                      <Form.Item label={t('profile.gender')} name="gender">
-                        <Select style={profileInputStyle}>
-                          <Select.Option value="male">{t('profile.gender_male')}</Select.Option>
-                          <Select.Option value="female">{t('profile.gender_female')}</Select.Option>
-                          <Select.Option value="other">{t('profile.gender_other')}</Select.Option>
-                        </Select>
-                      </Form.Item>
-                      <Form.Item label={t('profile.nationality')} name="nationality">
-                        <Select
-                          showSearch
-                          placeholder={t('profile.nationality_placeholder')}
-                          style={profileInputStyle}
-                          optionFilterProp="label"
-                        >
-                          {[
-                            { value: 'Vietnamese', label: 'Việt Nam' },
-                            { value: 'American', label: 'United States' },
-                            { value: 'British', label: 'United Kingdom' },
-                            { value: 'Canadian', label: 'Canada' },
-                            { value: 'Australian', label: 'Australia' },
-                            { value: 'French', label: 'France' },
-                            { value: 'German', label: 'Germany' },
-                            { value: 'Japanese', label: 'Japan' },
-                            { value: 'Korean', label: 'South Korea' },
-                            { value: 'Chinese', label: 'China' },
-                            { value: 'Singaporean', label: 'Singapore' },
-                            { value: 'Malaysian', label: 'Malaysia' },
-                            { value: 'Thai', label: 'Thailand' },
-                            { value: 'Other', label: 'Other' },
-                          ].map((c) => (
-                            <Select.Option key={c.value} value={c.value}>{c.label}</Select.Option>
-                          ))}
-                        </Select>
-                      </Form.Item>
-                      <Form.Item label={t('profile.language_preference')} name="language">
-                        <Select style={profileInputStyle}>
-                          <Select.Option value="vi">Tiếng Việt</Select.Option>
-                          <Select.Option value="en">English</Select.Option>
-                        </Select>
-                      </Form.Item>
-                      <Form.Item label={t('profile.timezone')} name="timezone" className="col-span-full">
-                        <Select
-                          showSearch
-                          placeholder={t('profile.timezone_placeholder')}
-                          style={profileInputStyle}
-                          optionFilterProp="label"
-                        >
-                          {[
-                            'UTC-12:00', 'UTC-11:00', 'UTC-10:00', 'UTC-09:00',
-                            'UTC-08:00', 'UTC-07:00', 'UTC-06:00', 'UTC-05:00',
-                            'UTC-04:00', 'UTC-03:00', 'UTC-02:00', 'UTC-01:00',
-                            'UTC+00:00', 'UTC+01:00', 'UTC+02:00', 'UTC+03:00',
-                            'UTC+03:30', 'UTC+04:00', 'UTC+04:30', 'UTC+05:00',
-                            'UTC+05:30', 'UTC+05:45', 'UTC+06:00', 'UTC+06:30',
-                            'UTC+07:00', 'UTC+08:00', 'UTC+08:45', 'UTC+09:00',
-                            'UTC+09:30', 'UTC+10:00', 'UTC+11:00', 'UTC+12:00',
-                            'UTC+13:00', 'UTC+14:00',
-                          ].map((tz) => (
-                            <Select.Option key={tz} value={tz}>{tz}</Select.Option>
-                          ))}
-                        </Select>
-                      </Form.Item>
-                    </div>
+            {!dismissBanner && (() => {
+              const pct = calcProfileCompletion(user)
+              if (pct >= 100) return null
+              const statusText = pct < 50 ? t('profile.completion_low') : t('profile.completion_medium')
+              return (
+                <div className="profile-completion-alert">
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 10,
+                    background: 'var(--theme-accent)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontSize: 16, flexShrink: 0,
+                  }}>
+                    <LockOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.5 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--theme-text)' }}>{t('profile.completion_title')}</span>
+                    <span style={{ color: 'var(--theme-muted)', marginLeft: 6 }}>{pct}% — {statusText}</span>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <Button type="primary" size="small" style={{ borderRadius: 8, fontWeight: 600, fontSize: 12, height: 30, whiteSpace: 'nowrap' }}
+                      onClick={() => setActiveTab('account')}
+                    >
+                      {t('profile.completion_cta')}
+                    </Button>
+                    <Button size="small" style={{ borderRadius: 8, fontWeight: 500, fontSize: 12, height: 30, background: 'transparent', borderColor: 'var(--theme-border)', color: 'var(--theme-muted)', whiteSpace: 'nowrap' }}
+                      onClick={() => setDismissBanner(true)}
+                    >
+                      {t('profile.completion_later')}
+                    </Button>
                   </div>
                 </div>
+              )
+            })()}
 
-                {/* Contact Information */}
+            {(['account', 'personal', 'health'] as ProfileTabKey[]).includes(activeTab) && (
+              <div>
+                <Form layout="vertical" form={form} onFinish={handleSave} onValuesChange={() => setFormDirty(true)} className={profileFormClass}>
+                  {activeTab === 'account' && (
+                    <>
+                    <ProfileHeader
+                      user={user}
+                      avatarPreview={avatarPreview}
+                      fileRef={fileRef}
+                      coverPreview={coverPreview}
+                      coverRef={coverRef}
+                      contactText={contactText}
+                      onCopyContact={handleCopyContact}
+                      onAvatarChange={handleAvatarFileChange}
+                      onCoverChange={handleCoverFileChange}
+                      onCoverRemove={handleCoverRemove}
+                      mediaUploading={mediaUploading}
+                      t={t}
+                    />
+                   <div style={responsiveSectionCardStyle}>
+                    {renderSectionHeader(<UserOutlined />, t('profile.account_security_title'), t('profile.account_security_subtitle'))}
+
+                   <Form.Item label={t('profile.member_code')}>
+                     <Input
+                       disabled
+                       suffix={<span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><LockOutlined /><CopyOutlined style={{ cursor: 'pointer', color: 'var(--theme-accent)' }} onClick={() => { navigator.clipboard.writeText(user.memberCode || ''); message.success(t('profile.msg_contact_copied')) }} /></span>}
+                       value={user.memberCode || '—'}
+                       style={{ ...profileDisabledInputStyle, fontWeight: 600, fontSize: 14 }}
+                     />
+                   </Form.Item>
+
+                   <Form.Item name="name" hidden>
+                     <Input />
+                   </Form.Item>
+
+                   <Form.Item label={t('profile.login_email')} name="email">
+                     <Input disabled suffix={<LockOutlined />} style={profileDisabledInputStyle} />
+                   </Form.Item>
+                   <div className="mb-5 -mt-2">
+                     <div className="text-xs leading-relaxed text-[var(--theme-muted)]" style={{ maxWidth: 480 }}>
+                       {t('profile.change_email_note')}
+                     </div>
+                      <Button
+                        type="link"
+                        size="small"
+                        style={{ padding: 0, marginTop: 6, fontSize: 12, height: 'auto' }}
+                        onClick={() => { setNewEmail(''); setOtpValue(''); setEmailChangeStep('email'); setChangeEmailModalOpen(true) }}
+                      >
+                        {t('profile.change_email')}
+                      </Button>
+                   </div>
+
+                   <Form.Item label={t('profile.username')}>
+                     <Input
+                       disabled
+                       value={user.username || (user.email ? user.email.split('@')[0] : '—')}
+                       style={profileDisabledInputStyle}
+                     />
+                   </Form.Item>
+
+                   <Form.Item label={t('profile.created_at')}>
+                     <Input disabled value={user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'} style={profileDisabledInputStyle} />
+                   </Form.Item>
+                 </div>
+                 </>)}
+
+                {/* Personal Information */}
+                {activeTab === 'personal' && (
                 <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<EnvironmentOutlined />, t('profile.contact_info'), t('profile.contact_info_subtitle'))}
-                  <div className={profileFormClass}>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                      <Form.Item label={t('profile.country')} name="country">
-                        <Select
-                          showSearch
-                          placeholder={t('profile.country_placeholder')}
-                          style={profileInputStyle}
-                          optionFilterProp="label"
+                  {renderSectionHeader(<UserOutlined />, t('profile.personal_info'), t('profile.personal_info_subtitle'))}
+                  {isProfileMobile && mobileSubTabPicker ? (
+                    <div className="profile-subtab-picker">
+                      {[
+                        { key: 'basic' as PersonalSubTab, label: t('profile.personal_subtab_basic') },
+                        { key: 'contact' as PersonalSubTab, label: t('profile.personal_subtab_contact') },
+                        { key: 'emergency' as PersonalSubTab, label: t('profile.personal_subtab_emergency') },
+                        { key: 'verification' as PersonalSubTab, label: t('profile.personal_subtab_verification') },
+                      ].map((sub) => (
+                        <button key={sub.key} type="button" className="profile-subtab-picker-btn"
+                          onClick={() => { setPersonalSubTab(sub.key); setMobileSubTabPicker(false) }}
                         >
-                          {[
-                            { value: 'Vietnam', label: 'Việt Nam' },
-                            { value: 'USA', label: 'United States' },
-                            { value: 'UK', label: 'United Kingdom' },
-                            { value: 'Canada', label: 'Canada' },
-                            { value: 'Australia', label: 'Australia' },
-                            { value: 'France', label: 'France' },
-                            { value: 'Germany', label: 'Germany' },
-                            { value: 'Japan', label: 'Japan' },
-                            { value: 'South Korea', label: 'South Korea' },
-                            { value: 'China', label: 'China' },
-                            { value: 'Singapore', label: 'Singapore' },
-                            { value: 'Malaysia', label: 'Malaysia' },
-                            { value: 'Thailand', label: 'Thailand' },
-                          ].map((c) => (
-                            <Select.Option key={c.value} value={c.value}>{c.label}</Select.Option>
-                          ))}
-                        </Select>
-                      </Form.Item>
-                      <Form.Item label={t('profile.province')} name="province">
-                        <Input placeholder={t('profile.province_placeholder')} style={profileInputStyle} />
-                      </Form.Item>
-                      <Form.Item label={t('profile.detailed_address')} name="detailedAddress" className="col-span-full">
-                        <Input placeholder={t('profile.detailed_address_placeholder')} style={profileInputStyle} />
-                      </Form.Item>
+                          <span className="profile-subtab-picker-icon">
+                            {sub.key === 'basic' ? <UserOutlined /> :
+                             sub.key === 'contact' ? <PhoneOutlined /> :
+                             sub.key === 'emergency' ? <SafetyCertificateOutlined /> :
+                             <InfoCircleOutlined />}
+                          </span>
+                          <span className="profile-subtab-picker-label">{sub.label}</span>
+                          <span className="profile-subtab-picker-arrow">›</span>
+                        </button>
+                      ))}
                     </div>
-                    <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
-                      <div className="mb-3 text-sm font-semibold text-[var(--theme-text)]">
-                        {t('profile.emergency_contact')}
+                  ) : (
+                    <>
+                    {isProfileMobile && (
+                      <button type="button" className="profile-subtab-back" onClick={() => setMobileSubTabPicker(true)}>
+                        <ArrowLeftOutlined style={{ fontSize: 14 }} />
+                        <span>{t('profile.back_to_sections', 'Quay lại các mục thông tin')}</span>
+                      </button>
+                    )}
+                    {!isProfileMobile && (
+                    <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-2 scrollbar-thin">
+                      {[
+                        { key: 'basic' as PersonalSubTab, label: t('profile.personal_subtab_basic') },
+                        { key: 'contact' as PersonalSubTab, label: t('profile.personal_subtab_contact') },
+                        { key: 'emergency' as PersonalSubTab, label: t('profile.personal_subtab_emergency') },
+                        { key: 'verification' as PersonalSubTab, label: t('profile.personal_subtab_verification') },
+                      ].map((sub) => (
+                        <button
+                          key={sub.key}
+                          type="button"
+                          onClick={() => setPersonalSubTab(sub.key)}
+                          className={`profile-mobile-tab${personalSubTab === sub.key ? ' active' : ''}`}
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
+                    )}
+                    <div className={profileFormClass}>
+                    {personalSubTab === 'basic' && (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
+                        <Form.Item label={t('profile.full_name')} name="fullName" className="col-span-full">
+                          <Input placeholder={t('profile.full_name_placeholder')} style={profileInputStyle} />
+                        </Form.Item>
+                        <Form.Item label={t('profile.dob')} name="dateOfBirth">
+                          <Input type="date" style={profileInputStyle} />
+                        </Form.Item>
+                        <Form.Item label={t('profile.gender')} name="gender">
+                          <Select style={profileInputStyle}>
+                            <Select.Option value="male">{t('profile.gender_male')}</Select.Option>
+                            <Select.Option value="female">{t('profile.gender_female')}</Select.Option>
+                            <Select.Option value="other">{t('profile.gender_other')}</Select.Option>
+                          </Select>
+                        </Form.Item>
                       </div>
+                    )}
+
+                    {personalSubTab === 'contact' && (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
+                        <Form.Item label={t('profile.phone')} name="phone" className="col-span-full">
+                          <Input prefix={<PhoneOutlined />} placeholder={t('profile.phone_placeholder')} style={profileInputStyle} />
+                        </Form.Item>
+                        <Form.Item label={t('profile.country')} name="country">
+                          <Select
+                            showSearch
+                            placeholder={t('profile.country_placeholder')}
+                            style={profileInputStyle}
+                            optionFilterProp="label"
+                          >
+                            {[
+                              { value: 'Vietnam', label: 'Việt Nam' },
+                              { value: 'USA', label: 'United States' },
+                              { value: 'UK', label: 'United Kingdom' },
+                              { value: 'Canada', label: 'Canada' },
+                              { value: 'Australia', label: 'Australia' },
+                              { value: 'France', label: 'France' },
+                              { value: 'Germany', label: 'Germany' },
+                              { value: 'Japan', label: 'Japan' },
+                              { value: 'South Korea', label: 'South Korea' },
+                              { value: 'China', label: 'China' },
+                              { value: 'Singapore', label: 'Singapore' },
+                              { value: 'Malaysia', label: 'Malaysia' },
+                              { value: 'Thailand', label: 'Thailand' },
+                            ].map((c) => (
+                              <Select.Option key={c.value} value={c.value}>{c.label}</Select.Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                        <Form.Item label={t('profile.province')} name="province">
+                          <Input placeholder={t('profile.province_placeholder')} style={profileInputStyle} />
+                        </Form.Item>
+                        <Form.Item label={t('profile.detailed_address')} name="detailedAddress" className="col-span-full">
+                          <Input placeholder={t('profile.detailed_address_placeholder')} style={profileInputStyle} />
+                        </Form.Item>
+                      </div>
+                    )}
+
+                    {personalSubTab === 'emergency' && (
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
                         <Form.Item label={t('profile.emergency_name')} name="emergencyName">
                           <Input placeholder={t('profile.emergency_name_placeholder')} style={profileInputStyle} />
                         </Form.Item>
                         <Form.Item label={t('profile.emergency_phone')} name="emergencyPhone">
                           <Input placeholder={t('profile.emergency_phone_placeholder')} style={profileInputStyle} />
+                        </Form.Item>
+                        <Form.Item label={t('profile.emergency_contact_country')} name="emergencyContactCountry">
+                          <Select
+                            showSearch
+                            placeholder={t('profile.country_placeholder')}
+                            style={profileInputStyle}
+                            optionFilterProp="label"
+                          >
+                            {[
+                              { value: 'Vietnam', label: 'Việt Nam' },
+                              { value: 'USA', label: 'United States' },
+                              { value: 'UK', label: 'United Kingdom' },
+                              { value: 'Canada', label: 'Canada' },
+                              { value: 'Australia', label: 'Australia' },
+                              { value: 'France', label: 'France' },
+                              { value: 'Germany', label: 'Germany' },
+                              { value: 'Japan', label: 'Japan' },
+                              { value: 'South Korea', label: 'South Korea' },
+                              { value: 'China', label: 'China' },
+                              { value: 'Singapore', label: 'Singapore' },
+                              { value: 'Malaysia', label: 'Malaysia' },
+                              { value: 'Thailand', label: 'Thailand' },
+                            ].map((c) => (
+                              <Select.Option key={c.value} value={c.value}>{c.label}</Select.Option>
+                            ))}
+                          </Select>
                         </Form.Item>
                         <Form.Item label={t('profile.emergency_relationship')} name="emergencyRelationship">
                           <Select placeholder={t('profile.emergency_relationship_placeholder')} style={profileInputStyle}>
@@ -1239,13 +1254,196 @@ function ProfileContent() {
                           </Select>
                         </Form.Item>
                       </div>
-                    </div>
+                    )}
+
+                    {personalSubTab === 'verification' && (
+                      <div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
+                          <Form.Item label={t('profile.identity_type')} name="identityType">
+                            <Select
+                              placeholder={t('profile.doc_select')}
+                              style={profileInputStyle}
+                              onChange={(val: string) => {
+                                if (val && val !== 'other') form.setFieldValue('identityCountry', '')
+                              }}
+                            >
+                              <Select.Option value="cccd">{t('profile.doc_cccd')}</Select.Option>
+                              <Select.Option value="cmnd">{t('profile.doc_cmnd')}</Select.Option>
+                              <Select.Option value="passport">{t('profile.doc_passport')}</Select.Option>
+                              <Select.Option value="other">{t('profile.doc_other')}</Select.Option>
+                            </Select>
+                          </Form.Item>
+                          <Form.Item label={t('profile.identity_number')} name="identityNumber">
+                            <Input
+                              placeholder={t('profile.document_number_placeholder')}
+                              style={profileInputStyle}
+                              type={user.role === 'admin' ? 'text' : 'password'}
+                            />
+                          </Form.Item>
+                          <Form.Item label={t('profile.identity_country')} name="identityCountry">
+                            <Select
+                              showSearch
+                              placeholder={t('profile.identity_country_placeholder')}
+                              style={profileInputStyle}
+                              optionFilterProp="label"
+                            >
+                              {[
+                                { value: 'Vietnam', label: 'Việt Nam' },
+                                { value: 'USA', label: 'United States' },
+                                { value: 'UK', label: 'United Kingdom' },
+                                { value: 'Canada', label: 'Canada' },
+                                { value: 'Australia', label: 'Australia' },
+                                { value: 'France', label: 'France' },
+                                { value: 'Germany', label: 'Germany' },
+                                { value: 'Japan', label: 'Japan' },
+                                { value: 'South Korea', label: 'South Korea' },
+                                { value: 'China', label: 'China' },
+                                { value: 'Singapore', label: 'Singapore' },
+                                { value: 'Malaysia', label: 'Malaysia' },
+                                { value: 'Thailand', label: 'Thailand' },
+                              ].map((c) => (
+                                <Select.Option key={c.value} value={c.value}>{c.label}</Select.Option>
+                              ))}
+                            </Select>
+                          </Form.Item>
+                        </div>
+                        <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
+                          <div className="mb-3 text-sm font-semibold text-[var(--theme-text)]">
+                            {t('profile.identity_images')}
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 max-[480px]:grid-cols-1">
+                            <div>
+                              <div className="mb-1 text-xs text-[var(--theme-muted)]">{t('profile.identity_front')}</div>
+                              <label
+                                style={{
+                                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                                  justifyContent: 'center', gap: 6,
+                                  minHeight: 100, borderRadius: 10,
+                                  border: '1px dashed var(--theme-border)',
+                                  background: 'var(--theme-input-bg)',
+                                  cursor: 'pointer', overflow: 'hidden',
+                                }}
+                              >
+                                {identityFrontPreview || user.identityFrontImage ? (
+                                  <img
+                                    src={identityFrontPreview || user.identityFrontImage}
+                                    alt="front"
+                                    style={{ width: '100%', height: 120, objectFit: 'cover' }}
+                                  />
+                                ) : (
+                                  <>
+                                    <PlusOutlined style={{ fontSize: 20, color: 'var(--theme-muted)' }} />
+                                    <span style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
+                                      {t('profile.identity_upload')}
+                                    </span>
+                                  </>
+                                )}
+                                <input
+                                  type="file"
+                                  hidden
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0]
+                                    if (file) {
+                                      setIdentityFrontFile(file)
+                                      setIdentityFrontPreview(URL.createObjectURL(file))
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+                            <div>
+                              <div className="mb-1 text-xs text-[var(--theme-muted)]">{t('profile.identity_back')}</div>
+                              <label
+                                style={{
+                                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                                  justifyContent: 'center', gap: 6,
+                                  minHeight: 100, borderRadius: 10,
+                                  border: '1px dashed var(--theme-border)',
+                                  background: 'var(--theme-input-bg)',
+                                  cursor: 'pointer', overflow: 'hidden',
+                                }}
+                              >
+                                {identityBackPreview || user.identityBackImage ? (
+                                  <img
+                                    src={identityBackPreview || user.identityBackImage}
+                                    alt="back"
+                                    style={{ width: '100%', height: 120, objectFit: 'cover' }}
+                                  />
+                                ) : (
+                                  <>
+                                    <PlusOutlined style={{ fontSize: 20, color: 'var(--theme-muted)' }} />
+                                    <span style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
+                                      {t('profile.identity_upload')}
+                                    </span>
+                                  </>
+                                )}
+                                <input
+                                  type="file"
+                                  hidden
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0]
+                                    if (file) {
+                                      setIdentityBackFile(file)
+                                      setIdentityBackPreview(URL.createObjectURL(file))
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                        {(user.identityType || user.identityStatus) && (
+                          <div className="mt-4 flex items-center gap-2 text-sm flex-wrap">
+                            {(() => {
+                              const st = (user.identityStatus || '') as string
+                              if (!st) return <Tag color="default">{t('profile.identity_not_submitted')}</Tag>
+                              if (st === 'pending') return <Tag color="processing">{t('profile.identity_pending')}</Tag>
+                              if (st === 'approved') return <Tag color="success">{t('profile.identity_approved')}</Tag>
+                              if (st === 'rejected') {
+                                return <>
+                                  <Tag color="error">{t('profile.identity_rejected')}</Tag>
+                                  {user.identityRejectReason && (
+                                    <span className="text-xs text-[var(--theme-muted)] ml-1">
+                                      ({t('profile.identity_reject_reason')}: {user.identityRejectReason})
+                                    </span>
+                  )}
+                            </>
+                              }
+                              return null
+                            })()}
+                            {user.identityReviewedAt && (
+                              <span className="text-xs text-[var(--theme-muted)]">
+                                {new Date(user.identityReviewedAt).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {form.getFieldValue('identityType') === 'cccd' && user.nationality === 'Vietnamese' && (
+                          <div className="mt-2 text-xs text-[var(--theme-accent)]">
+                            <InfoCircleOutlined className="mr-1" />
+                            {t('profile.identity_suggest_vn')}
+                          </div>
+                        )}
+                        {form.getFieldValue('identityType') === 'passport' && user.nationality !== 'Vietnamese' && user.nationality && (
+                          <div className="mt-2 text-xs text-[var(--theme-accent)]">
+                            <InfoCircleOutlined className="mr-1" />
+                            {t('profile.identity_suggest_foreign')}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
+                  </>
+                )}
                 </div>
+                )}
 
                 {/* Health Information */}
+                {activeTab === 'health' && (
                 <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<PhoneOutlined />, t('profile.health_info'), t('profile.health_info_subtitle'))}
+                  {renderSectionHeader(<HeartOutlined />, t('profile.health_info'), t('profile.health_info_subtitle'))}
                   <div className={profileFormClass}>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
                       <Form.Item label={t('profile.height')} name="height">
@@ -1275,196 +1473,73 @@ function ProfileContent() {
                     </Form.Item>
                   </div>
                 </div>
+                )}
 
-                {/* Identity Verification */}
-                <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<LockOutlined />, t('profile.identity_verification'), t('profile.identity_verification_subtitle'))}
-                  <div className={profileFormClass}>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                      <Form.Item label={t('profile.identity_type')} name="identityType">
-                        <Select
-                          placeholder={t('profile.doc_select')}
-                          style={profileInputStyle}
-                          onChange={(val: string) => {
-                            if (val && val !== 'other') form.setFieldValue('identityCountry', '')
-                          }}
-                        >
-                          <Select.Option value="cccd">{t('profile.doc_cccd')}</Select.Option>
-                          <Select.Option value="cmnd">{t('profile.doc_cmnd')}</Select.Option>
-                          <Select.Option value="passport">{t('profile.doc_passport')}</Select.Option>
-                          <Select.Option value="other">{t('profile.doc_other')}</Select.Option>
-                        </Select>
-                      </Form.Item>
-                      <Form.Item label={t('profile.identity_number')} name="identityNumber">
-                        <Input
-                          placeholder={t('profile.document_number_placeholder')}
-                          style={profileInputStyle}
-                          type={user.role === 'admin' ? 'text' : 'password'}
-                        />
-                      </Form.Item>
-                      <Form.Item label={t('profile.identity_country')} name="identityCountry">
-                        <Select
-                          showSearch
-                          placeholder={t('profile.identity_country_placeholder')}
-                          style={profileInputStyle}
-                          optionFilterProp="label"
-                        >
-                          {[
-                            { value: 'Vietnam', label: 'Việt Nam' },
-                            { value: 'USA', label: 'United States' },
-                            { value: 'UK', label: 'United Kingdom' },
-                            { value: 'Canada', label: 'Canada' },
-                            { value: 'Australia', label: 'Australia' },
-                            { value: 'France', label: 'France' },
-                            { value: 'Germany', label: 'Germany' },
-                            { value: 'Japan', label: 'Japan' },
-                            { value: 'South Korea', label: 'South Korea' },
-                            { value: 'China', label: 'China' },
-                            { value: 'Singapore', label: 'Singapore' },
-                            { value: 'Malaysia', label: 'Malaysia' },
-                            { value: 'Thailand', label: 'Thailand' },
-                          ].map((c) => (
-                            <Select.Option key={c.value} value={c.value}>{c.label}</Select.Option>
-                          ))}
-                        </Select>
-                      </Form.Item>
-                    </div>
 
-                    <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
-                      <div className="mb-3 text-sm font-semibold text-[var(--theme-text)]">
-                        {t('profile.identity_images')}
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 max-[480px]:grid-cols-1">
-                        <div>
-                          <div className="mb-1 text-xs text-[var(--theme-muted)]">{t('profile.identity_front')}</div>
-                          <label
-                            style={{
-                              display: 'flex', flexDirection: 'column', alignItems: 'center',
-                              justifyContent: 'center', gap: 6,
-                              minHeight: 100, borderRadius: 10,
-                              border: '1px dashed var(--theme-border)',
-                              background: 'var(--theme-input-bg)',
-                              cursor: 'pointer', overflow: 'hidden',
-                            }}
-                          >
-                            {identityFrontPreview || user.identityFrontImage ? (
-                              <img
-                                src={identityFrontPreview || user.identityFrontImage}
-                                alt="front"
-                                style={{ width: '100%', height: 120, objectFit: 'cover' }}
-                              />
-                            ) : (
-                              <>
-                                <PlusOutlined style={{ fontSize: 20, color: 'var(--theme-muted)' }} />
-                                <span style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
-                                  {t('profile.identity_upload')}
-                                </span>
-                              </>
-                            )}
-                            <input
-                              type="file"
-                              hidden
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0]
-                                if (file) {
-                                  setIdentityFrontFile(file)
-                                  setIdentityFrontPreview(URL.createObjectURL(file))
-                                }
-                              }}
-                            />
-                          </label>
-                        </div>
-                        <div>
-                          <div className="mb-1 text-xs text-[var(--theme-muted)]">{t('profile.identity_back')}</div>
-                          <label
-                            style={{
-                              display: 'flex', flexDirection: 'column', alignItems: 'center',
-                              justifyContent: 'center', gap: 6,
-                              minHeight: 100, borderRadius: 10,
-                              border: '1px dashed var(--theme-border)',
-                              background: 'var(--theme-input-bg)',
-                              cursor: 'pointer', overflow: 'hidden',
-                            }}
-                          >
-                            {identityBackPreview || user.identityBackImage ? (
-                              <img
-                                src={identityBackPreview || user.identityBackImage}
-                                alt="back"
-                                style={{ width: '100%', height: 120, objectFit: 'cover' }}
-                              />
-                            ) : (
-                              <>
-                                <PlusOutlined style={{ fontSize: 20, color: 'var(--theme-muted)' }} />
-                                <span style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
-                                  {t('profile.identity_upload')}
-                                </span>
-                              </>
-                            )}
-                            <input
-                              type="file"
-                              hidden
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0]
-                                if (file) {
-                                  setIdentityBackFile(file)
-                                  setIdentityBackPreview(URL.createObjectURL(file))
-                                }
-                              }}
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-
-                    {(user.identityType || user.identityStatus) && (
-                      <div className="mt-4 flex items-center gap-2 text-sm flex-wrap">
-                        {(() => {
-                          const st = (user.identityStatus || '') as string
-                          if (!st) return <Tag color="default">{t('profile.identity_not_submitted')}</Tag>
-                          if (st === 'pending') return <Tag color="processing">{t('profile.identity_pending')}</Tag>
-                          if (st === 'approved') return <Tag color="success">{t('profile.identity_approved')}</Tag>
-                          if (st === 'rejected') {
-                            return <>
-                              <Tag color="error">{t('profile.identity_rejected')}</Tag>
-                              {user.identityRejectReason && (
-                                <span className="text-xs text-[var(--theme-muted)] ml-1">
-                                  ({t('profile.identity_reject_reason')}: {user.identityRejectReason})
-                                </span>
-                              )}
-                            </>
-                          }
-                          return null
-                        })()}
-                        {user.identityReviewedAt && (
-                          <span className="text-xs text-[var(--theme-muted)]">
-                            {new Date(user.identityReviewedAt).toLocaleDateString()}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {form.getFieldValue('identityType') === 'cccd' && user.nationality === 'Vietnamese' && (
-                      <div className="mt-2 text-xs text-[var(--theme-accent)]">
-                        <InfoCircleOutlined className="mr-1" />
-                        {t('profile.identity_suggest_vn')}
-                      </div>
-                    )}
-                    {form.getFieldValue('identityType') === 'passport' && user.nationality !== 'Vietnamese' && user.nationality && (
-                      <div className="mt-2 text-xs text-[var(--theme-accent)]">
-                        <InfoCircleOutlined className="mr-1" />
-                        {t('profile.identity_suggest_foreign')}
-                      </div>
-                    )}
-                  </div>
-                </div>
 
                 </Form>
+              </div>
+            )}
 
+            {activeTab === 'account' && !hasPassword && (
+              <div style={responsiveSectionCardStyle}>
+                {renderSectionHeader(<LockOutlined />, t('profile.set_password_title'), t('profile.set_password_subtitle'))}
+
+                <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
+                  <Form.Item label={t('profile.new_password')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Form.Item label={t('profile.confirm_password')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.confirm_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
+                    {t('profile.set_password_btn')}
+                  </Button>
+                </Form>
+              </div>
+            )}
+
+            {activeTab === 'account' && hasPassword && (
+              <div style={responsiveSectionCardStyle}>
+                {renderSectionHeader(<LockOutlined />, t('profile.change_password_title'), t('profile.change_password_subtitle'))}
+
+                <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
+                  <Form.Item label={t('profile.current_password')} name="currentPassword" rules={[{ required: true, message: t('profile.current_password_placeholder') }]}>
+                    <Input.Password placeholder={t('profile.current_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -12, marginBottom: 8 }}>
+                    <Button
+                      type="link"
+                      size="small"
+                      style={{ padding: 0, height: 'auto', fontSize: 12 }}
+                      onClick={() => { setForgotPasswordStep('method'); setForgotPasswordMethod(null); setForgotPasswordOtp(''); setForgotPasswordNewPassword(''); setForgotPasswordConfirmPassword(''); setResendCooldown(0); setOtpSending(false); setOtpSendingMethod(null); setForgotPasswordModalOpen(true) }}
+                    >
+                      {t('profile.forgot_password')}
+                    </Button>
+                  </div>
+
+                  <Form.Item label={t('profile.new_password_change')} name="newPassword" rules={[{ required: true, min: 6, message: t('profile.new_password_min') }]}>
+                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Form.Item label={t('profile.confirm_password_change')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_change_placeholder') }, { validator: (_: any, value: string) => { if (!value || passwordForm.getFieldValue('newPassword') === value) return Promise.resolve(); return Promise.reject(new Error(t('profile.confirm_password_match'))) } }]}>
+                    <Input.Password placeholder={t('profile.confirm_password_hint')} style={profilePasswordInputStyle} />
+                  </Form.Item>
+
+                  <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
+                    {t('profile.change_password_btn')}
+                  </Button>
+                </Form>
+              </div>
+            )}
+
+            {activeTab === 'gym' && (
+              <div>
                 {/* Gym Profile */}
                 <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<ShoppingCartOutlined />, t('profile.gym_profile'), t('profile.gym_profile_subtitle'))}
+                  {renderSectionHeader(<TrophyOutlined />, t('profile.gym_profile'), t('profile.gym_profile_subtitle'))}
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
                       <span className="text-[var(--theme-muted)]">{t('profile.join_date')}</span>
@@ -1495,63 +1570,6 @@ function ProfileContent() {
                   </div>
                 </div>
 
-                {formDirty && (
-                  <>
-                    <div className="max-[768px]:hidden" style={{
-                      position: 'sticky', bottom: 0, zIndex: 10,
-                      background: 'var(--theme-elevated)',
-                      border: '1px solid var(--theme-border)',
-                      padding: '12px 24px',
-                      marginTop: 4, marginBottom: 0,
-                      borderRadius: 14,
-                      display: 'flex', justifyContent: 'flex-end', gap: 10,
-                      backdropFilter: 'blur(12px)',
-                    }}>
-                      <Button
-                        onClick={() => { form.resetFields(); setFormDirty(false) }}
-                        style={{ height: 44, borderRadius: 10, fontWeight: 500, paddingInline: 24 }}
-                      >
-                        {t('profile.cancel')}
-                      </Button>
-                      <Button
-                        type="primary"
-                        loading={loading}
-                        style={{ height: 44, borderRadius: 10, fontWeight: 600, paddingInline: 32, background: 'var(--theme-accent)', borderColor: 'var(--theme-accent-border)' }}
-                        onClick={() => form.submit()}
-                      >
-                        {t('profile.save_changes')}
-                      </Button>
-                    </div>
-                    <div className="min-[769px]:hidden fixed bottom-0 left-0 right-0 z-50" style={{
-                      background: 'var(--theme-elevated)',
-                      borderTop: '1px solid var(--theme-border)',
-                      padding: '12px 16px',
-                      paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-                      display: 'flex', gap: 10,
-                    }}>
-                      <Button
-                        block
-                        onClick={() => { form.resetFields(); setFormDirty(false) }}
-                        style={{ height: 44, borderRadius: 10, fontWeight: 500 }}
-                      >
-                        {t('profile.cancel')}
-                      </Button>
-                      <Button
-                        block
-                        type="primary"
-                        loading={loading}
-                        style={{ height: 44, borderRadius: 10, fontWeight: 600, background: 'var(--theme-accent)', borderColor: 'var(--theme-accent-border)' }}
-                        onClick={() => form.submit()}
-                      >
-                        {t('profile.save_changes')}
-                      </Button>
-                    </div>
-                  </>
-                )}
-
-                <div style={{ marginBottom: 12 }}>
-                  {renderActionItem(<ShoppingCartOutlined />, t('profile.orders_title'), t('profile.orders_subtitle'), goToOrders)}
-                </div>
               </div>
             )}
 
@@ -1854,52 +1872,198 @@ function ProfileContent() {
               </div>
             )}
 
-            {activeTab === 'password' && !hasPassword && (
-              <div style={responsiveSectionCardStyle}>
-                {renderSectionHeader(<LockOutlined />, t('profile.set_password_title'), t('profile.set_password_subtitle'))}
-
-                <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
-                  <Form.Item label={t('profile.new_password')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
-                  </Form.Item>
-
-                  <Form.Item label={t('profile.confirm_password')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.confirm_password_hint')} style={profilePasswordInputStyle} />
-                  </Form.Item>
-
-                  <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                    {t('profile.set_password_btn')}
-                  </Button>
-                </Form>
-              </div>
-            )}
-
-            {activeTab === 'password' && hasPassword && (
-              <div style={responsiveSectionCardStyle}>
-                {renderSectionHeader(<LockOutlined />, t('profile.change_password_title'), t('profile.change_password_subtitle'))}
-
-                <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
-                  <Form.Item label={t('profile.current_password')} name="currentPassword" rules={[{ required: true, message: t('profile.current_password_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.current_password_hint')} style={profilePasswordInputStyle} />
-                  </Form.Item>
-
-                  <Form.Item label={t('profile.new_password_change')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_change_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
-                  </Form.Item>
-
-                  <Form.Item label={t('profile.confirm_password_change')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_change_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.confirm_password_hint')} style={profilePasswordInputStyle} />
-                  </Form.Item>
-
-                  <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                    {t('profile.change_password_btn')}
-                  </Button>
-                </Form>
-              </div>
-            )}
           </TabContent>
+          </div>
         </div>
       </div>
+      <Modal
+        title={t('profile.password_recovery')}
+        open={forgotPasswordModalOpen}
+        onCancel={() => { setForgotPasswordModalOpen(false); setResendCooldown(0); setOtpSending(false); setOtpSendingMethod(null) }}
+        footer={null}
+        destroyOnClose
+        className={addressEditModalClass}
+        style={profileThemeStyle}
+      >
+        {forgotPasswordStep === 'method' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+            <div style={{ fontSize: 13, color: 'var(--theme-muted)', marginBottom: 4 }}>
+              {t('profile.choose_otp_method')}
+            </div>
+
+            <Button
+              block
+              disabled={!user?.email || otpSending}
+              onClick={() => handleForgotPasswordSendOtp('email')}
+              loading={otpSending && otpSendingMethod === 'email'}
+              style={{
+                height: 48,
+                borderRadius: 12,
+                textAlign: 'left',
+                padding: '0 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 14,
+                border: '1px solid var(--profile-border)',
+                background: !user?.email || otpSending ? 'var(--theme-elevated)' : 'var(--profile-bg-container)',
+                color: user?.email ? 'var(--profile-text)' : 'var(--theme-muted)',
+                cursor: user?.email && !otpSending ? 'pointer' : 'not-allowed',
+              }}
+              className="!font-normal"
+            >
+              ✉ {t('profile.send_otp_email')}
+              {!user?.email && <span style={{ marginLeft: 'auto', fontSize: 11 }}>{t('profile.method_unavailable')}</span>}
+            </Button>
+
+            <Button
+              block
+              disabled={!user?.phone || otpSending}
+              onClick={() => handleForgotPasswordSendOtp('phone')}
+              loading={otpSending && otpSendingMethod === 'phone'}
+              style={{
+                height: 48,
+                borderRadius: 12,
+                textAlign: 'left',
+                padding: '0 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 14,
+                border: '1px solid var(--profile-border)',
+                background: !user?.phone || otpSending ? 'var(--theme-elevated)' : 'var(--profile-bg-container)',
+                color: user?.phone ? 'var(--profile-text)' : 'var(--theme-muted)',
+                cursor: user?.phone && !otpSending ? 'pointer' : 'not-allowed',
+              }}
+              className="!font-normal"
+            >
+              📞 {t('profile.send_otp_phone')}
+              {!user?.phone && <span style={{ marginLeft: 'auto', fontSize: 11 }}>{t('profile.method_unavailable')}</span>}
+            </Button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
+            <div className="text-xs leading-relaxed text-[var(--theme-muted)]" style={{ marginBottom: 4 }}>
+              Mã OTP có thể mất vài giây để đến nơi.
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
+                {t('profile.otp_code')}
+              </div>
+              <Input
+                value={forgotPasswordOtp}
+                onChange={(e) => setForgotPasswordOtp(e.target.value)}
+                placeholder={t('profile.otp_code')}
+                style={profileInputStyle}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
+                {t('profile.new_password')}
+              </div>
+              <Input.Password
+                value={forgotPasswordNewPassword}
+                onChange={(e) => setForgotPasswordNewPassword(e.target.value)}
+                placeholder={t('profile.new_password_hint')}
+                style={profilePasswordInputStyle}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
+                {t('profile.confirm_password')}
+              </div>
+              <Input.Password
+                value={forgotPasswordConfirmPassword}
+                onChange={(e) => setForgotPasswordConfirmPassword(e.target.value)}
+                placeholder={t('profile.confirm_password_hint')}
+                style={profilePasswordInputStyle}
+              />
+            </div>
+            <Button
+              type="primary"
+              block
+              loading={forgotPasswordLoading}
+              onClick={handleForgotPasswordConfirm}
+              className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}
+            >
+              {t('profile.reset_password')}
+            </Button>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        title={t('profile.change_email_title')}
+        open={changeEmailModalOpen}
+        onCancel={() => setChangeEmailModalOpen(false)}
+        footer={null}
+        destroyOnClose
+        className={addressEditModalClass}
+        style={profileThemeStyle}
+      >
+        {emailChangeStep === 'email' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
+                {t('profile.current_email')}
+              </div>
+              <Input disabled value={user?.email || '—'} style={profileDisabledInputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
+                {t('profile.new_email')}
+              </div>
+              <Input
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder={t('profile.email_placeholder')}
+                style={profileInputStyle}
+              />
+            </div>
+            <Button
+              type="primary"
+              block
+              loading={emailChangeLoading}
+              onClick={handleRequestEmailChange}
+              className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}
+            >
+              {t('profile.send_otp')}
+            </Button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
+                {t('profile.new_email')}
+              </div>
+              <Input disabled value={newEmail} style={profileDisabledInputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
+                {t('profile.otp_code')}
+              </div>
+              <Input
+                value={otpValue}
+                onChange={(e) => setOtpValue(e.target.value)}
+                placeholder={t('profile.otp_code')}
+                style={profileInputStyle}
+              />
+            </div>
+            <div className="text-xs leading-relaxed text-[var(--theme-muted)]">
+              {t('profile.email_change_note')}
+            </div>
+            <Button
+              type="primary"
+              block
+              loading={emailChangeLoading}
+              onClick={handleConfirmEmailChange}
+              className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}
+            >
+              {t('profile.confirm_change_email')}
+            </Button>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

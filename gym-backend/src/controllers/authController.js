@@ -1,16 +1,20 @@
+import { invalidateAiPTCache } from '../ai/services/context/contextDataService.js'
+import { buildClientUrl } from '../config/appUrls.js'
+import Address from '../models/Address.js'
+import Booking from '../models/Booking.js'
+import Membership from '../models/Membership.js'
+import Order from '../models/Order.js'
 import Shop from '../models/Shop.js'
 import User from '../models/User.js'
-import Address from '../models/Address.js'
-import Membership from '../models/Membership.js'
-import Booking from '../models/Booking.js'
-import Order from '../models/Order.js'
 import { recordAuditLog } from '../services/auditLogService.js'
+import { invalidateContextCache } from '../services/conversationContextCache.js'
 import {
   consumeOtp,
   hashPendingPassword,
   sendOtp,
   verifyOtp,
 } from '../services/otpService.js'
+import { assertFeatureEnabled, getSystemSettingsValue } from '../services/systemSettingsService.js'
 import AppError from '../utils/appError.js'
 import {
   generateAccessToken,
@@ -26,8 +30,6 @@ import {
   normalizeIdentifier,
   normalizePhone,
 } from '../utils/identifier.js'
-import { buildClientUrl } from '../config/appUrls.js'
-import { assertFeatureEnabled, getSystemSettingsValue } from '../services/systemSettingsService.js'
 
 const sendError = (res, error) => {
   console.error(error)
@@ -647,6 +649,11 @@ export const updateProfile = async (req, res) => {
     if (!user) {
       throw new AppError('Không tìm thấy người dùng để cập nhật', 404)
     }
+    // Invalidate AI cache if user is PT and profile was updated
+    if (user.role === 'pt') {
+      invalidateAiPTCache()
+      invalidateContextCache('ptAvailability', { userId: String(user._id) })
+    }
     return res.json({ message: 'Cập nhật thông tin thành công', user })
   } catch (error) {
     return sendError(res, error)
@@ -822,6 +829,192 @@ export const resetPassword = async (req, res) => {
   }
 }
 
+export const requestPasswordResetOtp = async (req, res) => {
+  try {
+    const settings = await getSystemSettingsValue()
+    const { method } = req.body
+
+    if (!method || !['email', 'phone'].includes(method)) {
+      throw new AppError('Phương thức không hợp lệ', 400)
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      throw new AppError('Không tìm thấy tài khoản', 404)
+    }
+
+    const identifier = method === 'email' ? user.email : user.phone
+    if (!identifier) {
+      throw new AppError(
+        method === 'email' ? 'Tài khoản chưa có email' : 'Tài khoản chưa có số điện thoại',
+        400,
+      )
+    }
+
+    const channel = method === 'email' ? 'email' : 'sms'
+
+    const otpResult = await sendOtp({
+      identifier,
+      purpose: 'password_reset',
+      channel,
+      provider: user.provider,
+      ttlSeconds: settings.auth.otpExpiresInSeconds,
+      exposePreview: settings.auth.demoOtpEnabled,
+      payload: {
+        userId: user._id.toString(),
+      },
+    })
+
+    return res.json({
+      message: method === 'email' ? 'Mã OTP đã được gửi về email' : 'Mã OTP đã được gửi qua SMS',
+      expiresIn: otpResult.expiresIn,
+      resendAfter: otpResult.resendAfter,
+      otpPreview: otpResult.otpPreview,
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const resetPasswordWithOtp = async (req, res) => {
+  try {
+    const { method, otp, newPassword } = req.body
+
+    if (!method || !['email', 'phone'].includes(method)) {
+      throw new AppError('Phương thức không hợp lệ', 400)
+    }
+    if (!otp) {
+      throw new AppError('Mã OTP là bắt buộc', 400)
+    }
+    if (!newPassword || newPassword.length < 6) {
+      throw new AppError('Mật khẩu mới phải có ít nhất 6 ký tự', 400)
+    }
+
+    validatePasswordStrength(newPassword)
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      throw new AppError('Không tìm thấy tài khoản', 404)
+    }
+
+    const identifier = method === 'email' ? user.email : user.phone
+    if (!identifier) {
+      throw new AppError(
+        method === 'email' ? 'Tài khoản chưa có email' : 'Tài khoản chưa có số điện thoại',
+        400,
+      )
+    }
+
+    const otpRecord = await verifyOtp({
+      identifier,
+      purpose: 'password_reset',
+      otp,
+    })
+
+    await consumeOtp(otpRecord._id)
+
+    user.password = newPassword
+    await user.save()
+
+    return res.json({ message: 'Đặt lại mật khẩu thành công' })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const requestEmailChangeOtp = async (req, res) => {
+  try {
+    const settings = await getSystemSettingsValue()
+    const { newEmail } = req.body
+
+    if (!newEmail || !isValidEmail(newEmail)) {
+      throw new AppError('Email mới không hợp lệ', 400)
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      throw new AppError('Không tìm thấy tài khoản', 404)
+    }
+
+    if (newEmail.toLowerCase() === user.email?.toLowerCase()) {
+      throw new AppError('Email mới trùng với email hiện tại', 400)
+    }
+
+    const existingUser = await User.findOne({ email: newEmail.toLowerCase() })
+    if (existingUser) {
+      throw new AppError('Email đã được sử dụng bởi tài khoản khác', 400)
+    }
+
+    if (!user.email) {
+      throw new AppError('Tài khoản chưa có email để nhận OTP', 400)
+    }
+
+    const otpResult = await sendOtp({
+      identifier: user.email,
+      purpose: 'email_change',
+      channel: 'email',
+      provider: user.provider,
+      ttlSeconds: settings.auth.otpExpiresInSeconds,
+      exposePreview: settings.auth.demoOtpEnabled,
+      payload: {
+        userId: user._id.toString(),
+        newEmail: newEmail.toLowerCase(),
+      },
+    })
+
+    return res.json({
+      message: 'Mã OTP đã được gửi về email hiện tại',
+      expiresIn: otpResult.expiresIn,
+      resendAfter: otpResult.resendAfter,
+      otpPreview: otpResult.otpPreview,
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const confirmEmailChange = async (req, res) => {
+  try {
+    const { newEmail, otp } = req.body
+
+    if (!newEmail || !isValidEmail(newEmail)) {
+      throw new AppError('Email mới không hợp lệ', 400)
+    }
+    if (!otp) {
+      throw new AppError('Mã OTP là bắt buộc', 400)
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      throw new AppError('Không tìm thấy tài khoản', 404)
+    }
+
+    if (!user.email) {
+      throw new AppError('Tài khoản chưa có email', 400)
+    }
+
+    const otpRecord = await verifyOtp({
+      identifier: user.email,
+      purpose: 'email_change',
+      otp,
+    })
+
+    const storedNewEmail = otpRecord.payload?.newEmail
+    if (!storedNewEmail || storedNewEmail.toLowerCase() !== newEmail.toLowerCase()) {
+      throw new AppError('Email không khớp với yêu cầu đổi email', 400)
+    }
+
+    await consumeOtp(otpRecord._id)
+
+    user.email = newEmail.toLowerCase()
+    await user.save()
+
+    return res.json({ message: 'Đổi email thành công', email: user.email })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
@@ -945,6 +1138,12 @@ export const updateUserRole = async (req, res) => {
       details: `Đổi role từ ${previousRole} sang ${normalizedRole}`,
     })
 
+    // Invalidate AI PT cache if role changed to/from PT
+    if (previousRole === 'pt' || normalizedRole === 'pt') {
+      invalidateAiPTCache()
+      invalidateContextCache('ptAvailability', { userId: String(user._id) })
+    }
+
     return res.json({ message: 'Cập nhật role thành công', user })
   } catch (error) {
     return sendError(res, error)
@@ -976,6 +1175,12 @@ export const toggleUserStatus = async (req, res) => {
       entity: user,
       details: user.isActive ? 'Mở khóa tài khoản' : 'Khóa tài khoản',
     })
+
+    // Invalidate AI cache if PT is locked/unlocked (changes visibility in AI response)
+    if (user.role === 'pt') {
+      invalidateAiPTCache()
+      invalidateContextCache('ptAvailability', { userId: String(user._id) })
+    }
 
     return res.json({
       message: `Tài khoản đã được ${user.isActive ? 'mở khóa' : 'khóa'}`,

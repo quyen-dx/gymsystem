@@ -54,7 +54,7 @@ function MemberFooter() {
 
   const accountLinks: FooterLink[] = [
     { label: t('footer.member.account.profile'), to: '/profile', icon: UserRound },
-    { label: t('footer.member.account.orders'), to: '/orders', icon: ShoppingBag },
+    { label: t('footer.member.account.orders'), to: '/cart?tab=orders', icon: ShoppingBag, match: ['/cart'] },
     { label: t('footer.member.account.notifications'), to: '/notifications', icon: Bell },
   ]
 

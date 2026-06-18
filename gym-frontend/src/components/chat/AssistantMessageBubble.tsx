@@ -1,48 +1,83 @@
-import type { ChatMessage, PlanPayloadPlan } from '../../types/aichat/aichat'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { PlanDetailCard } from './PlanDetailCard'
-import { PlanCompareTable } from './PlanCompareTable'
+import type { AiSource, ChatMessage, PlanPayloadPlan } from '../../types/aichat/aichat'
+import { ComboRecommendCard } from './ComboRecommendCard'
 import { CompareTwoPlansCard } from './CompareTwoPlansCard'
-import { MembershipPlanCards } from './MembershipPlanCards'
+import PlanCompactList from './PlanCompactList'
+import { PlanCompareTable } from './PlanCompareTable'
+import { PlanDetailCard } from './PlanDetailCard'
 import { PlanRecommendCard } from './PlanRecommendCard'
+import { WorkoutAnalyzeCard, WorkoutPlanCard } from './WorkoutAnalyzeCard'
+import { stripUnsafeModelOutput } from '../../utils/aiUtils'
 
 interface Props {
   message: ChatMessage
   content?: string
+  loadingMessage?: string | null
 }
 
-export function AssistantMessageBubble({ message, content }: Props) {
+function tryExtractAnswerFromJsonText(input: unknown): string {
+  if (input == null) return ''
+
+  if (typeof input !== 'string') {
+    if (typeof (input as any)?.answer === 'string') {
+      return (input as any).answer
+    }
+    if (typeof (input as any)?.data?.answer === 'string') {
+      return (input as any).data.answer
+    }
+    if (typeof (input as any)?.message === 'string') {
+      return (input as any).message
+    }
+    return ''
+  }
+
+  const text = input.trim()
+
+  if (!text.startsWith('{')) return input
+
+  try {
+    const parsed = JSON.parse(text)
+
+    if (typeof parsed?.answer === 'string') {
+      return parsed.answer
+    }
+
+    if (typeof parsed?.data?.answer === 'string') {
+      return parsed.data.answer
+    }
+
+    if (typeof parsed?.message === 'string') {
+      return parsed.message
+    }
+
+    return text.includes('"answer"') ? '' : input
+  } catch {
+    const match = text.match(/"answer"\s*:\s*"([\s\S]*?)"\s*,\s*"(conclusion|reason|recommendedPlanId|alternativePlanIds|cardIds|toolsNeeded|action)"/)
+
+    if (match?.[1]) {
+      return match[1]
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\')
+    }
+
+    return text.includes('"answer"') ? '' : input
+  }
+}
+
+export function AssistantMessageBubble({ message, content, loadingMessage }: Props) {
   const { i18n } = useTranslation()
   const lang = message.metadata?.answerLanguage === 'en'
     ? 'en'
     : message.metadata?.answerLanguage === 'vi'
       ? 'vi'
       : i18n.language?.startsWith('en') ? 'en' : 'vi'
-  const stripUnsafeModelOutput = (value: string) => {
-    const cleaned = String(value || '')
-      .replace(/<think>[\s\S]*?<\/think>/gi, '')
-      .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-      .replace(/^```[a-z0-9_-]*\s*/i, '')
-      .replace(/\s*```$/i, '')
-      .trim()
-    if (/^\s*\{[\s\S]*\}\s*$/.test(cleaned)) {
-      try {
-        const parsed = JSON.parse(cleaned)
-        if (typeof parsed?.answer === 'string') return parsed.answer.trim()
-        if (typeof parsed?.message === 'string') return parsed.message.trim()
-        return ''
-      } catch {
-        return ''
-      }
-    }
-    return cleaned
-  }
   const rawText = typeof content === 'string' ? content : (typeof message.content === 'string' ? message.content : '')
-  const text = stripUnsafeModelOutput(rawText)
+  const displayContent = tryExtractAnswerFromJsonText(rawText)
+  const text = tryExtractAnswerFromJsonText(stripUnsafeModelOutput(displayContent))
   const isPlanResponseType = typeof message.type === 'string' && (
     message.type === 'plan_detail'
-    || message.type === 'plan_list'
     || message.type === 'plan_compare'
     || message.type === 'plan_compare_two'
     || message.type === 'plan_compare_all'
@@ -50,13 +85,43 @@ export function AssistantMessageBubble({ message, content }: Props) {
   )
   const planPayload = isPlanResponseType ? message.planPayload : undefined
 
-  const renderBold = (text: string) =>
+  const renderEmphasis = (text: string) =>
     text.split(/(\*\*[^*]+\*\*)/g).map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
         return <strong key={i}>{part.slice(2, -2)}</strong>
       }
       return part
     })
+
+  const renderRichText = (value: string) => {
+    const parts = String(value || '').split(/((?:Giá|Price):\s*[^,\n]+|(?:Thời hạn|Duration):\s*[^,\n]+|(?:Quyền lợi|Benefits):|(?:Chuyên môn|Specialty|Expertise):\s*[^,\n]+|(?:Đánh giá|Rating):\s*[^,\n]+|\b\d+(?:[.,]\d+)?\/5\b|(?:\d{1,3}(?:[.,]\d{3})+|\d+)\s*(?:đ|₫|VND|VNĐ)\b|\b\d+\s*(?:ngày|days?|tháng|months?|năm|years?)\b)/gi)
+    return parts.filter(Boolean).map((part, index) => {
+      const text = part.trim()
+      if (!text) return part
+      const labelMatch = text.match(/^(?:[^\p{L}\p{N}]*)?(Giá|Price|Thời hạn|Duration|Quyền lợi|Benefits|Chuyên môn|Specialty|Expertise|Đánh giá|Rating):(\s*)/iu)
+      if (labelMatch) {
+        const label = labelMatch[1]
+        const rest = text.slice(labelMatch[0].length)
+        return (
+          <span key={index}>
+            <span className="ai-label">{label}:</span>
+            {rest ? ' ' : ''}
+            {rest ? renderRichText(rest) : null}
+          </span>
+        )
+      }
+      if (/(?:\d{1,3}(?:[.,]\d{3})+|\d+)\s*(?:đ|₫|VND|VNĐ)\b/i.test(text)) {
+        return <span key={index} className="ai-price-value">{renderEmphasis(part)}</span>
+      }
+      if (/\b\d+\s*(?:ngày|days?|tháng|months?|năm|years?)\b/i.test(text)) {
+        return <span key={index} className="ai-duration-value">{renderEmphasis(part)}</span>
+      }
+      if (/\b\d+(?:[.,]\d+)?\/5\b/i.test(text)) {
+        return <span key={index} className="ai-rating-value">{renderEmphasis(part)}</span>
+      }
+      return renderEmphasis(part)
+    })
+  }
 
   const normalizeReadableText = (value: string) =>
     value
@@ -73,8 +138,8 @@ export function AssistantMessageBubble({ message, content }: Props) {
       const items = bullets
       bullets = []
       nodes.push(
-        <ul key={`${keyPrefix}-ul`}>
-          {items.map((item, index) => <li key={index}>{renderBold(item)}</li>)}
+        <ul key={`${keyPrefix}-ul`} className="ai-benefit-list">
+          {items.map((item, index) => <li key={index} className="ai-benefit-item">{renderRichText(item)}</li>)}
         </ul>
       )
     }
@@ -91,7 +156,25 @@ export function AssistantMessageBubble({ message, content }: Props) {
         return
       }
       flushBullets(String(i))
-      nodes.push(<p key={i}>{renderBold(trimmed)}</p>)
+      const numberedTitle = trimmed.match(/^(\d+)\.\s+(.+)$/)
+      if (numberedTitle) {
+        nodes.push(
+          <p key={i} className="ai-plan-title">
+            <span className="ai-section-index">{numberedTitle[1]}.</span>
+            {' '}
+            {renderRichText(numberedTitle[2])}
+          </p>
+        )
+        return
+      }
+      const isStandaloneTitle = !trimmed.includes(':')
+        && trimmed.length <= 72
+        && /^(Gói|Plan|PT|Huấn luyện viên|Trainer)\b/i.test(trimmed)
+      nodes.push(
+        <p key={i} className={isStandaloneTitle ? 'ai-plan-title' : undefined}>
+          {renderRichText(trimmed)}
+        </p>
+      )
     })
     flushBullets('end')
     return nodes
@@ -153,27 +236,88 @@ export function AssistantMessageBubble({ message, content }: Props) {
     )
   }
 
-  const displayText = typeof message.answer === 'string' && message.answer.trim() ? stripUnsafeModelOutput(message.answer) : text
+  const normalizeSource = (source: AiSource) => {
+    const url = typeof source.url === 'string' && source.url.trim()
+      ? source.url.trim()
+      : (typeof source.sourceUrl === 'string' ? source.sourceUrl.trim() : '')
+    if (!url) return null
+    let domain = typeof source.domain === 'string' && source.domain.trim()
+      ? source.domain.trim()
+      : (typeof source.sourceDomain === 'string' ? source.sourceDomain.trim() : '')
+    if (!domain) {
+      try {
+        domain = new URL(url).hostname.replace(/^www\./, '')
+      } catch {
+        domain = ''
+      }
+    }
+    const title = typeof source.title === 'string' && source.title.trim()
+      ? source.title.trim()
+      : (typeof source.sourceTitle === 'string' && source.sourceTitle.trim() ? source.sourceTitle.trim() : domain || url)
+    const favicon = typeof source.favicon === 'string' && source.favicon.trim()
+      ? source.favicon.trim()
+      : (domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32` : '')
+    return { title, url, domain, favicon }
+  }
+
+  const renderSourceList = () => {
+    const normalizedSources = (Array.isArray(message.sources) ? message.sources : [])
+      .map(normalizeSource)
+      .filter((source): source is { title: string; url: string; domain: string; favicon: string } => Boolean(source))
+      .slice(0, 4)
+    if (normalizedSources.length === 0) return null
+    return (
+      <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.78 }}>
+          {lang === 'en' ? 'References' : 'Nguồn tham khảo'}
+        </div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {normalizedSources.map((source) => (
+            <a
+              key={source.url}
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              className="ai-plan-row"
+              style={{ display: 'grid', gridTemplateColumns: '24px 1fr', gap: 8, textDecoration: 'none', color: 'inherit' }}
+            >
+              {source.favicon ? (
+                <img src={source.favicon} alt="" width={20} height={20} style={{ borderRadius: 4, marginTop: 2 }} />
+              ) : (
+                <span style={{ width: 20, height: 20, borderRadius: 4, background: 'rgba(148, 163, 184, 0.24)', marginTop: 2 }} />
+              )}
+              <span>
+                <span className="ai-plan-name" style={{ display: 'block' }}>{source.domain || source.title}</span>
+                <span className="ai-plan-price" style={{ display: 'block' }}>
+                  {lang === 'en' ? 'Article: ' : 'Bài viết: '}
+                  {source.title}
+                </span>
+                <span style={{ display: 'block', marginTop: 2, fontSize: 12, fontWeight: 600 }}>
+                  {lang === 'en' ? 'View source' : 'Xem nguồn'}
+                </span>
+              </span>
+            </a>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  const answerText = tryExtractAnswerFromJsonText(stripUnsafeModelOutput(tryExtractAnswerFromJsonText(message.answer)))
+  const displayText = answerText || text
+
+  const shouldRenderPlanCompact = (() => {
+    if (message.type === 'plan_list') return true
+    if (message.planPayload && (message.planPayload as any).type === 'plan_list') return true
+    if (message.type === 'text_advice' && Array.isArray(message.plans) && message.plans.length > 0) return true
+    return false
+  })()
 
   if (planPayload?.type === 'plan_detail') {
     return (
       <div className="ai-assistant-content ai-text-content">
         {displayText && renderText(displayText)}
         <PlanDetailCard plan={planPayload.plan as PlanPayloadPlan} lang={lang} />
-      </div>
-    )
-  }
-
-  if (planPayload?.type === 'plan_list') {
-    const plans = (planPayload.plans || []) as PlanPayloadPlan[]
-    return (
-      <div className="ai-assistant-content ai-text-content">
-        {displayText && renderText(displayText)}
-        {plans.length > 0 && (
-          <div>
-            <MembershipPlanCards plans={plans} lang={lang} />
-          </div>
-        )}
       </div>
     )
   }
@@ -207,12 +351,46 @@ export function AssistantMessageBubble({ message, content }: Props) {
     )
   }
 
+  if (shouldRenderPlanCompact) {
+    const plans = (message.planPayload && (message.planPayload as any).type === 'plan_list')
+      ? (message.planPayload as any).plans || []
+      : (message.plans || [])
+    return (
+      <div className="ai-assistant-content ai-text-content">
+        {displayText && renderText(displayText)}
+        <PlanCompactList plans={plans} lang={lang} />
+      </div>
+    )
+  }
+
+  if (message.type === 'smart_recommend' || (planPayload?.type === 'smart_recommend')) {
+    const payload = planPayload?.type === 'smart_recommend' ? planPayload : message as any
+    return (
+      <div className="ai-assistant-content ai-text-content">
+        {displayText && renderText(displayText)}
+        <ComboRecommendCard data={payload as any} lang={lang} />
+      </div>
+    )
+  }
+
+  if (message.type === 'workout_analyzer' || message.type === 'workout_plan' || planPayload?.type === 'workout_analyzer' || planPayload?.type === 'workout_plan') {
+    const payload = (planPayload?.type === 'workout_analyzer' || planPayload?.type === 'workout_plan') ? planPayload : message as any
+    const isPlan = payload.type === 'workout_plan'
+    return (
+      <div className="ai-assistant-content ai-text-content">
+        {displayText && renderText(displayText)}
+        {isPlan ? <WorkoutPlanCard data={payload.plan || payload} lang={lang} /> : <WorkoutAnalyzeCard data={payload.analysis || payload} lang={lang} />}
+      </div>
+    )
+  }
+
   return (
     <div className="ai-assistant-content ai-text-content" style={{ whiteSpace: 'pre-line', lineHeight: 1.7 }}>
       {displayText && renderText(displayText)}
       {renderGenericCards()}
+      {renderSourceList()}
       {!displayText && (
-        <span className="ai-loading-text">đang suy nghĩ...</span>
+        <span className="ai-loading-text">{loadingMessage || 'đang suy nghĩ...'}</span>
       )}
     </div>
   )

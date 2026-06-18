@@ -2,6 +2,7 @@ import Product from '../models/Product.js'
 import Shop from '../models/Shop.js'
 import { recordAuditLog } from '../services/auditLogService.js'
 import { invalidateContextCache } from '../services/conversationContextCache.js'
+import { invalidateAiDomainCache } from '../ai/services/aiService.js'
 import AppError from '../utils/appError.js'
 
 const getUserDisplayName = (user, fallback = '') =>
@@ -198,6 +199,7 @@ export const createProduct = async (req, res, next) => {
       details: 'Thêm sản phẩm',
     })
     invalidateContextCache('products')
+    invalidateAiDomainCache('products')
     res.status(201).json(product)
   } catch (err) { next(err) }
 }
@@ -270,6 +272,7 @@ export const updateProduct = async (req, res, next) => {
       details: 'Cập nhật thông tin sản phẩm',
     })
     invalidateContextCache('products')
+    invalidateAiDomainCache('products')
     res.json(product)
   } catch (err) { next(err) }
 }
@@ -287,6 +290,7 @@ export const deleteProduct = async (req, res, next) => {
       details: 'Xóa sản phẩm',
     })
     invalidateContextCache('products')
+    invalidateAiDomainCache('products')
     res.json({ message: 'Đã xoá sản phẩm' })
   } catch (err) { next(err) }
 }

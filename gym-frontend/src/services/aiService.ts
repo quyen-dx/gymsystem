@@ -34,10 +34,34 @@ const normalizeSources = (sources: unknown) => (
     Array.isArray(sources)
         ? sources
             .filter((item) => isRecord(item) && typeof item.url === 'string' && item.url.trim())
-            .map((item) => ({
-                title: typeof item.title === 'string' ? item.title : '',
-                url: item.url,
-            }))
+            .map((item) => {
+                const url = item.url.trim()
+                let domain = typeof item.domain === 'string' && item.domain.trim()
+                    ? item.domain.trim()
+                    : (typeof item.sourceDomain === 'string' && item.sourceDomain.trim() ? item.sourceDomain.trim() : '')
+                if (!domain) {
+                    try {
+                        domain = new URL(url).hostname.replace(/^www\./, '')
+                    } catch {
+                        domain = ''
+                    }
+                }
+                const title = typeof item.title === 'string' && item.title.trim()
+                    ? item.title.trim()
+                    : (typeof item.sourceTitle === 'string' && item.sourceTitle.trim() ? item.sourceTitle.trim() : domain || url)
+                const favicon = typeof item.favicon === 'string' && item.favicon.trim()
+                    ? item.favicon.trim()
+                    : (domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32` : '')
+                return {
+                    title,
+                    url,
+                    domain,
+                    favicon,
+                    sourceTitle: title,
+                    sourceUrl: typeof item.sourceUrl === 'string' && item.sourceUrl.trim() ? item.sourceUrl.trim() : url,
+                    sourceDomain: domain,
+                }
+            })
             .slice(0, 5)
         : isRecord(sources) ? sources : {}
 )
@@ -66,6 +90,7 @@ export type AiMode = 'gym' | 'general'
 
 type AiStreamEvent =
     | { id: string; event: 'meta'; data: any }
+    | { id: string; event: 'status'; data: { status: string; message: string } }
     | { id: string; event: 'chunk'; data: { text?: string; seq?: number } }
     | { id: string; event: 'done'; data: any }
     | { id: string; event: 'error'; data: { message?: string } }
@@ -74,6 +99,7 @@ type AiStreamEvent =
 type RequestAiAssistantStreamOptions = {
     onChunk?: (chunk: string) => void
     onFirstChunk?: () => void
+    onStatus?: (status: string, message: string) => void
     onMeta?: (data: any) => void
     onFallback?: (data: any) => void
     signal?: AbortSignal
@@ -248,6 +274,14 @@ export const requestAiAssistantStream = async (
         if (streamEvent.event === 'meta') {
             console.log('[AI stream frontend] meta:', streamEvent.data)
             options.onMeta?.(streamEvent.data)
+            return
+        }
+
+        if (streamEvent.event === 'status') {
+            const status = streamEvent.data?.status || ''
+            const message = streamEvent.data?.message || ''
+            console.log('[AI stream frontend] status:', status, message)
+            options.onStatus?.(status, message)
             return
         }
 

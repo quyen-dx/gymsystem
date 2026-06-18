@@ -76,13 +76,8 @@ export const contextCache = {
     const cached = scope.entries.get(entryKey)
 
     if (cached && cached.expiresAt.getTime() > nowMs && cached.version === version) {
-      console.log('[CONTEXT_CACHE] hit:', dataKey)
-      console.log('[CACHE] hit:', dataKey)
       return cached.value
     }
-
-    console.log('[CONTEXT_CACHE] miss:', dataKey)
-    console.log('[CACHE] miss:', dataKey)
     const value = await loader()
     const cachedAt = new Date()
     const expiresAt = new Date(cachedAt.getTime() + Number(ttlSeconds || 0) * 1000)

@@ -4,6 +4,7 @@ import PTSchedule from '../models/PTSchedule.js'
 import Booking from '../models/Booking.js'
 import { recordAuditLog } from '../services/auditLogService.js'
 import { invalidateContextCache } from '../services/conversationContextCache.js'
+import { invalidateAiDomainCache } from '../ai/services/aiService.js'
 import AppError from '../utils/appError.js'
 import { isValidEmail, normalizePhone } from '../utils/identifier.js'
 
@@ -264,6 +265,7 @@ export const createPT = async (req, res) => {
     })
     invalidateContextCache('ptList')
     invalidateContextCache('ptAvailability')
+    invalidateAiDomainCache('pts')
 
     res.status(201).json({ message: 'Thêm PT thành công', pt: { ...pt.toObject(), user: { _id: user._id, name: user.name, email: user.email, phone: user.phone, avatar: user.avatar } } })
   } catch (error) {
@@ -316,6 +318,7 @@ export const updatePT = async (req, res) => {
     })
     invalidateContextCache('ptList')
     invalidateContextCache('ptAvailability')
+    invalidateAiDomainCache('pts')
 
     res.json({ message: 'Cập nhật thành công' })
   } catch (error) {
@@ -342,6 +345,7 @@ export const deletePT = async (req, res) => {
     })
     invalidateContextCache('ptList')
     invalidateContextCache('ptAvailability')
+    invalidateAiDomainCache('pts')
 
     res.json({ message: 'Đã xóa PT' })
   } catch (error) {
@@ -368,6 +372,7 @@ export const updatePTSchedule = async (req, res) => {
       )
     }
     invalidateContextCache('ptAvailability')
+    invalidateAiDomainCache('pts')
 
     res.json({ message: 'Cập nhật lịch làm việc thành công' })
   } catch (error) {

@@ -4,6 +4,7 @@ import LandingContent from '../models/LandingContent.js'
 import Policy from '../models/Policy.js'
 import UserActivity from '../models/UserActivity.js'
 import { invalidateContextCache } from '../services/conversationContextCache.js'
+import { invalidateAiDomainCache } from '../ai/services/aiService.js'
 import { recordUserActivity } from '../services/userActivityService.js'
 
 const normalizePageId = (value) => {
@@ -153,6 +154,7 @@ export const updateLandingContent = async (req, res) => {
   })
   await landing.save()
   invalidateContextCache('landingCms')
+  invalidateAiDomainCache('landing')
   res.json({ message: 'Cập nhật landing CMS thành công', landing })
 }
 
@@ -178,6 +180,7 @@ export const updateCmsPage = async (req, res) => {
   })
   await landing.save()
   invalidateContextCache('landingCms')
+  invalidateAiDomainCache('landing')
   res.json({ message: 'Cập nhật landing CMS thành công', pageId, landing })
 }
 
@@ -212,6 +215,7 @@ export const getFaqs = async (req, res) => {
 export const createFaq = async (req, res) => {
   const faq = await Faq.create(req.body)
   invalidateContextCache('faqs')
+  invalidateAiDomainCache('faqs')
   res.status(201).json({ message: 'Tạo FAQ thành công', faq })
 }
 
@@ -219,6 +223,7 @@ export const updateFaq = async (req, res) => {
   const faq = await Faq.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
   if (!faq) return res.status(404).json({ message: 'Không tìm thấy FAQ' })
   invalidateContextCache('faqs')
+  invalidateAiDomainCache('faqs')
   res.json({ message: 'Cập nhật FAQ thành công', faq })
 }
 
@@ -226,6 +231,7 @@ export const deleteFaq = async (req, res) => {
   const faq = await Faq.findByIdAndDelete(req.params.id)
   if (!faq) return res.status(404).json({ message: 'Không tìm thấy FAQ' })
   invalidateContextCache('faqs')
+  invalidateAiDomainCache('faqs')
   res.json({ message: 'Xóa FAQ thành công' })
 }
 
@@ -266,6 +272,7 @@ export const createPolicy = async (req, res) => {
   const slug = req.body.slug || slugify(req.body.titleVi || req.body.titleEn)
   const policy = await Policy.create({ ...req.body, slug })
   invalidateContextCache('policies')
+  invalidateAiDomainCache('policies')
   res.status(201).json({ message: 'Tạo chính sách thành công', policy })
 }
 
@@ -275,6 +282,7 @@ export const updatePolicy = async (req, res) => {
   const policy = await Policy.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true })
   if (!policy) return res.status(404).json({ message: 'Không tìm thấy chính sách' })
   invalidateContextCache('policies')
+  invalidateAiDomainCache('policies')
   res.json({ message: 'Cập nhật chính sách thành công', policy })
 }
 
@@ -282,6 +290,7 @@ export const deletePolicy = async (req, res) => {
   const policy = await Policy.findByIdAndDelete(req.params.id)
   if (!policy) return res.status(404).json({ message: 'Không tìm thấy chính sách' })
   invalidateContextCache('policies')
+  invalidateAiDomainCache('policies')
   res.json({ message: 'Xóa chính sách thành công' })
 }
 

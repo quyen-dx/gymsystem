@@ -25,6 +25,7 @@ export interface User {
   hasPassword?: boolean
   createdAt: string
   memberCode?: string
+  username?: string
   fullName?: string
   gender?: string
   nationality?: string
@@ -37,6 +38,7 @@ export interface User {
     name?: string
     phone?: string
     relationship?: string
+    country?: string
   }
   healthInfo?: {
     height?: number | null

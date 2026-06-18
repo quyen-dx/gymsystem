@@ -22,6 +22,13 @@ const {
   detectAnswerLanguage,
   parseAiJsonPayload,
   isSensitiveDataRequest,
+  buildGenericSafeAnswer,
+  buildGenericNutritionAnswer,
+  normalizeResponseType,
+  getNutritionWebSources,
+  hasWorkoutGoalAdviceIntent,
+  hasNutritionIntent,
+  answerIsParseFailure,
 } = __aiClassifierTestHooks
 
 const cases = [
@@ -85,6 +92,214 @@ test('workout frequency supplements previous plan advice in same conversation', 
   assert.ok(normalized.tools.includes('plans'))
   assert.notEqual(normalized.intent, 'workout_info')
 })
+
+const workoutGoalAdviceQueries = [
+  'Gợi ý mục tiêu tập luyện cho tôi',
+  'Tôi nên đặt mục tiêu tập luyện thế nào?',
+  'Tôi muốn bắt đầu tập thì nên theo hướng nào?',
+  'Tôi chưa biết nên giảm cân hay tăng cơ',
+  'Cho tôi mục tiêu tập phù hợp',
+]
+
+for (const query of workoutGoalAdviceQueries) {
+  test(`classifies workout goal/advice variant: ${query}`, () => {
+    const fallback = buildDefaultClassifier(query, 'vi')
+    const normalized = normalizeClassifierResult(fallback, query, { role: 'member' }, 'vi')
+
+    assert.equal(hasWorkoutGoalAdviceIntent(query), true)
+    assert.equal(normalized.subject, 'workout')
+    assert.ok(['advice', 'recommend', 'goal'].includes(normalized.action))
+    assert.equal(normalized.intent, 'workout_advice')
+    assert.equal(normalized.shouldRenderCard, false)
+    assert.deepEqual(normalized.tools, ['workout'])
+  })
+}
+
+test('generic safe answer handles workout goal/advice variants without parse failure', () => {
+  for (const query of workoutGoalAdviceQueries) {
+    const classifier = normalizeClassifierResult(buildDefaultClassifier(query, 'vi'), query, { role: 'member' }, 'vi')
+    const payload = buildGenericSafeAnswer({
+      query,
+      classifierResult: classifier,
+      language: 'vi',
+      toolData: { workoutProgress: { totalWorkouts: 2 } },
+      reason: 'test_parse_failure',
+    })
+
+    assert.ok(payload)
+    assert.equal(payload.type, 'workout_advice')
+    assert.equal(payload.provider, 'generic_safe_answer')
+    assert.match(payload.answer, /^[A-ZÀ-Ỹ\s]+/)
+    assert.match(payload.answer, /GymPro có 2 buổi tập gần đây/)
+    assert.doesNotMatch(payload.answer, /Với mục tiêu của bạn, nên bắt đầu bằng lịch tập bền vững/)
+    assert.equal(answerIsParseFailure(payload.answer, 'vi'), false)
+    assert.equal(payload.cards.length, 0)
+    assert.equal(payload.planPayload, null)
+  }
+})
+
+test('parse-failure detector only identifies system error text', () => {
+  const parseFailure = 'Mình chưa xử lý được câu trả lời này, bạn hỏi lại ngắn hơn giúp mình nhé.'
+
+  assert.equal(answerIsParseFailure(parseFailure, 'vi'), true)
+  assert.equal(answerIsParseFailure('Kết luận: Bạn nên bắt đầu với mục tiêu sức khỏe tổng quát.', 'vi'), false)
+})
+
+test('generic safe answer dispatches plan and PT subjects from classifier context', () => {
+  const planPayload = buildGenericSafeAnswer({
+    query: 'Cho tôi xem các gói tập',
+    language: 'vi',
+    classifierResult: { subject: 'plan', action: 'list', intent: 'membership_info' },
+    toolData: { activePlans: testPlans },
+    reason: 'test_parse_failure',
+  })
+  const ptPayload = buildGenericSafeAnswer({
+    query: 'Cho tôi xem PT phù hợp',
+    language: 'vi',
+    classifierResult: { subject: 'trainer', action: 'list', intent: 'pt_advice' },
+    toolData: { availablePTs: [{ id: 'pt1', name: 'Coach A', specialties: ['Tăng cơ'], rating: 4.8 }] },
+    reason: 'test_parse_failure',
+  })
+
+  assert.equal(planPayload.type, 'text_advice')
+  assert.equal(planPayload.provider, 'generic_safe_answer')
+  assert.deepEqual(planPayload.cards, [])
+  assert.equal(planPayload.planPayload, null)
+  assert.equal(answerIsParseFailure(planPayload.answer, 'vi'), false)
+  assert.equal(ptPayload.type, 'pt_list')
+  assert.equal(ptPayload.provider, 'generic_safe_answer')
+  assert.equal(answerIsParseFailure(ptPayload.answer, 'vi'), false)
+})
+
+const nutritionQueries = [
+  'Tôi nên ăn gì để giảm cân?',
+  'Ăn gì để tăng cơ?',
+  'Bữa tối nên ăn gì?',
+  'Giảm mỡ nên ăn như nào?',
+  'Tôi muốn thực đơn 1 ngày',
+  'Ăn cơm có béo không?',
+  'Tập gym nên ăn trước buổi tập không?',
+  'Sau tập nên ăn gì?',
+]
+
+const unsafeRenderedPattern = /\b(undefined|null|NaN)\b|\[object Object\]/i
+
+for (const query of nutritionQueries) {
+  test(`classifies nutrition query outside workout: ${query}`, () => {
+    const classifier = normalizeClassifierResult(buildDefaultClassifier(query, 'vi'), query, { role: 'member' }, 'vi')
+    const payload = buildGenericNutritionAnswer({
+      query,
+      classifierResult: classifier,
+      language: 'vi',
+      toolData: { products: [{ nameVi: 'Whey Protein' }] },
+    })
+
+    assert.equal(hasNutritionIntent(query), true)
+    assert.equal(classifier.subject, 'nutrition')
+    assert.equal(classifier.intent, 'nutrition_advice')
+    assert.notEqual(classifier.subject, 'workout')
+    assert.notEqual(classifier.intent, 'workout_advice')
+    assert.ok(classifier.tools.includes('products'))
+    assert.equal(payload.type, 'nutrition_advice')
+    assert.match(payload.answer, /Nên ăn:/)
+    assert.match(payload.answer, /Ức gà|trứng|đậu phụ|rau xanh|yến mạch/)
+    assert.match(payload.answer, /Gợi ý 1 ngày:/)
+    assert.equal(answerIsParseFailure(payload.answer, 'vi'), false)
+  })
+}
+
+for (const query of [
+  'Trước buổi tập nên ăn gì?',
+  'Sau buổi tập nên ăn gì?',
+  'Tôi nên ăn gì để giảm cân?',
+  'Ăn gì để tăng cơ?',
+  'Bữa tối nên ăn gì?',
+]) {
+  test(`nutrition safe answer has no unsafe rendered token: ${query}`, () => {
+    const classifier = normalizeClassifierResult(buildDefaultClassifier(query, 'vi'), query, { role: 'member' }, 'vi')
+    const payload = buildGenericNutritionAnswer({
+      query,
+      classifierResult: classifier,
+      language: 'vi',
+      toolData: {},
+    })
+
+    assert.equal(payload.type, 'nutrition_advice')
+    assert.doesNotMatch(payload.answer, unsafeRenderedPattern)
+    assert.match(payload.answer, /^[A-ZÀ-Ỹ\s]+/)
+    assert.match(payload.answer, /Nên ăn:/)
+    if (/truoc|trước/i.test(query)) {
+      assert.match(payload.answer, /Trước buổi tập bạn nên ăn nhẹ/)
+    }
+    if (/sau/i.test(query)) {
+      assert.match(payload.answer, /Sau buổi tập bạn nên ưu tiên protein/)
+    }
+  })
+}
+
+test('nutrition web sources are normalized for source cards', () => {
+  const sources = getNutritionWebSources({
+    webSearchNutrition: {
+      used: true,
+      sources: [
+        {
+          sourceTitle: 'Best Pre Workout Meals',
+          sourceUrl: 'https://www.healthline.com/nutrition/pre-workout-meals',
+          sourceDomain: 'healthline.com',
+        },
+      ],
+    },
+  })
+
+  assert.equal(normalizeResponseType('nutrition_advice_with_sources', 'nutrition_advice'), 'nutrition_advice_with_sources')
+  assert.equal(sources.length, 1)
+  assert.equal(sources[0].title, 'Best Pre Workout Meals')
+  assert.equal(sources[0].url, 'https://www.healthline.com/nutrition/pre-workout-meals')
+  assert.equal(sources[0].domain, 'healthline.com')
+  assert.match(sources[0].favicon, /google\.com\/s2\/favicons/)
+})
+
+const requiredNonFallbackQueries = [
+  'Gợi ý mục tiêu tập luyện cho tôi',
+  'Tôi nên tập gì?',
+  'Tôi muốn giảm cân',
+  'Tôi muốn tăng cơ',
+  'Gym có mấy gói?',
+  'Gói nào rẻ nhất?',
+  'Tháng này tôi tập ổn không?',
+  'PT nào phù hợp với tôi?',
+  'Gói đó có PT không?',
+  'Đọc ảnh này giúp tôi',
+]
+
+const toolDataForSafeAnswer = {
+  activePlans: testPlans,
+  plans: testPlans,
+  availablePTs: [{ id: 'pt1', name: 'Coach A', specialties: ['Tăng cơ', 'Giảm mỡ'], rating: 4.8 }],
+  pt: [{ id: 'pt1', name: 'Coach A', specialties: ['Tăng cơ', 'Giảm mỡ'], rating: 4.8 }],
+  workoutProgress: { totalWorkouts: 3 },
+  currentMembership: { found: false },
+}
+
+for (const query of requiredNonFallbackQueries) {
+  test(`valid GymPro query never uses parse-failure fallback: ${query}`, () => {
+    const classifier = normalizeClassifierResult(buildDefaultClassifier(query, 'vi'), query, { role: 'member' }, 'vi')
+    const safePayload = buildGenericSafeAnswer({
+      query,
+      classifierResult: classifier,
+      language: 'vi',
+      toolData: toolDataForSafeAnswer,
+      reason: 'test_parse_failure',
+    })
+
+    assert.notEqual(classifier.intent, 'unknown')
+    assert.ok(classifier.tools.length > 0 || ['plan', 'trainer', 'workout', 'health'].includes(classifier.subject))
+    assert.ok(safePayload, `Expected safe payload for ${classifier.subject}/${classifier.action}/${classifier.intent}`)
+    assert.equal(answerIsParseFailure(safePayload.answer, 'vi'), false)
+    assert.doesNotMatch(safePayload.answer, /Mình chưa xử lý được câu trả lời này/)
+    assert.ok(String(safePayload.answer || '').trim().length > 0)
+  })
+}
 
 for (const query of ['VIP?', 'PT?', 'Gói?', 'Plan?', 'Trainer?']) {
   test(`keeps short ambiguous message unclear: ${query}`, () => {
@@ -421,6 +636,42 @@ test('benefit lookup Premium PT is DB-only no card/list', () => {
   assert.match(payload.answer, /Có/)
   assert.equal(payload.cards.length, 0)
   assert.equal(payload.plans.length, 0)
+})
+
+test('plan catalog and price questions are text-only without plan cards', () => {
+  const unsafeOutput = /\b(undefined|null|NaN)\b|\[object Object\]/i
+  const listPayload = buildPlanInfoDirectAnswer({ query: 'Có bao nhiêu gói tập?', language: 'vi', plans: testPlans })
+  const pricePayload = buildPlanInfoDirectAnswer({ query: 'Giá các gói', language: 'vi', plans: testPlans })
+  const listByVerbPayload = buildPlanInfoDirectAnswer({ query: 'Liệt kê gói tập', language: 'vi', plans: testPlans })
+  const cheapestPayload = buildPlanInfoDirectAnswer({ query: 'Gói nào rẻ nhất?', language: 'vi', plans: testPlans })
+
+  for (const payload of [listPayload, pricePayload, listByVerbPayload, cheapestPayload]) {
+    assert.equal(payload.type, 'text_advice')
+    assert.deepEqual(payload.cards, [])
+    assert.deepEqual(payload.plans, [])
+    assert.equal(payload.planPayload, null)
+    assert.doesNotMatch(payload.answer, unsafeOutput)
+    assert.match(payload.answer, /Giá:/)
+    assert.match(payload.answer, /Thời hạn:/)
+    assert.match(payload.answer, /Quyền lợi:/)
+  }
+  assert.match(listPayload.answer, /GymPro hiện có 3 gói/)
+  assert.match(pricePayload.answer, /GÓI VIP/)
+  assert.match(cheapestPayload.answer, /GÓI CƠ BẢN/)
+})
+
+test('plan catalog uses safe fallback labels for missing plan fields', () => {
+  const payload = buildPlanInfoDirectAnswer({
+    query: 'Liệt kê gói tập',
+    language: 'vi',
+    plans: [{ _id: 'missing', nameVi: 'Gói Thiếu Dữ Liệu', nameEn: 'Missing Data' }],
+  })
+
+  assert.equal(payload.type, 'text_advice')
+  assert.match(payload.answer, /Giá: Chưa cập nhật/)
+  assert.match(payload.answer, /Thời hạn: Chưa cập nhật/)
+  assert.match(payload.answer, /Quyền lợi:\n\n• Chưa cập nhật/)
+  assert.doesNotMatch(payload.answer, /\b(undefined|null|NaN)\b|\[object Object\]/i)
 })
 
 test('English short questions are detected as English', () => {

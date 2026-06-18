@@ -5,6 +5,7 @@ import {
   buildFacebookOauthRedirect,
   buildGoogleOauthRedirect,
   changePassword,
+  confirmEmailChange,
   deleteUser,
   enableSellerMode,
   getAllUsers,
@@ -16,7 +17,10 @@ import {
   logout,
   refreshToken,
   registerFacebook,
+  requestEmailChangeOtp,
+  requestPasswordResetOtp,
   resetPassword,
+  resetPasswordWithOtp,
   sendForgotPasswordOtp,
   sendRegisterOtp,
   setPassword,
@@ -124,6 +128,10 @@ router.put('/update-profile', protect, upload.fields([
   { name: 'identityBackImage', maxCount: 1 },
 ]), updateProfile)
 router.put('/change-password', protect, changePassword)
+router.post('/request-password-reset-otp', protect, requestPasswordResetOtp)
+router.post('/reset-password-with-otp', protect, resetPasswordWithOtp)
+router.post('/change-email/request', protect, requestEmailChangeOtp)
+router.post('/change-email/confirm', protect, confirmEmailChange)
 router.post('/add-password', protect, setPassword)
 router.put('/set-password', protect, setPassword)
 router.post('/logout', logout)

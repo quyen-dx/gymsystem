@@ -1,71 +1,75 @@
-import mongoose from 'mongoose'
-import Booking from '../../models/Booking.js'
-import Faq from '../../models/Faq.js'
-import Feedback from '../../models/Feedback.js'
-import LandingContent from '../../models/LandingContent.js'
 import Membership from '../../models/Membership.js'
-import Order from '../../models/Order.js'
-import Plan from '../../models/Plan.js'
-import Policy from '../../models/Policy.js'
-import PT from '../../models/PT.js'
-import Product from '../../models/Product.js'
-import SystemSettings from '../../models/SystemSettings.js'
-import Transaction from '../../models/Transaction.js'
 import User from '../../models/User.js'
-import UserActivity from '../../models/UserActivity.js'
-import { contextCache } from '../../services/conversationContextCache.js'
-import { buildWebSearchContext, searchFitnessWeb } from '../../services/webSearchService.js'
+import { buildWebSearchContext, searchFitnessWeb, webSearchNutrition } from '../../services/webSearchService.js'
 import { runAIWithFallback } from './aiFallbackService.js'
+import { getReasoningGuide } from './reasoningGuideService.js'
+import {
+  buildGenericNutritionAnswer as buildGenericNutritionAnswerFromBuilder,
+  getNutritionWebSources as getNutritionWebSourcesFromBuilder,
+  inferNutritionGoal as inferNutritionGoalFromBuilder,
+  normalizeSourceList as normalizeSourceListFromBuilder,
+  normalizeSourceMetadata as normalizeSourceMetadataFromBuilder,
+  selectUsedNutritionSources as selectUsedNutritionSourcesFromBuilder,
+} from './builders/nutritionAnswerBuilder.js'
+import {
+  buildPlanInfoDirectAnswer as buildPlanInfoDirectAnswerFromBuilder
+} from './builders/planAnswerBuilder.js'
+import {
+  buildGenericWorkoutAdviceAnswer as buildGenericWorkoutAdviceAnswerFromBuilder,
+  buildWorkoutAnalysisAnswer as buildWorkoutAnalysisAnswerFromBuilder,
+  buildWorkoutFrequencyAnswer as buildWorkoutFrequencyAnswerFromBuilder,
+  hasWorkoutGoalAdviceIntent as hasWorkoutGoalAdviceIntentFromBuilder,
+  hasWorkoutProgressAdviceIntent as hasWorkoutProgressAdviceIntentFromBuilder,
+} from './builders/workoutAnswerBuilder.js'
+import {
+  attachDataSource,
+  configureContextDataService,
+  createCacheContext,
+  getActivePlans,
+  getBookingContext,
+  getCheckinContext,
+  getDashboardStats,
+  getFaqs,
+  getFeedbackHistory,
+  getHealthContext,
+  getLandingCmsContext,
+  getLatestMembership,
+  getMembershipHistory,
+  getNotifications,
+  getOrderHistory,
+  getPTAvailability,
+  getPTList,
+  getPolicies,
+  getProducts,
+  getSystemSettingsContext,
+  getWorkoutContext,
+  invalidateAppCache,
+  invalidateAiDomainCache,
+  serializeMembership,
+  toObjectIdOrNull
+} from './context/contextDataService.js'
+import { conversationalUnderstand } from './conversationalUnderstandingLayer.js'
 import { buildPlanRecommendationPayload } from './dbResponder.js'
-import { isProviderQuotaError } from './providerHelper.js'
-import { generateSmartSuggestions } from './suggestionEngine.js'
+import { buildCheckinSummaryResponse, buildMembershipInfoResponse, buildPlanListResponse, buildPtListResponse, buildWorkoutAdviceResponse } from './naturalResponseBuilder.js'
+import {
+  answerIsParseFailure,
+  buildGenericSafeAnswer as buildGenericSafeAnswerFromResponseUtils,
+  cleanAiOutput,
+  detectAnswerLanguage,
+  normalizeFinalAnswerText,
+  normalizeForIntent,
+  normalizeLanguage,
+  normalizeResponseType,
+  parseAiJsonPayload,
+  removeRepeatedSuggestions
+} from './response/responseUtils.js'
+import { getSmartRecommendations } from './smartRecommendService.js'
+import { analyzeWorkoutHistory, getWorkoutAnalyzerContext } from './workoutAnalyzerService.js'
 
-const normalizeLanguage = (language) => language === 'en' ? 'en' : 'vi'
+export { invalidateAppCache, invalidateAiDomainCache }
+
 const getUserDisplayName = (user, fallback = '') =>
   String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
-
-const detectAnswerLanguage = (userMessage = '', appLanguage = 'vi') => {
-  const fallback = normalizeLanguage(appLanguage)
-  const text = String(userMessage || '').trim()
-  if (!text) return fallback
-
-  const lower = text.toLowerCase()
-  if (/^(what|how|why|when|where|which|who|is|are|does|do|can|should)\b/i.test(lower)) return 'en'
-  const hasVietnameseDiacritics = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(lower)
-  if (hasVietnameseDiacritics) return 'vi'
-
-  const tokens = lower
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-
-  if (tokens.length < 2) return fallback
-
-  const englishWords = new Set([
-    'which', 'what', 'how', 'why', 'when', 'where', 'who',
-    'plan', 'plans', 'membership', 'price', 'cost', 'cheap', 'cheapest', 'affordable',
-    'choose', 'should', 'need', 'do', 'does', 'can', 'compare', 'recommend',
-    'personal', 'trainer', 'pt', 'workout', 'training', 'schedule', 'booking',
-    'refund', 'policy', 'product', 'products', 'best', 'suitable',
-    'include', 'includes', 'budget', 'student', 'train', 'times', 'week', 'month',
-  ])
-  const vietnameseWords = new Set([
-    'toi', 'minh', 'ban', 'nen', 'chon', 'goi', 'gia', 're', 'nhat',
-    'so', 'sanh', 'tap', 'lich', 'dat', 'pt', 'can', 'khong', 'co',
-    'bao', 'nhieu', 'thanh', 'toan', 'chinh', 'sach', 'hoan', 'tien',
-    'san', 'pham', 'phu', 'hop', 'tu', 'van', 'dang', 'ky',
-  ])
-
-  const englishScore = tokens.reduce((score, token) => score + (englishWords.has(token) ? 1 : 0), 0)
-  const vietnameseScore = tokens.reduce((score, token) => score + (vietnameseWords.has(token) ? 1 : 0), 0)
-
-  if (englishScore >= 2 && englishScore >= vietnameseScore) return 'en'
-  if (vietnameseScore >= 2 && vietnameseScore >= englishScore) return 'vi'
-  return fallback
-}
 
 const aiMessages = {
   vi: {
@@ -106,151 +110,6 @@ const isSensitiveDataRequest = (query = '', user = null) => {
     return getRole(user) !== 'admin' || /\b(password|mat khau|mật khẩu|token|cookie|jwt)\b/.test(normalized)
   }
   return false
-}
-
-const stripJsonFence = (text) => String(text || '')
-  .trim()
-  .replace(/^```(?:json)?\s*/i, '')
-  .replace(/\s*```$/i, '')
-  .trim()
-
-const extractJsonObjectString = (text = '') => {
-  const source = String(text || '')
-  for (let start = source.indexOf('{'); start !== -1; start = source.indexOf('{', start + 1)) {
-    let depth = 0
-    let inString = false
-    let escaped = false
-    for (let index = start; index < source.length; index += 1) {
-      const char = source[index]
-      if (inString) {
-        if (escaped) {
-          escaped = false
-        } else if (char === '\\') {
-          escaped = true
-        } else if (char === '"') {
-          inString = false
-        }
-        continue
-      }
-      if (char === '"') {
-        inString = true
-      } else if (char === '{') {
-        depth += 1
-      } else if (char === '}') {
-        depth -= 1
-        if (depth === 0) {
-          const candidate = source.slice(start, index + 1)
-          try {
-            JSON.parse(candidate)
-            return candidate
-          } catch {
-            break
-          }
-        }
-      }
-    }
-  }
-  return ''
-}
-
-const cleanAiOutput = (raw, { expectedJson = false, fallbackAnswer = '' } = {}) => {
-  const fallback = fallbackAnswer || 'Mình chưa xử lý được câu trả lời này, bạn hỏi lại ngắn hơn giúp mình nhé.'
-  const withoutThinking = String(raw || '')
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-    .replace(/^```[a-z0-9_-]*\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim()
-  const withoutFence = stripJsonFence(withoutThinking)
-  if (expectedJson) {
-    const json = extractJsonObjectString(withoutFence)
-    return json || withoutFence || fallback
-  }
-  return withoutFence || fallback
-}
-
-const normalizeFinalAnswerText = (value = '') => String(value || '')
-  .replace(/\r\n/g, '\n')
-  .replace(/<think>[\s\S]*?<\/think>/gi, '')
-  .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-  .replace(/^```[a-z0-9_-]*\s*/i, '')
-  .replace(/\s*```$/i, '')
-  .replace(/[ \t]+\n/g, '\n')
-  .replace(/\n[ \t]+/g, '\n')
-  .replace(/[ \t]{2,}/g, ' ')
-  .replace(/GymPro(?=[A-Za-zÀ-ỹ0-9])/g, 'GymPro ')
-  .replace(/Gói(?=VIP|Cơ|Co|Nâng|Nang)/g, 'Gói ')
-  .replace(/chưa(?=có|ghi|xử)/g, 'chưa ')
-  .replace(/dữ(?=liệu)/g, 'dữ ')
-  .replace(/cá(?=nhân)/g, 'cá ')
-  .trim()
-
-const getParseFailureAnswer = (language = 'vi') => normalizeLanguage(language) === 'en'
-  ? 'Sorry, I could not process this answer. Please try asking again more briefly.'
-  : 'Mình chưa xử lý được câu trả lời này, bạn hỏi lại ngắn hơn giúp mình nhé.'
-
-const parseAiJsonPayload = (text, fallbackAnswer = '') => {
-  const raw = String(text || '')
-  console.log('[RAW AI LENGTH]', raw.length)
-  console.log('[RAW AI FULL]', raw)
-  const cleaned = cleanAiOutput(raw, { expectedJson: true, fallbackAnswer })
-  console.log('[CLEANED AI]', cleaned.slice(0, 100))
-  console.log('[CLEANED AI FULL]', cleaned)
-  if (!raw) return { answer: fallbackAnswer, suggestions: [] }
-
-  const candidates = [
-    cleaned,
-    stripJsonFence(cleaned),
-    extractJsonObjectString(raw),
-    extractJsonObjectString(cleaned),
-  ].filter(Boolean)
-
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate)
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue
-      const answerValue = [parsed.answer, parsed.content, parsed.message, parsed.text]
-        .find((value) => typeof value === 'string' && value.trim())
-      return {
-        ...parsed,
-        answer: answerValue ? cleanAiOutput(answerValue).trim() : cleanAiOutput(fallbackAnswer || raw).trim(),
-        suggestions: Array.isArray(parsed.suggestions)
-          ? parsed.suggestions
-            .filter((item) => typeof item === 'string' && item.trim())
-            .map((item) => item.trim())
-            .slice(0, 4)
-          : [],
-      }
-    } catch {}
-  }
-
-  return {
-    type: 'text_advice',
-    answer: normalizeFinalAnswerText(cleanAiOutput(raw, { fallbackAnswer: fallbackAnswer || raw })),
-    suggestions: [],
-  }
-}
-
-const normalizeForIntent = (value) => String(value || '')
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .replace(/đ/g, 'd')
-  .replace(/Đ/g, 'd')
-  .toLowerCase()
-
-const removeRepeatedSuggestions = (suggestions, query) => {
-  const normalizedQuery = normalizeForIntent(query).trim()
-  const seen = new Set()
-  return (Array.isArray(suggestions) ? suggestions : [])
-    .filter((item) => typeof item === 'string' && item.trim())
-    .map((item) => item.trim())
-    .filter((item) => {
-      const normalized = normalizeForIntent(item).trim()
-      if (!normalized || normalized === normalizedQuery || seen.has(normalized)) return false
-      seen.add(normalized)
-      return true
-    })
-    .slice(0, 4)
 }
 
 const normalizeAiJsonAnswer = ({ text, query, language, fallbackAnswer = '' }) => {
@@ -406,784 +265,6 @@ const resolveMemberWebSearch = async ({ query, intent, memberContext }) => {
     console.error('Member AI web search error:', error)
     return createWebSearchState(true, 'search_failed')
   }
-}
-
-const toObjectIdOrNull = (value) => mongoose.Types.ObjectId.isValid(value)
-  ? new mongoose.Types.ObjectId(value)
-  : null
-
-const ttlCache = new Map()
-const getCached = async (key, ttlSeconds, loader) => {
-  const now = Date.now()
-  const cached = ttlCache.get(key)
-  if (cached && cached.expiresAt > now) return cached.value
-  const value = await loader()
-  ttlCache.set(key, { value, expiresAt: now + ttlSeconds * 1000 })
-  return value
-}
-
-const getCollectionName = (module) => ({
-  activePlans: 'plans',
-  currentMembership: 'memberships',
-  plans: 'plans',
-  membership: 'memberships',
-  membershipHistory: 'memberships',
-  checkins: 'checkins',
-  pt: 'users',
-  ptAvailability: 'bookings',
-  bookings: 'bookings',
-  products: 'products',
-  orders: 'orders',
-  notifications: 'notifications',
-  faqs: 'faqs',
-  policies: 'policies',
-  feedback: 'feedback',
-  reports: 'reports',
-  members: 'users',
-  systemSettings: 'system_settings',
-  landingCms: 'landingcontents',
-}[module] || module)
-
-const getDocumentCount = (value) => {
-  if (Array.isArray(value)) return value.length
-  if (value?.count !== undefined) return Number(value.count) || 0
-  if (value?.found === false) return 0
-  if (value && typeof value === 'object') {
-    if (value.totalPTs !== undefined) return Number(value.totalPTs) || 0
-    if (Array.isArray(value.availablePTs)) return value.availablePTs.length
-    if (Array.isArray(value.upcomingBookings)) return value.upcomingBookings.length
-    if (Array.isArray(value.bookingHistory)) return value.bookingHistory.length
-    return Object.keys(value).length > 0 ? 1 : 0
-  }
-  return value ? 1 : 0
-}
-
-const getUpdatedAt = (value) => {
-  const values = Array.isArray(value) ? value : [value]
-  const timestamps = values
-    .flatMap((item) => {
-      if (!item || typeof item !== 'object') return []
-      return [item.updatedAt, item.createdAt, item.endDate].filter(Boolean)
-    })
-    .map((item) => new Date(item).getTime())
-    .filter(Number.isFinite)
-  if (timestamps.length === 0) return null
-  return new Date(Math.max(...timestamps)).toISOString()
-}
-
-const logAiDataSource = ({ module, source = 'database', collection, value, cacheHit = false }) => {
-  console.log('[AI_DATA_SOURCE]', JSON.stringify({
-    module,
-    source,
-    collection: collection || getCollectionName(module),
-    documentCount: getDocumentCount(value),
-    cacheHit: Boolean(cacheHit),
-    updatedAt: getUpdatedAt(value),
-  }))
-}
-
-const attachDataSource = (toolData, key, value, source = 'database', cacheHit = false) => {
-  toolData[key] = value
-  toolData._dataSources = {
-    ...(toolData._dataSources || {}),
-    [key]: {
-      module: key,
-      source,
-      collection: getCollectionName(key),
-      documentCount: getDocumentCount(value),
-      cacheHit,
-      updatedAt: getUpdatedAt(value),
-    },
-  }
-  logAiDataSource({ module: key, source, value, cacheHit })
-}
-
-const getConversationId = (conversationContext, user) => {
-  const explicitId = conversationContext?.conversationId
-    || conversationContext?.sessionId
-    || conversationContext?.chatSessionId
-  return String(explicitId || `user:${user?._id || 'anonymous'}`)
-}
-
-const createCacheContext = ({ user, conversationContext }) => ({
-  conversationId: getConversationId(conversationContext, user),
-  userId: String(user?._id || 'anonymous'),
-})
-
-const getContextCached = (cacheContext, key, ttlSeconds, loader, variant = '') => contextCache.getOrLoad({
-  conversationId: cacheContext?.conversationId,
-  userId: cacheContext?.userId,
-  key,
-  ttlSeconds,
-  loader,
-  variant,
-})
-
-const calculateRemainingDays = (endDate) => {
-  const end = new Date(endDate)
-  if (Number.isNaN(end.getTime())) return 0
-  end.setHours(23, 59, 59, 999)
-  return Math.max(0, Math.ceil((end.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
-}
-
-const serializeMembership = (membership) => {
-  if (!membership) return { found: false }
-  const remainingDays = calculateRemainingDays(membership.endDate)
-  const plan = membership.planId || {}
-  return {
-    found: true,
-    planName: plan.nameVi || plan.nameEn || 'Membership plan',
-    planNameVi: plan.nameVi || '',
-    planNameEn: plan.nameEn || '',
-    planDurationDays: plan.durationDays || null,
-    planPrice: plan.price || null,
-    planDescriptionVi: plan.descriptionVi || '',
-    planDescriptionEn: plan.descriptionEn || '',
-    planFeaturesVi: plan.featuresVi || [],
-    planFeaturesEn: plan.featuresEn || [],
-    startDate: membership.startDate,
-    endDate: membership.endDate,
-    updatedAt: membership.updatedAt,
-    remainingDays,
-    status: remainingDays <= 0 && membership.status === 'active' ? 'expired' : membership.status,
-  }
-}
-
-const getLatestMembership = async (memberId) => Membership.findOne({ memberId })
-  .sort({ endDate: -1 })
-  .populate('planId', 'nameVi nameEn durationDays price descriptionVi descriptionEn featuresVi featuresEn color')
-  .lean()
-
-const getActivePlans = async (limit = 12) => {
-  const plans = await Plan.find({ isActive: true })
-    .select('nameVi nameEn price durationDays descriptionVi descriptionEn featuresVi featuresEn color')
-    .sort({ price: 1 })
-    .limit(limit)
-    .lean()
-  return plans.map((plan) => ({
-    _id: plan._id,
-    nameVi: plan.nameVi,
-    nameEn: plan.nameEn,
-    price: plan.price,
-    durationDays: plan.durationDays,
-    descriptionVi: plan.descriptionVi,
-    descriptionEn: plan.descriptionEn,
-    featuresVi: plan.featuresVi,
-    featuresEn: plan.featuresEn,
-    color: plan.color,
-    updatedAt: plan.updatedAt,
-  }))
-}
-
-const summarizeCheckinFrequency = (checkins = []) => {
-  const now = Date.now()
-  const dayMs = 24 * 60 * 60 * 1000
-  const monthStart = new Date()
-  monthStart.setDate(1)
-  monthStart.setHours(0, 0, 0, 0)
-  const inLastDays = (days) => checkins.filter((item) => {
-    const time = new Date(item.createdAt || item.date).getTime()
-    return Number.isFinite(time) && now - time <= days * dayMs
-  }).length
-  return {
-    totalFetched: checkins.length,
-    last7Days: inLastDays(7),
-    last30Days: inLastDays(30),
-    thisMonth: checkins.filter((item) => {
-      const time = new Date(item.createdAt || item.date).getTime()
-      return Number.isFinite(time) && time >= monthStart.getTime()
-    }).length,
-  }
-}
-
-const getUpcomingBookings = async (memberId, limit = 8) => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const bookings = await Booking.find({
-    memberId,
-    date: { $gte: today },
-    status: { $ne: 'cancelled' },
-  })
-    .sort({ date: 1, slot: 1 })
-    .limit(limit)
-    .populate('ptId', 'name specialties rating')
-    .lean()
-
-  return bookings.map((booking) => ({
-    id: String(booking._id),
-    date: booking.date,
-    slot: booking.slot,
-    status: booking.status,
-    note: booking.note || '',
-    ptName: booking.ptId?.name || '',
-    ptSpecialties: booking.ptId?.specialties || [],
-  }))
-}
-
-const getRecentBookings = async (memberId, limit = 12) => {
-  const bookings = await Booking.find({ memberId })
-    .sort({ date: -1, createdAt: -1 })
-    .limit(limit)
-    .populate('ptId', 'name specialties rating')
-    .lean()
-
-  return bookings.map((booking) => ({
-    id: String(booking._id),
-    date: booking.date,
-    slot: booking.slot,
-    status: booking.status,
-    ptName: booking.ptId?.name || '',
-  }))
-}
-
-const serializeUserBrief = (user) => ({
-  id: String(user?._id || ''),
-  name: getUserDisplayName(user),
-  email: user?.email || '',
-  phone: user?.phone || '',
-  role: user?.role || '',
-  specialties: user?.specialties || [],
-  rating: user?.rating || 0,
-  experienceYears: user?.experienceYears || 0,
-  bio: user?.bio || '',
-  avatar: user?.avatar || '',
-  certificates: user?.certificates || [],
-  introVideoUrl: user?.introVideoUrl || '',
-  updatedAt: user?.updatedAt,
-})
-
-const getMembershipHistory = async (memberId, limit = 6) => {
-  const memberships = await Membership.find({ memberId })
-    .sort({ endDate: -1, createdAt: -1 })
-    .limit(limit)
-    .populate('planId', 'nameVi nameEn durationDays price')
-    .lean()
-  return memberships.map((membership) => ({
-    id: String(membership._id),
-    planName: membership.planId?.nameVi || membership.planId?.nameEn || '',
-    price: membership.planId?.price || null,
-    durationDays: membership.planId?.durationDays || null,
-    startDate: membership.startDate,
-    endDate: membership.endDate,
-    status: membership.status,
-  }))
-}
-
-const getCheckinContext = async (memberId) => {
-  const latestCheckins = await getActivitiesByKeywords(memberId, ['checkin', 'check-in', 'điểm danh', 'diem danh', 'qr'], 30)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const todayCheckinStatus = latestCheckins.some((item) => new Date(item.createdAt).getTime() >= today.getTime())
-  return {
-    checkinStats: summarizeCheckinFrequency(latestCheckins),
-    latestCheckins: latestCheckins.slice(0, 10),
-    streak: estimateCheckinStreak(latestCheckins),
-    todayCheckinStatus,
-  }
-}
-
-const estimateCheckinStreak = (checkins = []) => {
-  const days = new Set(checkins.map((item) => {
-    const date = new Date(item.createdAt || item.date)
-    if (Number.isNaN(date.getTime())) return ''
-    date.setHours(0, 0, 0, 0)
-    return date.toISOString().slice(0, 10)
-  }).filter(Boolean))
-  let streak = 0
-  const cursor = new Date()
-  cursor.setHours(0, 0, 0, 0)
-  while (days.has(cursor.toISOString().slice(0, 10))) {
-    streak += 1
-    cursor.setDate(cursor.getDate() - 1)
-  }
-  return streak
-}
-
-const getPTList = async (limit = 8) => {
-  const pts = await User.find({ role: 'pt', isActive: true, status: { $ne: 'locked' } })
-    .select('name email phone avatar specialties rating experienceYears bio updatedAt')
-    .sort({ rating: -1, experienceYears: -1 })
-    .limit(limit)
-    .lean()
-  const ptProfiles = await PT.find({ userId: { $in: pts.map((pt) => pt._id) } }).lean()
-  const ptProfileMap = new Map(ptProfiles.map((pt) => [String(pt.userId), pt]))
-  return pts.map((user) => {
-    const profile = ptProfileMap.get(String(user._id)) || {}
-    return serializeUserBrief({
-      ...user,
-      specialties: profile.specialties || user.specialties || [],
-      rating: profile.rating ?? user.rating,
-      experienceYears: profile.experienceYears ?? user.experienceYears,
-      bio: profile.bio || user.bio || '',
-      certificates: profile.certificates || [],
-      introVideoUrl: profile.introVideoUrl || '',
-      updatedAt: profile.updatedAt && user.updatedAt
-        ? new Date(Math.max(new Date(profile.updatedAt).getTime(), new Date(user.updatedAt).getTime()))
-        : profile.updatedAt || user.updatedAt,
-    })
-  })
-}
-
-const getPTAvailability = async (query, limit = 8, cacheContext = null) => {
-  const range = normalizeTimeRange(query)
-  const pts = await getPTList(limit)
-  if (!range.start || !range.end) return { timeRange: range.label, totalPTs: pts.length, availablePTs: pts, busyBookings: [] }
-  const bookings = await Booking.find({
-    ptId: { $in: pts.map((pt) => pt.id).filter(Boolean) },
-    date: { $gte: range.start, $lte: range.end },
-    status: { $ne: 'cancelled' },
-  }).populate('ptId', 'name').lean()
-  const busyPtIds = new Set(bookings.map((booking) => String(booking.ptId?._id || booking.ptId)))
-  const availablePTs = pts.filter((pt) => !busyPtIds.has(String(pt.id)))
-  return {
-    timeRange: range.label,
-    totalPTs: pts.length,
-    rangeStart: range.start,
-    rangeEnd: range.end,
-    availablePTs,
-    availableSlots: availablePTs.map((pt) => ({
-      ptId: pt.id,
-      ptName: pt.name,
-      slot: range.label,
-      rangeStart: range.start,
-      rangeEnd: range.end,
-    })),
-    busyBookings: bookings.slice(0, 12).map((booking) => ({
-      ptName: booking.ptId?.name || '',
-      date: booking.date,
-      slot: booking.slot,
-      status: booking.status,
-    })),
-  }
-}
-
-const getBookingContext = async (user, query, cacheContext = null) => {
-  const userId = toObjectIdOrNull(user?._id)
-  if (!userId) return { upcomingBookings: [], bookingHistory: [] }
-  const role = getRole(user)
-  const filter = role === 'pt' ? { ptId: userId } : role === 'admin' ? {} : { memberId: userId }
-  const upcomingBookings = await Booking.find({
-    ...filter,
-    date: { $gte: new Date() },
-    status: { $ne: 'cancelled' },
-  }).sort({ date: 1, slot: 1 }).limit(8).populate('ptId memberId', 'name').lean()
-  const bookingHistory = await Booking.find(filter).sort({ date: -1, createdAt: -1 }).limit(10).populate('ptId memberId', 'name').lean()
-  return {
-    upcomingBookings: upcomingBookings.map(serializeBookingBrief),
-    bookingHistory: bookingHistory.map(serializeBookingBrief),
-    ...(hasBookingActionIntent(query) ? { availableSlots: await getPTAvailability(query, 8, cacheContext) } : {}),
-  }
-}
-
-const serializeBookingBrief = (booking) => ({
-  id: String(booking._id),
-  date: booking.date,
-  slot: booking.slot,
-  status: booking.status,
-  note: booking.note || '',
-  ptName: booking.ptId?.name || '',
-  memberName: booking.memberId?.name || '',
-  updatedAt: booking.updatedAt,
-})
-
-const getWorkoutContext = async (memberId) => {
-  const workoutProgress = await getActivitiesByKeywords(memberId, ['workout', 'bài tập', 'tap luyen', 'training', 'session', 'completed'], 12)
-  const goalActivities = await getActivitiesByKeywords(memberId, ['goal', 'mục tiêu', 'muc tieu', 'progress', 'tiến độ', 'tien do'], 6)
-  return {
-    currentWorkoutPlan: workoutProgress[0] || null,
-    workoutProgress,
-    completedSessions: workoutProgress.filter((item) => /completed|hoan thanh|hoàn thành/i.test(`${item.type} ${item.title} ${item.description}`)).length,
-    trainingGoal: goalActivities[0] || null,
-  }
-}
-
-const getHealthContext = async (memberId) => {
-  const healthLogs = await getActivitiesByKeywords(memberId, ['health', 'sức khỏe', 'suc khoe', 'bmi', 'weight', 'cân nặng', 'can nang', 'body fat', 'mo co the'], 12)
-  const latest = healthLogs[0] || null
-  return {
-    latestHealthLog: latest,
-    weightHistory: healthLogs.filter((item) => /weight|can nang|cân nặng/i.test(`${item.type} ${item.title} ${item.description}`)).slice(0, 8),
-    bmi: latest?.metadata?.bmi ?? null,
-    bodyFat: latest?.metadata?.bodyFat ?? latest?.metadata?.body_fat ?? null,
-    progressSummary: healthLogs.slice(0, 6),
-  }
-}
-
-const getProducts = async (limit = 8) => {
-  const products = await Product.find({ isActive: true })
-    .select('name price category description image images stock rating reviewCount weightVariants weights')
-    .sort({ rating: -1, reviewCount: -1, createdAt: -1 })
-    .limit(limit)
-    .lean()
-  return products.map((product) => ({
-    id: String(product._id),
-    name: product.name,
-    price: product.price,
-    category: product.category,
-    description: product.description,
-    image: product.image || product.images?.[0] || '',
-    stock: product.stock,
-    rating: product.rating || 0,
-    reviewCount: product.reviewCount || 0,
-    variants: product.weightVariants || product.weights || [],
-    updatedAt: product.updatedAt,
-  }))
-}
-
-const getOrderHistory = async (user, limit = 8) => {
-  const userId = toObjectIdOrNull(user?._id)
-  if (!userId) return []
-  const filter = getRole(user) === 'admin' ? {} : { userId, hiddenForUser: { $ne: true } }
-  const orders = await Order.find(filter).sort({ createdAt: -1 }).limit(limit).lean()
-  return orders.map((order) => ({
-    id: String(order._id),
-    totalAmount: order.totalAmount || order.totalPrice || 0,
-    status: order.status,
-    paymentStatus: order.paymentStatus,
-    items: (order.items || []).map((item) => ({
-      name: item.productName || item.name,
-      quantity: item.quantity,
-      price: item.price,
-      total: item.total,
-    })).slice(0, 5),
-    createdAt: order.createdAt,
-  }))
-}
-
-const getFaqs = async (limit = 8) => {
-  const faqs = await Faq.find({ isPublished: true }).sort({ order: 1, createdAt: -1 }).limit(limit).lean()
-  return faqs.map((faq) => ({
-    id: String(faq._id),
-    questionVi: faq.questionVi,
-    questionEn: faq.questionEn,
-    answerVi: faq.answerVi,
-    answerEn: faq.answerEn,
-    categoryVi: faq.categoryVi,
-    categoryEn: faq.categoryEn,
-    updatedAt: faq.updatedAt,
-  }))
-}
-
-const getPolicies = async (limit = 8) => {
-  const policies = await Policy.find({ isPublished: true }).sort({ createdAt: -1 }).limit(limit).lean()
-  return policies.map((policy) => ({
-    id: String(policy._id),
-    titleVi: policy.titleVi,
-    titleEn: policy.titleEn,
-    categoryVi: policy.categoryVi,
-    categoryEn: policy.categoryEn,
-    contentVi: String(policy.contentVi || '').slice(0, 1200),
-    contentEn: String(policy.contentEn || '').slice(0, 1200),
-    updatedAt: policy.updatedAt,
-  }))
-}
-
-const getSystemSettingsContext = async () => {
-  const doc = await SystemSettings.findOne({ singletonKey: 'global' }).lean()
-  if (!doc) return { found: false }
-  return {
-    found: true,
-    settings: doc.settings || {},
-    updatedAt: doc.updatedAt,
-  }
-}
-
-const getLandingCmsContext = async (pageId = 'home') => {
-  const landing = await LandingContent.findOne({ pageId }).lean()
-  if (!landing) return { found: false, pageId }
-  return {
-    found: true,
-    pageId: landing.pageId || pageId,
-    heroTitle: landing.heroTitle,
-    heroSubtitle: landing.heroSubtitle,
-    heroBadgeText: landing.heroBadgeText,
-    ctaText: landing.ctaText,
-    servicesTitle: landing.servicesTitle,
-    testimonialsTitle: landing.testimonialsTitle,
-    finalCtaTitle: landing.finalCtaTitle,
-    aboutTitle: landing.aboutTitle,
-    aboutContent: landing.aboutContent,
-    stats: landing.stats || [],
-    services: landing.services || [],
-    testimonials: landing.testimonials || [],
-    sections: landing.sections || [],
-    updatedAt: landing.updatedAt,
-  }
-}
-
-const getFeedbackHistory = async (user, limit = 6) => {
-  const userId = toObjectIdOrNull(user?._id)
-  if (!userId) return []
-  const filter = getRole(user) === 'admin' ? {} : { user: userId }
-  const feedback = await Feedback.find(filter).sort({ createdAt: -1 }).limit(limit).populate('user', 'name fullName displayName').lean()
-  return feedback.map((item) => ({
-    id: String(item._id),
-    title: item.title,
-    type: item.type,
-    priority: item.priority,
-    status: item.status,
-    adminReply: item.adminReply || '',
-    userName: getUserDisplayName(item.user),
-    createdAt: item.createdAt,
-  }))
-}
-
-const getNotifications = async (memberId) => getActivitiesByKeywords(memberId, ['notification', 'thông báo', 'thong bao', 'reminder', 'alert', 'nhắc lịch', 'nhac lich'], 8)
-
-const getDashboardStats = async () => {
-  const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const next30 = new Date(now)
-  next30.setDate(next30.getDate() + 30)
-  const [totalMembers, activeMembers, expiringMembers, activePlans, revenueAgg, orders] = await Promise.all([
-    User.countDocuments({ role: 'member' }),
-    User.countDocuments({ role: 'member', isActive: true, status: { $ne: 'locked' } }),
-    Membership.find({ endDate: { $gte: now, $lte: next30 }, status: 'active' }).limit(10).populate('memberId planId', 'name nameVi nameEn').lean(),
-    Plan.countDocuments({ isActive: true }),
-    Transaction.aggregate([
-      { $match: { status: 'completed', type: { $in: ['payment', 'deposit'] }, createdAt: { $gte: monthStart } } },
-      { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } },
-    ]),
-    Order.find({ createdAt: { $gte: monthStart } }).select('totalAmount totalPrice status paymentStatus createdAt').limit(20).lean(),
-  ])
-  return {
-    dashboardStats: { totalMembers, activeMembers, activePlans, monthOrders: orders.length },
-    expiringMembers: expiringMembers.map((item) => ({
-      memberName: item.memberId?.name || '',
-      planName: item.planId?.nameVi || item.planId?.nameEn || '',
-      endDate: item.endDate,
-      daysLeft: calculateRemainingDays(item.endDate),
-    })),
-    revenueSummary: {
-      monthStart,
-      transactions: revenueAgg,
-      orderRevenue: orders.reduce((sum, order) => sum + Number(order.totalAmount || order.totalPrice || 0), 0),
-    },
-    churnRisk: expiringMembers.slice(0, 5).map((item) => ({
-      memberName: item.memberId?.name || '',
-      reason: 'Membership expires within 30 days',
-      daysLeft: calculateRemainingDays(item.endDate),
-    })),
-  }
-}
-
-const getActivitiesByKeywords = async (memberId, keywords, limit = 12) => {
-  const regex = new RegExp(keywords.map((keyword) => keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i')
-  const activities = await UserActivity.find({
-    user: memberId,
-    $or: [
-      { type: regex },
-      { title: regex },
-      { description: regex },
-    ],
-  })
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .lean()
-
-  return activities.map((activity) => ({
-    id: String(activity._id),
-    type: activity.type,
-    title: activity.title,
-    description: activity.description || '',
-    metadata: activity.metadata || {},
-    createdAt: activity.createdAt,
-  }))
-}
-
-const getMemberAssistantSnapshot = async (memberId) => {
-  const [
-    membershipDoc,
-    checkins,
-    upcomingBookings,
-    recentBookings,
-    healthMetrics,
-    progressActivities,
-    workoutActivities,
-    notificationActivities,
-  ] = await Promise.all([
-    getLatestMembership(memberId),
-    getActivitiesByKeywords(memberId, ['checkin', 'check-in', 'điểm danh', 'diem danh', 'qr'], 30),
-    getUpcomingBookings(memberId, 5),
-    getRecentBookings(memberId, 8),
-    getActivitiesByKeywords(memberId, ['health', 'sức khỏe', 'suc khoe', 'bmi', 'weight', 'cân nặng', 'can nang', 'metric', 'score'], 8),
-    getActivitiesByKeywords(memberId, ['progress', 'tiến độ', 'tien do', 'goal', 'mục tiêu', 'muc tieu', 'completed'], 10),
-    getActivitiesByKeywords(memberId, ['workout', 'bài tập', 'tap luyen', 'training', 'session', 'completed'], 10),
-    getActivitiesByKeywords(memberId, ['notification', 'thông báo', 'thong bao', 'reminder', 'alert', 'nhắc lịch', 'nhac lich'], 8),
-  ])
-
-  return {
-    membership: serializeMembership(membershipDoc),
-    checkins,
-    checkinFrequency: summarizeCheckinFrequency(checkins),
-    upcomingBookings,
-    recentBookings,
-    healthMetrics,
-    progressActivities,
-    workoutActivities,
-    notificationActivities,
-  }
-}
-
-const mergeAvailableData = (base, data) => {
-  base.availableData = {
-    ...(data || {}),
-    ...(base.availableData || {}),
-  }
-  return base
-}
-
-const fetchMemberContextByIntent = async ({ intent, user, reasoningMode = false }) => {
-  const memberId = toObjectIdOrNull(user?._id)
-  if (!memberId) return { intent, availableData: {}, missingData: ['memberId'] }
-
-  const safeIntent = MEMBER_INTENTS.has(intent) ? intent : 'unknown'
-  const base = {
-    intent: safeIntent,
-    member: {
-      id: String(user?._id || ''),
-      name: getUserDisplayName(user),
-      role: user?.role || 'member',
-    },
-    availableData: {},
-    missingData: [],
-  }
-
-  if (safeIntent === 'greeting') return base
-
-  if (safeIntent === 'member_profile') {
-    const membership = serializeMembership(await getLatestMembership(memberId))
-    base.availableData.profile = {
-      id: String(user?._id || ''),
-      name: getUserDisplayName(user),
-      email: user?.email || '',
-      phone: user?.phone || '',
-      role: user?.role || 'member',
-    }
-    base.availableData.membership = membership
-    if (!membership.found) base.missingData.push('membership')
-    return base
-  }
-
-  if (safeIntent === 'web_fitness_knowledge') {
-    const snapshot = await getMemberAssistantSnapshot(memberId)
-    mergeAvailableData(base, snapshot)
-    if (snapshot.healthMetrics.length === 0) base.missingData.push('healthMetrics')
-    if (snapshot.progressActivities.length === 0) base.missingData.push('goalsOrProgress')
-    return base
-  }
-
-  if (safeIntent === 'membership' || safeIntent === 'membership_compare' || safeIntent === 'membership_recommend') {
-    const [
-      membershipDoc,
-      plans,
-      checkins,
-      recentBookings,
-      healthMetrics,
-      progressActivities,
-    ] = await Promise.all([
-      getLatestMembership(memberId),
-      getActivePlans(12),
-      reasoningMode ? getActivitiesByKeywords(memberId, ['checkin', 'check-in', 'điểm danh', 'diem danh'], 30) : Promise.resolve([]),
-      reasoningMode ? getRecentBookings(memberId, 8) : Promise.resolve([]),
-      reasoningMode ? getActivitiesByKeywords(memberId, ['health', 'sức khỏe', 'suc khoe', 'bmi', 'weight', 'cân nặng', 'can nang', 'metric'], 6) : Promise.resolve([]),
-      reasoningMode ? getActivitiesByKeywords(memberId, ['goal', 'mục tiêu', 'muc tieu', 'progress', 'tiến độ', 'tien do', 'completed'], 8) : Promise.resolve([]),
-    ])
-    const membership = serializeMembership(membershipDoc)
-    base.availableData.membership = membership
-    base.availableData.availablePlans = plans
-    if (reasoningMode) {
-      base.availableData.checkins = checkins
-      base.availableData.checkinFrequency = summarizeCheckinFrequency(checkins)
-      base.availableData.recentBookings = recentBookings
-      base.availableData.healthMetrics = healthMetrics
-      base.availableData.progressActivities = progressActivities
-    }
-    if (!membership.found) base.missingData.push('membership')
-    return base
-  }
-
-  if (safeIntent === 'schedule') {
-    if (!reasoningMode) {
-      const upcomingBookings = await getUpcomingBookings(memberId)
-      base.availableData.upcomingBookings = upcomingBookings
-      if (upcomingBookings.length === 0) base.missingData.push('upcomingBookings')
-      return base
-    }
-    const snapshot = await getMemberAssistantSnapshot(memberId)
-    mergeAvailableData(base, snapshot)
-    if (snapshot.upcomingBookings.length === 0) base.missingData.push('upcomingBookings')
-    return base
-  }
-
-  if (safeIntent === 'workout') {
-    const [snapshot, plans] = await Promise.all([
-      getMemberAssistantSnapshot(memberId),
-      getActivePlans(12),
-    ])
-    mergeAvailableData(base, { ...snapshot, availablePlans: plans })
-    if (snapshot.upcomingBookings.length === 0) base.missingData.push('upcomingBookings')
-    if (snapshot.workoutActivities.length === 0) base.missingData.push('workoutActivities')
-    return base
-  }
-
-  if (safeIntent === 'checkin') {
-    if (!reasoningMode) {
-      const checkins = await getActivitiesByKeywords(memberId, ['checkin', 'check-in', 'điểm danh', 'diem danh', 'qr'], 20)
-      base.availableData.checkins = checkins
-      base.availableData.checkinFrequency = summarizeCheckinFrequency(checkins)
-      if (checkins.length === 0) base.missingData.push('checkins')
-      return base
-    }
-    const snapshot = await getMemberAssistantSnapshot(memberId)
-    mergeAvailableData(base, snapshot)
-    if (snapshot.checkins.length === 0) base.missingData.push('checkins')
-    return base
-  }
-
-  if (safeIntent === 'health') {
-    if (!reasoningMode) {
-      const healthMetrics = await getActivitiesByKeywords(memberId, ['health', 'sức khỏe', 'suc khoe', 'bmi', 'weight', 'cân nặng', 'can nang', 'metric'], 12)
-      base.availableData.healthMetrics = healthMetrics
-      if (healthMetrics.length === 0) base.missingData.push('healthMetrics')
-      return base
-    }
-    const snapshot = await getMemberAssistantSnapshot(memberId)
-    mergeAvailableData(base, snapshot)
-    if (snapshot.healthMetrics.length === 0) base.missingData.push('healthMetrics')
-    return base
-  }
-
-  if (safeIntent === 'nutrition') {
-    const [snapshot, plans] = await Promise.all([
-      getMemberAssistantSnapshot(memberId),
-      getActivePlans(12),
-    ])
-    mergeAvailableData(base, { ...snapshot, availablePlans: plans })
-    if (snapshot.healthMetrics.length === 0) base.missingData.push('healthMetrics')
-    if (snapshot.progressActivities.length === 0) base.missingData.push('goalsOrProgress')
-    return base
-  }
-
-  if (safeIntent === 'progress') {
-    const snapshot = await getMemberAssistantSnapshot(memberId)
-    mergeAvailableData(base, snapshot)
-    if (snapshot.recentBookings.length === 0 && snapshot.checkins.length === 0 && snapshot.healthMetrics.length === 0 && snapshot.progressActivities.length === 0) base.missingData.push('progressData')
-    return base
-  }
-
-  if (safeIntent === 'dashboard' || safeIntent === 'notifications') {
-    const [snapshot, plans] = await Promise.all([
-      getMemberAssistantSnapshot(memberId),
-      getActivePlans(8),
-    ])
-    mergeAvailableData(base, { ...snapshot, availablePlans: plans })
-    if (safeIntent === 'notifications' && snapshot.notificationActivities.length === 0) base.missingData.push('notifications')
-    return base
-  }
-
-  base.missingData.push('matchedIntent')
-  return base
 }
 
 const buildGymProPrompt = ({ user, query, conversationContext, memberContext, language = 'vi' }) => {
@@ -1440,14 +521,14 @@ ${JSON.stringify(context, null, 2).slice(0, 9000)}
 
 Output JSON only, no explanation:
 ${planMode
-    ? `{
+      ? `{
   "answer": "short advisory answer or clarification questions if information is not enough",
   "recommendedPlanId": "Mongo id string from activePlans, or 'none' if you are not proposing any plan yet because you need to ask questions first",
   "reason": "short reason based only on context",
   "alternativePlanIds": ["up to 2 Mongo id strings from activePlans, or empty array [] if not proposing any plan yet"],
   "suggestions": ["3-4 short follow-up questions complying with the system rules"]
 }`
-    : `{
+      : `{
   "answer": "short answer",
   "suggestions": ["3-4 short follow-up questions complying with the system rules"]
 }`}`
@@ -1462,70 +543,10 @@ const hasAnyProviderConfigured = () => {
 
 const idsEqual = (a, b) => String(a || '') === String(b || '')
 
-const RESPONSE_TYPES = new Set([
-  'text_advice',
-  'unclear_question',
-  'plan_list',
-  'plan_detail',
-  'plan_recommend',
-  'plan_compare',
-  'plan_compare_two',
-  'plan_compare_all',
-  'schedule_info',
-  'checkin_summary',
-  'pt_list',
-  'pt_detail',
-  'pt_advice',
-  'pt_advice_no_data',
-  'pt_availability',
-  'booking_list',
-  'booking_suggestion',
-  'health_advice',
-  'workout_advice',
-  'workout_progress',
-  'health_summary',
-  'product_list',
-  'product_recommend',
-  'notification_list',
-  'policy_answer',
-  'policy_refund',
-  'policy_privacy',
-  'policy_payment',
-  'admin_dashboard',
-  'report_summary',
-  'action_result',
-])
-
-const normalizeResponseType = (type, classifierIntent) => {
-  if (RESPONSE_TYPES.has(type)) return type
-  if (type === 'trainer_list') return 'pt_list'
-  if (classifierIntent === 'checkin_info') return 'checkin_summary'
-  if (classifierIntent === 'checkin_summary') return 'checkin_summary'
-  if (classifierIntent === 'checkin_goal') return 'checkin_summary'
-  if (classifierIntent === 'pt_info') return 'pt_list'
-  if (classifierIntent === 'pt_availability') return 'booking_suggestion'
-  if (classifierIntent === 'pt_advice') return 'pt_list'
-  if (classifierIntent === 'booking_info') return 'booking_list'
-  if (classifierIntent === 'booking_action') return 'booking_suggestion'
-  if (classifierIntent === 'workout_info') return 'workout_advice'
-  if (classifierIntent === 'workout_advice') return 'workout_advice'
-  if (classifierIntent === 'health_info' || classifierIntent === 'health_advice') return 'health_summary'
-  if (classifierIntent === 'shop_info') return 'product_list'
-  if (classifierIntent === 'shop_advice') return 'product_recommend'
-  if (classifierIntent === 'notification_info') return 'notification_list'
-  if (classifierIntent === 'policy_faq' || classifierIntent === 'policy_refund' || classifierIntent === 'policy_privacy' || classifierIntent === 'policy_payment' || classifierIntent === 'policy_terms' || classifierIntent === 'faq_answer') return 'policy_answer'
-  if (classifierIntent === 'admin_report') return 'report_summary'
-  if (classifierIntent === 'theme_action' || classifierIntent === 'feedback_action') return 'action_result'
-  if (classifierIntent === 'plan_comparison') return 'plan_recommend'
-  if (classifierIntent === 'cheapest_long_term_plan') return 'plan_recommend'
-  if (classifierIntent === 'unclear_question') return 'unclear_question'
-  return 'text_advice'
-}
-
 const pickCardsForType = ({ type, toolData, recommendedPlan, alternativePlans }) => {
   if (type === 'plan_recommend' && recommendedPlan) return [recommendedPlan, ...(alternativePlans || []).slice(0, 2)]
   if (type === 'plan_list') return (toolData.activePlans || toolData.plans || []).slice(0, 12)
-  if (type === 'pt_list' || type === 'booking_suggestion') return (toolData.ptAvailability?.availablePTs || toolData.availablePTs || []).slice(0, 8)
+  if (type === 'pt_list' || type === 'pt_detail' || type === 'booking_suggestion') return (toolData.ptAvailability?.availablePTs || toolData.availablePTs || []).slice(0, type === 'pt_detail' ? 1 : 8)
   if (type === 'booking_list') return (toolData.upcomingBookings || []).slice(0, 8)
   if (type === 'product_list' || type === 'product_recommend') return (toolData.products || []).slice(0, 8)
   if (type === 'notification_list') return (toolData.notifications || []).slice(0, 8)
@@ -1538,13 +559,13 @@ const pickCardsForType = ({ type, toolData, recommendedPlan, alternativePlans })
 }
 
 const CARD_RENDER_TYPES = new Set([
-  'plan_list',
   'plan_detail',
   'plan_recommend',
   'plan_compare',
   'plan_compare_two',
   'plan_compare_all',
   'pt_list',
+  'pt_detail',
   'trainer_list',
   'booking_list',
   'product_list',
@@ -1553,6 +574,10 @@ const CARD_RENDER_TYPES = new Set([
 
 const TEXT_ONLY_TYPES = new Set([
   'text_advice',
+  'health_advice',
+  'nutrition_advice',
+  'nutrition_advice_with_sources',
+  'workout_advice',
   'policy_answer',
   'policy_refund',
   'policy_privacy',
@@ -1563,10 +588,19 @@ const TEXT_ONLY_TYPES = new Set([
 
 const applyRenderGate = (payload = {}, classifierResult = {}) => {
   const normalizedType = normalizeResponseType(payload.type, classifierResult.intent)
+  if (normalizedType === 'plan_list') {
+    return {
+      ...payload,
+      type: 'text_advice',
+      cards: [],
+      plans: [],
+      recommendedPlan: null,
+      planPayload: null,
+    }
+  }
   const shouldRenderCard = !TEXT_ONLY_TYPES.has(normalizedType)
     && (CARD_RENDER_TYPES.has(normalizedType) || Boolean(classifierResult.shouldRenderCard))
   const isPlanType = /^plan_/.test(normalizedType)
-  console.log('[RENDER_GATE]', normalizedType, shouldRenderCard)
   if (shouldRenderCard) {
     return {
       ...payload,
@@ -1694,6 +728,9 @@ const normalizeToolName = (toolName) => {
   if (value === 'ptAvailability') return 'ptAvailability'
   if (value === 'pts') return 'pt'
   if (value === 'availablePTs') return 'pt'
+  if (value === 'nutrition') return 'products'
+  if (value === 'nutritionData') return 'products'
+  if (value === 'webNutrition') return 'webSearchNutrition'
   return value
 }
 
@@ -1774,6 +811,14 @@ const hasBookingActionIntent = (query = '') => {
   return /\b(dat lich|book|booking|huy lich|cancel booking|doi lich|reschedule)\b/.test(normalized)
 }
 
+configureContextDataService({
+  getUserDisplayName,
+  getRole,
+  normalizeTimeRange,
+  hasBookingActionIntent,
+  memberIntents: MEMBER_INTENTS,
+})
+
 const hasPtAvailabilityIntent = (query = '') => {
   const normalized = normalizeForIntent(query)
   return /\b(pt nao|huan luyen vien nao|trainer nao)\b/.test(normalized)
@@ -1836,6 +881,21 @@ const hasMembershipAdviceIntent = (query = '') => {
     || /\b(sinh vien|ngan sach|budget|goi tap|goi nao|chon goi|nen mua vip|khong nen mua vip|vip|co ban|basic|lau dai|tiet kiem|phong tap|khong can pt|can pt|khoe hon|giam mo|tang co)\b/.test(normalized)
 }
 
+const hasPlanSelectionContext = (query = '') => {
+  const normalized = normalizeForIntent(query)
+  return Boolean(normalizeVietnameseMoney(query))
+    || /\b(goi tap|goi gym|goi nao|chon goi|membership|plan|vip|co ban|basic|premium|ngan sach|budget|gia|price|mua|dang ky|pt)\b/.test(normalized)
+}
+
+const hasWorkoutGoalAdviceIntent = (query = '') => hasWorkoutGoalAdviceIntentFromBuilder({
+  query,
+  deps: {
+    normalizeForIntent,
+    hasPlanSelectionContext,
+    hasShopIntent,
+  },
+})
+
 const hasCheapestLongTermIntent = (query = '') => {
   const normalized = normalizeForIntent(query)
   const longTerm = /\b(\d+\s*(thang|nam|month|year|ngay|day)|dai han|dai|long term|nhieu thang)\b/.test(normalized)
@@ -1857,10 +917,48 @@ const hasHealthOrWorkoutContext = (query = '') => {
   return /\b(tap|buoi\/tuan|giam mo|giam can|tang co|tang can|workout|bai tap|dinh duong|health|suc khoe|bmi|calo|protein|fat loss|muscle)\b/.test(normalized)
 }
 
+const hasNutritionIntent = (query = '') => {
+  const normalized = normalizeForIntent(query)
+  const nutritionTerms = /\b(an gi|nen an|an uong|bua|bua sang|bua trua|bua toi|thuc don|mon gi|mon an|dinh duong|diet|meal|meal plan|nutrition|calo|calorie|macro|protein|healthy|com|gao lut|yen mach|uc ga|trung|rau|do an|food)\b/.test(normalized)
+  const nutritionAction = /\b(goi y|de xuat|nen|the nao|nhu nao|phu hop|recommend|suggest|advice|should|can|co beo khong|truoc buoi tap|sau tap)\b/.test(normalized)
+  const goalTerms = /\b(giam can|giam mo|tang co|tang can|lean|bulk|fat loss|weight loss|muscle gain)\b/.test(normalized)
+  return nutritionTerms && (nutritionAction || goalTerms || /\b(an|thuc don|meal|diet|nutrition|food)\b/.test(normalized))
+}
+
+const shouldUseNutritionWebSearch = (query = '') => {
+  const normalized = normalizeForIntent(query)
+  return hasNutritionIntent(query)
+    && /\b(an gi|thuc don|mon|calo|calorie|macro|co beo khong|truoc buoi tap|sau tap|healthy|diet|meal|nutrition)\b/.test(normalized)
+}
+
+const hasBodyImageAnalysisIntent = (query = '') => {
+  const normalized = normalizeForIntent(query)
+  return /\b(doc anh|xem anh|phan tich anh|anh nay|body photo|progress photo|image|photo|picture)\b/.test(normalized)
+}
+
+const hasWorkoutProgressAdviceIntent = (query = '') => hasWorkoutProgressAdviceIntentFromBuilder({
+  query,
+  normalizeForIntent,
+})
+
 const normalizePlanEntityText = (value = '') => normalizeForIntent(value)
   .replace(/\b(goi|plan|membership)\b/g, ' ')
   .replace(/\s+/g, ' ')
   .trim()
+
+const hasUnsafeRenderedToken = (value = '') => /\b(undefined|null|NaN)\b|\[object Object\]/i.test(String(value || ''))
+
+const cleanUnsafeRenderedTokens = (value = '', fallback = '') => {
+  const text = normalizeFinalAnswerText(value)
+  if (!hasUnsafeRenderedToken(text)) return text
+  const cleaned = text
+    .replace(/\b(undefined|null|NaN)\b/gi, '')
+    .replace(/\[object Object\]/gi, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/:\s*(\n|$)/g, ':$1')
+    .trim()
+  return cleaned && !hasUnsafeRenderedToken(cleaned) ? cleaned : fallback
+}
 
 const splitAliasWords = (value = '') => normalizePlanEntityText(value).split(/\s+/).filter(Boolean)
 
@@ -1883,7 +981,7 @@ const buildPlanAliasCandidates = (plan = {}) => {
     const words = splitAliasWords(normalized)
     if (words.length > 1) {
       words.forEach((word) => {
-        if (word.length >= 3 || /^[a-z0-9]{2,}$/i.test(word)) aliases.add(word)
+        if (word.length >= 3) aliases.add(word)
       })
     }
   })
@@ -1941,10 +1039,23 @@ const benefitExistsInFeatures = (features = [], benefit = '') => {
 
 const findPlanMentionedInQuery = (plans = [], query = '') => {
   const normalized = normalizePlanEntityText(query)
-  return (Array.isArray(plans) ? plans : []).find((plan) => {
+  let bestPlan = null
+  let bestScore = 0
+  for (const plan of (Array.isArray(plans) ? plans : [])) {
     const aliases = buildPlanAliasCandidates(plan)
-    return aliases.some((alias) => queryContainsPlanAlias(normalized, alias))
-  }) || null
+    for (const alias of aliases) {
+      if (!queryContainsPlanAlias(normalized, alias)) continue
+      let score = alias.length
+      if (normalized === alias) score += 50
+      else if (normalized.startsWith(alias) || normalized.endsWith(alias)) score += 25
+      else if (normalized.includes(alias)) score += 10
+      if (score > bestScore) {
+        bestScore = score
+        bestPlan = plan
+      }
+    }
+  }
+  return bestScore >= 5 ? bestPlan : null
 }
 
 const inferGoalEntity = (query = '') => {
@@ -1953,6 +1064,13 @@ const inferGoalEntity = (query = '') => {
   if (/\b(giam mo|giam can|fat loss|weight loss)\b/.test(normalized)) return 'fat_loss'
   if (/\b(tang can|gain weight|bulk)\b/.test(normalized)) return 'weight_gain'
   if (/\b(khoe hon|suc khoe|healthy|fitness)\b/.test(normalized)) return 'general_fitness'
+  return null
+}
+
+const inferExperienceLevel = (query = '') => {
+  const normalized = normalizeForIntent(query)
+  if (/\b(moi tap|nguoi moi|newbie|beginner|bat dau)\b/.test(normalized)) return 'beginner'
+  if (/\b(da tap|kinh nghiem|intermediate|advanced|nang cao)\b/.test(normalized)) return 'experienced'
   return null
 }
 
@@ -2055,6 +1173,22 @@ const buildSemanticConversationMemory = (conversationContext = {}, query = '') =
     || null
   const benefitLookupFollowUp = Boolean(lastBenefitLookup && isBenefitLookupFollowUp(query))
 
+  // Extract last mentioned plan/PT from conversation history
+  const lastMentionedPlan = conversationContext?.lastMentionedPlan
+    || [...recentMessages].reverse().map((msg) => {
+      const data = msg.data || msg.metadata?.toolData || {}
+      const rec = msg.answer?.match(/\*\*([^*]+)\*\*/)?.[1]
+      return rec || data.recommendedPlan?.nameVi || data.recommendedPlan?.nameEn || null
+    }).find(Boolean)
+    || null
+  const lastMentionedPT = conversationContext?.lastMentionedPT
+    || [...recentMessages].reverse().map((msg) => {
+      const data = msg.data || msg.metadata?.toolData || {}
+      return data.recommendedPT?.name || data.pt?.name || null
+    }).find(Boolean)
+    || null
+  const lastGoal = conversationContext?.lastGoal || inferGoalEntity(query) || null
+
   return {
     recentMessages,
     lastIntent,
@@ -2064,6 +1198,9 @@ const buildSemanticConversationMemory = (conversationContext = {}, query = '') =
     budgetPeriod,
     budgetText: budgetMessage?.content || '',
     isSupplemental,
+    lastMentionedPlan,
+    lastMentionedPT,
+    lastGoal,
     supplementalSignals: {
       frequencyPerWeek: normalizeWeeklyFrequency(query),
       workoutFrequency: hasWorkoutFrequencyIntent(query),
@@ -2123,7 +1260,7 @@ const buildQuestionAnalysis = (query = '', language = 'vi') => {
   const asksOwnBooking = hasBookingSubject && /\b(cua toi|toi co|my|lich pt nao|lich tap)\b/.test(normalized)
   const bookingAction = hasBookingActionIntent(query)
   const planBenefit = asksPlanBenefitQuestion(query)
-  const planList = /\b(xem cac goi|danh sach goi|cac goi tap|goi tap nao|membership plans|show plans|list plans)\b/.test(normalized)
+  const planList = /\b(xem cac goi|danh sach goi|cac goi tap|goi tap nao|gym co may goi|co may goi|bao nhieu goi|membership plans|show plans|list plans|how many plans)\b/.test(normalized)
   const planAdvice = hasPlanSubject && /\b(co nen|nen|chon|tu van|phu hop|recommend|should|which|best|dang tien|worth)\b/.test(normalized)
   const hasPlanAdviceCondition = Boolean(budget)
     || Boolean(frequencyPerWeek)
@@ -2134,8 +1271,15 @@ const buildQuestionAnalysis = (query = '', language = 'vi') => {
     || hasPrivacyPolicyIntent(query)
     || hasRefundPolicyIntent(query)
     || hasPaymentPolicyIntent(query)
+  const nutritionSubject = hasNutritionIntent(query)
   const healthSubject = /\b(bmi|dau lung|dau nguc|kho tho|chong mat|chan thuong|huyet ap|health)\b/.test(normalized)
-  const workoutSubject = /\b(bai tap|workout|lo trinh|tap gi|tap \d|buoi\/tuan|sessions per week)\b/.test(normalized) || Boolean(frequencyPerWeek)
+  const bodyImageAnalysis = hasBodyImageAnalysisIntent(query)
+  const workoutProgressAdvice = hasWorkoutProgressAdviceIntent(query)
+  const workoutGoalAdvice = hasWorkoutGoalAdviceIntent(query)
+  const workoutSubject = /\b(bai tap|workout|lo trinh|tap luyen|tap gym|tap gi|muc tieu tap|training goal|fitness goal|tap \d|buoi\/tuan|sessions per week)\b/.test(normalized)
+    || Boolean(frequencyPerWeek)
+    || workoutGoalAdvice
+    || workoutProgressAdvice
   const workoutFrequency = hasWorkoutFrequencyIntent(query)
 
   const base = {
@@ -2184,6 +1328,8 @@ const buildQuestionAnalysis = (query = '', language = 'vi') => {
   if (asksTrainerWhich) return { ...base, subject: 'trainer', action: 'advice', intent: 'pt_advice', confidence: 0.9, tools: ['trainers'], reason: 'User asks which trainer fits their constraints.' }
   if (planBenefit) return { ...base, subject: 'plan', action: 'info', intent: 'membership_benefit_lookup', confidence: 0.9, tools: ['plans'], shouldRenderCard: false, needsAIReasoning: false, reason: 'User asks a specific plan benefit/info question.' }
   if (planList) return { ...base, subject: 'plan', action: 'info', intent: 'membership_info', confidence: 0.85, tools: ['plans'], shouldRenderCard: true, needsAIReasoning: false, reason: 'User asks to view membership plans.' }
+  if (nutritionSubject) return { ...base, subject: 'nutrition', action: /\b(thuc don|meal plan)\b/.test(normalized) ? 'meal_plan' : 'advice', intent: 'nutrition_advice', confidence: 0.86, tools: shouldUseNutritionWebSearch(query) ? ['products', 'webSearchNutrition'] : ['products'], shouldRenderCard: false, reason: 'User asks nutrition/diet/meal advice.' }
+  if (workoutGoalAdvice) return { ...base, subject: 'workout', action: 'goal', intent: 'workout_advice', confidence: 0.82, tools: ['workout'], shouldRenderCard: false, reason: 'User asks for workout goal direction, not membership plan selection.' }
   if (planAdvice && !hasPlanAdviceCondition) return { ...base, subject: 'plan', action: 'unclear', intent: 'unclear_question', confidence: 0.86, shouldAskClarify: true, needsAIReasoning: false, needsDatabase: false, tools: [], reason: 'Plan advice request is too vague to recommend without one key constraint.' }
   if (hasCheapestLongTermIntent(query)) return { ...base, subject: 'plan', action: 'compare', intent: 'cheapest_long_term_plan', confidence: 0.85, tools: ['plans'], needsDatabase: true, needsAIReasoning: false, shouldRenderCard: false, reason: 'User asks for cheapest long-term plan option.' }
   if (planAdvice || hasMembershipAdviceIntent(query)) return { ...base, subject: 'plan', action: 'advice', intent: 'membership_advice', confidence: 0.8, tools: ['plans'], reason: 'User asks for membership plan advice.' }
@@ -2191,8 +1337,10 @@ const buildQuestionAnalysis = (query = '', language = 'vi') => {
   if (workoutFrequency) return { ...base, subject: 'workout', action: 'info', intent: 'workout_info', confidence: 0.88, tools: ['workout'], shouldRenderCard: false, needsAIReasoning: true, reason: 'User states workout/check-in training frequency, not a booked schedule.' }
   if (checkinSubject) return { ...base, subject: 'checkin', action: 'personal_data', intent: 'checkin_summary', confidence: 0.75, tools: ['checkins'], shouldRenderCard: true, needsAIReasoning: false, reason: 'User asks check-in data.' }
   if (hasShopIntent(query)) return { ...base, subject: 'shop', action: 'advice', intent: 'shop_advice', confidence: 0.75, tools: ['products'], reason: 'User asks shop/product advice.' }
+  if (bodyImageAnalysis) return { ...base, subject: 'workout', action: 'analyze', intent: 'workout_advice', confidence: 0.75, tools: ['workout', 'health'], shouldRenderCard: false, reason: 'User asks to analyze a body/progress image.' }
+  if (workoutProgressAdvice) return { ...base, subject: 'workout', action: 'advice', intent: 'workout_advice', confidence: 0.75, tools: ['workout'], shouldRenderCard: false, reason: 'User asks what/how to train or whether training progress is okay.' }
   if (healthSubject) return { ...base, subject: 'health', action: 'advice', intent: 'health_advice', confidence: 0.75, tools: ['health'], reason: 'User asks health/safety advice.' }
-  if (workoutSubject) return { ...base, subject: 'workout', action: 'advice', intent: 'workout_advice', confidence: 0.7, tools: ['workout'], reason: 'User provides or asks workout/training context, not booked schedule.' }
+  if (workoutSubject) return { ...base, subject: 'workout', action: workoutGoalAdvice ? 'goal' : 'advice', intent: 'workout_advice', confidence: 0.7, tools: ['workout'], shouldRenderCard: false, reason: 'User provides or asks workout/training context, not booked schedule.' }
 
   return base
 }
@@ -2331,15 +1479,15 @@ const buildEnoughInfoAdviceFallback = ({ query, toolData, language }) => {
     : (planName ? `Bạn nên chọn ${planName}.` : 'Bạn nên ưu tiên gói rẻ nhất hoặc có giá/ngày tốt nhất trong GymPro.')
   const reason = lang === 'en'
     ? [
-        'Your goal and training frequency are already enough for an initial recommendation.',
-        'Saving money is the priority, so consistency matters more than PT booking.',
-        'A cost-effective plan is enough to maintain regular training.'
-      ]
+      'Your goal and training frequency are already enough for an initial recommendation.',
+      'Saving money is the priority, so consistency matters more than PT booking.',
+      'A cost-effective plan is enough to maintain regular training.'
+    ]
     : [
-        'Bạn đã có mục tiêu và tần suất tập rõ ràng nên có thể tư vấn ngay.',
-        'Ưu tiên tiết kiệm tiền nên không cần chọn gói quá cao hoặc gắn PT riêng.',
-        'Tập đều quan trọng hơn quyền lợi phụ nếu mục tiêu chính là giảm mỡ/khỏe hơn.'
-      ]
+      'Bạn đã có mục tiêu và tần suất tập rõ ràng nên có thể tư vấn ngay.',
+      'Ưu tiên tiết kiệm tiền nên không cần chọn gói quá cao hoặc gắn PT riêng.',
+      'Tập đều quan trọng hơn quyền lợi phụ nếu mục tiêu chính là giảm mỡ/khỏe hơn.'
+    ]
   const alternatives = lang === 'en'
     ? ['If you want better progress tracking, choose a plan with health/workout tracking.']
     : ['Nếu muốn theo dõi tiến độ tốt hơn, chọn gói có health/workout tracking.']
@@ -2457,6 +1605,7 @@ const getDomainSuggestions = (intent, language = 'vi') => {
     policyPrivacy: ['GymPro lưu dữ liệu nào?', 'Xem chính sách bảo mật', 'Tôi có thể yêu cầu xóa dữ liệu không?'],
     policyPayment: ['Có thể thanh toán bằng cách nào?', 'Có xuất hóa đơn không?', 'Có hỗ trợ trả góp không?'],
     shop: ['Whey nào phù hợp tăng cơ?', 'Sản phẩm nào đang bán chạy?', 'Đơn hàng của tôi ở đâu?'],
+    nutrition: ['Lên thực đơn 1 ngày cho tôi', 'Trước buổi tập nên ăn gì?', 'Sau tập nên ăn gì?'],
   }
   const en = {
     membership: ['Which plan is the most economical?', 'Compare with another plan', 'Should I upgrade?'],
@@ -2466,6 +1615,7 @@ const getDomainSuggestions = (intent, language = 'vi') => {
     policyPrivacy: ['What data does GymPro store?', 'View privacy policy', 'Can I request data deletion?'],
     policyPayment: ['Which payment methods are supported?', 'Can I get an invoice?', 'Is installment payment available?'],
     shop: ['Which whey fits muscle gain?', 'Which products are best-selling?', 'Where is my order?'],
+    nutrition: ['Build a 1-day meal plan', 'What should I eat before training?', 'What should I eat after training?'],
   }
   const set = lang === 'en' ? en : vi
   if (intent === 'checkin_goal' || intent === 'checkin_summary' || intent === 'checkin_info') return set.checkin
@@ -2474,6 +1624,7 @@ const getDomainSuggestions = (intent, language = 'vi') => {
   if (intent === 'policy_privacy') return set.policyPrivacy
   if (intent === 'policy_payment') return set.policyPayment
   if (intent === 'shop_advice' || intent === 'shop_info') return set.shop
+  if (intent === 'nutrition_advice' || intent === 'nutrition_info') return set.nutrition
   if (intent === 'membership_advice' || intent === 'membership_info' || intent === 'membership_benefit_lookup' || intent === 'plan_comparison' || intent === 'cheapest_long_term_plan') return set.membership
   return lang === 'en' ? ['Which plan suits my budget?', 'How many days should I train?'] : ['Gói nào hợp ngân sách của tôi?', 'Tôi nên tập mấy buổi mỗi tuần?']
 }
@@ -2487,15 +1638,15 @@ const buildClarificationAnswer = ({ analysis, query, language }) => {
     ? (lang === 'en' ? 'VIP plan' : 'Gói VIP')
     : subject === 'plan'
       ? (lang === 'en' ? 'membership plan' : 'gói tập')
-    : subject === 'trainer'
-      ? 'PT'
-      : subject === 'checkin'
-        ? (lang === 'en' ? 'check-ins' : 'check-in')
-        : subject === 'booking'
-          ? (lang === 'en' ? 'schedule/booking' : 'lịch tập/lịch PT')
-          : subject === 'shop'
-            ? (lang === 'en' ? 'GymPro shop' : 'shop GymPro')
-            : (lang === 'en' ? 'this topic' : 'nội dung này')
+      : subject === 'trainer'
+        ? 'PT'
+        : subject === 'checkin'
+          ? (lang === 'en' ? 'check-ins' : 'check-in')
+          : subject === 'booking'
+            ? (lang === 'en' ? 'schedule/booking' : 'lịch tập/lịch PT')
+            : subject === 'shop'
+              ? (lang === 'en' ? 'GymPro shop' : 'shop GymPro')
+              : (lang === 'en' ? 'this topic' : 'nội dung này')
   const answer = subject === 'plan' && namedVip
     ? (lang === 'en'
       ? 'What would you like to know about the VIP plan: price, benefits, or comparison with another plan?'
@@ -2550,21 +1701,21 @@ const buildCheckinGoalAnswer = ({ query, toolData, language }) => {
   const perWeek = missing > 0 ? Math.ceil((missing / weeksLeft) * 10) / 10 : 0
   const answer = lang === 'en'
     ? formatReadableAnswer({
-        conclusion: `You have checked in ${current} time(s) this month. To reach ${target} sessions/month, you still need ${missing} session(s).`,
-        reasons: missing > 0
-          ? [`There are about ${daysLeft} day(s) left this month.`, `You need around ${perWeek} session(s)/week from now to month-end.`]
-          : ['You have already reached the monthly target.', 'Keep a steady rhythm to maintain the streak.'],
-        alternativeTitle: 'Pace suggestion',
-        lang,
-      })
+      conclusion: `You have checked in ${current} time(s) this month. To reach ${target} sessions/month, you still need ${missing} session(s).`,
+      reasons: missing > 0
+        ? [`There are about ${daysLeft} day(s) left this month.`, `You need around ${perWeek} session(s)/week from now to month-end.`]
+        : ['You have already reached the monthly target.', 'Keep a steady rhythm to maintain the streak.'],
+      alternativeTitle: 'Pace suggestion',
+      lang,
+    })
     : formatReadableAnswer({
-        conclusion: `Tháng này bạn đã check-in ${current} buổi. Để đạt ${target} buổi/tháng, bạn còn thiếu ${missing} buổi.`,
-        reasons: missing > 0
-          ? [`Còn khoảng ${daysLeft} ngày đến cuối tháng.`, `Bạn cần trung bình khoảng ${perWeek} buổi/tuần từ giờ đến cuối tháng.`]
-          : ['Bạn đã đạt mục tiêu tháng này.', 'Tiếp tục giữ nhịp đều để duy trì streak.'],
-        alternativeTitle: 'Gợi ý nhịp tập',
-        lang,
-      })
+      conclusion: `Tháng này bạn đã check-in ${current} buổi. Để đạt ${target} buổi/tháng, bạn còn thiếu ${missing} buổi.`,
+      reasons: missing > 0
+        ? [`Còn khoảng ${daysLeft} ngày đến cuối tháng.`, `Bạn cần trung bình khoảng ${perWeek} buổi/tuần từ giờ đến cuối tháng.`]
+        : ['Bạn đã đạt mục tiêu tháng này.', 'Tiếp tục giữ nhịp đều để duy trì streak.'],
+      alternativeTitle: 'Gợi ý nhịp tập',
+      lang,
+    })
   return {
     type: 'checkin_summary',
     answer,
@@ -2577,51 +1728,191 @@ const buildCheckinGoalAnswer = ({ query, toolData, language }) => {
   }
 }
 
-const buildWorkoutFrequencyAnswer = ({ query, toolData, language }) => {
-  const lang = normalizeLanguage(language)
-  const frequency = normalizeWeeklyFrequency(query)
-  const normalized = normalizeForIntent(query)
-  const isDaily = /\btap\s+moi\s+ngay\b/.test(normalized)
-  const isSteady = /\btap\s+deu\b/.test(normalized)
-  const label = frequency
-    ? (lang === 'en' ? `${frequency} sessions/week` : `${frequency} buổi/tuần`)
-    : isDaily
-      ? (lang === 'en' ? 'daily training' : 'tập mỗi ngày')
-      : isSteady
-        ? (lang === 'en' ? 'steady training' : 'tập đều')
-        : (lang === 'en' ? 'this training frequency' : 'tần suất này')
-  const answer = lang === 'en'
-    ? [
-        `${label} is a fairly solid training frequency.`,
-        'If your goal is muscle gain, it can work well when recovery and nutrition are managed.',
-        'If you are new, monitor soreness, sleep, and recovery before increasing intensity.',
-        '',
-        'Are you aiming for muscle gain, fat loss, or endurance?',
-      ].join('\n')
-    : [
-        `Tần suất ${label} khá cao.`,
-        'Nếu mục tiêu tăng cơ thì phù hợp.',
-        'Nếu mới tập nên theo dõi hồi phục.',
-        '',
-        'Bạn đang muốn tăng cơ, giảm mỡ hay tăng sức bền?',
-      ].join('\n')
+const buildWorkoutFrequencyAnswer = ({ query, toolData, language }) => buildWorkoutFrequencyAnswerFromBuilder({
+  query,
+  toolData,
+  language,
+  deps: {
+    normalizeLanguage,
+    normalizeWeeklyFrequency,
+    normalizeForIntent,
+  },
+})
 
+const buildGenericWorkoutAdviceAnswer = ({ query, classifierResult = {}, toolData = {}, language }) => buildGenericWorkoutAdviceAnswerFromBuilder({
+  query,
+  classifierResult,
+  toolData,
+  language,
+  deps: {
+    normalizeLanguage,
+    inferGoalEntity,
+    normalizeWeeklyFrequency,
+    inferExperienceLevel,
+    hasBodyImageAnalysisIntent,
+    formatReadableAnswer,
+  },
+})
+
+const buildGenericPlanAnswer = ({ classifierResult = {}, toolData = {}, language }) => {
+  const lang = normalizeLanguage(language)
+  const plans = toolData.activePlans || toolData.plans || []
+  const hasPlans = Array.isArray(plans) && plans.length > 0
   return {
-    type: 'workout_advice',
-    answer,
+    type: 'text_advice',
+    answer: hasPlans
+      ? buildPlanListResponse({ plans, lang })
+      : (lang === 'en'
+        ? 'GymPro does not have active membership plan data available right now.'
+        : 'Hiện GymPro chưa có dữ liệu gói tập đang hoạt động.'),
     data: toolData,
     cards: [],
+    plans: hasPlans ? plans : [],
     recommendedPlan: null,
-    plans: [],
     planPayload: null,
-    suggestions: lang === 'en'
-      ? ['Muscle gain', 'Fat loss', 'Endurance']
-      : ['Tăng cơ', 'Giảm mỡ', 'Tăng sức bền'],
+    suggestions: getDomainSuggestions(classifierResult.intent || 'membership_info', lang),
     mode: 'gym',
-    provider: 'rule_based',
+    provider: 'generic_safe_answer',
     model: 'local',
+    metadata: {
+      intent: classifierResult.intent || 'membership_info',
+      answeredBy: 'generic_safe_answer',
+      route: 'GENERIC_PLAN_ANSWER',
+      usedFallback: true,
+      classifier: classifierResult,
+    },
   }
 }
+
+const buildGenericPTAnswer = ({ classifierResult = {}, toolData = {}, language }) => {
+  const lang = normalizeLanguage(language)
+  const pts = toolData.ptAvailability?.availablePTs || toolData.availablePTs || toolData.pts || toolData.pt || []
+  const list = Array.isArray(pts) ? pts : []
+  const hasPts = list.length > 0
+  return {
+    type: hasPts ? 'pt_list' : 'text_advice',
+    answer: hasPts
+      ? buildPtListResponse({ pts: list, lang })
+      : (lang === 'en'
+        ? 'GymPro does not have suitable trainer data available right now.'
+        : 'Hiện GymPro chưa có dữ liệu huấn luyện viên phù hợp.'),
+    data: toolData,
+    cards: hasPts ? list.slice(0, 8) : [],
+    plans: [],
+    recommendedPlan: null,
+    planPayload: null,
+    suggestions: getDomainSuggestions(classifierResult.intent || 'pt_advice', lang),
+    mode: 'gym',
+    provider: 'generic_safe_answer',
+    model: 'local',
+    metadata: {
+      intent: classifierResult.intent || 'pt_advice',
+      answeredBy: 'generic_safe_answer',
+      route: 'GENERIC_PT_ANSWER',
+      usedFallback: true,
+      classifier: classifierResult,
+    },
+  }
+}
+
+const buildGenericMembershipAnswer = ({ classifierResult = {}, toolData = {}, language }) => {
+  const lang = normalizeLanguage(language)
+  const membership = toolData.currentMembership || toolData.membership || {}
+  const hasMembership = Boolean(membership?.found || membership?.planName || membership?.planNameVi || membership?.planNameEn)
+  return {
+    type: 'text_advice',
+    answer: hasMembership
+      ? buildMembershipInfoResponse({ membership, lang })
+      : (lang === 'en'
+        ? 'GymPro does not show an active membership for your account right now.'
+        : 'Hiện GymPro chưa ghi nhận gói tập đang hoạt động trong tài khoản của bạn.'),
+    data: toolData,
+    cards: [],
+    plans: [],
+    recommendedPlan: null,
+    planPayload: null,
+    suggestions: getDomainSuggestions(classifierResult.intent || 'membership_info', lang),
+    mode: 'gym',
+    provider: 'generic_safe_answer',
+    model: 'local',
+    metadata: {
+      intent: classifierResult.intent || 'membership_info',
+      answeredBy: 'generic_safe_answer',
+      route: 'GENERIC_MEMBERSHIP_ANSWER',
+      usedFallback: true,
+      classifier: classifierResult,
+    },
+  }
+}
+
+const buildGenericHealthAnswer = ({ classifierResult = {}, toolData = {}, language }) => {
+  const lang = normalizeLanguage(language)
+  const hasHealth = Boolean(toolData.healthSummary?.latestHealthLog || toolData.health?.latestHealthLog)
+  return {
+    type: 'health_advice',
+    answer: hasHealth
+      ? (lang === 'en'
+        ? 'I found your latest health data. Tell me your goal so I can connect it to a safe training direction.'
+        : 'Mình đã thấy dữ liệu sức khỏe gần nhất. Bạn cho mình biết mục tiêu để mình gợi ý hướng tập an toàn hơn.')
+      : (lang === 'en'
+        ? 'I can help, but I need a few basics first: height, weight, training frequency, and any injury or health limitation.'
+        : 'Mình có thể hỗ trợ, nhưng cần vài thông tin cơ bản: chiều cao, cân nặng, tần suất tập và có chấn thương/bệnh nền nào không.'),
+    data: toolData,
+    cards: [],
+    plans: [],
+    recommendedPlan: null,
+    planPayload: null,
+    suggestions: getDomainSuggestions(classifierResult.intent || 'health_advice', lang),
+    mode: 'gym',
+    provider: 'generic_safe_answer',
+    model: 'local',
+    metadata: {
+      intent: classifierResult.intent || 'health_advice',
+      answeredBy: 'generic_safe_answer',
+      route: 'GENERIC_HEALTH_ANSWER',
+      usedFallback: true,
+      classifier: classifierResult,
+    },
+  }
+}
+
+const inferNutritionGoal = (query = '', classifierResult = {}) => inferNutritionGoalFromBuilder({
+  query,
+  classifierResult,
+  normalizeForIntent,
+})
+
+const buildGenericNutritionAnswer = ({ query, classifierResult = {}, toolData = {}, language }) => buildGenericNutritionAnswerFromBuilder({
+  query,
+  classifierResult,
+  toolData,
+  language,
+  deps: {
+    normalizeLanguage,
+    normalizeForIntent,
+  },
+})
+
+const buildGenericSafeAnswer = ({ query, classifierResult = {}, toolData = {}, language, reason = 'safe_fallback' }) => {
+  return buildGenericSafeAnswerFromResponseUtils({
+    query,
+    classifierResult,
+    toolData,
+    language,
+    reason,
+    deps: {
+      inferSubjectFromIntent,
+      buildGenericWorkoutAdviceAnswer,
+      buildGenericNutritionAnswer,
+      buildGenericMembershipAnswer,
+      buildGenericPlanAnswer,
+      buildGenericPTAnswer,
+      buildGenericHealthAnswer,
+    },
+  })
+}
+
+const buildWorkoutAnalysisAnswer = (analysis, lang = 'vi') => buildWorkoutAnalysisAnswerFromBuilder(analysis, lang)
 
 const formatAvailabilitySlot = (slot, language = 'vi') => {
   const lang = normalizeLanguage(language)
@@ -2633,6 +1924,102 @@ const formatAvailabilitySlot = (slot, language = 'vi') => {
     ? `${start.toLocaleTimeString(lang === 'en' ? 'en-US' : 'vi-VN', { hour: '2-digit', minute: '2-digit' })}-${end.toLocaleTimeString(lang === 'en' ? 'en-US' : 'vi-VN', { hour: '2-digit', minute: '2-digit' })}`
     : (slot?.slot || slot?.time || slot?.label || (lang === 'en' ? 'available' : 'còn trống'))
   return `${slot?.ptName || slot?.name || 'PT'}: ${time}`
+}
+
+const formatPtExperience = (pt, lang = 'vi') => {
+  const years = Number(pt?.experienceYears || 0)
+  if (!years) return ''
+  return lang === 'en' ? `${years} year(s)` : `${years} năm`
+}
+
+const getPtSpecialties = (pt) => Array.isArray(pt?.specialties)
+  ? pt.specialties.map((item) => String(item || '').trim()).filter(Boolean)
+  : String(pt?.specialties || pt?.specialty || '').split(',').map((item) => item.trim()).filter(Boolean)
+
+const formatPtScheduleText = (pt) => String(pt?.schedule || pt?.scheduleText || '').trim()
+
+const formatPtListText = ({ pts, lang = 'vi' }) => {
+  const list = Array.isArray(pts) ? pts : []
+  if (list.length === 0) {
+    return lang === 'en'
+      ? 'There are no trainers available at the moment. Please check back later.'
+      : 'Hiện tại chưa có PT nào khả dụng. Bạn quay lại sau nhé.'
+  }
+
+  const total = list.length
+  const limit = 5
+  const shown = list.slice(0, limit)
+  const header = lang === 'en'
+    ? `GymPro currently has ${total} active trainer(s):`
+    : `GymPro hiện có ${total} huấn luyện viên đang hoạt động:`
+
+  const lines = [header]
+
+  shown.forEach((pt, index) => {
+    const specialties = getPtSpecialties(pt)
+    const email = String(pt.email || '').trim()
+    const phone = String(pt.phone || '').trim()
+    const schedule = formatPtScheduleText(pt)
+
+    lines.push('', `${index + 1}. **${pt.name || 'PT'}**`)
+
+    if (specialties.length > 0) {
+      lines.push(`${lang === 'en' ? 'Expertise:' : 'Chuyên môn:'} ${specialties.join(' • ')}`)
+    }
+
+    const contactParts = []
+    if (phone) contactParts.push(`${lang === 'en' ? 'Phone' : 'SĐT'}: ${phone}`)
+    if (email) contactParts.push(`${lang === 'en' ? 'Email' : 'Email'}: ${email}`)
+    if (contactParts.length > 0) lines.push(contactParts.join(' | '))
+
+    if (schedule) lines.push(`${lang === 'en' ? 'Schedule:' : 'Lịch:'} ${schedule}`)
+
+    if (index < shown.length - 1) lines.push('', '────────────────')
+  })
+
+  if (total > limit) {
+    const remaining = total - limit
+    lines.push('', lang === 'en' ? `... and ${remaining} more trainer(s)` : `... và ${remaining} PT khác`)
+  }
+
+  lines.push('', lang === 'en' ? 'Which trainer would you like to view in detail or book with?' : 'Bạn muốn xem chi tiết PT nào?')
+
+  return lines.join('\n')
+}
+
+const formatPtDetailText = ({ pt, lang = 'vi' }) => {
+  const lines = [`**${pt?.name || 'PT'}**`]
+  const specialties = getPtSpecialties(pt)
+  const experience = formatPtExperience(pt, lang)
+  const email = String(pt?.email || '').trim()
+  const phone = String(pt?.phone || '').trim()
+  const bio = String(pt?.bio || '').trim()
+  const rating = Number(pt?.rating || 0)
+  const reviewCount = Number(pt?.reviewCount || 0)
+  const schedule = formatPtScheduleText(pt)
+
+  if (email) lines.push('', 'Email:', email)
+  if (phone) lines.push('', lang === 'en' ? 'Phone:' : 'Số điện thoại:', phone)
+  if (experience) lines.push('', lang === 'en' ? 'Experience:' : 'Kinh nghiệm:', experience)
+  if (specialties.length > 0) {
+    lines.push('', lang === 'en' ? 'Expertise:' : 'Chuyên môn:')
+    specialties.forEach((item) => lines.push(`• ${item}`))
+  }
+  if (bio) lines.push('', 'Bio:', bio)
+  if (rating > 0) {
+    const ratingText = reviewCount > 0 ? `${rating}/5 (${reviewCount} đánh giá)` : `${rating}/5`
+    lines.push('', lang === 'en' ? 'Rating:' : 'Đánh giá:', ratingText)
+  }
+  if (Array.isArray(pt?.latestReviews) && pt.latestReviews.length > 0) {
+    pt.latestReviews
+      .map((review) => String(review.comment || '').trim())
+      .filter(Boolean)
+      .slice(0, 2)
+      .forEach((comment) => lines.push(`• ${comment}`))
+  }
+  if (schedule) lines.push('', lang === 'en' ? 'This week schedule:' : 'Lịch làm việc tuần này:', schedule)
+
+  return lines.join('\n')
 }
 
 const buildPtAvailabilityAnswer = ({ toolData, language }) => {
@@ -2660,25 +2047,25 @@ const buildPtAvailabilityAnswer = ({ toolData, language }) => {
   const answer = hasSlotData
     ? (lang === 'en'
       ? formatReadableAnswer({
-          conclusion: `I found ${pts.length || slots.length} PT option(s) with open time tonight.`,
-          reasons: slots.slice(0, 5).map((slot) => formatAvailabilitySlot(slot, lang)),
-          alternativeTitle: 'Available slots',
-          lang,
-        })
+        conclusion: `I found ${pts.length || slots.length} PT option(s) with open time tonight.`,
+        reasons: slots.slice(0, 5).map((slot) => formatAvailabilitySlot(slot, lang)),
+        alternativeTitle: 'Available slots',
+        lang,
+      })
       : formatReadableAnswer({
-          conclusion: `Mình tìm thấy ${pts.length || slots.length} PT có lịch trống trong khung giờ này.`,
-          reasons: slots.slice(0, 5).map((slot) => formatAvailabilitySlot(slot, lang)),
-          alternativeTitle: 'Khung giờ trống',
-          lang,
-        }))
+        conclusion: `Mình tìm thấy ${pts.length || slots.length} PT có lịch trống trong khung giờ này.`,
+        reasons: slots.slice(0, 5).map((slot) => formatAvailabilitySlot(slot, lang)),
+        alternativeTitle: 'Khung giờ trống',
+        lang,
+      }))
     : (lang === 'en'
       ? 'GymPro does not currently have configured PT availability data for tonight.'
       : 'Hiện GymPro chưa có dữ liệu lịch trống của PT tối nay.')
   return {
-    type: 'booking_suggestion',
+    type: hasSlotData ? 'pt_list' : 'booking_suggestion',
     answer,
     data: toolData,
-    cards: hasSlotData ? pts.slice(0, 8) : [],
+    cards: [],
     suggestions: getDomainSuggestions('pt_availability', lang),
     mode: 'gym',
     provider: 'rule_based',
@@ -2701,7 +2088,18 @@ const buildPtAdviceAnswer = ({ query, toolData, language }) => {
       cards: [],
       suggestions: getDomainSuggestions('pt_advice', lang),
       mode: 'gym',
+      provider: 'db_direct',
+      model: 'local',
     }
+  }
+
+  const requestedPt = findRequestedPt(query, pts)
+  if (requestedPt) {
+    return buildPtDetailAnswer({ pt: requestedPt, language: lang })
+  }
+  const requestedPtName = extractRequestedPtQuery(query)
+  if (isPtDetailQuery(query) && requestedPtName) {
+    return buildPtNotFoundAnswer({ requestedName: requestedPtName, language: lang })
   }
 
   const normalized = normalizeForIntent(query)
@@ -2718,15 +2116,103 @@ const buildPtAdviceAnswer = ({ query, toolData, language }) => {
     return { pt, score }
   }).sort((a, b) => b.score - a.score)
 
-  const recommended = scored.slice(0, 3).map((item) => item.pt)
+  const hasGoalFilter = /\b(tang co|muscle|giam can|giam mo|fat loss|weight loss|yoga|cardio|boxing|hiit|mobility|strength)\b/.test(normalized)
+  const recommended = (hasGoalFilter ? scored.slice(0, 3) : scored).map((item) => item.pt).slice(0, 8)
   return {
     type: 'pt_list',
-    answer: lang === 'en'
-      ? 'Based on GymPro PT data, these trainers are the closest match. I will not replace this with a membership plan because you asked for PT advice.'
-      : 'Dựa trên dữ liệu PT của GymPro, đây là các huấn luyện viên phù hợp nhất. Mình không đề xuất gói tập thay cho PT vì bạn đang hỏi PT cụ thể.',
-    cards: recommended,
+    answer: formatPtListText({ pts: recommended, lang }),
+    cards: [],
     suggestions: getDomainSuggestions('pt_advice', lang),
     mode: 'gym',
+    provider: 'db_direct',
+    model: 'local',
+  }
+}
+
+const isPtDetailQuery = (query = '') => {
+  const normalized = normalizeForIntent(query)
+  return /\b(chi tiet|thong tin|profile|ho so|gioi thieu|info|detail|details|about)\b/.test(normalized)
+    && /\b(pt|trainer|coach|hlv|huan luyen vien)\b/.test(normalized)
+}
+
+const extractRequestedPtQuery = (query = '') => normalizeForIntent(query)
+  .replace(/\b(chi tiet|thong tin|profile|ho so|gioi thieu|xem|cho toi|toi muon|muon|ve|cua|la ai|info|detail|details|about|pt|trainer|coach|hlv|huan luyen vien)\b/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+
+const findRequestedPt = (query = '', pts = []) => {
+  if (!isPtDetailQuery(query)) return null
+  const normalizedQuery = normalizeForIntent(query)
+  const requestedName = extractRequestedPtQuery(query)
+  let best = null
+  let bestScore = 0
+
+  for (const pt of pts) {
+    const normalizedName = normalizeForIntent(pt.name || '')
+    if (!normalizedName || normalizedName.length < 2) continue
+
+    let score = 0
+    if (requestedName && normalizedName === requestedName) score = 120
+    else if (requestedName && normalizedName.includes(requestedName)) score = 100
+    else if (requestedName && requestedName.includes(normalizedName)) score = 90
+    else if (normalizedQuery.includes(normalizedName)) score = 80
+
+    if (score > bestScore) {
+      bestScore = score + Math.min(normalizedName.length, 30)
+      best = pt
+    }
+  }
+
+  return bestScore >= 80 ? best : null
+}
+
+const ptSpecialtyText = (pt) => {
+  if (Array.isArray(pt.specialties)) return pt.specialties.filter(Boolean).join(', ')
+  return pt.specialties || pt.specialty || ''
+}
+
+const toPtCard = (pt) => ({
+  ...pt,
+  name: pt.name || '',
+  avatar: pt.avatar || '',
+  phone: pt.phone || '',
+  email: pt.email || '',
+  specialty: ptSpecialtyText(pt) || pt.bio || '',
+  specialties: Array.isArray(pt.specialties) ? pt.specialties : [],
+  bio: pt.bio || '',
+  reviewCount: pt.reviewCount || 0,
+  latestReviews: pt.latestReviews || [],
+  schedule: formatPtScheduleText(pt),
+})
+
+const buildPtDetailAnswer = ({ pt, language }) => {
+  const lang = normalizeLanguage(language)
+
+  return {
+    type: 'pt_detail',
+    answer: formatPtDetailText({ pt, lang }),
+    cards: [toPtCard(pt)],
+    suggestions: getDomainSuggestions('pt_advice', lang),
+    mode: 'gym',
+    provider: 'db_direct',
+    model: 'local',
+  }
+}
+
+const buildPtNotFoundAnswer = ({ requestedName, language }) => {
+  const lang = normalizeLanguage(language)
+  return {
+    type: 'pt_advice_no_data',
+    answer: lang === 'en'
+      ? `I could not find a GymPro trainer matching "${requestedName}". You can ask to view the current PT list.`
+      : `Mình chưa tìm thấy PT nào khớp với "${requestedName}" trong dữ liệu GymPro. Bạn có thể hỏi danh sách PT hiện có.`,
+    cards: [],
+    suggestions: lang === 'en'
+      ? ['View current PT list', 'Which PT suits me?', 'PT available tonight?']
+      : ['Xem danh sách PT hiện có', 'PT nào phù hợp với tôi?', 'Tối nay PT nào còn lịch?'],
+    mode: 'gym',
+    provider: 'db_direct',
+    model: 'local',
   }
 }
 
@@ -2788,26 +2274,26 @@ const buildPtPlanBudgetAdvicePayload = ({ query, toolData, language }) => {
   const reasons = shouldBuyPt
     ? (lang === 'en'
       ? [
-          `The estimated monthly cost is about ${ptMonthlyPrice.toLocaleString('en-US')} VND, within your budget.`,
-          'PT is most useful when you need technique correction, accountability, or a personalized plan.',
-          'If you only need gym access, a non-PT plan may still be more cost-effective.',
-        ]
+        `The estimated monthly cost is about ${ptMonthlyPrice.toLocaleString('en-US')} VND, within your budget.`,
+        'PT is most useful when you need technique correction, accountability, or a personalized plan.',
+        'If you only need gym access, a non-PT plan may still be more cost-effective.',
+      ]
       : [
-          `Chi phí ước tính khoảng ${ptMonthlyPrice.toLocaleString('vi-VN')}đ/tháng, nằm trong ngân sách của bạn.`,
-          'PT hữu ích nhất khi bạn cần sửa kỹ thuật, kèm sát hoặc giáo án cá nhân hóa.',
-          'Nếu chỉ cần quyền vào phòng tập, gói không PT vẫn có thể tiết kiệm hơn.',
-        ])
+        `Chi phí ước tính khoảng ${ptMonthlyPrice.toLocaleString('vi-VN')}đ/tháng, nằm trong ngân sách của bạn.`,
+        'PT hữu ích nhất khi bạn cần sửa kỹ thuật, kèm sát hoặc giáo án cá nhân hóa.',
+        'Nếu chỉ cần quyền vào phòng tập, gói không PT vẫn có thể tiết kiệm hơn.',
+      ])
     : (lang === 'en'
       ? [
-          overRatio ? `It is about ${overRatio} times higher than your monthly budget.` : 'It is above your monthly budget.',
-          alternativeName ? `Start with ${alternativeName} first if you mainly need gym access or basic progress tracking.` : 'Start with a non-PT plan first if you mainly need gym access.',
-          'When your budget is higher or you need technique correction, reconsider PT.',
-        ]
+        overRatio ? `It is about ${overRatio} times higher than your monthly budget.` : 'It is above your monthly budget.',
+        alternativeName ? `Start with ${alternativeName} first if you mainly need gym access or basic progress tracking.` : 'Start with a non-PT plan first if you mainly need gym access.',
+        'When your budget is higher or you need technique correction, reconsider PT.',
+      ]
       : [
-          overRatio ? `Vượt ngân sách khoảng ${overRatio} lần.` : 'Vượt ngân sách theo tháng bạn đã nêu.',
-          alternativeName ? `Nếu mới tập, bạn có thể bắt đầu bằng ${alternativeName} để làm quen và theo dõi tiến độ.` : 'Nếu mới tập, bạn có thể bắt đầu bằng gói không PT để làm quen và theo dõi tiến độ.',
-          'Khi có ngân sách cao hơn hoặc cần sửa kỹ thuật, hãy cân nhắc PT.',
-        ])
+        overRatio ? `Vượt ngân sách khoảng ${overRatio} lần.` : 'Vượt ngân sách theo tháng bạn đã nêu.',
+        alternativeName ? `Nếu mới tập, bạn có thể bắt đầu bằng ${alternativeName} để làm quen và theo dõi tiến độ.` : 'Nếu mới tập, bạn có thể bắt đầu bằng gói không PT để làm quen và theo dõi tiến độ.',
+        'Khi có ngân sách cao hơn hoặc cần sửa kỹ thuật, hãy cân nhắc PT.',
+      ])
 
   const answer = formatReadableAnswer({
     conclusion,
@@ -3134,7 +2620,24 @@ const summarizeToolDataForLog = (toolData = {}) => ({
   policies: Array.isArray(toolData.policies) ? toolData.policies.length : 0,
   faqs: Array.isArray(toolData.faqs) ? toolData.faqs.length : 0,
   products: Array.isArray(toolData.products) ? toolData.products.length : 0,
+  health: Boolean(toolData.healthSummary || toolData.health),
+  workout: Boolean(toolData.workoutProgress || toolData.workout),
+  webSearchNutrition: toolData.webSearchNutrition ? {
+    used: Boolean(toolData.webSearchNutrition.used),
+    reason: toolData.webSearchNutrition.reason || '',
+    results: Array.isArray(toolData.webSearchNutrition.results) ? toolData.webSearchNutrition.results.length : 0,
+    sources: Array.isArray(toolData.webSearchNutrition.sources) ? toolData.webSearchNutrition.sources.length : 0,
+  } : null,
+  dataSources: toolData._dataSources || {},
 })
+
+const normalizeSourceMetadata = (source = {}) => normalizeSourceMetadataFromBuilder(source)
+
+const normalizeSourceList = (sources = []) => normalizeSourceListFromBuilder(sources)
+
+const getNutritionWebSources = (toolData = {}) => getNutritionWebSourcesFromBuilder(toolData)
+
+const selectUsedNutritionSources = ({ aiSources = [], toolSources = [] } = {}) => selectUsedNutritionSourcesFromBuilder({ aiSources, toolSources })
 
 const shouldUseAiReasoning = (query = '') => {
   const normalized = normalizeForIntent(query)
@@ -3162,129 +2665,22 @@ const detectDbDirectIntent = (query = '') => {
   return null
 }
 
-const buildPlanInfoDirectAnswer = ({ query, plans, language, targetBenefit = '' }) => {
-  const lang = normalizeLanguage(language)
-  const normalized = normalizeForIntent(query)
-  if (!Array.isArray(plans) || plans.length === 0) {
-    return {
-      type: 'text_advice',
-      answer: lang === 'en'
-        ? 'GymPro currently has no data for this.'
-        : 'Hiện GymPro chưa có dữ liệu này.',
-      recommendedPlan: null,
-      plans: [],
-      cards: [],
-      planPayload: null,
-      suggestions: getDomainSuggestions('membership_info', lang),
-    }
-  }
-  const isGeneralBenefitQuery = /\b(co .* khong)\b/.test(normalized) && !/\b(goi|vip|premium|basic|co ban|nang cao|plan|membership)\b/.test(normalized)
-  if (isGeneralBenefitQuery) {
-    return {
-      type: 'text_advice',
-      answer: lang === 'en'
-        ? 'Please specify which plan you want to check: VIP, Premium, or Basic?'
-        : 'Bạn muốn kiểm tra quyền lợi của gói nào: VIP, Premium hay Cơ Bản?',
-      recommendedPlan: null,
-      plans: [],
-      cards: [],
-      planPayload: null,
-      suggestions: getDomainSuggestions('membership_info', lang),
-    }
-  }
-  const mentionedPlan = findPlanMentionedInQuery(plans, query)
-  if (mentionedPlan) {
-    const planName = getPlanName(mentionedPlan, lang)
-    if (asksPlanBenefitQuestion(query) || targetBenefit) {
-      const normalized = normalizeForIntent(query)
-      const features = lang === 'en' ? (mentionedPlan.featuresEn || mentionedPlan.featuresVi || []) : (mentionedPlan.featuresVi || mentionedPlan.featuresEn || [])
-      const askedBenefit = targetBenefit || extractAskedPlanBenefit(query, lang)
-      const asksPool = /\b(ho boi|hồ bơi|pool|xong hoi|xông hơi|sauna)\b/.test(normalized)
-      if (asksPool) {
-        const hasPoolBenefit = benefitExistsInFeatures(features, askedBenefit)
-        return {
-          type: 'text_advice',
-          answer: hasPoolBenefit
-            ? (lang === 'en'
-              ? `Yes. GymPro data records a pool/sauna-related benefit for ${planName}.`
-              : `Có. Dữ liệu GymPro ghi nhận quyền lợi hồ bơi/xông hơi trong ${planName}.`)
-            : (lang === 'en'
-              ? `GymPro data does not currently record a pool benefit for ${planName}.`
-              : `Hiện dữ liệu GymPro chưa ghi nhận hồ bơi trong quyền lợi ${planName}.`),
-          recommendedPlan: null,
-          plans: [],
-          cards: [],
-          suggestions: getDomainSuggestions('membership_info', lang),
-          lastBenefitLookup: {
-            targetBenefit: askedBenefit,
-            previousPlan: planName,
-            intent: 'membership_benefit_lookup',
-          },
-        }
-      }
-      const hasAskedBenefit = askedBenefit !== (lang === 'en' ? 'that benefit' : 'quyền lợi đó')
-        && benefitExistsInFeatures(features, askedBenefit)
-      return {
-        type: 'text_advice',
-        answer: hasAskedBenefit
-          ? (lang === 'en'
-            ? `Yes. GymPro data records ${askedBenefit} in ${planName}.`
-            : `Có. Dữ liệu GymPro ghi nhận ${askedBenefit} trong quyền lợi ${planName}.`)
-          : askedBenefit
-            ? (lang === 'en'
-              ? `GymPro data does not currently record ${askedBenefit} in ${planName}.`
-              : `Hiện dữ liệu GymPro chưa ghi nhận ${askedBenefit} trong quyền lợi ${planName}.`)
-            : features.length
-          ? (lang === 'en'
-            ? `${planName} currently records these benefits: ${features.slice(0, 6).join(', ')}.`
-            : `${planName} hiện ghi nhận các quyền lợi: ${features.slice(0, 6).join(', ')}.`)
-          : (lang === 'en'
-            ? `GymPro data does not currently record detailed benefits for ${planName}.`
-            : `Hiện dữ liệu GymPro chưa ghi nhận quyền lợi chi tiết cho ${planName}.`),
-        recommendedPlan: null,
-        plans: [],
-        cards: [],
-        suggestions: getDomainSuggestions('membership_info', lang),
-        lastBenefitLookup: {
-          targetBenefit: askedBenefit,
-          previousPlan: planName,
-          intent: 'membership_benefit_lookup',
-        },
-      }
-    }
-    return {
-      type: 'plan_detail',
-      answer: '',
-      recommendedPlan: null,
-      plans: [],
-      cards: [mentionedPlan],
-      planPayload: { type: 'plan_detail', plan: mentionedPlan },
-      suggestions: getDomainSuggestions('membership_info', lang),
-    }
-  }
-  if (asksPlanBenefitQuestion(query)) {
-    return {
-      type: 'text_advice',
-      answer: lang === 'en'
-        ? 'Please specify which plan to check: VIP, Premium, or Basic?'
-        : 'Bạn muốn kiểm tra quyền lợi của gói nào: VIP, Premium hay Cơ Bản?',
-      recommendedPlan: null,
-      plans: [],
-      cards: [],
-      planPayload: null,
-      suggestions: getDomainSuggestions('membership_info', lang),
-    }
-  }
-  return {
-    type: 'plan_list',
-    answer: lang === 'en' ? 'Here are the active GymPro membership plans.' : 'Đây là các gói tập đang hoạt động của GymPro.',
-    recommendedPlan: null,
-    plans,
-    cards: plans,
-    planPayload: { type: 'plan_list', plans },
-    suggestions: getDomainSuggestions('membership_info', lang),
-  }
-}
+const buildPlanInfoDirectAnswer = ({ query, plans, language, targetBenefit = '' }) => buildPlanInfoDirectAnswerFromBuilder({
+  query,
+  plans,
+  language,
+  targetBenefit,
+  deps: {
+    normalizeLanguage,
+    normalizeForIntent,
+    getDomainSuggestions,
+    getPlanName,
+    findPlanMentionedInQuery,
+    asksPlanBenefitQuestion,
+    extractAskedPlanBenefit,
+    benefitExistsInFeatures,
+  },
+})
 
 const runDbDirectFastPath = async ({ intent, query, user, baseToolData, language, cacheContext }) => {
   const lang = normalizeLanguage(language)
@@ -3327,17 +2723,17 @@ const runDbDirectFastPath = async ({ intent, query, user, baseToolData, language
     const payload = intent === 'checkin_goal'
       ? buildCheckinGoalAnswer({ query, toolData, language: lang })
       : {
-          type: 'checkin_summary',
-          answer: lang === 'en'
-            ? `This month you have checked in ${toolData.checkinStats?.thisMonth ?? toolData.checkinStats?.last30Days ?? 0} time(s).`
-            : `Tháng này bạn đã check-in ${toolData.checkinStats?.thisMonth ?? toolData.checkinStats?.last30Days ?? 0} buổi.`,
-          data: toolData,
-          cards: [toolData.checkinStats].filter(Boolean),
-          suggestions: getDomainSuggestions('checkin_summary', lang),
-          mode: 'gym',
-          provider: 'db_direct',
-          model: 'local',
-        }
+        type: 'checkin_summary',
+        answer: lang === 'en'
+          ? `This month you have checked in ${toolData.checkinStats?.thisMonth ?? toolData.checkinStats?.last30Days ?? 0} time(s).`
+          : `Tháng này bạn đã check-in ${toolData.checkinStats?.thisMonth ?? toolData.checkinStats?.last30Days ?? 0} buổi.`,
+        data: toolData,
+        cards: [toolData.checkinStats].filter(Boolean),
+        suggestions: getDomainSuggestions('checkin_summary', lang),
+        mode: 'gym',
+        provider: 'db_direct',
+        model: 'local',
+      }
     return { ...payload, provider: 'db_direct', model: 'local', metadata: { route: 'DB_DIRECT', intent } }
   }
   if (intent === 'booking_info') {
@@ -3445,7 +2841,7 @@ const preloadReasoningContext = async ({ user, query, cacheContext }) => {
   if (hasSeriousMedicalSignal(query) || /\b(bmi|suc khoe|health|can nang|weight|body fat|mo co the)\b/.test(normalized)) {
     extra.health = await getHealthContext(memberId)
   }
-  if (hasHealthOrWorkoutContext(query) || /\b(workout|bai tap|lo trinh|lộ trình|tap gi|tập gì)\b/.test(normalized)) {
+  if (hasHealthOrWorkoutContext(query) || /\b(workout|bai tap|lo trinh|lộ trình|tap luyen|tap gym|muc tieu tap|tap gi|tập gì)\b/.test(normalized)) {
     extra.workout = await getWorkoutContext(memberId)
   }
   return mergeToolData({ activePlans, currentMembership, checkin, booking, _dataSources: sourceData._dataSources }, extra)
@@ -3453,6 +2849,11 @@ const preloadReasoningContext = async ({ user, query, cacheContext }) => {
 
 // 2. Classifier system prompts & runners
 const buildClassifierSystemPrompt = () => {
+  const guide = getReasoningGuide({
+    subject: 'core',
+    sections: ['Quy tắc dữ liệu', 'Thứ tự nguồn dữ liệu', 'Tool Planning', 'Query Reasoner', 'Safety Rule'],
+    maxChars: 5000,
+  })
   return `Bạn là AI Intent Classifier toàn hệ thống cho GymPro.
 Nhiệm vụ:
 - Hiểu ý định thật sự của user.
@@ -3460,6 +2861,9 @@ Nhiệm vụ:
 - Dựa trên toàn bộ câu, lịch sử hội thoại, role/permissions và context summary backend cung cấp.
 - Chỉ trả JSON hợp lệ.
 - Không giải thích ngoài JSON.
+
+GymPro reasoning guide từ docs/AI_GYMPRO_REASONING_MASTER.md:
+${guide.content || 'Guide unavailable. Follow database-first and no-hardcode rules.'}
 
 Quy tắc:
 - Nếu user hỏi "PT nào", "huấn luyện viên nào", "which trainer/PT" phù hợp/gợi ý/recommend cho mục tiêu, người mới, tăng cơ, ngân sách thấp => pt_advice, tools ["pts"]. KHÔNG trả plan_recommend và KHÔNG đề xuất gói tập thay cho PT.
@@ -3470,6 +2874,7 @@ Quy tắc:
 - "Tối nay PT nào còn lịch trống?" => pt_availability, tools ["pts", "ptAvailability"].
 - "Tôi có lịch PT nào tối nay không?" => booking_info, tools ["bookings"].
 - "Nếu tôi muốn đạt 12 buổi/tháng thì còn thiếu bao nhiêu buổi nữa?" => checkin_goal, tools ["checkins"].
+- "Tôi nên ăn gì để giảm cân?", "Ăn gì để tăng cơ?", "Bữa tối nên ăn gì?", "thực đơn giảm mỡ" => nutrition_advice, subject nutrition, tools ["products", "webSearchNutrition"] nếu cần kiến thức chung. KHÔNG map sang workout_advice.
 - "Tôi đau lưng", "BMI của tôi", "khó thở", "chóng mặt" => health_advice hoặc health_info; nếu nghiêm trọng cần safety.
 - "Tôi muốn mua whey", "sản phẩm tăng cơ", "shop", "đồ tập", "mua hàng" => shop_advice/shop_info. Không map câu tư vấn gói có chữ "mua VIP" sang shop.
 - "hoàn tiền/refund/mai đổi ý/không tập nữa có lấy lại tiền không" => policy_refund. "bảo mật/privacy" => policy_privacy. "thanh toán/payment" => policy_payment. FAQ khác => faq_answer.
@@ -3482,16 +2887,16 @@ Quy tắc:
 
 JSON Output structure:
 {
-  "subject": "plan | trainer | booking | workout | checkin | policy | shop | health | account | general",
+  "subject": "plan | trainer | booking | workout | nutrition | checkin | policy | shop | health | account | general",
   "action": "info | advice | compare | personal_data | availability | create | update | cancel | policy_lookup | unclear",
-  "intent": "membership_info | membership_benefit_lookup | membership_advice | plan_comparison | checkin_summary | checkin_goal | pt_info | pt_advice | pt_availability | booking_info | booking_action | policy_refund | policy_privacy | policy_payment | policy_terms | faq_answer | shop_advice | shop_info | health_advice | workout_advice | general_chat | unclear_question | unknown",
+  "intent": "membership_info | membership_benefit_lookup | membership_advice | plan_comparison | checkin_summary | checkin_goal | pt_info | pt_advice | pt_availability | booking_info | booking_action | policy_refund | policy_privacy | policy_payment | policy_terms | faq_answer | shop_advice | shop_info | health_advice | nutrition_advice | workout_advice | general_chat | unclear_question | unknown",
   "confidence": 0.0,
   "shouldAskClarify": false,
   "shouldRenderCard": false,
   "language": "vi | en",
   "needsAIReasoning": true,
   "needsDatabase": true,
-  "tools": ["plans", "membership", "checkins", "pts", "ptAvailability", "bookings", "workout", "health", "products", "cart", "orders", "notifications", "faqs", "policies", "feedback", "reports", "members", "systemSettings", "landingCms"],
+  "tools": ["plans", "membership", "checkins", "pts", "ptAvailability", "bookings", "workout", "health", "products", "webSearchNutrition", "cart", "orders", "notifications", "faqs", "policies", "feedback", "reports", "members", "systemSettings", "landingCms"],
   "reason": "ngắn gọn lý do phân loại",
   "entities": {
     "budget": number | null,
@@ -3523,13 +2928,13 @@ Important:
 
 Backend Context available before classification:
 ${JSON.stringify({
-  userMessage: query,
-  role: toolData?.role || 'member',
-  userId: toolData?.userId || '',
-  permissions: toolData?.permissions || {},
-  normalized: toolData?.normalized || {},
-  language,
-}, null, 2).slice(0, 6000)}
+    userMessage: query,
+    role: toolData?.role || 'member',
+    userId: toolData?.userId || '',
+    permissions: toolData?.permissions || {},
+    normalized: toolData?.normalized || {},
+    language,
+  }, null, 2).slice(0, 6000)}
 
 Return exactly one valid JSON object:`
 }
@@ -3537,7 +2942,7 @@ Return exactly one valid JSON object:`
 const runAiClassifier = async ({ query, recentConversation, semanticMemory, toolData, language }) => {
   const systemPrompt = buildClassifierSystemPrompt()
   const context = buildClassifierContextPrompt({ query, recentConversation, semanticMemory, toolData, language })
-  
+
   try {
     const result = await runAIWithFallback({
       systemPrompt,
@@ -3548,7 +2953,7 @@ const runAiClassifier = async ({ query, recentConversation, semanticMemory, tool
       temperature: 0.1,
       maxTokens: 900,
     })
-    
+
     const parsed = parseAiJsonPayload(result.text, '')
     return {
       subject: parsed.subject || 'general',
@@ -3626,8 +3031,11 @@ const normalizeClassifierResult = (classifierResult, query, user = null, languag
     'booking_action',
     'health_advice',
     'health_info',
+    'nutrition_advice',
+    'nutrition_info',
     'workout_advice',
     'workout_info',
+    'workout_analyze',
     'shop_advice',
     'shop_info',
     'notification_info',
@@ -3756,6 +3164,45 @@ const normalizeClassifierResult = (classifierResult, query, user = null, languag
     normalized.needsDatabase = true
     normalized.needsAIReasoning = false
     normalized.reason = `${normalized.reason} | guard: checkin goal query`.trim()
+  } else if (hasNutritionIntent(query)) {
+    normalized.subject = 'nutrition'
+    normalized.action = /\b(thuc don|meal plan)\b/.test(normalizeForIntent(query)) ? 'meal_plan' : 'advice'
+    normalized.intent = 'nutrition_advice'
+    normalized.shouldRenderCard = false
+    normalized.needsDatabase = true
+    normalized.needsAIReasoning = true
+    normalized.tools = shouldUseNutritionWebSearch(query)
+      ? ['products', 'health', 'workout', 'membership', 'webSearchNutrition']
+      : ['products', 'health', 'workout', 'membership']
+    normalized.reason = `${normalized.reason} | guard: nutrition/diet query`.trim()
+  } else if (hasBodyImageAnalysisIntent(query)) {
+    normalized.subject = 'workout'
+    normalized.action = 'analyze'
+    normalized.intent = 'workout_advice'
+    normalized.shouldRenderCard = false
+    normalized.needsDatabase = true
+    normalized.needsAIReasoning = true
+    normalized.tools = ['workout', 'health']
+    normalized.reason = `${normalized.reason} | guard: body/progress image analysis query`.trim()
+  } else if (hasWorkoutProgressAdviceIntent(query)) {
+    normalized.subject = 'workout'
+    normalized.action = 'advice'
+    normalized.intent = 'workout_advice'
+    normalized.shouldRenderCard = false
+    normalized.needsDatabase = true
+    normalized.needsAIReasoning = true
+    normalized.tools = ['workout']
+    normalized.reason = `${normalized.reason} | guard: workout progress/advice query`.trim()
+  } else if (hasWorkoutGoalAdviceIntent(query)) {
+    normalized.subject = 'workout'
+    normalized.action = 'goal'
+    normalized.intent = 'workout_advice'
+    normalized.shouldRenderCard = false
+    normalized.needsDatabase = true
+    normalized.needsAIReasoning = true
+    normalized.tools = ['workout']
+    normalized.reason = `${normalized.reason} | guard: workout goal advice query`.trim()
+    normalized.entities.goal = normalized.entities.goal || inferGoalEntity(query)
   } else if (hasMembershipAdviceIntent(query) && !hasShopIntent(query) && hasWorkoutFrequencyIntent(query)) {
     normalized.subject = 'plan'
     normalized.action = 'advice'
@@ -3833,6 +3280,10 @@ const normalizeClassifierResult = (classifierResult, query, user = null, languag
     normalized.reason = `${normalized.reason} | booking guard: no booking action requested`.trim()
   }
 
+  if (normalized.intent === 'workout_advice' || normalized.intent === 'health_advice') {
+    normalized.shouldRenderCard = false
+  }
+
   if (normalized.intent === 'admin_report' && !hasRole(user, ADMIN_ROLES)) {
     normalized.intent = 'general_chat'
     normalized.needsDatabase = false
@@ -3856,6 +3307,13 @@ const normalizeClassifierResult = (classifierResult, query, user = null, languag
   if (normalized.intent === 'booking_action' || normalized.intent === 'pt_availability') toolSet.add('ptAvailability')
   if (normalized.intent.startsWith('workout_')) toolSet.add('workout')
   if (normalized.intent.startsWith('health_')) toolSet.add('health')
+  if (normalized.intent.startsWith('nutrition_')) {
+    toolSet.add('products')
+    toolSet.add('health')
+    toolSet.add('workout')
+    toolSet.add('membership')
+    if (shouldUseNutritionWebSearch(query)) toolSet.add('webSearchNutrition')
+  }
   if (normalized.intent.startsWith('shop_')) toolSet.add('products')
   if (normalized.intent === 'shop_info') toolSet.add('orders')
   if (normalized.intent === 'notification_info') toolSet.add('notifications')
@@ -3915,8 +3373,13 @@ const buildDefaultClassifier = (query, language = 'vi') => {
   const isPtAvailability = hasPtAvailabilityIntent(query)
   const isBookingInfo = hasBookingInfoIntent(query)
   const isBooking = /\b(dat lich|booking|huy lich|doi lich)\b/.test(normalized)
+  const isNutrition = hasNutritionIntent(query)
   const isHealth = /\b(bmi|dau lung|dau nguc|kho tho|chong mat|chan thuong|huyet ap)\b/.test(normalized)
   const isWorkout = /\b(bai tap|workout|tap gi|lich tap tu tap|giam .*kg|moi tap)\b/.test(normalized)
+    || hasWorkoutGoalAdviceIntent(query)
+    || hasBodyImageAnalysisIntent(query)
+    || hasWorkoutProgressAdviceIntent(query)
+  const isWorkoutAnalysis = /\b(phan tich.*(bai tap|workout|tap luyen|tien do)|workout.?analyz|summary.*workout|workout.*summary|thong ke.*(bai tap|workout|tap)|tiến.độ.*tập|workout.*stats|workout.*trend|workout.*history|so.bo.*(bai tap|tập|workout)|danh.gia.*(bai tap|tập|workout))\b/.test(normalized)
   const isShop = hasShopIntent(query)
   const isRefund = hasRefundPolicyIntent(query)
   const isPrivacy = hasPrivacyPolicyIntent(query)
@@ -3924,34 +3387,41 @@ const buildDefaultClassifier = (query, language = 'vi') => {
   const isPolicy = /\b(chinh sach|quy dinh|faq|terms|dieu khoan)\b/.test(normalized)
   const isAdmin = /\b(doanh thu|bao cao|dashboard|member sap het han|thong ke)\b/.test(normalized)
   const isTheme = /\b(doi giao dien|doi mau|theme|mau xanh|mau do|dark mode)\b/.test(normalized)
-  const intent = isTheme ? 'theme_action'
-    : isAdmin ? 'admin_report'
-      : isRefund ? 'policy_refund'
-        : isPrivacy ? 'policy_privacy'
-          : isPayment ? 'policy_payment'
-            : isPolicy ? 'faq_answer'
-              : isPtAdvice ? 'pt_advice'
-                : isPtAvailability ? 'pt_availability'
-                  : isBookingInfo ? 'booking_info'
-                    : isBooking ? 'booking_action'
-                      : isCheckinGoal ? 'checkin_goal'
-                        : isCheckin ? 'checkin_summary'
-                          : isShop ? 'shop_advice'
-                            : isHealth ? 'health_info'
-                              : isWorkout ? 'workout_advice'
-                                : isBudgetOrGoal || hasMembershipAdviceIntent(query) ? 'membership_advice'
-                                  : 'unknown'
+  const tools = []
+  let intent = 'unknown'
+  if (isTheme) intent = 'theme_action'
+  else if (isAdmin) intent = 'admin_report'
+  else if (isRefund) intent = 'policy_refund'
+  else if (isPrivacy) intent = 'policy_privacy'
+  else if (isPayment) intent = 'policy_payment'
+  else if (isPolicy) intent = 'faq_answer'
+  else if (isPtAdvice) intent = 'pt_advice'
+  else if (isPtAvailability) intent = 'pt_availability'
+  else if (isBookingInfo) intent = 'booking_info'
+  else if (isBooking) intent = 'booking_action'
+  else if (isCheckinGoal) intent = 'checkin_goal'
+  else if (isCheckin) intent = 'checkin_summary'
+  else if (isShop) intent = 'shop_advice'
+  else if (isNutrition) {
+    intent = 'nutrition_advice'
+    tools.push('products', 'health', 'workout', 'membership')
+    if (shouldUseNutritionWebSearch(query)) tools.push('webSearchNutrition')
+  }
+  else if (isHealth) intent = 'health_info'
+  else if (isWorkoutAnalysis) { intent = 'workout_analyze'; tools.push('workout', 'workout_analyze') }
+  else if (isWorkout) intent = 'workout_advice'
+  else if (isBudgetOrGoal || hasMembershipAdviceIntent(query)) intent = 'membership_advice'
   return {
     intent,
     confidence: 0.2,
     needsAIReasoning: true,
     needsDatabase: true,
-    tools: [],
+    tools,
     reason: 'classifier error fallback',
     entities: {
       budget,
       budgetPeriod: 'unknown',
-      goal: null,
+      goal: inferGoalEntity(query),
       frequencyPerWeek,
       mentionedPlanNames: [],
       mentionedPTNames: [],
@@ -4023,8 +3493,20 @@ const fetchToolData = async ({ user, query, toolNames, cacheContext }) => {
   if (tools.has('workout')) {
     promises.workout = getWorkoutContext(memberId)
   }
+  if (tools.has('workout_analyze')) {
+    promises.workoutAnalyzer = getWorkoutAnalyzerContext(memberId)
+  }
   if (tools.has('products')) {
     promises.products = getProducts(8)
+  }
+  if (tools.has('webSearchNutrition')) {
+    promises.webSearchNutrition = webSearchNutrition(query, { maxResults: 4 }).catch((error) => ({
+      used: false,
+      reason: error?.message || 'nutrition_web_search_error',
+      results: [],
+      sources: [],
+      context: '',
+    }))
   }
   if (tools.has('orders')) {
     promises.orders = getOrderHistory(user, 8)
@@ -4062,7 +3544,7 @@ const fetchToolData = async ({ user, query, toolNames, cacheContext }) => {
   const results = await Promise.all(Object.values(promises))
   const toolData = {}
   keys.forEach((key, index) => {
-    attachDataSource(toolData, key, results[index], 'database', false)
+    attachDataSource(toolData, key, results[index], key === 'webSearchNutrition' ? 'web' : 'database', false)
   })
 
   return toolData
@@ -4119,13 +3601,13 @@ const mergeToolData = (baseData = {}, extraData = {}) => {
 const compactRecentConversation = (messages = [], limit = 8) => (
   Array.isArray(messages)
     ? messages.slice(-limit).map((message) => ({
-        role: message.role,
-        content: String(message.content || '').slice(0, 500),
-        createdAt: message.createdAt,
-        intent: message.intent,
-        action: message.action,
-        subject: message.subject,
-      }))
+      role: message.role,
+      content: String(message.content || '').slice(0, 500),
+      createdAt: message.createdAt,
+      intent: message.intent,
+      action: message.action,
+      subject: message.subject,
+    }))
     : []
 )
 
@@ -4193,7 +3675,6 @@ const localizeMembership = (membership = {}, language = 'vi') => {
 
 const compactToolDataForAi = (toolData = {}, language = 'vi') => {
   const lang = normalizeLanguage(language)
-  console.log('[LOCALIZATION]', lang)
   const plans = toolData.activePlans || toolData.plans || []
   return {
     role: toolData.role,
@@ -4202,12 +3683,12 @@ const compactToolDataForAi = (toolData = {}, language = 'vi') => {
     membership: localizeMembership(toolData.currentMembership || toolData.membership, lang),
     checkin: toolData.checkinStats
       ? {
-          monthCount: toolData.checkinStats.thisMonth ?? toolData.checkinStats.last30Days ?? 0,
-          last30Days: toolData.checkinStats.last30Days ?? 0,
-          lastCheckin: toolData.latestCheckins?.[0]?.createdAt || null,
-          streak: toolData.streak ?? 0,
-          todayCheckinStatus: toolData.todayCheckinStatus,
-        }
+        monthCount: toolData.checkinStats.thisMonth ?? toolData.checkinStats.last30Days ?? 0,
+        last30Days: toolData.checkinStats.last30Days ?? 0,
+        lastCheckin: toolData.latestCheckins?.[0]?.createdAt || null,
+        streak: toolData.streak ?? 0,
+        todayCheckinStatus: toolData.todayCheckinStatus,
+      }
       : null,
     bookings: (toolData.upcomingBookings || []).slice(0, 5).map((booking) => ({
       date: booking.date,
@@ -4217,24 +3698,38 @@ const compactToolDataForAi = (toolData = {}, language = 'vi') => {
     })),
     ptAvailability: toolData.ptAvailability
       ? {
-          timeRange: toolData.ptAvailability.timeRange,
-          availablePTs: (toolData.ptAvailability.availablePTs || []).slice(0, 6).map((pt) => ({
-            id: pt.id,
-            name: pt.name,
-            specialties: pt.specialties,
-            rating: pt.rating,
-          })),
-          availableSlots: (toolData.ptAvailability.availableSlots || []).slice(0, 6).map((slot) => ({
-            ptName: slot.ptName,
-            slot: slot.slot,
-            rangeStart: slot.rangeStart,
-            rangeEnd: slot.rangeEnd,
-          })),
-        }
+        timeRange: toolData.ptAvailability.timeRange,
+        availablePTs: (toolData.ptAvailability.availablePTs || []).slice(0, 6).map((pt) => ({
+          id: pt.id,
+          name: pt.name,
+          specialties: pt.specialties,
+          rating: pt.rating,
+        })),
+        availableSlots: (toolData.ptAvailability.availableSlots || []).slice(0, 6).map((slot) => ({
+          ptName: slot.ptName,
+          slot: slot.slot,
+          rangeStart: slot.rangeStart,
+          rangeEnd: slot.rangeEnd,
+        })),
+      }
       : null,
     policies: (toolData.policies || []).slice(0, 8).map((policy) => localizePolicy(policy, lang)),
     faqs: (toolData.faqs || []).slice(0, 8).map((faq) => localizeFaq(faq, lang)),
     products: (toolData.products || []).slice(0, 8).map((product) => localizeProduct(product, lang)),
+    health: toolData.healthSummary || toolData.health || null,
+    workout: {
+      goal: toolData.workoutGoal || toolData.workout?.goal || toolData.workoutSummary?.goal || null,
+      recentProgress: Array.isArray(toolData.workoutProgress) ? toolData.workoutProgress.slice(0, 6) : [],
+      summary: toolData.workoutSummary || toolData.workout || null,
+    },
+    webSearchNutrition: toolData.webSearchNutrition
+      ? {
+        used: Boolean(toolData.webSearchNutrition.used),
+        reason: toolData.webSearchNutrition.reason || '',
+        sources: getNutritionWebSources(toolData),
+        context: toolData.webSearchNutrition.context || '',
+      }
+      : null,
     systemSettings: toolData.systemSettings || null,
     landingCms: toolData.landingCms || null,
     dataSources: toolData._dataSources || {},
@@ -4247,8 +3742,13 @@ const compactToolDataForAi = (toolData = {}, language = 'vi') => {
 }
 
 // 4. Answer Generator Prompts
-const buildAnswerGeneratorSystemPrompt = (language = 'vi') => {
+const buildAnswerGeneratorSystemPrompt = (language = 'vi', subject = 'core') => {
   const lang = normalizeLanguage(language)
+  const guide = getReasoningGuide({
+    subject: subject || 'core',
+    sections: ['Quy tắc dữ liệu', 'Thứ tự nguồn dữ liệu', 'Response Rule', 'Safety Rule', 'Web Search Rule'],
+    maxChars: 5500,
+  })
   const languageInstruction = lang === 'en'
     ? `You are GymPro Assistant.
 Always answer in the user's message language. If unclear, use the app language.
@@ -4265,6 +3765,9 @@ Không tự dịch dữ liệu database và không suy đoán bản dịch bị 
 Bạn là GymPro Operations Assistant - trợ lý thông minh cho toàn bộ hệ thống phòng gym.
 Bạn hỗ trợ theo role của user: Auth/Profile, Membership/Plans, Member info, Check-in QR, PT, Booking, Workout, Health, Reports/Dashboard, Products/Shop, Notifications, Feedback/Policies/FAQ, Theme/System settings.
 
+GymPro reasoning guide từ docs/AI_GYMPRO_REASONING_MASTER.md:
+${guide.content || 'Guide unavailable. Follow database-first and no-hardcode rules.'}
+
 Nguyên tắc bắt buộc:
 1. Dựa trên classifierResult và toolData. toolData là nguồn dữ liệu thật duy nhất. Không bịa giá, quyền lợi, lịch, doanh thu, sản phẩm, chính sách, PT.
 1a. toolData/context đã được localize theo language="${lang}". Không dùng AI để dịch từ field ngôn ngữ khác.
@@ -4278,7 +3781,7 @@ Nguyên tắc bắt buộc:
 7. Nếu quyền lợi/chính sách/sản phẩm không có trong DB: nói rõ GymPro chưa ghi nhận dữ liệu đó, không tự suy đoán.
 8. Safety/medical: với đau ngực, khó thở, chóng mặt, chấn thương nặng, bệnh nền hoặc triệu chứng nghiêm trọng, không chẩn đoán; khuyên gặp bác sĩ/chuyên gia và chỉ đưa lời khuyên tập luyện an toàn chung.
 9. Suggestions phải là 3-4 câu hỏi tiếp theo, không phải card, không gợi ý sai domain. Ví dụ hỏi tư vấn gói thì không gợi ý đặt lịch/PT trừ khi user có nhu cầu.
-10. Format dễ đọc: không trả một đoạn văn dài. Với câu tư vấn, answer phải có "Kết luận:" trước, sau đó dòng trống, "Lý do:" và bullet "- ...". Nếu có lựa chọn khác, chỉ thêm 1-2 bullet ở mục riêng. Với check-in/báo cáo, đưa số liệu chính trước rồi bullet gợi ý cải thiện. Mỗi bullet ngắn, không quá 1 câu.
+10. Format dễ đọc: không trả một đoạn văn dài. Với câu tư vấn ngoài nutrition, answer phải có "Kết luận:" trước, sau đó dòng trống, "Lý do:" và bullet "- ...". Riêng nutrition_advice trả lời tự nhiên như nutrition coach, có thể dùng đoạn ngắn và bullet món ăn khi hữu ích, không ép heading "Kết luận/Nên ăn/Nên hạn chế" nếu câu hỏi đơn giản. Với check-in/báo cáo, đưa số liệu chính trước rồi bullet gợi ý cải thiện. Mỗi bullet ngắn, không quá 1 câu.
 11. Nếu type là plan_recommend, luôn trả thêm "conclusion" và "reason" là mảng 2-4 chuỗi ngắn. Không nhét toàn bộ answer vào reason.
 12. Tôn trọng classifierResult.intent:
    - membership_advice/plan_comparison chỉ dùng activePlans/membership, không trả shop.
@@ -4287,13 +3790,14 @@ Nguyên tắc bắt buộc:
    - pt_availability là hỏi PT nào còn trống, không trả upcomingBookings của user.
    - booking_info mới là lịch đã đặt của user.
    - policy_refund chỉ trả chính sách hoàn tiền/refund; không trả bảo mật/privacy.
-13. Render gate: chỉ trả type/card khi response.type cuối cùng là plan_list, plan_detail, plan_recommend, plan_compare, trainer_list, booking_list, checkin_summary hoặc product_list. Nếu type là text_advice, policy_answer hoặc unclear_question thì chỉ trả text, không card. Không render card chỉ vì trong câu có từ "PT", "gói", "VIP", "lịch", "tập" hoặc "shop".
+13. Render gate: ưu tiên trải nghiệm chat. Danh sách/đếm/giá gói tập chỉ trả text_advice bằng markdown, không trả plan_list/card/carousel/detail card. Các câu như "có bao nhiêu gói", "có những gói nào", "liệt kê gói", "giá các gói", "gói rẻ nhất/đắt nhất/phổ biến", "có gói sinh viên không", "giá gói VIP bao nhiêu" đều là text-only. Chỉ render plan_detail/plan_compare/plan_recommend khi user thật sự muốn xem chi tiết, quyền lợi sâu, so sánh, tư vấn chọn gói, đăng ký hoặc nâng cấp. Nếu card chỉ lặp lại đúng nội dung answer thì không trả card. Không render card chỉ vì trong câu có từ "PT", "gói", "VIP", "lịch", "tập" hoặc "shop".
+14. Nutrition flow: nếu classifierResult.intent là nutrition_advice, ưu tiên dữ liệu theo độ tin cậy: (1) GymPro Database/products, (2) User Health Data, (3) Workout Data, (4) Verified Web Sources, (5) Local Safe Answer. Không để web ghi đè dữ liệu nội bộ. Nếu toolData.webSearchNutrition.used=true và bạn thật sự dùng kiến thức web, trả type="nutrition_advice_with_sources" và copy CHÍNH XÁC các nguồn đã dùng từ toolData.webSearchNutrition.sources vào "sources" gồm title, url, domain, favicon. Nếu không dùng web trong nội dung trả lời thì để "sources": [] và type="nutrition_advice". Không được nói kiến thức web như dữ liệu nội bộ GymPro. Nếu không có dữ liệu cá nhân, hỏi thêm nhẹ nhàng hoặc đưa gợi ý an toàn chung. Không chẩn đoán bệnh hoặc thực đơn điều trị.
 
 Output format:
 Trả về duy nhất 1 JSON object hợp lệ, không bọc trong markdown hay bất cứ lời giải thích nào khác ngoài JSON:
 {
   "intent": "intent cuối cùng sau khi đọc userMessage/context",
-  "type": "text_advice | unclear_question | plan_list | plan_detail | plan_recommend | plan_compare | checkin_summary | pt_list | trainer_list | pt_detail | booking_list | booking_suggestion | workout_advice | workout_progress | health_summary | product_list | product_recommend | notification_list | policy_answer | admin_dashboard | report_summary | action_result",
+  "type": "text_advice | unclear_question | plan_list | plan_detail | plan_recommend | plan_compare | checkin_summary | pt_list | trainer_list | pt_detail | booking_list | booking_suggestion | workout_advice | workout_progress | nutrition_advice | nutrition_advice_with_sources | health_summary | product_list | product_recommend | notification_list | policy_answer | admin_dashboard | report_summary | action_result",
   "answer": "câu trả lời tự nhiên, có xuống dòng và bullet khi có nhiều ý",
   "conclusion": "kết luận ngắn nếu là tư vấn, hoặc null",
   "reason": ["2-4 lý do ngắn nếu là plan_recommend/tư vấn, ngược lại []"],
@@ -4302,6 +3806,7 @@ Trả về duy nhất 1 JSON object hợp lệ, không bọc trong markdown hay 
   "cardIds": ["ids item cần render card, nếu có"],
   "toolsNeeded": ["chỉ liệt kê tool còn thiếu nếu chưa đủ dữ liệu, thường là []"],
   "action": { "action": "change_theme | open_page | none", "themeName": string | null, "color": string | null, "path": string | null, "message": string | null },
+  "sources": [{"title": "source title", "url": "https://...", "domain": "example.com", "favicon": "https://..."}],
   "suggestions": ["3-4 câu hỏi tiếp theo"]
 }`
 }
@@ -4331,7 +3836,7 @@ Return exactly one valid JSON object, no explanation:`
 const buildRuleBasedFallbackAnswer = ({ query, classifierResult, toolData, language }) => {
   const lang = normalizeLanguage(language)
   const plans = toolData.activePlans || toolData.plans || []
-  
+
   if (classifierResult.intent === 'cheapest_long_term_plan') {
     return {
       ...buildCheapestLongTermAnswer({ query, plans, language: lang }),
@@ -4348,6 +3853,10 @@ const buildRuleBasedFallbackAnswer = ({ query, classifierResult, toolData, langu
         classifier: classifierResult
       }
     }
+  }
+
+  if (classifierResult.intent === 'nutrition_advice' || classifierResult.intent === 'nutrition_info') {
+    return buildGenericNutritionAnswer({ query, classifierResult, toolData, language: lang })
   }
 
   if (classifierResult.intent === 'membership_advice' || classifierResult.intent === 'membership_info' || classifierResult.intent === 'membership_benefit_lookup') {
@@ -4425,28 +3934,32 @@ const buildRuleBasedFallbackAnswer = ({ query, classifierResult, toolData, langu
     }
   }
 
+  if (classifierResult.intent === 'workout_advice') {
+    return buildGenericWorkoutAdviceAnswer({ query, classifierResult, toolData, language: lang })
+  }
+
   const directAnswers = {
     checkin_summary: lang === 'en'
       ? formatReadableAnswer({
-          conclusion: `This month you have ${toolData.checkinStats?.last30Days ?? 0} check-ins recorded.`,
-          reasons: [
-            `Current streak: ${toolData.checkinStats?.streak ?? toolData.streak ?? 0} day(s).`,
-            'Keep a steady weekly rhythm instead of compressing all sessions into a few days.',
-            'Review your workout progress if attendance drops for more than one week.'
-          ],
-          alternativeTitle: 'Improvement tips',
-          lang
-        })
+        conclusion: `This month you have ${toolData.checkinStats?.last30Days ?? 0} check-ins recorded.`,
+        reasons: [
+          `Current streak: ${toolData.checkinStats?.streak ?? toolData.streak ?? 0} day(s).`,
+          'Keep a steady weekly rhythm instead of compressing all sessions into a few days.',
+          'Review your workout progress if attendance drops for more than one week.'
+        ],
+        alternativeTitle: 'Improvement tips',
+        lang
+      })
       : formatReadableAnswer({
-          conclusion: `Tháng này hệ thống ghi nhận bạn đã check-in ${toolData.checkinStats?.last30Days ?? 0} buổi.`,
-          reasons: [
-            `Chuỗi hiện tại: ${toolData.checkinStats?.streak ?? toolData.streak ?? 0} ngày.`,
-            'Duy trì lịch đều theo tuần thay vì dồn quá nhiều buổi vào vài ngày.',
-            'Nếu số buổi giảm hơn 1 tuần, nên xem lại lộ trình tập hoặc mục tiêu hiện tại.'
-          ],
-          alternativeTitle: 'Gợi ý cải thiện',
-          lang
-        }),
+        conclusion: `Tháng này hệ thống ghi nhận bạn đã check-in ${toolData.checkinStats?.last30Days ?? 0} buổi.`,
+        reasons: [
+          `Chuỗi hiện tại: ${toolData.checkinStats?.streak ?? toolData.streak ?? 0} ngày.`,
+          'Duy trì lịch đều theo tuần thay vì dồn quá nhiều buổi vào vài ngày.',
+          'Nếu số buổi giảm hơn 1 tuần, nên xem lại lộ trình tập hoặc mục tiêu hiện tại.'
+        ],
+        alternativeTitle: 'Gợi ý cải thiện',
+        lang
+      }),
     booking_list: lang === 'en'
       ? `You have ${(toolData.upcomingBookings || []).length} upcoming bookings.`
       : `Bạn đang có ${(toolData.upcomingBookings || []).length} lịch sắp tới.`,
@@ -4456,9 +3969,6 @@ const buildRuleBasedFallbackAnswer = ({ query, classifierResult, toolData, langu
     health_summary: lang === 'en'
       ? (toolData.healthSummary?.latestHealthLog ? 'Here is your latest health summary from GymPro data.' : 'GymPro does not have enough health data yet. What are your height and weight?')
       : (toolData.healthSummary?.latestHealthLog ? 'Đây là tóm tắt sức khỏe mới nhất theo dữ liệu GymPro.' : 'GymPro chưa có đủ dữ liệu sức khỏe. Bạn cho mình chiều cao và cân nặng hiện tại nhé?'),
-    workout_advice: lang === 'en'
-      ? 'Based on your goal, start with a sustainable training plan and progress gradually.'
-      : 'Với mục tiêu của bạn, nên bắt đầu bằng lịch tập bền vững và tăng dần cường độ.',
     workout_progress: lang === 'en'
       ? `GymPro has ${(toolData.workoutProgress || []).length} recent workout records.`
       : `GymPro đang có ${(toolData.workoutProgress || []).length} ghi nhận tập luyện gần đây của bạn.`,
@@ -4505,11 +4015,11 @@ const buildRuleBasedFallbackAnswer = ({ query, classifierResult, toolData, langu
       }
     }
   }
-  
+
   const defaultAnswer = lang === 'en'
     ? 'I do not have enough information to answer that. Please feel free to ask about GymPro memberships, plans, workouts, or schedules!'
     : 'Tôi hiện chưa có đủ thông tin để trả lời câu hỏi này. Bạn hãy hỏi về gói tập, PT, lịch tập hoặc sức khỏe nhé!'
-    
+
   return {
     type: 'text_advice',
     answer: defaultAnswer,
@@ -4546,19 +4056,23 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
   const cacheContext = createCacheContext({ user, conversationContext })
   const semanticMemory = buildSemanticConversationMemory(conversationContext, normalizedQuery)
   const reasoningQuery = buildReasoningQueryWithMemory(normalizedQuery, semanticMemory)
-  console.log('[LANGUAGE]', lang)
-  console.log('[LANG DETECT]', userMessage || query, lang)
-  console.log('[LANGUAGE_SOURCE]', lang === appLanguage ? 'app_or_detected_same' : 'user_message')
-  console.log('[LOCALIZATION]', lang)
-  console.log('[SEMANTIC_MEMORY]', {
-    lastIntent: semanticMemory.lastIntent,
-    lastSubject: semanticMemory.lastSubject,
-    isSupplemental: semanticMemory.isSupplemental,
-    supplementalSignals: semanticMemory.supplementalSignals,
+
+  // Conversational Understanding Layer
+  const cuResult = conversationalUnderstand({
+    query: normalizedQuery,
+    userMessage,
+    context: {
+      lastSubject: semanticMemory.lastSubject,
+      lastIntent: semanticMemory.lastIntent,
+      lastMentionedPlan: conversationContext?.lastMentionedPlan || semanticMemory.lastMentionedPlan,
+      lastMentionedPT: conversationContext?.lastMentionedPT,
+      lastGoal: conversationContext?.lastGoal,
+      lastBudget: semanticMemory.budget || conversationContext?.lastBudget,
+      lastFrequency: semanticMemory.supplementalSignals?.frequencyPerWeek || conversationContext?.lastFrequency,
+      lastQuery: conversationContext?.recentMessages?.slice(-1)?.[0]?.content || '',
+    },
+    language: lang,
   })
-  
-  console.log('--- NEW AI INTENT FLOW ---')
-  console.log('Query:', normalizedQuery)
 
   if (isSensitiveDataRequest(normalizedQuery, user)) {
     return {
@@ -4577,12 +4091,14 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
       },
     }
   }
-  
+
   let classifierResult = null
   let classifierSource = 'fallback_rule'
   let provider = 'none'
   let model = 'none'
   let toolData = {}
+  let rawAnswerText = ''
+  let fallbackReason = ''
 
   try {
     toolData = await buildInitialToolData({ user, query: normalizedQuery, language: lang })
@@ -4603,24 +4119,68 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
     }
   }
 
-  if (hasAnyProviderConfigured()) {
+  classifierResult = buildDefaultClassifier(normalizedQuery, lang)
+  classifierResult = normalizeClassifierResult(classifierResult, normalizedQuery, user, lang, semanticMemory)
+
+  // Enrich with Conversational Understanding if it has higher confidence
+  if (cuResult.confidence > (classifierResult.confidence || 0) && cuResult.intent !== 'unknown') {
+    const allowedIntents = new Set([
+      'membership_info', 'membership_benefit_lookup', 'membership_advice', 'plan_comparison',
+      'cheapest_long_term_plan', 'checkin_summary', 'checkin_goal',
+      'pt_advice', 'pt_availability', 'booking_info', 'booking_action',
+      'health_advice', 'nutrition_advice', 'workout_advice', 'workout_info', 'workout_analyze',
+      'shop_advice', 'policy_refund', 'policy_privacy', 'policy_payment', 'faq_answer',
+    ])
+    if (allowedIntents.has(cuResult.intent)) {
+      classifierResult.intent = cuResult.intent
+      classifierResult.confidence = cuResult.confidence
+      classifierResult.subject = cuResult.subject
+      classifierResult.action = cuResult.action
+      if (cuResult.entities.goal) classifierResult.entities.goal = cuResult.entities.goal
+      if (cuResult.entities.budget) classifierResult.entities.budget = cuResult.entities.budget
+      if (cuResult.entities.frequencyPerWeek) classifierResult.entities.frequencyPerWeek = cuResult.entities.frequencyPerWeek
+      classifierResult.isFollowUp = cuResult.isFollowUp
+      classifierResult.followUpTarget = cuResult.followUpTarget
+      classifierResult.reason = `CU layer: ${cuResult.subject}/${cuResult.action} -> ${cuResult.intent} (${cuResult.confidence})`
+      classifierSource = 'cu_layer'
+    }
+  }
+
+  // If CU detected a follow-up with a resolved subject, enrich tools
+  if (cuResult.isFollowUp && cuResult.followUpTarget?.type === 'plan_comparison') {
+    classifierResult.intent = 'plan_comparison'
+    const tools = new Set(classifierResult.tools || [])
+    tools.add('plans')
+    classifierResult.tools = [...tools]
+  }
+
+  const QUICK_INTENTS = new Set([
+    'membership_info', 'membership_benefit_lookup',
+    'checkin_summary', 'checkin_goal',
+    'booking_info', 'pt_availability',
+    'policy_refund', 'policy_privacy', 'policy_payment', 'faq_answer',
+    'unclear_question', 'theme_action', 'admin_report',
+    'cheapest_long_term_plan', 'booking_action',
+  ])
+
+  if (hasAnyProviderConfigured() && !QUICK_INTENTS.has(classifierResult.intent) && classifierResult.needsAIReasoning !== false) {
     try {
-      classifierResult = await runAiClassifier({
+      const aiClassifier = await runAiClassifier({
         query: normalizedQuery,
         recentConversation: conversationContext?.recentMessages || [],
         semanticMemory,
         toolData,
         language: lang,
       })
-      if (classifierResult) classifierSource = 'ai'
+      if (aiClassifier) {
+        classifierResult = normalizeClassifierResult(aiClassifier, normalizedQuery, user, lang, semanticMemory)
+        classifierSource = 'ai'
+      }
     } catch (err) {
-      console.error('AI classifier error, falling back to local classifier:', err)
+      console.error('AI classifier error:', err)
     }
   }
 
-  classifierResult = classifierResult || buildDefaultClassifier(normalizedQuery, lang)
-  classifierResult = normalizeClassifierResult(classifierResult, normalizedQuery, user, lang, semanticMemory)
-  
   if (initialBudget && !classifierResult.entities.budget) {
     classifierResult.entities.budget = initialBudget
   }
@@ -4631,43 +4191,33 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
   if (initialFrequency && !classifierResult.entities.frequencyPerWeek) {
     classifierResult.entities.frequencyPerWeek = initialFrequency
   }
-  
-  console.log('[CLASSIFIER]', classifierResult.intent, classifierResult.confidence, classifierResult.tools, classifierResult.entities)
-  console.log('[INTENT]', classifierResult.intent)
-  console.log('[ROUTE]', 'AI_REASONING')
-  
+
   const toolsUsed = classifierResult.tools || []
-  console.log('[TOOLS]', toolsUsed)
+  console.log('[AGENT_PLAN]', {
+    subject: classifierResult.subject,
+    action: classifierResult.action,
+    intent: classifierResult.intent,
+    confidence: classifierResult.confidence,
+    needsDatabase: classifierResult.needsDatabase,
+    needsAIReasoning: classifierResult.needsAIReasoning,
+    tools: toolsUsed,
+  })
 
   if (classifierResult.shouldAskClarify || classifierResult.intent === 'unclear_question') {
     let clarifyPayload = buildClarificationAnswer({ analysis: classifierResult, query: normalizedQuery, language: lang })
     clarifyPayload = applyRenderGate(clarifyPayload, classifierResult)
-    clarifyPayload.answer = normalizeFinalAnswerText(cleanAiOutput(clarifyPayload.answer, { fallbackAnswer: getParseFailureAnswer(lang) }))
+    clarifyPayload.answer = normalizeFinalAnswerText(cleanAiOutput(clarifyPayload.answer, { fallbackAnswer: '' }))
     clarifyPayload.metadata = { ...(clarifyPayload.metadata || {}), answerLanguage: lang, questionAnalysis: classifierResult, classifierSource, semanticMemory }
-    console.log('[AI_AUDIT]', {
-      userMessage: normalizedQuery,
-      classifierSource,
-      subject: classifierResult.subject,
-      action: classifierResult.action,
-      intent: classifierResult.intent,
-      tools: classifierResult.tools,
-      shouldRenderCard: classifierResult.shouldRenderCard,
-      responseType: clarifyPayload.type,
-      provider: clarifyPayload.provider || 'rule_based',
-      model: clarifyPayload.model || 'local',
-      language: lang,
-      semanticMemory: {
-        lastIntent: semanticMemory.lastIntent,
-        lastSubject: semanticMemory.lastSubject,
-        isSupplemental: semanticMemory.isSupplemental,
-      },
-      hasPlanPayload: Boolean(clarifyPayload.planPayload),
-      finalAnswerPreview: String(clarifyPayload.answer || '').slice(0, 160),
-    })
+    console.log('[USED_TOOLS]', [])
+    console.log('[TOOL_RESULT_SUMMARY]', summarizeToolDataForLog(toolData))
+    console.log('[RAW_ANSWER]', String(clarifyPayload.answer || '').slice(0, 500))
+    console.log('[FINAL_ANSWER]', String(clarifyPayload.answer || '').slice(0, 500))
+    console.log('[FALLBACK_REASON]', 'clarification_required')
     return clarifyPayload
   }
-  
+
   try {
+    console.log('[USED_TOOLS]', toolsUsed)
     toolData = mergeToolData(toolData, await fetchToolData({
       user,
       query: normalizedQuery,
@@ -4676,18 +4226,18 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
     }))
   } catch (err) {
     console.error('Tool-scoped context fetch error:', err)
+    fallbackReason = `tool_error:${err?.message || 'unknown'}`
   }
-  console.log('[TOOL_DATA]', summarizeToolDataForLog(toolData))
-  
+  console.log('[TOOL_RESULT_SUMMARY]', summarizeToolDataForLog(toolData))
   // Ensure we have active plans for membership-related intents
   if ((!Array.isArray(toolData.activePlans) || toolData.activePlans.length === 0) && (classifierResult.intent === 'membership_advice' || classifierResult.intent === 'membership_info' || classifierResult.intent === 'membership_benefit_lookup' || classifierResult.intent === 'plan_comparison' || toolsUsed.includes('plans'))) {
     try {
       toolData.activePlans = await getActivePlans(12)
       toolData.plans = toolData.activePlans
       attachDataSource(toolData, 'activePlans', toolData.activePlans, 'database', false)
-    } catch (e) {}
+    } catch (e) { }
   }
-  
+
   let payload = null
   if ((classifierResult.intent === 'membership_info' || classifierResult.intent === 'membership_benefit_lookup') && (classifierResult.action === 'info' || classifierResult.shouldRenderCard || asksPlanBenefitQuestion(normalizedQuery) || semanticMemory?.benefitLookupFollowUp)) {
     const plans = toolData.activePlans || toolData.plans || []
@@ -4739,9 +4289,50 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
     payload = buildPtPlanBudgetAdvicePayload({ query: reasoningQuery, toolData, language: lang })
   } else if (classifierResult.intent === 'workout_info' && hasWorkoutFrequencyIntent(normalizedQuery)) {
     payload = buildWorkoutFrequencyAnswer({ query: normalizedQuery, toolData, language: lang })
+  } else if (classifierResult.intent === 'workout_analyze') {
+    try {
+      const analysis = await analyzeWorkoutHistory({ userId: user?._id, period: '30d', query: normalizedQuery })
+      payload = {
+        type: 'workout_analyzer',
+        answer: buildWorkoutAnalysisAnswer(analysis, lang),
+        analysis,
+        data: toolData,
+        mode: 'gym',
+        provider: 'workout_analyzer',
+        model: 'v2',
+        metadata: {
+          intent: classifierResult.intent,
+          answeredBy: 'workout_analyzer',
+          route: 'WORKOUT_ANALYZER',
+        },
+        suggestions: lang === 'en'
+          ? ['Generate a workout plan for me', 'What should I train today?', 'How is my training progress?']
+          : ['Tạo giáo án tập cho tôi', 'Hôm nay tôi nên tập gì?', 'Tiến độ tập luyện của tôi thế nào?'],
+      }
+    } catch (err) {
+      console.error('Workout analyzer error:', err)
+    }
+  } else if (classifierResult.intent === 'membership_advice' && /\b(combo|smart|goi y|gợi ý|suggest|recommend.*pt|recommend.*product|goi.*pt|plan.*trainer)\b/.test(normalizeForIntent(normalizedQuery))) {
+    try {
+      const smartRec = await getSmartRecommendations({ userId: user?._id, query: normalizedQuery, language: lang })
+      payload = {
+        ...smartRec,
+        data: toolData,
+        mode: 'gym',
+        provider: 'smart_recommend',
+        model: 'v2',
+        metadata: {
+          intent: classifierResult.intent,
+          answeredBy: 'smart_recommend',
+          route: 'SMART_RECOMMEND',
+        },
+      }
+    } catch (err) {
+      console.error('Smart recommend error:', err)
+    }
   } else if (hasAnyProviderConfigured()) {
     try {
-      const systemPrompt = buildAnswerGeneratorSystemPrompt(lang)
+      const systemPrompt = buildAnswerGeneratorSystemPrompt(lang, classifierResult.subject || classifierResult.intent || 'core')
       const contextPrompt = buildAnswerGeneratorContextPrompt({
         query: normalizedQuery,
         recentConversation: conversationContext?.recentMessages || [],
@@ -4750,7 +4341,7 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
         toolData,
         language: lang,
       })
-      
+
       const result = await runAIWithFallback({
         systemPrompt,
         context: contextPrompt,
@@ -4762,20 +4353,31 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
         maxTokens: 1000,
         timeoutMs: 10_000,
       })
-      
-      const aiAnswerPayload = parseAiJsonPayload(result.text, getParseFailureAnswer(lang))
+
+      rawAnswerText = String(result.text || '')
+      const aiAnswerPayload = parseAiJsonPayload(result.text, '')
       const plansList = toolData.activePlans || toolData.plans || []
       const recommendedPlan = plansList.find(p => idsEqual(p._id, aiAnswerPayload.recommendedPlanId)) || null
       const alternativePlans = Array.isArray(aiAnswerPayload.alternativePlanIds)
         ? aiAnswerPayload.alternativePlanIds.map(id => plansList.find(p => idsEqual(p._id, id))).filter(Boolean)
         : []
       const desiredType = normalizeResponseType(aiAnswerPayload.type, classifierResult.intent)
+      const isNutritionAnswer = classifierResult.intent === 'nutrition_advice' || classifierResult.intent === 'nutrition_info'
+      const nutritionToolSources = isNutritionAnswer ? getNutritionWebSources(toolData) : []
+      const nutritionAiSources = isNutritionAnswer ? normalizeSourceList(aiAnswerPayload.sources) : []
+      const nutritionSources = selectUsedNutritionSources({
+        aiSources: nutritionAiSources,
+        toolSources: nutritionToolSources,
+      })
+      const usedNutritionWebSearch = isNutritionAnswer
+        && Boolean(toolData.webSearchNutrition?.used)
+        && nutritionSources.length > 0
       const cardType = ['plan_detail', 'plan_list'].includes(desiredType)
       const showRecommendationCard = aiAnswerPayload.type === 'plan_recommend'
         && recommendedPlan
         && (classifierResult.intent === 'membership_advice' || classifierResult.intent === 'membership_info' || classifierResult.intent === 'plan_comparison')
         && !asksPlanBenefitQuestion(normalizedQuery)
-      const responseType = showRecommendationCard ? 'plan_recommend' : desiredType
+      const responseType = usedNutritionWebSearch ? 'nutrition_advice_with_sources' : (showRecommendationCard ? 'plan_recommend' : desiredType)
       const answerReason = splitReadableItems(aiAnswerPayload.reason || aiAnswerPayload.reasons)
       const recommendationConclusion = String(aiAnswerPayload.conclusion || '').trim()
         || (recommendedPlan
@@ -4785,14 +4387,14 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
           : '')
       const formattedRecommendationAnswer = showRecommendationCard
         ? formatReadableAnswer({
-            conclusion: recommendationConclusion,
-            reasons: answerReason.length > 0 ? answerReason : aiAnswerPayload.answer,
-            alternativeTitle: lang === 'en' ? 'Alternative options' : 'Lựa chọn thay thế',
-            alternatives: alternativePlans.slice(0, 2).map(plan => lang === 'en'
-              ? `${plan.nameEn || plan.nameVi} if it fits your budget better.`
-              : `${plan.nameVi || plan.nameEn} nếu bạn muốn phương án phù hợp ngân sách hơn.`),
-            lang
-          })
+          conclusion: recommendationConclusion,
+          reasons: answerReason.length > 0 ? answerReason : aiAnswerPayload.answer,
+          alternativeTitle: lang === 'en' ? 'Alternative options' : 'Lựa chọn thay thế',
+          alternatives: alternativePlans.slice(0, 2).map(plan => lang === 'en'
+            ? `${plan.nameEn || plan.nameVi} if it fits your budget better.`
+            : `${plan.nameVi || plan.nameEn} nếu bạn muốn phương án phù hợp ngân sách hơn.`),
+          lang
+        })
         : ''
       const finalAnswer = formattedRecommendationAnswer || aiAnswerPayload.answer || ''
       const finalReason = answerReason.length > 0
@@ -4800,23 +4402,23 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
         : (showRecommendationCard ? splitReadableItems(aiAnswerPayload.answer).slice(0, 4) : [])
       const comparePlans = [recommendedPlan, ...alternativePlans].filter(Boolean).slice(0, 2)
       const renderedPlans = responseType === 'plan_list'
-          ? plansList
-          : []
+        ? plansList
+        : []
       const cardPayload = showRecommendationCard
         ? {
-            type: 'plan_recommend',
-            recommendedPlan,
-            alternatives: alternativePlans.slice(0, 2),
-            conclusion: recommendationConclusion,
-            reason: finalReason,
-          }
+          type: 'plan_recommend',
+          recommendedPlan,
+          alternatives: alternativePlans.slice(0, 2),
+          conclusion: recommendationConclusion,
+          reason: finalReason,
+        }
         : responseType === 'plan_detail' && recommendedPlan
           ? { type: 'plan_detail', plan: recommendedPlan }
-        : responseType === 'plan_list'
+          : responseType === 'plan_list'
             ? { type: 'plan_list', plans: plansList }
             : null
       const cards = pickCardsForType({ type: responseType, toolData, recommendedPlan, alternativePlans })
-        
+
       payload = {
         type: responseType,
         answer: finalAnswer,
@@ -4826,10 +4428,20 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
         plans: responseType === 'plan_list' ? renderedPlans : [],
         cards,
         suggestions: aiAnswerPayload.suggestions || [],
+        ...(isNutritionAnswer ? {
+          products: toolData.products || [],
+          sources: usedNutritionWebSearch ? nutritionSources : [],
+          usedWebSearch: usedNutritionWebSearch,
+        } : {}),
         mode: 'gym',
         data: {
           availablePlans: plansList,
           activePlans: plansList,
+          ...(isNutritionAnswer ? {
+            products: toolData.products || [],
+            sources: usedNutritionWebSearch ? nutritionSources : [],
+            usedWebSearch: usedNutritionWebSearch,
+          } : {}),
           ...toolData
         },
         planPayload: cardPayload,
@@ -4857,7 +4469,7 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
       console.error('Answer Generator error, falling back to local reasoning:', err)
     }
   }
-  
+
   if (!payload) {
     payload = buildRuleBasedFallbackAnswer({
       query: classifierResult.intent === 'membership_advice' ? reasoningQuery : normalizedQuery,
@@ -4958,15 +4570,42 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
     }
   }
 
+  if (!rawAnswerText) rawAnswerText = String(payload?.answer || '')
+  console.log('[RAW_ANSWER]', rawAnswerText.slice(0, 1000))
+
   payload = applyMedicalSafetyGuard(payload, normalizedQuery, lang)
 
-  const parseFailureAnswer = getParseFailureAnswer(lang)
   payload = {
     ...(payload || {}),
-    answer: normalizeFinalAnswerText(cleanAiOutput(payload?.answer || '', { fallbackAnswer: parseFailureAnswer })),
+    answer: normalizeFinalAnswerText(cleanAiOutput(payload?.answer || '', { fallbackAnswer: '' })),
   }
+  payload.answer = cleanUnsafeRenderedTokens(payload.answer, '')
   if (/^\s*\{[\s\S]*\}\s*$/.test(payload.answer || '')) {
-    payload.answer = parseFailureAnswer
+    payload.answer = ''
+  }
+
+  if (answerIsParseFailure(payload?.answer || '', lang) || !String(payload?.answer || '').trim() || hasUnsafeRenderedToken(payload?.answer || '')) {
+    const safePayload = buildGenericSafeAnswer({
+      query: normalizedQuery,
+      classifierResult,
+      toolData,
+      language: lang,
+      reason: answerIsParseFailure(payload?.answer || '', lang) ? 'ai_parse_failure' : hasUnsafeRenderedToken(payload?.answer || '') ? 'unsafe_rendered_token' : 'empty_answer',
+    })
+    if (safePayload) {
+      fallbackReason = answerIsParseFailure(payload?.answer || '', lang) ? 'ai_parse_failure_safe_answer' : 'empty_answer_safe_answer'
+      payload = {
+        ...safePayload,
+        metadata: {
+          ...(safePayload.metadata || {}),
+          previousProvider: payload?.provider || provider,
+          previousModel: payload?.model || model,
+          replacedParseFailure: true,
+        },
+      }
+    } else {
+      fallbackReason = fallbackReason || 'empty_or_parse_failure_without_safe_answer'
+    }
   }
 
   if (!Array.isArray(payload?.suggestions) || payload.suggestions.length === 0) {
@@ -4977,26 +4616,51 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
   }
 
   if (!String(payload?.answer || '').trim()) {
-    payload = {
-      ...(payload || {}),
-      type: payload?.type || 'text_advice',
-      answer: lang === 'en'
-        ? 'I do not have enough data to answer accurately. Could you clarify a little more?'
-        : 'Mình chưa có đủ dữ liệu để trả lời chính xác. Bạn có thể nói rõ hơn một chút không?',
-      suggestions: payload?.suggestions?.length ? payload.suggestions : getDomainSuggestions(classifierResult.intent, lang),
+    // Attempt to build a data-driven response before falling back
+    let dataDrivenAnswer = ''
+    const plans = toolData.activePlans || toolData.plans || []
+    const pts = toolData.pt || toolData.availablePTs || []
+    const checkinStats = toolData.checkinStats || toolData.checkin || null
+    const membership = toolData.currentMembership || toolData.membership || null
+
+    if (plans.length > 0 && ['membership_info', 'membership_advice', 'plan_comparison'].includes(classifierResult.intent)) {
+      dataDrivenAnswer = buildPlanListResponse({ plans, lang })
+    } else if (pts.length > 0 && (classifierResult.intent.startsWith('pt_'))) {
+      dataDrivenAnswer = buildPtListResponse({ pts, lang })
+    } else if (checkinStats && classifierResult.intent.startsWith('checkin_')) {
+      dataDrivenAnswer = buildCheckinSummaryResponse({ stats: checkinStats, lang })
+    } else if (membership && classifierResult.intent.startsWith('membership_')) {
+      dataDrivenAnswer = buildMembershipInfoResponse({ membership, lang })
+    } else if (toolData.workoutProgress || toolData.workout) {
+      dataDrivenAnswer = buildWorkoutAdviceResponse({ stats: toolData.workoutProgress || toolData.workout, lang })
+    } else if (plans.length > 0) {
+      dataDrivenAnswer = buildPlanListResponse({ plans, lang })
+    }
+
+    if (dataDrivenAnswer) {
+      payload = {
+        ...(payload || {}),
+        type: payload?.type || 'text_advice',
+        answer: dataDrivenAnswer,
+        suggestions: payload?.suggestions?.length ? payload.suggestions : getDomainSuggestions(classifierResult.intent, lang),
+        dataDrivenFallback: true,
+      }
+    } else {
+      payload = {
+        ...(payload || {}),
+        type: payload?.type || 'text_advice',
+        answer: lang === 'en'
+          ? 'I do not have enough data to answer accurately. Could you clarify a little more?'
+          : 'Mình chưa có đủ dữ liệu để trả lời chính xác. Bạn có thể nói rõ hơn một chút không?',
+        suggestions: payload?.suggestions?.length ? payload.suggestions : getDomainSuggestions(classifierResult.intent, lang),
+      }
     }
   }
   payload = applyRenderGate(payload, classifierResult)
   payload.metadata = { ...(payload.metadata || {}), answerLanguage: lang, questionAnalysis: classifierResult, classifierSource, semanticMemory }
-  
-  console.log('[TYPE]', payload.type)
-  console.log('[CLEAN_OUTPUT]', String(payload.answer || '').slice(0, 120))
-  console.log('[CLEAN_OUTPUT_FULL]', String(payload.answer || ''))
-  console.log('[FINAL_TYPE]', payload.type)
-  console.log('[FINAL_ANSWER]', String(payload.answer || '').slice(0, 120))
-  console.log('[FINAL_ANSWER_FULL]', String(payload.answer || ''))
-  console.log('[FINAL ANSWER]', String(payload.answer || '').slice(0, 100))
-  console.log('[AI_PROVIDER]', payload.provider || provider, payload.model || model)
+  console.log('[FINAL_ANSWER]', String(payload.answer || '').slice(0, 1000))
+  console.log('[FALLBACK_REASON]', fallbackReason || null)
+
   console.log('[AI_AUDIT]', {
     userMessage: normalizedQuery,
     classifierSource,
@@ -5017,7 +4681,7 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
     hasPlanPayload: Boolean(payload.planPayload),
     finalAnswerPreview: String(payload.answer || '').slice(0, 160),
   })
-  
+
   return payload
 }
 
@@ -5034,4 +4698,12 @@ export const __aiClassifierTestHooks = {
   detectAnswerLanguage,
   parseAiJsonPayload,
   isSensitiveDataRequest,
+  buildGenericSafeAnswer,
+  buildGenericWorkoutAdviceAnswer,
+  buildGenericNutritionAnswer,
+  normalizeResponseType,
+  getNutritionWebSources,
+  hasWorkoutGoalAdviceIntent,
+  hasNutritionIntent,
+  answerIsParseFailure,
 }

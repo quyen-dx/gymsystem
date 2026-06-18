@@ -1,5 +1,5 @@
 import { CheckOutlined, CopyOutlined, DeleteOutlined, EditOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoreOutlined, PaperClipOutlined, PlusOutlined, RobotOutlined, SendOutlined } from '@ant-design/icons'
-import { Avatar, Badge, Button, Drawer, Dropdown, Input, Modal, Spin, Tooltip, Typography, message as antdMessage } from 'antd'
+import { Avatar, Badge, Button, Drawer, Dropdown, Input, Modal, Tooltip, Typography, message as antdMessage } from 'antd'
 import type { CSSProperties, ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -12,6 +12,12 @@ import { InBodyAnalysisCard } from './InBodyAnalysisCard'
 import type { AiToolPayload, ChatAttachment, ChatMessage, ChatSession, ConversationContext, PlanPayload, StoredChatState, WebSearchResult } from '../../types/aichat/aichat'
 
 import { AssistantMessageBubble } from './AssistantMessageBubble'
+import PTCard from './PTCard'
+import {
+    extractAiAnswer,
+    parseJsonLikeString,
+    stripUnsafeModelOutput,
+} from '../../utils/aiUtils'
 
 const STORAGE_KEY_PREFIX = 'chat_history_'
 const ACCEPTED_AI_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
@@ -38,8 +44,8 @@ const getSourceDomain = (url: string) => {
 }
 
 const getSourceName = (source: WebSearchResult, t?: (key: string) => string) => {
-    const domain = getSourceDomain(source.url)
-    const title = String(source.title || '').replace(/\s+/g, ' ').trim()
+    const domain = String(source.domain || source.sourceDomain || '').trim() || getSourceDomain(source.url)
+    const title = String(source.title || source.sourceTitle || '').replace(/\s+/g, ' ').trim()
     if (!title) return domain || (t ? t('ai.sourceWeb') : 'Web source')
     return title
         .replace(/\s*[-|]\s*.*$/, '')
@@ -215,20 +221,11 @@ const splitAiAssistantResponse = (rawContent: unknown, currentContent = '', t: (
 }
 
 const extractAiResponseContent = (response: unknown, fallback = '', t?: (key: string) => string) => {
-    if (typeof response === 'string') return response
-    if (!response || typeof response !== 'object') return fallback
-
-    const payload = response as Record<string, unknown>
-    const directContent = [payload.answer, payload.message, payload.text, payload.content]
-        .find((value) => typeof value === 'string' && value.trim())
-
-    if (typeof directContent === 'string') return directContent
-
-    const objectMessage = getAiObjectDisplayMessage(
-        payload.answer ?? payload.message ?? payload.text ?? payload.content ?? payload,
-        t || ((key: string) => key),
-    )
-    return objectMessage || fallback
+    const answer = extractAiAnswer(response)
+    if (answer === 'Phản hồi AI chưa đúng định dạng.' || answer === 'Không nhận được phản hồi.') {
+        return fallback || answer
+    }
+    return answer
 }
 
 const normalizeChatContent = (content: unknown, t?: (key: string) => string) => {
@@ -238,11 +235,23 @@ const normalizeChatContent = (content: unknown, t?: (key: string) => string) => 
             .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
             .replace(/^```[a-z0-9_-]*\s*/i, '')
             .replace(/\s*```$/i, '')
+        
+        const extracted = extractAiAnswer(cleaned)
+        if (extracted !== 'Phản hồi AI chưa đúng định dạng.' && extracted !== 'Không nhận được phản hồi.') {
+            return extracted
+        }
+
         if (/^\s*\{[\s\S]*\}\s*$/.test(cleaned)) {
             return getAiObjectDisplayMessage(cleaned, t || ((key: string) => key)) || ''
         }
         return cleaned
     }
+    
+    const extracted = extractAiAnswer(content)
+    if (extracted !== 'Phản hồi AI chưa đúng định dạng.' && extracted !== 'Không nhận được phản hồi.') {
+        return extracted
+    }
+
     return getAiObjectDisplayMessage(content, t || ((key: string) => key)) || ''
 }
 
@@ -380,8 +389,11 @@ const renderWebSourceCards = (sourcesInput: unknown, dark: boolean, t?: (key: st
                 {t ? t('ai.sourcesTitle') : 'Sources'}
             </Typography.Text>
             {uniqueSources.map((source) => {
-                const domain = getSourceDomain(source.url)
+                const domain = String(source.domain || source.sourceDomain || '').trim() || getSourceDomain(source.url)
                 const name = getSourceName(source, t)
+                const favicon = typeof source.favicon === 'string' && source.favicon.trim()
+                    ? source.favicon.trim()
+                    : `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`
                 return (
                     <a
                         key={source.url}
@@ -403,17 +415,17 @@ const renderWebSourceCards = (sourcesInput: unknown, dark: boolean, t?: (key: st
                     >
                         <Avatar
                             size={32}
-                            src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`}
+                            src={favicon}
                             style={{ background: 'var(--theme-elevated)' }}
                         >
                             {domain.charAt(0).toUpperCase()}
                         </Avatar>
                         <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
                             <Typography.Text strong ellipsis style={{ color: 'inherit', lineHeight: 1.25 }}>
-                                {name}
+                                {domain || name}
                             </Typography.Text>
                             <Typography.Text ellipsis style={{ color: dark ? '#d8d8d8' : 'rgba(237,235,230,0.55)', fontSize: 12, lineHeight: 1.2 }}>
-                                {domain}
+                                {t ? t('ai.sourceArticle') : 'Article'}: {name}
                             </Typography.Text>
                         </span>
                     </a>
@@ -434,7 +446,6 @@ const getAiResponsePlanPayload = (response: unknown): PlanPayload | undefined =>
   const payload = response as Record<string, unknown>
   const responseType = typeof payload.type === 'string' ? payload.type : ''
   const isPlanResponse = responseType === 'plan_detail'
-    || responseType === 'plan_list'
     || responseType === 'plan_compare'
     || responseType === 'plan_compare_two'
     || responseType === 'plan_compare_all'
@@ -445,7 +456,7 @@ const getAiResponsePlanPayload = (response: unknown): PlanPayload | undefined =>
   const planPayload = candidate as Record<string, unknown>
   if (planPayload.type === 'plan_detail' && planPayload.plan) return planPayload as PlanPayload
   if (
-    (planPayload.type === 'plan_list' || planPayload.type === 'plan_compare_two' || planPayload.type === 'plan_compare_all')
+    (planPayload.type === 'plan_compare_two' || planPayload.type === 'plan_compare_all')
     && Array.isArray(planPayload.plans)
   ) return planPayload as PlanPayload
   if (planPayload.type === 'plan_recommend' && planPayload.recommendedPlan) {
@@ -463,7 +474,7 @@ const getAiResponsePlanFields = (response: unknown) => {
   return {
     type: planPayload.type,
     ...(planPayload.type === 'plan_detail' ? { plan: planPayload.plan } : {}),
-    ...(planPayload.type === 'plan_list' || planPayload.type === 'plan_compare_two' || planPayload.type === 'plan_compare_all'
+    ...(planPayload.type === 'plan_compare_two' || planPayload.type === 'plan_compare_all'
       ? { plans: planPayload.plans, ...(planPayload.type === 'plan_compare_two' ? { conclusion: planPayload.conclusion } : {}) }
       : {}),
     ...(planPayload.type === 'plan_recommend'
@@ -574,6 +585,7 @@ const normalizeChatMessage = (message: ChatMessage): ChatMessage => {
         ...(typeof safeMessage.answer === 'string' ? { answer: safeMessage.answer } : {}),
         createdAt: typeof safeMessage.createdAt === 'string' ? safeMessage.createdAt : new Date().toISOString(),
         ...(suggestions.length > 0 ? { suggestions } : {}),
+        ...(Array.isArray(safeMessage.sources) ? { sources: safeMessage.sources } : {}),
         ...(isRecord(safeMessage.webSearch) ? { webSearch: {
             needed: Boolean(safeMessage.webSearch.needed),
             used: Boolean(safeMessage.webSearch.used),
@@ -806,7 +818,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
     const [loading, setLoading] = useState(false)
     const [aiActionLoading, setAiActionLoading] = useState(false)
     const [activeAiTool, setActiveAiTool] = useState('')
-    const [loadingPhase, setLoadingPhase] = useState<'data' | 'reasoning'>('data')
+    const [aiStatus, setAiStatus] = useState<{ status: string; message: string } | null>(null)
     const [errorInfo, setErrorInfo] = useState<{ code: number; message: string } | null>(null)
     const [retryCountdown, setRetryCountdown] = useState(0)
     const [lastQuery, setLastQuery] = useState('')
@@ -925,12 +937,8 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
 
     useEffect(() => {
         if (!loading) {
-            setLoadingPhase('data')
-            return
+            setAiStatus(null)
         }
-        setLoadingPhase('data')
-        const timer = window.setTimeout(() => setLoadingPhase('reasoning'), 2000)
-        return () => window.clearTimeout(timer)
     }, [loading])
 
     const activeSession = sessions.find((s) => s.sessionId === activeSessionId) || sessions[0]
@@ -1260,6 +1268,9 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                     ...(fromSuggestion ? { suggestedFollowUp: trimmed } : {}),
                     intent,
                 },
+                onStatus: (status, message) => {
+                    setAiStatus({ status, message })
+                },
                 onMeta: (data) => {
                     if (data?.imageType) {
                         setVisionImageType(data.imageType)
@@ -1269,7 +1280,9 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                         setActiveAiTool(data.tool || '')
                     }
                 },
-                onFirstChunk: () => setLoading(false),
+                onFirstChunk: () => {
+                    setLoading(false)
+                },
                 onChunk: (chunk) => {
                     const actionCandidate = `${suppressedActionText}${chunk}`.trimStart()
                     if (suppressActionStream === null) {
@@ -1320,13 +1333,15 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                 setAiActionLoading(false)
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
-                    content: fallbackContent ? fallbackSplit.chatContent : t('ai.fallbackResponse'),
+                    content: fallbackSplit.chatContent || t('ai.fallbackResponse'),
+                    answer: fallbackSplit.chatContent,
                     suggestions: normalizeSuggestions(fallbackResponse.suggestions)
                         .filter((suggestion) => normalizeCommandText(suggestion) !== normalizeCommandText(trimmed)),
                     intent: typeof fallbackResponse.metadata?.intent === 'string' ? fallbackResponse.metadata.intent : fallbackAction?.action,
                     subject: getAiResponseSubject(fallbackResponse),
                     action: fallbackAction?.action,
                     metadata: isRecord(fallbackResponse.metadata) ? fallbackResponse.metadata : undefined,
+                    sources: Array.isArray(fallbackResponse.sources) ? fallbackResponse.sources : undefined,
                     webSearch: fallbackResponse.webSearch,
                     data: isRecord(fallbackResponse.data) ? fallbackResponse.data : undefined,
                     cards: Array.isArray(fallbackResponse.cards) ? fallbackResponse.cards : undefined,
@@ -1347,13 +1362,15 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                 setAiActionLoading(false)
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
-                    content: message.content ? message.content : splitResponse.chatContent || t('ai.fallbackResponse'),
+                    content: splitResponse.chatContent,
+                    answer: splitResponse.chatContent,
                     suggestions: normalizeSuggestions(response.suggestions)
                         .filter((suggestion) => normalizeCommandText(suggestion) !== normalizeCommandText(trimmed)),
                     intent: typeof response.metadata?.intent === 'string' ? response.metadata.intent : actionPayload?.action,
                     subject: getAiResponseSubject(response),
                     action: actionPayload?.action,
                     metadata: isRecord(response.metadata) ? response.metadata : undefined,
+                    sources: Array.isArray(response.sources) ? response.sources : undefined,
                     webSearch: response.webSearch,
                     data: isRecord(response.data) ? response.data : undefined,
                     cards: Array.isArray(response.cards) ? response.cards : undefined,
@@ -1365,13 +1382,15 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                 setAiActionLoading(false)
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
-                    content: message.content ? message.content : splitResponse.chatContent || t('ai.fallbackResponse'),
+                    content: splitResponse.chatContent || t('ai.fallbackResponse'),
+                    answer: splitResponse.chatContent,
                     suggestions: normalizeSuggestions(response.suggestions)
                         .filter((suggestion) => normalizeCommandText(suggestion) !== normalizeCommandText(trimmed)),
                     intent: typeof response.metadata?.intent === 'string' ? response.metadata.intent : actionPayload?.action,
                     subject: getAiResponseSubject(response),
                     action: actionPayload?.action,
                     metadata: isRecord(response.metadata) ? response.metadata : undefined,
+                    sources: Array.isArray(response.sources) ? response.sources : undefined,
                     webSearch: response.webSearch,
                     data: isRecord(response.data) ? response.data : undefined,
                     cards: Array.isArray(response.cards) ? response.cards : undefined,
@@ -1723,24 +1742,23 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
 
                 .ai-assistant-content,
                 .ai-assistant-content * {
-                    font-weight: 600;
-                    line-height: 1.8;
-                    font-size: 15.5px;
+                    line-height: 1.72;
+                    font-size: 15px;
                 }
 
                 .ai-text-content {
                     white-space: pre-line;
-                    line-height: 1.75;
+                    line-height: 1.72;
                     max-width: 100%;
                 }
 
                 .ai-text-content p {
-                    margin: 0 0 10px;
+                    margin: 0 0 8px;
                 }
 
                 .ai-text-content ul {
-                    margin: 8px 0 10px;
-                    padding-left: 18px;
+                    margin: 6px 0 14px;
+                    padding-left: 0;
                 }
 
                 .ai-reason-box {
@@ -2380,40 +2398,14 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                                         )}
                                                                         {toolPayload?.type === 'pt_list' && (
                                                                             <div style={{ display: 'grid', gap: 10 }}>
-                                                                                {(Array.isArray(toolPayload.items) ? toolPayload.items : []).map((item, index) => {
-                                                                                    const name = String(item?.name || '')
-                                                                                    const phone = String(item?.phone || '')
-                                                                                    const email = String(item?.email || '')
-                                                                                    return (
-                                                                                        <div
-                                                                                            key={`${email || phone || name}-${index}`}
-                                                                                            style={{
-                                                                                                display: 'grid',
-                                                                                                gridTemplateColumns: '44px minmax(0, 1fr)',
-                                                                                                gap: 10,
-                                                                                                alignItems: 'center',
-                                                                                                padding: 10,
-                                                                                                borderRadius: 14,
-                                                                                                background: 'var(--theme-card)',
-                                                                                            }}
-                                                                                        >
-                                                                                            <Avatar src={item?.avatar ? String(item.avatar) : undefined} size={44}>
-                                                                                                {name.charAt(0) || 'PT'}
-                                                                                            </Avatar>
-                                                                                            <div style={{ minWidth: 0 }}>
-                                                                                                <Typography.Text strong style={{ color: bubbleColor, display: 'block' }}>
-                                                                                                    {name}
-                                                                                                </Typography.Text>
-                                                                                                <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
-                                                                                                    {String(item?.specialty || t('ai.ptFallback'))}
-                                                                                                </Typography.Text>
-                                                                                                <Typography.Text style={{ color: panelMutedText, display: 'block', fontSize: 12 }}>
-                                                                                                    {phone || t('ai.phoneFallback')} {email ? `• ${email}` : ''}
-                                                                                                </Typography.Text>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    )
-                                                                                })}
+                                                                                {(Array.isArray(toolPayload.items) ? toolPayload.items : []).map((item, index) => (
+                                                                                    <PTCard
+                                                                                        key={`${item.email || item.phone || item.name}-${index}`}
+                                                                                        item={item}
+                                                                                        bubbleColor={bubbleColor}
+                                                                                        panelMutedText={panelMutedText}
+                                                                                    />
+                                                                                ))}
                                                                             </div>
                                                                         )}
                                                                         {message.data?.inBodyAnalysis && !isUser && (
@@ -2425,7 +2417,11 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                                             visibleContent ? renderMarkdownText(visibleContent, bubbleColor) : null
                                                                         )}
                                                                         {!message.data?.inBodyAnalysis && !toolPayload && !isUser && (
-                                                                            <AssistantMessageBubble message={message} content={visibleContent} />
+                                                                            <AssistantMessageBubble
+                                                                                message={message}
+                                                                                content={visibleContent}
+                                                                                loadingMessage={index === lastAssistantMessageIndex && !visibleContent ? (aiStatus?.message || null) : null}
+                                                                            />
                                                                         )}
                                                                         {!toolPayload && !actionPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark, t)}
                                                                     </>
@@ -2493,19 +2489,6 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                     </div>
                                                 )
                                             })
-                                        )}
-                                        {loading && (
-                                            <div style={{ textAlign: 'center', marginTop: 14 }}>
-                                                <Spin />
-                                                <div style={{ marginTop: 8 }}>
-                                                    <Typography.Text style={{ color: 'var(--theme-muted)', fontSize: 12 }}>
-                                                        {loadingPhase === 'reasoning'
-                                                            ? 'Đang suy luận câu trả lời phù hợp...'
-                                                            : 'AI GymPro đang đọc dữ liệu hệ thống...'}
-                                                        {activeAiTool ? `: ${activeAiTool}` : ''}
-                                                    </Typography.Text>
-                                                </div>
-                                            </div>
                                         )}
                                     </div>
 

@@ -9,8 +9,6 @@ import {
   LogoutOutlined,
   PhoneOutlined,
   PlusOutlined,
-  RightOutlined,
-  ShoppingCartOutlined,
   StarFilled,
   StarOutlined,
   UserOutlined,
@@ -19,7 +17,6 @@ import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, message, Modal, Spa
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { generateTheme, PRESET_ACCENT_COLORS, resolveEffectiveTheme, useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../hooks/useAuth'
@@ -104,21 +101,6 @@ const sectionIconStyle = {
   color: 'var(--theme-accent)',
   fontSize: 16,
   flexShrink: 0,
-} as CSSProperties
-
-const actionItemStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  padding: '12px 16px',
-  background: 'var(--theme-elevated)',
-  border: '1px solid var(--theme-border)',
-  borderRadius: 10,
-  cursor: 'pointer',
-  marginBottom: 8,
-  transition: 'border-color 0.2s, background 0.2s',
-  width: '100%',
-  textAlign: 'left',
 } as CSSProperties
 
 type ProfileTabKey = 'profile' | 'address' | 'password' | 'appearance'
@@ -441,7 +423,6 @@ export default function AccountProfileModal({
   const { settings: systemSettings } = useSystemSettings()
   const { token } = theme.useToken()
   const screens = Grid.useBreakpoint()
-  const navigate = useNavigate()
   const [form] = Form.useForm()
   const [passwordForm] = Form.useForm()
   const [addressForm] = Form.useForm()
@@ -474,11 +455,6 @@ export default function AccountProfileModal({
       setAccentColor(user.accentColor)
     }
   }, [user?.accentColor])
-
-  const goToOrders = () => {
-    handleClose()
-    navigate('/orders')
-  }
 
   const handlePresetSelect = (hex: string) => {
     void saveAccentColor(hex)
@@ -856,28 +832,6 @@ export default function AccountProfileModal({
     </div>
   )
 
-  const renderActionItem = (
-    icon: ReactNode,
-    title: string,
-    description: string,
-    onClick: () => void,
-    disabled = false,
-  ) => (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{ ...actionItemStyle, opacity: disabled ? 0.65 : 1 }}
-    >
-      <div style={{ ...sectionIconStyle, width: 36, height: 36, fontSize: 16 }}>{icon}</div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--theme-text)' }}>{title}</div>
-        <div style={{ fontSize: 11, color: 'var(--theme-muted)', marginTop: 2 }}>{description}</div>
-      </div>
-      <RightOutlined style={{ color: 'var(--theme-muted)', fontSize: 12 }} />
-    </button>
-  )
-
   const sharedContent = (
     <>
       <ProfileHeader
@@ -977,7 +931,6 @@ export default function AccountProfileModal({
                 </div>
 
                 <div style={{ marginBottom: 12 }}>
-                  {renderActionItem(<ShoppingCartOutlined />, t('profile.orders_title'), t('profile.orders_subtitle'), goToOrders)}
                   <Button
                     block
                     icon={<LogoutOutlined />}

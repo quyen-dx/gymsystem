@@ -2,6 +2,7 @@ import Plan from '../models/Plan.js';
 import Membership from '../models/Membership.js';
 import { recordAuditLog } from '../services/auditLogService.js';
 import { invalidateContextCache } from '../services/conversationContextCache.js';
+import { invalidateAiDomainCache } from '../ai/services/aiService.js';
 
 // ==================== TẠO GÓI TẬP ====================
 export const createPlan = async (req, res) => {
@@ -17,6 +18,7 @@ export const createPlan = async (req, res) => {
       details: 'Tạo gói tập',
     });
     invalidateContextCache('activePlans');
+    invalidateAiDomainCache('plans');
 
     res.status(201).json({ message: 'Tạo gói tập thành công', plan });
   } catch (error) {
@@ -129,6 +131,7 @@ export const updatePlan = async (req, res) => {
       details: 'Cập nhật thông tin gói tập',
     });
     invalidateContextCache('activePlans');
+    invalidateAiDomainCache('plans');
 
     res.json({ message: 'Cập nhật gói tập thành công', plan });
   } catch (error) {
@@ -166,6 +169,7 @@ export const deletePlan = async (req, res) => {
       details: 'Xóa gói tập',
     });
     invalidateContextCache('activePlans');
+    invalidateAiDomainCache('plans');
 
     res.json({ message: 'Xóa gói tập thành công' });
   } catch (error) {
@@ -191,6 +195,7 @@ export const togglePlanStatus = async (req, res) => {
       details: plan.isActive ? 'Kích hoạt gói tập' : 'Vô hiệu hóa gói tập',
     });
     invalidateContextCache('activePlans');
+    invalidateAiDomainCache('plans');
 
     res.json({
       message: `Gói tập đã được ${plan.isActive ? 'kích hoạt' : 'vô hiệu hóa'}`,
