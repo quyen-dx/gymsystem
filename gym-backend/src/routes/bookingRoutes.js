@@ -8,6 +8,7 @@ import {
   getPTBookings,
   confirmBooking,
   rejectBooking,
+  rejectAllPendingBookings,
   cancelBooking,
   completeBooking,
   joinWaitlist,
@@ -27,6 +28,8 @@ router.post('/recurring', protect, authorize('member'), createRecurringBooking)
 router.get('/my', protect, authorize('member'), getMyBookings)
 
 router.get('/pt', protect, authorize('pt'), getPTBookings)
+
+router.patch('/pt/reject-all', protect, authorize('pt'), rejectAllPendingBookings)
 
 router.patch('/:id/confirm', protect, authorize('pt'), confirmBooking)
 

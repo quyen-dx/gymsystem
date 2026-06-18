@@ -28,9 +28,9 @@ import { useCart } from '../../../context/useCart'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useWallet } from '../../../context/WalletProvider'
 import { useAuth } from '../../../hooks/useAuth'
-import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
 import { getShops } from '../../../services/shopService'
 import type { ProductShop } from '../../../types/member/product'
+import { getUserDisplayName, getUserInitialName } from '../../../utils/userDisplay'
 import AiChatWidget from '../../chat/AiChatWidget'
 import MemberFooter from '../footer/MemberFooter'
 
@@ -62,7 +62,6 @@ export default function MemberLayout({
   const { t } = useTranslation()
   const { user } = useAuth()
   const { settings, isEnabled } = useSystemSettings()
-  const [accountOpen, setAccountOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false)
@@ -123,12 +122,14 @@ export default function MemberLayout({
   }
 
   const walletText = wallet ? `${wallet.balance.toLocaleString('vi-VN')}đ` : '0đ'
+  const displayName = getUserDisplayName(user, t('profile.account_name'))
+  const avatarName = getUserInitialName(user, 'U')
   const avatarUrl =
     user?.avatar ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarName)}`
 
-  const openProfileModal = () => {
-    setAccountOpen(true)
+  const openProfilePage = () => {
+    navigate('/account/profile')
     setMenuOpen(false)
   }
 
@@ -314,7 +315,7 @@ export default function MemberLayout({
           </div>
         </nav>
 
-        {user?.role === 'admin' && !location.pathname.startsWith('/admin') && (
+        {(user?.role === 'super_admin' || user?.role === 'admin') && !location.pathname.startsWith('/admin') && (
           <button
             type="button"
             className="member-shell-nav-item"
@@ -363,7 +364,7 @@ export default function MemberLayout({
 
           <div
             className="member-shell-user"
-            onClick={openProfileModal}
+            onClick={openProfilePage}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             style={{
@@ -384,7 +385,7 @@ export default function MemberLayout({
           >
             <Avatar src={avatarUrl} />
             <Text strong style={{ color: 'var(--theme-text)' }}>
-              {user?.name}
+              {displayName}
             </Text>
           </div>
         </div>
@@ -433,13 +434,13 @@ export default function MemberLayout({
         width={320}
       >
         <div className="flex items-center gap-3 p-4">
-          <img className="h-10 w-10 rounded-full object-cover" src={avatarUrl} alt={user?.name || 'Avatar'} />
+          <img className="h-10 w-10 rounded-full object-cover" src={avatarUrl} alt={displayName} />
           <div className="min-w-0 flex-1">
-            <p className="m-0 truncate text-sm font-medium" style={{ color: 'var(--theme-text)' }}>{user?.name}</p>
+            <p className="m-0 truncate text-sm font-medium" style={{ color: 'var(--theme-text)' }}>{displayName}</p>
             <p className="m-0 truncate text-xs" style={{ color: 'var(--gs-text-muted)' }}>{t('role.' + (user?.role || 'member'))}</p>
           </div>
           <button
-            onClick={openProfileModal}
+            onClick={openProfilePage}
             className="whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs transition-colors"
             style={{ borderColor: 'var(--theme-border)', backgroundColor: 'var(--theme-card)', color: 'var(--theme-text)' }}
             type="button"
@@ -477,7 +478,7 @@ export default function MemberLayout({
           })}
         </nav>
 
-        {user?.role === 'admin' && !location.pathname.startsWith('/admin') && (
+        {(user?.role === 'super_admin' || user?.role === 'admin') && !location.pathname.startsWith('/admin') && (
           <>
             <div style={{ padding: '8px 16px 0' }}>
               <div style={{ height: 1, background: 'var(--theme-border)' }} />
@@ -497,8 +498,7 @@ export default function MemberLayout({
 
       </Drawer>
 
-      <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
-      {!accountOpen && !menuOpen && settings.ai.floatingChatbotEnabled && <AiChatWidget />}
+      {!menuOpen && settings.ai.floatingChatbotEnabled && location.pathname !== '/ai-chat' && <AiChatWidget />}
     </Layout >
   )
 }

@@ -4,6 +4,8 @@ import {
   resetSystemSettingsValue,
   updateSystemSettingsValue,
 } from '../services/systemSettingsService.js'
+import { invalidateContextCache } from '../services/conversationContextCache.js'
+import { invalidateAiDomainCache } from '../ai/services/aiService.js'
 
 const sendSystemSettingsError = (res, error, fallbackMessage = 'Không thể xử lý cài đặt hệ thống') => {
   console.error('[system-settings] error:', error)
@@ -52,6 +54,8 @@ export const updateSystemSettings = async (req, res, next) => {
     console.log('[system-settings] PUT payload:', JSON.stringify(payload))
 
     const doc = await updateSystemSettingsValue(payload)
+    invalidateContextCache('systemSettings')
+    invalidateAiDomainCache('settings')
     try {
       await recordAuditLog({
         req,
@@ -79,6 +83,8 @@ export const updateSystemSettings = async (req, res, next) => {
 export const resetSystemSettings = async (req, res, next) => {
   try {
     const doc = await resetSystemSettingsValue()
+    invalidateContextCache('systemSettings')
+    invalidateAiDomainCache('settings')
     try {
       await recordAuditLog({
         req,

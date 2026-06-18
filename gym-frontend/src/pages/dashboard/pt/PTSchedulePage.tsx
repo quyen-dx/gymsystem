@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
+import { BellOutlined, RightOutlined } from '@ant-design/icons'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { bookingService } from '../../../services/bookingService'
+import { useTheme } from '../../../context/ThemeProvider'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 interface PTBooking {
   _id: string
   memberId: {
     _id: string
     name?: string
+    fullName?: string
+    displayName?: string
     email?: string
     avatar?: string
   }
@@ -22,14 +28,22 @@ interface PTScheduleData {
   shift: string
 }
 
+const statusLabels: Record<string, string> = {
+  pending: 'Chờ',
+  confirmed: 'Xác nhận',
+  completed: 'Hoàn thành',
+  cancelled: 'Hủy',
+}
+
 export default function PTSchedulePage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const { dark } = useTheme()
   const [bookings, setBookings] = useState<PTBooking[]>([])
+  const [pendingCount, setPendingCount] = useState(0)
   const [schedules, setSchedules] = useState<PTScheduleData[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
-  const [newSchedule, setNewSchedule] = useState({ dayOfWeek: 0, shift: 'morning' })
-  const [message, setMessage] = useState('')
 
   const DAYS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
   const SHIFTS = [
@@ -44,17 +58,27 @@ export default function PTSchedulePage() {
       const res = await bookingService.getPTBookings({ filter: 'week' })
       let data = res.data?.data || res.data || []
       if (!Array.isArray(data)) data = []
-      
+
       const filtered = data.filter((b: PTBooking) =>
         new Date(b.date).toDateString() === new Date(selectedDate).toDateString()
       )
-      
+
       setBookings(filtered.sort((a: PTBooking, b: PTBooking) => a.slot.localeCompare(b.slot)))
     } catch (error) {
       console.error(error)
-      setMessage('Không thể tải lịch booking')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadPendingCount = async () => {
+    try {
+      const res = await bookingService.getPTBookings({ status: 'pending', from: 'today' })
+      let data = res.data?.data || res.data || []
+      if (!Array.isArray(data)) data = []
+      setPendingCount(data.length)
+    } catch (error) {
+      console.error(error)
     }
   }
 
@@ -71,16 +95,9 @@ export default function PTSchedulePage() {
     }
   }
 
-  const handleAddSchedule = async () => {
-    try {
-      setMessage('Cập nhật lịch làm việc thành công')
-      setNewSchedule({ dayOfWeek: 0, shift: 'morning' })
-      await loadSchedule()
-    } catch (error: any) {
-      console.error(error)
-      setMessage(error?.response?.data?.message || 'Cập nhật thất bại')
-    }
-  }
+  useEffect(() => {
+    loadPendingCount()
+  }, [])
 
   useEffect(() => {
     loadBookings()
@@ -95,13 +112,15 @@ export default function PTSchedulePage() {
   const daySchedules = schedules.filter(s => s.dayOfWeek === dayOfWeek)
 
   const confirmedCount = bookings.filter(b => b.status === 'confirmed').length
-  const pendingCount = bookings.filter(b => b.status === 'pending').length
+  const pendingDayCount = bookings.filter(b => b.status === 'pending').length
   const completedCount = bookings.filter(b => b.status === 'completed').length
+
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('vi-VN')
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8 max-[640px]:p-5">
+        <div className="rounded-[28px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-8 max-[640px]:p-5">
           <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">
             {t('pt.schedule.overline') || 'PT Schedule'}
           </p>
@@ -113,27 +132,61 @@ export default function PTSchedulePage() {
           </p>
         </div>
 
-        {message && (
-          <div className="rounded-2xl border border-[var(--gs-border)] bg-white/5 p-4 text-sm text-[var(--gs-text)]">
-            {message}
+        {/* Pending summary card */}
+        <div
+          className="flex cursor-pointer items-center justify-between rounded-xl border p-4 transition-colors hover:bg-[var(--theme-accent-muted)]"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--theme-accent) 35%, var(--gs-border))',
+            background: 'color-mix(in srgb, var(--theme-accent) 12%, var(--gs-card))',
+          }}
+          onClick={() => navigate('/pt/schedule/pending')}
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: 'color-mix(in srgb, var(--theme-accent) 20%, transparent)' }}>
+              <BellOutlined style={{ color: 'var(--theme-accent)', fontSize: 18 }} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-[var(--gs-text)]">Lịch chờ xác nhận</span>
+                {pendingCount > 0 && (
+                  <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white"
+                    style={{ background: 'var(--theme-accent)' }}>
+                    {pendingCount}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-[var(--gs-text-muted)]">
+                {pendingCount > 0
+                  ? `Có ${pendingCount} lịch cần phản hồi trước buổi tập`
+                  : 'Không có lịch chờ xác nhận'}
+              </p>
+            </div>
           </div>
-        )}
+          <div className="flex items-center gap-1 text-sm font-medium text-[var(--gs-text-muted)]">
+            Xem tất cả
+            <RightOutlined style={{ fontSize: 12 }} />
+          </div>
+        </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-          <div className="rounded-xl border border-[var(--gs-border)] bg-white/5 p-6">
+          <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-6">
             <h2 className="text-lg font-semibold text-[var(--gs-text)]">
               Lịch làm việc hàng tuần
             </h2>
 
             <div className="mt-4 space-y-3">
               {DAYS.map((day, idx) => (
-                <div key={idx} className="rounded-lg border border-[var(--gs-border)] bg-black/20 p-3">
+                <div key={idx} className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-3">
                   <p className="font-semibold text-[var(--gs-text)]">{day}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {schedules
                       .filter(s => s.dayOfWeek === idx)
                       .map((s, i) => (
-                        <span key={i} className="rounded-full bg-orange-500/20 px-3 py-1 text-xs text-orange-300">
+                        <span key={i} className="rounded-full px-3 py-1 text-xs"
+                          style={{
+                            background: 'var(--theme-accent-muted)',
+                            color: 'var(--theme-accent)',
+                          }}>
                           {SHIFTS.find(sh => sh.value === s.shift)?.label}
                         </span>
                       ))}
@@ -144,98 +197,57 @@ export default function PTSchedulePage() {
                 </div>
               ))}
             </div>
-
-            <div className="mt-6 rounded-lg border border-[var(--gs-border)] bg-black/30 p-4">
-              <h3 className="mb-3 font-semibold text-[var(--gs-text)]">
-                Thêm giờ làm việc
-              </h3>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Chọn ngày
-                  </label>
-                  <select
-                    value={newSchedule.dayOfWeek}
-                    onChange={(e) =>
-                      setNewSchedule({ ...newSchedule, dayOfWeek: Number(e.target.value) })
-                    }
-                    className="w-full rounded-lg border border-[var(--gs-border)] bg-transparent p-2 text-sm text-[var(--gs-text)]"
-                  >
-                    {DAYS.map((day, idx) => (
-                      <option key={idx} className="bg-gray-900 text-white" value={idx}>
-                        {day}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Chọn ca làm việc
-                  </label>
-                  <select
-                    value={newSchedule.shift}
-                    onChange={(e) =>
-                      setNewSchedule({ ...newSchedule, shift: e.target.value })
-                    }
-                    className="w-full rounded-lg border border-[var(--gs-border)] bg-transparent p-2 text-sm text-[var(--gs-text)]"
-                  >
-                    {SHIFTS.map((shift) => (
-                      <option key={shift.value} className="bg-gray-900 text-white" value={shift.value}>
-                        {shift.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <button
-                  onClick={handleAddSchedule}
-                  className="w-full rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-700"
-                >
-                  Thêm ca làm việc
-                </button>
-              </div>
-            </div>
           </div>
 
-          <div className="rounded-xl border border-[var(--gs-border)] bg-white/5 p-6">
+          <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-[var(--gs-text)]">
-                Khách đặt lịch tập - {new Date(selectedDate).toLocaleDateString('vi-VN')}
+                Khách đặt lịch tập - {formatDate(selectedDate)}
               </h2>
 
               <input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="rounded-lg border border-[var(--gs-border)] bg-transparent px-3 py-2 text-sm text-[var(--gs-text)]"
+                style={{
+                  background: 'var(--gs-input-bg)',
+                  color: 'var(--gs-text)',
+                  border: '1px solid var(--gs-border)',
+                }}
+                className="rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--theme-accent)]"
               />
             </div>
 
             <div className="mb-4 grid grid-cols-3 gap-3">
-              <div className="rounded-lg bg-blue-500/10 p-3 text-center">
-                <p className="text-xs text-[var(--gs-text-muted)]">Pending</p>
-                <p className="text-lg font-bold text-blue-300">{pendingCount}</p>
+              <div className="rounded-lg p-3 text-center" style={{ background: 'color-mix(in srgb, var(--theme-accent) 12%, var(--gs-card))' }}>
+                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Pending</p>
+                <p className="text-lg font-bold" style={{ color: 'var(--theme-accent)' }}>{pendingDayCount}</p>
               </div>
-              <div className="rounded-lg bg-green-500/10 p-3 text-center">
-                <p className="text-xs text-[var(--gs-text-muted)]">Confirmed</p>
-                <p className="text-lg font-bold text-green-300">{confirmedCount}</p>
+              <div className="rounded-lg p-3 text-center"
+                style={{ background: dark ? 'rgba(34,197,94,0.10)' : 'rgba(34,197,94,0.08)' }}>
+                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Confirmed</p>
+                <p className="text-lg font-bold" style={{ color: dark ? 'rgb(74,222,128)' : 'rgb(22,163,74)' }}>{confirmedCount}</p>
               </div>
-              <div className="rounded-lg bg-orange-500/10 p-3 text-center">
-                <p className="text-xs text-[var(--gs-text-muted)]">Completed</p>
-                <p className="text-lg font-bold text-orange-300">{completedCount}</p>
+              <div className="rounded-lg p-3 text-center"
+                style={{ background: dark ? 'rgba(59,130,246,0.10)' : 'rgba(59,130,246,0.08)' }}>
+                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Completed</p>
+                <p className="text-lg font-bold" style={{ color: dark ? 'rgb(96,165,250)' : 'rgb(37,99,235)' }}>{completedCount}</p>
               </div>
             </div>
 
             {daySchedules.length > 0 && (
-              <div className="mb-4 rounded-lg border border-green-500/40 bg-green-500/10 p-3 text-sm text-green-300">
+              <div className="mb-4 rounded-lg border p-3 text-sm"
+                style={{
+                  borderColor: 'color-mix(in srgb, var(--theme-accent) 40%, var(--gs-border))',
+                  background: 'color-mix(in srgb, var(--theme-accent) 12%, var(--gs-card))',
+                  color: 'var(--theme-accent)',
+                }}>
                 ✓ Bạn làm việc vào ngày này: {daySchedules.map(s => SHIFTS.find(sh => sh.value === s.shift)?.label).join(', ')}
               </div>
             )}
 
             {daySchedules.length === 0 && (
-              <div className="mb-4 rounded-lg border border-gray-500/40 bg-gray-500/10 p-3 text-sm text-gray-300">
+              <div className="mb-4 rounded-lg border border-dashed border-[var(--gs-border)] bg-[var(--gs-card)] p-3 text-sm text-[var(--gs-text-muted)]">
                 ⚠️ Bạn không có lịch làm việc vào ngày này
               </div>
             )}
@@ -254,7 +266,7 @@ export default function PTSchedulePage() {
               {bookings.map((booking) => (
                 <div
                   key={booking._id}
-                  className="rounded-lg border border-[var(--gs-border)] bg-black/20 p-3"
+                  className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-3"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -262,7 +274,7 @@ export default function PTSchedulePage() {
                         {booking.slot}
                       </p>
                       <p className="text-sm text-[var(--gs-text-muted)]">
-                        {booking.memberId?.name || booking.memberId?.email || 'Thành viên'}
+                        {getUserDisplayName(booking.memberId, booking.memberId?.email || 'Thành viên')}
                       </p>
                       {booking.note && (
                         <p className="text-xs text-[var(--gs-text-muted)]">
@@ -270,21 +282,28 @@ export default function PTSchedulePage() {
                         </p>
                       )}
                     </div>
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        booking.status === 'pending'
-                          ? 'bg-yellow-500/10 text-yellow-300'
-                          : booking.status === 'confirmed'
-                            ? 'bg-green-500/10 text-green-300'
-                            : booking.status === 'completed'
-                              ? 'bg-blue-500/10 text-blue-300'
-                              : 'bg-red-500/10 text-red-300'
-                      }`}
-                    >
-                      {booking.status === 'pending' && 'Chờ'}
-                      {booking.status === 'confirmed' && 'Xác nhận'}
-                      {booking.status === 'completed' && 'Hoàn thành'}
-                      {booking.status === 'cancelled' && 'Hủy'}
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '2px 10px',
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      background: booking.status === 'pending'
+                        ? 'color-mix(in srgb, var(--theme-accent) 20%, transparent)'
+                        : booking.status === 'confirmed'
+                          ? (dark ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.12)')
+                          : booking.status === 'completed'
+                            ? (dark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.12)')
+                            : (dark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.12)'),
+                      color: booking.status === 'pending'
+                        ? 'var(--theme-accent)'
+                        : booking.status === 'confirmed'
+                          ? (dark ? 'rgb(74,222,128)' : 'rgb(22,163,74)')
+                          : booking.status === 'completed'
+                            ? (dark ? 'rgb(96,165,250)' : 'rgb(37,99,235)')
+                            : (dark ? 'rgb(248,113,113)' : 'rgb(220,38,38)'),
+                    }}>
+                      {statusLabels[booking.status]}
                     </span>
                   </div>
                 </div>

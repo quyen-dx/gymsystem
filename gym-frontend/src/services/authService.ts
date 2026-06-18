@@ -60,4 +60,16 @@ export const authService = {
 
   resetPassword: (data: { resetToken: string; newPassword: string }) =>
     api.post('/auth/forgot-password/reset', data),
+
+  requestEmailChange: (data: { newEmail: string }) =>
+    api.post('/auth/change-email/request', data),
+
+  confirmEmailChange: (data: { newEmail: string; otp: string }) =>
+    api.post('/auth/change-email/confirm', data),
+
+  requestPasswordResetOtp: (data: { method: 'email' | 'phone' }) =>
+    api.post('/auth/request-password-reset-otp', data),
+
+  resetPasswordWithOtp: (data: { method: 'email' | 'phone'; otp: string; newPassword: string }) =>
+    api.post('/auth/reset-password-with-otp', data),
 }

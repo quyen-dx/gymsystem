@@ -22,6 +22,7 @@ const chatMessageSchema = new mongoose.Schema(
         createdAt: { type: String, required: true },
         suggestions: { type: [String], default: undefined },
         webSearch: { type: mongoose.Schema.Types.Mixed, default: undefined },
+        attachments: { type: mongoose.Schema.Types.Mixed, default: undefined },
     },
     { _id: false },
 )

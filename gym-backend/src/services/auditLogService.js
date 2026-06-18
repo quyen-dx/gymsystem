@@ -1,5 +1,8 @@
 import AuditLog from '../models/AuditLog.js'
 
+const getUserDisplayName = (user, fallback = '') =>
+  String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
+
 export const recordAuditLog = async ({ req, module, action, entity, entityName, details = '' }) => {
   if (!req.user || !entity?._id) return
 
@@ -10,7 +13,7 @@ export const recordAuditLog = async ({ req, module, action, entity, entityName, 
     entityName: entityName || entity.name || entity.email || entity.phone || entity._id.toString(),
     admin: {
       id: req.user._id,
-      name: req.user.name || '',
+      name: getUserDisplayName(req.user),
       email: req.user.email || '',
     },
     details,

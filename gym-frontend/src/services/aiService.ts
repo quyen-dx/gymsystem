@@ -2,7 +2,7 @@ import axios from 'axios'
 import api from './api'
 import { clearAuthSession, getAuthToken, refreshAccessToken } from './api'
 import { API_URL } from '../config/env'
-import type { ConversationContext } from '../types/aichat/aichat'
+import type { ChatAttachment, ConversationContext } from '../types/aichat/aichat'
 
 const aiCache = new Map<string, any>()
 const AI_CACHE_VERSION = 'tool-v10-member-orchestration'
@@ -34,10 +34,34 @@ const normalizeSources = (sources: unknown) => (
     Array.isArray(sources)
         ? sources
             .filter((item) => isRecord(item) && typeof item.url === 'string' && item.url.trim())
-            .map((item) => ({
-                title: typeof item.title === 'string' ? item.title : '',
-                url: item.url,
-            }))
+            .map((item) => {
+                const url = item.url.trim()
+                let domain = typeof item.domain === 'string' && item.domain.trim()
+                    ? item.domain.trim()
+                    : (typeof item.sourceDomain === 'string' && item.sourceDomain.trim() ? item.sourceDomain.trim() : '')
+                if (!domain) {
+                    try {
+                        domain = new URL(url).hostname.replace(/^www\./, '')
+                    } catch {
+                        domain = ''
+                    }
+                }
+                const title = typeof item.title === 'string' && item.title.trim()
+                    ? item.title.trim()
+                    : (typeof item.sourceTitle === 'string' && item.sourceTitle.trim() ? item.sourceTitle.trim() : domain || url)
+                const favicon = typeof item.favicon === 'string' && item.favicon.trim()
+                    ? item.favicon.trim()
+                    : (domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32` : '')
+                return {
+                    title,
+                    url,
+                    domain,
+                    favicon,
+                    sourceTitle: title,
+                    sourceUrl: typeof item.sourceUrl === 'string' && item.sourceUrl.trim() ? item.sourceUrl.trim() : url,
+                    sourceDomain: domain,
+                }
+            })
             .slice(0, 5)
         : isRecord(sources) ? sources : {}
 )
@@ -66,6 +90,7 @@ export type AiMode = 'gym' | 'general'
 
 type AiStreamEvent =
     | { id: string; event: 'meta'; data: any }
+    | { id: string; event: 'status'; data: { status: string; message: string } }
     | { id: string; event: 'chunk'; data: { text?: string; seq?: number } }
     | { id: string; event: 'done'; data: any }
     | { id: string; event: 'error'; data: { message?: string } }
@@ -74,10 +99,12 @@ type AiStreamEvent =
 type RequestAiAssistantStreamOptions = {
     onChunk?: (chunk: string) => void
     onFirstChunk?: () => void
+    onStatus?: (status: string, message: string) => void
     onMeta?: (data: any) => void
     onFallback?: (data: any) => void
     signal?: AbortSignal
     conversationContext?: ConversationContext
+    attachments?: ChatAttachment[]
     requestContext?: Record<string, string>
 }
 
@@ -202,6 +229,7 @@ export const requestAiAssistantStream = async (
             language: getRequestLanguage(options.requestContext),
             conversationContext: options.conversationContext,
             requestContext: options.requestContext,
+            ...(options.attachments ? { attachments: options.attachments } : {}),
         }),
         signal: options.signal,
     })
@@ -246,6 +274,14 @@ export const requestAiAssistantStream = async (
         if (streamEvent.event === 'meta') {
             console.log('[AI stream frontend] meta:', streamEvent.data)
             options.onMeta?.(streamEvent.data)
+            return
+        }
+
+        if (streamEvent.event === 'status') {
+            const status = streamEvent.data?.status || ''
+            const message = streamEvent.data?.message || ''
+            console.log('[AI stream frontend] status:', status, message)
+            options.onStatus?.(status, message)
             return
         }
 
@@ -329,6 +365,73 @@ export const renameAiChatSession = (sessionId: string, title: string) =>
 
 export const deleteAiChatSession = (sessionId: string) =>
     api.delete(`/ai-assistant/session/${sessionId}`)
+
+export const uploadAiChatImage = (file: File) => {
+    const formData = new FormData()
+    formData.append('image', file)
+    return api.post('/ai-assistant/upload-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000,
+    })
+}
+
+export type GymRecommendation = {
+    goal: string
+    recommendedPlan: { name: string; reason: string } | null
+    recommendedPT: { name: string; reason: string } | null
+    roadmap: string
+}
+
+export type BodyAnalysisResult = {
+    bodyType: string
+    estimatedCondition: string
+    strengths: string[]
+    improvements: string[]
+    recommendedGoal: string
+    explanation: string
+    recommendations?: GymRecommendation
+}
+
+export const analyzeBodyImages = async (
+    attachments: ChatAttachment[],
+    language = 'vi',
+): Promise<BodyAnalysisResult> => {
+    const { data } = await api.post('/ai-assistant/analyze-body', { attachments, language })
+    if (data?.result && typeof data.result === 'object') {
+        return data.result as BodyAnalysisResult
+    }
+    throw new Error('Invalid body analysis response')
+}
+
+export type InBodyMetrics = {
+    weight: string | null
+    bodyFatPercent: string | null
+    skeletalMuscle: string | null
+    bmi: string | null
+    visceralFat: string | null
+}
+
+export type InBodyAnalysisResult = {
+    unreadable: boolean
+    message?: string
+    metrics?: InBodyMetrics
+    interpretation?: string
+    assessment?: string
+    recommendation?: 'giảm mỡ' | 'tăng cơ' | 'duy trì'
+    explanation?: string
+    recommendations?: GymRecommendation
+}
+
+export const analyzeInBodyImages = async (
+    attachments: ChatAttachment[],
+    language = 'vi',
+): Promise<InBodyAnalysisResult> => {
+    const { data } = await api.post('/ai-assistant/analyze-inbody', { attachments, language })
+    if (data?.result && typeof data.result === 'object') {
+        return data.result as InBodyAnalysisResult
+    }
+    throw new Error('Invalid InBody analysis response')
+}
 
 export type ActivePlanInfo = {
   name: string

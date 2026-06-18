@@ -52,7 +52,9 @@ export default function TypewriterSlogans({
   const slogansRef = useRef(slogans)
   const timingsRef = useRef({ typeSpeed, deleteSpeed, pauseAfterTyping, pauseAfterDeleting })
 
+  // eslint-disable-next-line react-hooks/refs
   slogansRef.current = slogans
+  // eslint-disable-next-line react-hooks/refs
   timingsRef.current = { typeSpeed, deleteSpeed, pauseAfterTyping, pauseAfterDeleting }
 
   const clearTimer = useCallback(() => {
@@ -62,7 +64,10 @@ export default function TypewriterSlogans({
     }
   }, [])
 
-  const tick = useCallback(() => {
+  const tickRef = useRef<(() => void) | null>(null)
+
+  // eslint-disable-next-line react-hooks/refs
+  tickRef.current = useCallback(() => {
     if (!mountedRef.current) return
     clearTimer()
 
@@ -75,36 +80,40 @@ export default function TypewriterSlogans({
 
     if (!slogan.length) return
 
+    const schedule = (delay: number) => {
+      timerRef.current = setTimeout(() => tickRef.current?.(), delay)
+    }
+
     if (ph === 'typing') {
       if (charIndex < slogan.length) {
         const nextIndex = charIndex + 1
         const next = slogan.slice(0, nextIndex).join('')
         charIndexRef.current = nextIndex
         setDisplayText(next)
-        timerRef.current = setTimeout(tick, ts)
+        schedule(ts)
       } else {
         phaseRef.current = 'pause-typing'
-        timerRef.current = setTimeout(tick, pat)
+        schedule(pat)
       }
     } else if (ph === 'pause-typing') {
       phaseRef.current = 'deleting'
-      timerRef.current = setTimeout(tick, ds)
+      schedule(ds)
     } else if (ph === 'deleting') {
       if (charIndex > 0) {
         const nextIndex = charIndex - 1
         const next = slogan.slice(0, nextIndex).join('')
         charIndexRef.current = nextIndex
         setDisplayText(next)
-        timerRef.current = setTimeout(tick, ds)
+        schedule(ds)
       } else {
         phaseRef.current = 'pause-deleting'
-        timerRef.current = setTimeout(tick, pad)
+        schedule(pad)
       }
     } else if (ph === 'pause-deleting') {
       idxRef.current = (idx + 1) % sl.length
       charIndexRef.current = 0
       phaseRef.current = 'typing'
-      timerRef.current = setTimeout(tick, ts)
+      schedule(ts)
     }
   }, [clearTimer])
 
@@ -117,14 +126,14 @@ export default function TypewriterSlogans({
     clearTimer()
 
     if (slogans.length > 0) {
-      timerRef.current = setTimeout(tick, typeSpeed)
+      timerRef.current = setTimeout(() => tickRef.current?.(), typeSpeed)
     }
 
     return () => {
       mountedRef.current = false
       clearTimer()
     }
-  }, [slogans, language, tick, clearTimer, typeSpeed])
+  }, [slogans, language, clearTimer, typeSpeed])
 
   if (!slogans.length) return null
 

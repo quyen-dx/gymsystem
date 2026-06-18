@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { GoogleGenAI } from '@google/genai'
 
 const GEMINI_FALLBACK_MESSAGE = 'Promp này quá mới -_-  Doraemon chưa cập nhật dữ liệu đó! '
@@ -599,4 +600,514 @@ Câu hỏi: "${query}"`
         label: 'assistant-gym-stream',
         onChunk,
     })
+}
+
+const downloadImageAsBase64 = async (url) => {
+    const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000 })
+    const buffer = Buffer.from(response.data)
+    const mimeType = response.headers['content-type'] || 'image/jpeg'
+    const base64 = buffer.toString('base64')
+    return { mimeType, base64 }
+}
+
+export const analyzeBodyImages = async (imageUrls, language = 'vi') => {
+    if (!process.env.GEMINI_API_KEY) {
+        throw new Error('GEMINI_API_KEY is not configured')
+    }
+
+    const lang = normalizeLanguage(language)
+    const langInstruction = lang === 'en'
+        ? 'Always answer in English.'
+        : 'Luôn trả lời bằng tiếng Việt.'
+
+    const systemPrompt = `Bạn là chuyên gia thể hình và huấn luyện viên cá nhân của GymPro.
+Phân tích hình ảnh cơ thể người dùng gửi lên.
+
+${langInstruction}
+
+QUY TẮC BẮT BUỘC:
+- KHÔNG chẩn đoán bệnh lý.
+- KHÔNG khẳng định cân nặng chính xác.
+- KHÔNG khẳng định % mỡ chính xác.
+- Chỉ dùng các cụm từ: "có vẻ", "có thể", "theo hình ảnh".
+- Phân tích mang tính tham khảo, không thay thế tư vấn chuyên môn trực tiếp.
+
+Trả về DUY NHẤT 1 object JSON (không markdown, không code block) với cấu trúc:
+{
+    "bodyType": "mô tả dáng người tổng quát (ectomorph, mesomorph, endomorph hoặc kết hợp)",
+    "estimatedCondition": "đánh giá tình trạng tổng quát (vd: có vẻ săn chắc, có thể cần cải thiện định nghĩa cơ...)",
+    "strengths": ["điểm mạnh 1", "điểm mạnh 2", "điểm mạnh 3"],
+    "improvements": ["điểm cần cải thiện 1", "điểm cần cải thiện 2", "điểm cần cải thiện 3"],
+    "recommendedGoal": "mục tiêu tập luyện đề xuất phù hợp cho GymPro",
+    "explanation": "giải thích ngắn gọn về phân tích (2-3 câu)"
+}`
+
+    try {
+        const parts = [{ text: systemPrompt }]
+
+        for (const url of imageUrls) {
+            const { mimeType, base64 } = await downloadImageAsBase64(url)
+            parts.push({
+                inlineData: { mimeType, data: base64 },
+            })
+        }
+
+        const geminiClient = createGeminiClient()
+        const response = await geminiClient.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts }],
+            config: {
+                temperature: 0.2,
+                maxOutputTokens: 1200,
+            },
+        })
+
+        const text = readGeminiText(response, 'analyzeBody').trim()
+        return safeJsonParse(text)
+    } catch (error) {
+        console.error('Gemini analyzeBodyImages error:', error)
+        const normalizedError = normalizeGeminiError(error)
+        throw new Error(normalizedError.message || 'Lỗi phân tích hình ảnh')
+    }
+}
+
+export const analyzeInBodyImage = async (imageUrls, language = 'vi') => {
+    if (!process.env.GEMINI_API_KEY) {
+        throw new Error('GEMINI_API_KEY is not configured')
+    }
+
+    const lang = normalizeLanguage(language)
+    const langInstruction = lang === 'en'
+        ? 'Always answer in English.'
+        : 'Luôn trả lời bằng tiếng Việt.'
+
+    const systemPrompt = `Bạn là chuyên gia thể hình của GymPro, chuyên đọc và phân tích phiếu InBody.
+
+${langInstruction}
+
+NHIỆM VỤ:
+Đọc các chỉ số từ ảnh phiếu InBody người dùng gửi. Nếu không đọc rõ số liệu, trả về unreadable: true.
+
+QUY TẮC BẮT BUỘC:
+- KHÔNG chẩn đoán bệnh lý.
+- KHÔNG khẳng định số liệu chính xác nếu không đọc rõ từ ảnh.
+- Chỉ dùng các cụm từ: "có vẻ", "có thể", "theo kết quả InBody".
+- Nếu ảnh mờ, thiếu sáng hoặc không thấy phiếu InBody, trả về: {"unreadable": true, "message": "thông báo gửi ảnh rõ hơn"}
+- Phân tích mang tính tham khảo, không thay thế tư vấn chuyên môn trực tiếp.
+
+Trả về DUY NHẤT 1 object JSON (không markdown, không code block) với cấu trúc:
+{
+    "unreadable": false,
+    "metrics": {
+        "weight": "số kg (vd: 72.5) hoặc null nếu không đọc được",
+        "bodyFatPercent": "số % mỡ (vd: 18.2) hoặc null nếu không đọc được",
+        "skeletalMuscle": "số kg cơ xương (vd: 33.1) hoặc null nếu không đọc được",
+        "bmi": "số BMI (vd: 22.5) hoặc null nếu không đọc được",
+        "visceralFat": "chỉ số mỡ nội tạng (vd: 8) hoặc null nếu không đọc được"
+    },
+    "interpretation": "giải thích dễ hiểu từng chỉ số (2-3 câu)",
+    "assessment": "đánh giá tình trạng tổng quát dựa trên các chỉ số InBody",
+    "recommendation": "giảm mỡ | tăng cơ | duy trì",
+    "explanation": "giải thích chi tiết vì sao đề xuất đó, kèm lời khuyên tập luyện và dinh dưỡng phù hợp cho GymPro (3-5 câu)"
+}`
+
+    try {
+        const parts = [{ text: systemPrompt }]
+
+        for (const url of imageUrls) {
+            const { mimeType, base64 } = await downloadImageAsBase64(url)
+            parts.push({
+                inlineData: { mimeType, data: base64 },
+            })
+        }
+
+        const geminiClient = createGeminiClient()
+        const response = await geminiClient.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts }],
+            config: {
+                temperature: 0.15,
+                maxOutputTokens: 1500,
+            },
+        })
+
+        const text = readGeminiText(response, 'analyzeInBody').trim()
+        const parsed = safeJsonParse(text)
+
+        if (parsed && parsed.unreadable) {
+            return parsed
+        }
+
+        return parsed
+    } catch (error) {
+        console.error('Gemini analyzeInBodyImage error:', error)
+        const normalizedError = normalizeGeminiError(error)
+        throw new Error(normalizedError.message || 'Lỗi phân tích ảnh InBody')
+    }
+}
+
+export const generateRecommendationsFromAnalysis = async (analysisResult, analysisType, gymData, language = 'vi') => {
+    const lang = normalizeLanguage(language)
+    const langInstruction = lang === 'en'
+        ? 'Always answer in English.'
+        : 'Luôn trả lời bằng tiếng Việt.'
+
+    const analysisJson = JSON.stringify(analysisResult, null, 2)
+    const plansJson = JSON.stringify((gymData.plans || []).map((p) => ({
+        nameVi: p.nameVi,
+        nameEn: p.nameEn,
+        price: p.price,
+        durationDays: p.durationDays,
+        descriptionVi: (p.descriptionVi || '').slice(0, 200),
+        descriptionEn: (p.descriptionEn || '').slice(0, 200),
+        featuresVi: (p.featuresVi || []).slice(0, 5),
+        featuresEn: (p.featuresEn || []).slice(0, 5),
+        color: p.color,
+    })), null, 2)
+
+    const ptsJson = JSON.stringify((gymData.pts || []).map((pt) => ({
+        name: pt.name,
+        specialties: pt.specialties || [],
+        rating: pt.rating || 0,
+        experienceYears: pt.experienceYears || 0,
+        bio: (pt.bio || '').slice(0, 200),
+    })), null, 2)
+
+    const analysisLabel = analysisType === 'inbody' ? 'InBody' : 'cơ thể'
+    const metricsContext = analysisType === 'inbody'
+        ? `Các chỉ số InBody đã đọc:
+${analysisJson}`
+        : `Kết quả phân tích hình ảnh cơ thể:
+${analysisJson}`
+
+    const prompt = `Bạn là chuyên gia tư vấn thể hình của GymPro.
+
+${langInstruction}
+
+${metricsContext}
+
+DỮ LIỆU GYMPRO HIỆN TẠI:
+
+Gói tập (Plans):
+${plansJson}
+
+Huấn luyện viên (PT):
+${ptsJson}
+
+NHIỆM VỤ:
+Dựa trên kết quả phân tích ${analysisLabel} và dữ liệu GymPro thực tế bên trên, hãy đề xuất cho người dùng:
+
+1. MỤC TIÊU PHÙ HỢP: Mục tiêu tập luyện cụ thể dựa trên kết quả phân tích.
+2. GÓI TẬP PHÙ HỢP NHẤT: Chọn 1 gói từ dữ liệu Plans bên trên phù hợp nhất với mục tiêu và tình trạng hiện tại. Giải thích ngắn vì sao.
+3. PT PHÙ HỢP NHẤT: Chọn 1 PT từ dữ liệu bên trên phù hợp nhất với mục tiêu. Giải thích ngắn vì sao.
+4. LỘ TRÌNH 4-12 TUẦN: Đề xuất lộ trình cụ thể theo tuần.
+
+QUY TẮC:
+- KHÔNG bịa dữ liệu. Chỉ dùng dữ liệu GymPro được cung cấp bên trên.
+- Nếu không có gói tập hoặc PT phù hợp, nói rõ "Hiện chưa có gói tập/PT phù hợp trong hệ thống."
+- Luôn gắn đề xuất với dữ liệu thực tế.
+- Không chẩn đoán bệnh.
+
+Trả về DUY NHẤT 1 object JSON (không markdown, không code block) với cấu trúc:
+{
+    "goal": "mục tiêu tập luyện cụ thể",
+    "recommendedPlan": {
+        "name": "tên gói tập",
+        "reason": "lý do chọn gói này"
+    },
+    "recommendedPT": {
+        "name": "tên PT",
+        "reason": "lý do chọn PT này"
+    },
+    "roadmap": "lộ trình 4-12 tuần chi tiết (3-5 câu)"
+}`
+
+    const geminiClient = createGeminiClient()
+    const response = await geminiClient.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            temperature: 0.25,
+            maxOutputTokens: 1500,
+        },
+    })
+
+    const text = readGeminiText(response, 'generateRecommendations').trim()
+    return safeJsonParse(text)
+}
+
+export const classifyImageType = async (imageUrls) => {
+    const prompt = `Bạn là AI phân loại ảnh của GymPro.
+Xem ảnh người dùng gửi và phân loại vào 1 trong các loại sau:
+- "body": ảnh cơ thể người (chụp toàn thân, nửa người, vóc dáng) — mặc định nếu thấy người
+- "inbody": ảnh phiếu kết quả InBody (có bảng số liệu: weight, body fat, skeletal muscle, BMI, visceral fat)
+- "food": ảnh bữa ăn, món ăn, đồ uống
+- "exercise": ảnh thiết bị tập, bài tập, tư thế tập
+- "unknown": không rõ loại
+
+Trả về DUY NHẤT 1 object JSON:
+{
+    "type": "body" | "inbody" | "food" | "exercise" | "unknown",
+    "confidence": "high" | "medium" | "low",
+    "reason": "lý do ngắn gọn"
+}`
+
+    try {
+        const parts = [{ text: prompt }]
+
+        for (const url of imageUrls) {
+            const { mimeType, base64 } = await downloadImageAsBase64(url)
+            parts.push({
+                inlineData: { mimeType, data: base64 },
+            })
+        }
+
+        const geminiClient = createGeminiClient()
+        const response = await geminiClient.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts }],
+            config: {
+                temperature: 0.1,
+                maxOutputTokens: 300,
+            },
+        })
+
+        const text = readGeminiText(response, 'classifyImage').trim()
+        return safeJsonParse(text)
+    } catch (error) {
+        console.error('Gemini classifyImageType error:', error)
+        return { type: 'unknown', confidence: 'low', reason: 'classification failed' }
+    }
+}
+
+const analyzeVisionImage = async (imageUrls, classification, query, language = 'vi') => {
+    const lang = normalizeLanguage(language)
+    const langInstruction = lang === 'en'
+        ? 'Always answer in English.'
+        : 'Luôn trả lời bằng tiếng Việt.'
+
+    const imageType = classification?.type || 'unknown'
+
+    let systemPrompt = ''
+
+    if (imageType === 'inbody') {
+        systemPrompt = `Bạn là chuyên gia thể hình của GymPro, chuyên đọc và phân tích phiếu InBody.
+
+${langInstruction}
+
+NHIỆM VỤ:
+Đọc các chỉ số từ ảnh phiếu InBody. Nếu không đọc rõ số liệu, hãy nói rõ.
+
+QUY TẮC:
+- KHÔNG chẩn đoán bệnh lý.
+- KHÔNG khẳng định số liệu chính xác nếu không đọc rõ từ ảnh.
+- Chỉ dùng: "có vẻ", "có thể", "theo kết quả InBody".
+- Nếu ảnh mờ hoặc không thấy phiếu InBody, thông báo gửi ảnh rõ hơn.
+
+Phân tích gồm:
+1. Các chỉ số nhìn thấy (cân nặng, % mỡ, cơ xương, BMI, mỡ nội tạng)
+2. Giải thích ý nghĩa từng chỉ số dễ hiểu
+3. Đánh giá tình trạng tổng quát
+4. Đề xuất: giảm mỡ / tăng cơ / duy trì
+
+${query ? `Người dùng cũng hỏi thêm: "${query}"` : 'Hãy phân tích chi tiết dựa trên ảnh InBody.'}`
+    } else if (imageType === 'food') {
+        systemPrompt = `Bạn là chuyên gia dinh dưỡng của GymPro.
+
+${langInstruction}
+
+NHIỆM VỤ:
+Phân tích ảnh bữa ăn / món ăn người dùng gửi.
+
+QUY TẮC:
+- KHÔNG chẩn đoán bệnh lý.
+- Chỉ ước lượng tương đối: "có vẻ", "có thể", "theo hình ảnh".
+- Đưa lời khuyên dinh dưỡng phù hợp cho người tập gym.
+
+Phân tích gồm:
+1. Nhận diện món ăn / thực phẩm trong ảnh
+2. Ước lượng dinh dưỡng tương đối (protein, carbs, fat, calo)
+3. Đánh giá: phù hợp cho mục tiêu gì (tăng cơ, giảm mỡ, duy trì)
+4. Gợi ý cải thiện bữa ăn
+
+${query ? `Người dùng hỏi: "${query}"` : ''}`
+    } else if (imageType === 'exercise') {
+        systemPrompt = `Bạn là huấn luyện viên cá nhân của GymPro.
+
+${langInstruction}
+
+NHIỆM VỤ:
+Phân tích ảnh thiết bị tập / bài tập / tư thế tập người dùng gửi.
+
+QUY TẮC:
+- KHÔNG chẩn đoán bệnh lý.
+- Đưa hướng dẫn an toàn, đúng kỹ thuật.
+
+Phân tích gồm:
+1. Nhận diện thiết bị / bài tập
+2. Hướng dẫn sử dụng / tập đúng cách
+3. Nhóm cơ tác động chính
+4. Gợi ý bài tập bổ trợ
+
+${query ? `Người dùng hỏi: "${query}"` : ''}`
+    } else {
+        systemPrompt = `Bạn là trợ lý AI GymPro, có khả năng phân tích hình ảnh.
+
+${langInstruction}
+
+NHIỆM VỤ:
+Xem ảnh người dùng gửi và trả lời dựa trên nội dung ảnh.
+
+QUY TẮC:
+- KHÔNG chẩn đoán bệnh lý.
+- Nếu ảnh chụp người, phân tích vóc dáng tổng quát (dáng người, ước lượng tình trạng).
+- Nếu không rõ nội dung, hỏi lại người dùng muốn phân tích gì.
+- Trả lời tự nhiên, thân thiện như Doraemon.
+
+${query ? `Người dùng hỏi: "${query}"` : 'Hãy xem ảnh và cho biết bạn thấy gì, sau đó đề xuất cách tôi có thể giúp.'}`
+    }
+
+    try {
+        const parts = [{ text: systemPrompt }]
+
+        for (const url of imageUrls) {
+            const { mimeType, base64 } = await downloadImageAsBase64(url)
+            parts.push({
+                inlineData: { mimeType, data: base64 },
+            })
+        }
+
+        const geminiClient = createGeminiClient()
+        const response = await geminiClient.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts }],
+            config: {
+                temperature: 0.25,
+                maxOutputTokens: 2000,
+            },
+        })
+
+        return readGeminiText(response, 'analyzeVision').trim()
+    } catch (error) {
+        console.error('Gemini analyzeVisionImage error:', error)
+        const normalizedError = normalizeGeminiError(error)
+        throw new Error(normalizedError.message || 'Lỗi phân tích ảnh')
+    }
+}
+
+export const visionChat = async (query, attachments, language = 'vi') => {
+    const imageUrls = attachments
+        .filter((att) => att && typeof att.url === 'string')
+        .map((att) => att.url)
+
+    if (imageUrls.length === 0) {
+        throw new Error('Không có ảnh để phân tích')
+    }
+
+    const classification = await classifyImageType(imageUrls)
+
+    const gymData = { plans: [], pts: [] }
+    let recommendations = null
+
+    if (classification.type === 'body' || classification.type === 'inbody') {
+        try {
+            const Plan = (await import('../models/Plan.js')).default
+            const User = (await import('../models/User.js')).default
+
+            const [plans, pts] = await Promise.all([
+                Plan.find({ isActive: true })
+                    .select('nameVi nameEn price durationDays descriptionVi descriptionEn featuresVi featuresEn color')
+                    .sort({ price: 1 })
+                    .lean(),
+                User.find({ role: 'pt', isActive: true })
+                    .select('name specialties rating experienceYears bio')
+                    .sort({ rating: -1 })
+                    .lean(),
+            ])
+            gymData.plans = plans
+            gymData.pts = pts
+        } catch (err) {
+            console.error('Failed to fetch gym data for vision recommendations:', err)
+        }
+
+        if (classification.type === 'inbody') {
+            try {
+                const result = await analyzeInBodyImage(imageUrls, language)
+                if (gymData.plans.length > 0 || gymData.pts.length > 0) {
+                    recommendations = await generateRecommendationsFromAnalysis(result, 'inbody', gymData, language)
+                }
+                const analysis = formatInBodyAnalysisText(result, recommendations, language)
+                return { text: analysis, imageType: classification.type, data: { inBodyAnalysis: result, recommendations } }
+            } catch (err) {
+                console.error('InBody analysis failed, falling back to generic vision:', err)
+            }
+        }
+    }
+
+    const text = await analyzeVisionImage(imageUrls, classification, query, language)
+
+    return { text, imageType: classification.type }
+}
+
+const formatInBodyAnalysisText = (result, recommendations, language) => {
+    const lang = normalizeLanguage(language)
+    if (result.unreadable) {
+        return lang === 'en'
+            ? `I could not read your InBody sheet clearly. ${result.message || 'Please send a clearer photo with good lighting.'}`
+            : `Mình không đọc rõ phiếu InBody của bạn. ${result.message || 'Vui lòng gửi ảnh rõ hơn, đảm bảo đủ ánh sáng và các chỉ số hiện rõ.'}`
+    }
+
+    let text = ''
+
+    if (lang === 'en') {
+        text += `📊 InBody Analysis\n\n`
+        if (result.metrics) {
+            const m = result.metrics
+            text += `**Metrics:**\n`
+            if (m.weight) text += `- Weight: ${m.weight} kg\n`
+            if (m.bodyFatPercent) text += `- Body Fat: ${m.bodyFatPercent}%\n`
+            if (m.skeletalMuscle) text += `- Skeletal Muscle: ${m.skeletalMuscle} kg\n`
+            if (m.bmi) text += `- BMI: ${m.bmi}\n`
+            if (m.visceralFat) text += `- Visceral Fat: ${m.visceralFat}\n`
+            text += '\n'
+        }
+        if (result.interpretation) text += `**Interpretation:** ${result.interpretation}\n\n`
+        if (result.assessment) text += `**Assessment:** ${result.assessment}\n\n`
+        if (result.recommendation) text += `**Recommendation:** ${result.recommendation}\n\n`
+        if (result.explanation) text += `**Details:** ${result.explanation}\n\n`
+    } else {
+        text += `📊 Phân tích InBody\n\n`
+        if (result.metrics) {
+            const m = result.metrics
+            text += `**Chỉ số:**\n`
+            if (m.weight) text += `- Cân nặng: ${m.weight} kg\n`
+            if (m.bodyFatPercent) text += `- % Mỡ cơ thể: ${m.bodyFatPercent}%\n`
+            if (m.skeletalMuscle) text += `- Cơ xương: ${m.skeletalMuscle} kg\n`
+            if (m.bmi) text += `- BMI: ${m.bmi}\n`
+            if (m.visceralFat) text += `- Mỡ nội tạng: ${m.visceralFat}\n`
+            text += '\n'
+        }
+        if (result.interpretation) text += `**Giải thích:** ${result.interpretation}\n\n`
+        if (result.assessment) text += `**Đánh giá:** ${result.assessment}\n\n`
+        if (result.recommendation) text += `**Đề xuất:** ${result.recommendation}\n\n`
+        if (result.explanation) text += `**Chi tiết:** ${result.explanation}\n\n`
+    }
+
+    if (recommendations) {
+        if (lang === 'en') {
+            text += `**GymPro Recommendations**\n\n`
+            text += `**Goal:** ${recommendations.goal}\n`
+            if (recommendations.recommendedPlan) text += `**Best Plan:** ${recommendations.recommendedPlan.name} — ${recommendations.recommendedPlan.reason}\n`
+            if (recommendations.recommendedPT) text += `**Best PT:** ${recommendations.recommendedPT.name} — ${recommendations.recommendedPT.reason}\n`
+            if (recommendations.roadmap) text += `**4-12 Week Roadmap:** ${recommendations.roadmap}\n`
+        } else {
+            text += `**Đề xuất từ GymPro**\n\n`
+            text += `**Mục tiêu:** ${recommendations.goal}\n`
+            if (recommendations.recommendedPlan) text += `**Gói tập:** ${recommendations.recommendedPlan.name} — ${recommendations.recommendedPlan.reason}\n`
+            if (recommendations.recommendedPT) text += `**PT:** ${recommendations.recommendedPT.name} — ${recommendations.recommendedPT.reason}\n`
+            if (recommendations.roadmap) text += `**Lộ trình 4-12 tuần:** ${recommendations.roadmap}\n`
+        }
+    }
+
+    return text.trim()
 }

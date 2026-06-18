@@ -31,6 +31,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { memberService } from '../../../services/memberService'
 import type { HealthScore, MemberDetail, MemberMembership, TimelineEvent } from '../../../types/admin/member'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 import MemberRegisterPlanModal from './MemberRegisterPlanModal'
 import MemberRenewPlanModal from './MemberRenewPlanModal'
 
@@ -218,7 +219,12 @@ export default function MemberDetailPage() {
                 margin: '0 auto 12px',
               }}
             />
-            <Title level={4} style={{ margin: 0 }}>{member.name}</Title>
+            <Title level={4} style={{ margin: 0 }}>
+              {getUserDisplayName(member, 'Thành viên')}
+            </Title>
+            <div style={{ marginBottom: 4 }}>
+              <Text type="secondary" style={{ fontSize: 13 }}>{member.memberCode}</Text>
+            </div>
             <Text type="secondary">{member.email || member.phone}</Text>
             <div style={{ marginTop: 12 }}>
               <Tag color={member.isActive ? 'success' : 'error'} icon={member.isActive ? <CheckCircleOutlined /> : <CloseCircleOutlined />}>
@@ -286,7 +292,7 @@ export default function MemberDetailPage() {
         <Col xs={24} lg={16}>
           <Card className="rounded-[24px]" title={<><UserOutlined /> {t('admin.members.detail.basic_info')}</>} style={{ marginBottom: 16 }}>
             <Descriptions column={{ xs: 1, sm: 2 }} size="small">
-              <Descriptions.Item label={t('admin.members.form.name')}>{member.name}</Descriptions.Item>
+              <Descriptions.Item label={t('admin.members.form.name')}>{getUserDisplayName(member, 'Thành viên')}</Descriptions.Item>
               <Descriptions.Item label={t('admin.members.form.email')}>{member.email || '—'}</Descriptions.Item>
               <Descriptions.Item label={t('admin.members.form.phone')}>{member.phone || '—'}</Descriptions.Item>
               <Descriptions.Item label={t('admin.members.form.dateOfBirth')}>

@@ -12,6 +12,16 @@ import type { QRTokenResponse } from '../../../types/admin/checkin'
 
 const { Text, Title } = Typography
 
+function translateCheckinError(msg: string | undefined, t: ReturnType<typeof useTranslation>['t']): string {
+  if (!msg) return t('checkin_page.load_failed')
+  const map: Record<string, string> = {
+    'Gói tập của bạn đã hết hạn hoặc không còn hiệu lực': t('checkin_page.error_plan_expired'),
+    'Gói tập đã hết hạn. Vui lòng gia hạn để tiếp tục.': t('checkin_page.error_plan_expired_renew'),
+    'Mã QR không hợp lệ hoặc đã hết hạn': t('checkin_page.error_qr_expired'),
+  }
+  return map[msg] || msg
+}
+
 export default function MemberCheckinPage() {
   const { t } = useTranslation()
   const [qrData, setQrData] = useState<QRTokenResponse | null>(null)
@@ -30,7 +40,7 @@ export default function MemberCheckinPage() {
       setCountdown(res.data.ttl)
       setLoading(false)
     } catch (err: any) {
-      setError(err?.response?.data?.message || t('checkin_page.load_failed'))
+      setError(translateCheckinError(err?.response?.data?.message, t))
       setLoading(false)
     }
   }, [t])
@@ -140,7 +150,7 @@ export default function MemberCheckinPage() {
             onClick={() => {
               if (qrData?.token) {
                 navigator.clipboard.writeText(qrData.token)
-                message.success('Đã copy token')
+                message.success(t('checkin_page.copy_success'))
               }
             }}
           >

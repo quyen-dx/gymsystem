@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { systemExperienceService } from '../../../services/systemExperienceService'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 export default function FeedbackManagerPage() {
   const [items, setItems] = useState<any[]>([])
@@ -25,7 +26,7 @@ export default function FeedbackManagerPage() {
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase()
     return items.filter((item) => {
-      const sender = item.user?.name || item.user?.email || ''
+      const sender = getUserDisplayName(item.user, item.user?.email || '')
       const matchesSearch = !q || [item.title, item.content, sender].join(' ').toLowerCase().includes(q)
       const matchesType = !typeFilter || item.type === typeFilter
       const matchesPriority = !priorityFilter || item.priority === priorityFilter
@@ -96,7 +97,7 @@ export default function FeedbackManagerPage() {
         <Table rowKey="_id" loading={loading} dataSource={filteredItems} columns={[
           { title: t('admin.table_no'), width: 70, align: 'center' as const, render: (_: any, __: any, index: number) => (page - 1) * 10 + index + 1 },
           { title: t('system_experience.admin.title'), dataIndex: 'title' },
-          { title: t('system_experience.admin.sender'), render: (_, r: any) => r.user?.name || r.user?.email || '-' },
+          { title: t('system_experience.admin.sender'), render: (_, r: any) => getUserDisplayName(r.user, r.user?.email || '-') },
           { title: t('system_experience.admin.type'), dataIndex: 'type', render: (v) => t(`system_experience.feedback.type.${v}`) },
           { title: t('system_experience.admin.priority'), dataIndex: 'priority', render: (v) => t(`system_experience.feedback.priority.${v}`) },
           { title: t('system_experience.admin.status'), dataIndex: 'status', render: (v) => <Tag>{t(`system_experience.feedback.status.${v}`)}</Tag> },

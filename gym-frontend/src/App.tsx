@@ -24,12 +24,15 @@ import AdminTrainersCreatePage from './pages/dashboard/admin/AdminTrainersCreate
 import AdminTrainersEditPage from './pages/dashboard/admin/AdminTrainersEditPage'
 import TrainerDetailPage from './pages/dashboard/admin/TrainerDetailPage'
 import AdminUsersPage from './pages/dashboard/admin/AdminUsersPage'
+import AdminUserDetailPage from './pages/dashboard/admin/AdminUserDetailPage'
+
 import FAQCreatePage from './pages/dashboard/admin/FAQCreatePage'
 import FAQManagerPage from './pages/dashboard/admin/FAQManagerPage'
 import FeedbackManagerPage from './pages/dashboard/admin/FeedbackManagerPage'
 import PolicyCreatePage from './pages/dashboard/admin/PolicyCreatePage'
 import PolicyManagerPage from './pages/dashboard/admin/PolicyManagerPage'
 import SystemSettingsPage from './pages/dashboard/admin/SystemSettingsPage'
+import AiChatPage from './pages/dashboard/member/AiChatPage'
 import BookingPage from './pages/dashboard/member/BookingPage'
 import CartPage from './pages/dashboard/member/CartPage'
 import MemberCheckinPage from './pages/dashboard/member/MemberCheckinPage'
@@ -47,6 +50,7 @@ import ProductDetailPage from './pages/dashboard/member/ProductDetailPage'
 import WorkoutPage from './pages/dashboard/member/WorkoutPage'
 import PTClientsPage from './pages/dashboard/pt/PTClientsPage'
 import PTSchedulePage from './pages/dashboard/pt/PTSchedulePage'
+import PTSchedulePendingPage from './pages/dashboard/pt/PTSchedulePendingPage'
 import PTWorkoutsPage from './pages/dashboard/pt/PTWorkoutsPage'
 import SellerOrdersPage from './pages/dashboard/seller/SellerOrdersPage'
 import SellerProductCreatePage from './pages/dashboard/seller/SellerProductCreatePage'
@@ -63,18 +67,9 @@ import HelpCenterPage from './pages/public/HelpCenterPage'
 import MaintenancePage from './pages/public/MaintenancePage'
 import PartnershipPage from './pages/public/PartnershipPage'
 import PolicyPage from './pages/public/PolicyPage'
+import AccountProfilePage from './pages/auth/AccountProfilePage'
 
-{/* ADMIN */ }
 
-{/* Auth */ }
-
-{/* PT */ }
-
-{/* Staff */ }
-
-{/* Member */ }
-
-{/* Seller */ }
 
 function LoadingScreen() {
   const { t } = useTranslation()
@@ -126,7 +121,7 @@ function HomeRoute() {
 function MaintenanceRoute() {
   const { user, loading } = useAuth()
 
-  if (!loading && user?.role === 'admin') return <Navigate to="/admin/system-settings" replace />
+  if (!loading && (user?.role === 'super_admin' || user?.role === 'admin')) return <Navigate to="/admin/system-settings" replace />
   return <MaintenancePage />
 }
 
@@ -140,7 +135,7 @@ function AppWithTheme() {
   const { settings, loading: settingsLoading } = useSystemSettings()
   const location = useLocation()
 
-  if (!loading && !settingsLoading && user && user.role !== 'admin' && settings.general.maintenanceMode && location.pathname !== '/maintenance') {
+  if (!loading && !settingsLoading && user && user.role !== 'super_admin' && user.role !== 'admin' && settings.general.maintenanceMode && location.pathname !== '/maintenance') {
     return <Navigate to="/maintenance" replace />
   }
 
@@ -255,6 +250,7 @@ function AppWithTheme() {
         <Route path="/admin/partnerships" element={<PrivateRoute><AdminPartnershipRequestsPage /></PrivateRoute>} />
         <Route path="/admin/shop" element={<Navigate to="/admin/partnerships" />} />
         <Route path="/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
+        <Route path="/admin/users/:id" element={<PrivateRoute><AdminUserDetailPage /></PrivateRoute>} />
         <Route path="/admin/members" element={<PrivateRoute><AdminMembersPage /></PrivateRoute>} />
         <Route path="/admin/members/:id/edit" element={<PrivateRoute><AdminMembersEditPage /></PrivateRoute>} />
         <Route path="/admin/members/:id" element={<PrivateRoute><MemberDetailPage /></PrivateRoute>} />
@@ -289,13 +285,18 @@ function AppWithTheme() {
         {/* PT */}
         <Route path="/pt" element={<Navigate to="/pt/schedule" replace />} />
         <Route path="/pt/schedule" element={<PrivateRoute feature="pt.scheduleEnabled"><PTSchedulePage /></PrivateRoute>} />
+        <Route path="/pt/schedule/pending" element={<PrivateRoute><PTSchedulePendingPage /></PrivateRoute>} />
         <Route path="/pt/clients" element={<PrivateRoute feature="pt.moduleEnabled"><PTClientsPage /></PrivateRoute>} />
         <Route path="/pt/student" element={<Navigate to="/pt/clients" replace />} />
         <Route path="/pt/workouts" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutsPage /></PrivateRoute>} />
 
+        {/* ACCOUNT */}
+        <Route path="/account/profile" element={<PrivateRoute><AccountProfilePage /></PrivateRoute>} />
+
         {/* MEMBER */}
         <Route path="/" element={<HomeRoute />} />
         <Route path="/dashboard" element={<PrivateRoute><MemberDashboard /></PrivateRoute>} />
+        <Route path="/ai-chat" element={<PrivateRoute feature="ai.floatingChatbotEnabled"><AiChatPage /></PrivateRoute>} />
         <Route path="/deposit" element={<PrivateRoute feature="billing.qrPaymentEnabled"><DepositPage /></PrivateRoute>} />
         <Route path="/checkout" element={<PrivateRoute feature="shop.cartEnabled"><CheckoutPage /></PrivateRoute>} />
         <Route path="/orders" element={<PrivateRoute><OrderHistoryPage /></PrivateRoute>} />

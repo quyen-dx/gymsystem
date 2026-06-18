@@ -368,7 +368,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         </div>
       </section>
 
-      {landingFlags.statsSectionEnabled && <section ref={statsReveal.ref} className="border-y border-[var(--gs-border)] bg-[var(--gs-page)]">
+      {landingFlags.statsSectionEnabled && <section {...statsReveal.attr} className="border-y border-[var(--gs-border)] bg-[var(--gs-page)]">
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-px px-5 py-8 md:grid-cols-4 md:px-8">
           {stats.map((item, i) => (
             <div key={item.value} className={`reveal text-center ${statsReveal.visible ? 'visible' : ''}`} style={{ transitionDelay: `${i * 100}ms` }}>
@@ -380,7 +380,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
       </section>}
 
       {landingFlags.partnersSectionEnabled && shops.length >= 3 && (
-        <section ref={brandsReveal.ref} id="brands" className="bg-[var(--gs-page)] px-5 py-18 md:px-8 md:py-24">
+        <section {...brandsReveal.attr} id="brands" className="bg-[var(--gs-page)] px-5 py-18 md:px-8 md:py-24">
           <div className="mx-auto max-w-7xl">
             <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.partners.title')}</p>
             <div className={`mt-10 ${brandsReveal.visible ? 'visible' : ''}`}>
@@ -393,18 +393,18 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                       key={shop._id}
                       className="group flex flex-col items-center gap-3 transition-all duration-300"
                     >
-                      <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-[var(--gs-border)] bg-[var(--gs-card)] p-1 transition-all duration-300 group-hover:border-[var(--theme-accent)] md:h-24 md:w-24">
+                      <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border-2 border-[var(--gs-borderStrong)] bg-[var(--gs-card)] p-1 transition-all duration-300 group-hover:scale-110 group-hover:border-[var(--theme-accent)] group-hover:shadow-lg group-hover:shadow-[var(--theme-accent)]/30 md:h-24 md:w-24">
                         {avatar ? (
                           <img
                             src={avatar}
                             alt={name}
-                            className="h-full w-full rounded-full object-cover grayscale transition-all duration-300 group-hover:grayscale-0"
+                            className="h-full w-full rounded-full object-cover transition-all duration-300"
                           />
                         ) : (
                           <span className="text-lg font-bold text-[var(--gs-muted)]">{name.charAt(0)}</span>
                         )}
                       </div>
-                      <span className="max-w-[100px] truncate text-center text-sm text-[var(--gs-muted)] transition duration-300 group-hover:text-[var(--gs-text)]">
+                      <span className="max-w-[100px] truncate text-center text-sm font-semibold text-[var(--gs-text)] transition duration-300 group-hover:text-[var(--theme-accent)]">
                         {name}
                       </span>
                     </div>
@@ -416,7 +416,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         </section>
       )}
 
-      <section ref={introReveal.ref} id="about" className="mx-auto grid max-w-7xl gap-10 px-5 py-18 md:grid-cols-[1fr_0.9fr] md:px-8 md:py-24">
+      <section {...introReveal.attr} id="about" className="mx-auto grid max-w-7xl gap-10 px-5 py-18 md:grid-cols-[1fr_0.9fr] md:px-8 md:py-24">
         <div className={`reveal-left ${introReveal.visible ? 'visible' : ''}`}>
           <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.intro.eyebrow')}</p>
           <h2 className="mt-4 text-6xl font-black leading-none md:text-[82px]">{aboutTitle}</h2>
@@ -425,7 +425,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         <img className={`reveal-right h-[420px] w-full rounded-lg border border-[var(--gs-border)] object-cover ${introReveal.visible ? 'visible' : ''}`} src="https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=1200&q=86" alt={aboutTitle} />
       </section>
 
-      {landingFlags.servicesSectionEnabled && <section ref={featuresReveal.ref} id="features" className="bg-[var(--gs-page)] px-5 py-18 md:px-8 md:py-24">
+      {landingFlags.servicesSectionEnabled && <section {...featuresReveal.attr} id="features" className="bg-[var(--gs-page)] px-5 py-18 md:px-8 md:py-24">
         <div className="mx-auto max-w-7xl">
           <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.features.eyebrow')}</p>
           <h2 className="mt-4 text-4xl font-black leading-none md:text-6xl lg:text-7xl" style={{ wordBreak: 'keep-all' }}>{t('about.features.title')}</h2>
@@ -441,7 +441,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         </div>
       </section>}
 
-      <section ref={ptReveal.ref} id="trainers" className="mx-auto max-w-7xl px-5 py-18 md:px-8 md:py-24">
+      <section {...ptReveal.attr} id="trainers" className="mx-auto max-w-7xl px-5 py-18 md:px-8 md:py-24">
         <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.pts.eyebrow')}</p>
         <h2 className="mt-4 text-6xl font-black leading-none md:text-[82px]">{t('about.pts.title')}</h2>
         <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -456,7 +456,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         </div>
       </section>
 
-      <section ref={facilitiesReveal.ref} className="bg-[var(--gs-page)] px-5 py-18 md:px-8 md:py-24">
+      <section {...facilitiesReveal.attr} className="bg-[var(--gs-page)] px-5 py-18 md:px-8 md:py-24">
         <div className="mx-auto max-w-7xl">
           <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.facilities.eyebrow')}</p>
           <div className="mt-8 grid gap-4 md:grid-cols-2">
@@ -469,7 +469,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         </div>
       </section>
 
-      {landingFlags.feedbackSectionEnabled && <section ref={testimonialsReveal.ref} className="mx-auto max-w-7xl px-5 py-18 md:px-8 md:py-24">
+      {landingFlags.feedbackSectionEnabled && <section {...testimonialsReveal.attr} className="mx-auto max-w-7xl px-5 py-18 md:px-8 md:py-24">
         <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.testimonials.eyebrow')}</p>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {testimonialItems.map((item, i) => (
@@ -485,8 +485,8 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
       </section>}
 
       {landingFlags.startNowButtonEnabled && <section
-        ref={ctaReveal.ref}
-        className="flex min-h-[620px] items-center justify-center px-5 py-20 text-center md:px-8"
+        {...ctaReveal.attr}
+        className="flex min-h-[240px] items-center justify-center px-5 py-10 text-center md:min-h-[620px] md:px-8 md:py-20"
         style={{ background: 'linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.82)), url(https://images.unsplash.com/photo-1517963879433-6ad2b056d712?auto=format&fit=crop&w=1900&q=88) center/cover' }}
       >
         <div className={`reveal text-white ${ctaReveal.visible ? 'visible' : ''}`}>
@@ -497,63 +497,63 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         </div>
       </section>}
 
-      <footer id="footer" className="border-t border-[var(--gs-border)] bg-[var(--gs-page)] px-5 py-16 text-[var(--gs-text)] md:px-8">
-        <div className="mx-auto grid max-w-7xl gap-10 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
+      <footer id="footer" className="border-t border-[var(--gs-border)] bg-[var(--gs-page)] px-5 py-6 text-[var(--gs-text)] md:px-8 md:py-16">
+        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-x-5 gap-y-6 md:gap-x-8 md:gap-y-10 lg:grid-cols-4">
+          <div className="col-span-2 lg:col-span-1">
             <div className="flex items-center gap-3">
-              {logoUrl ? <img src={logoUrl} alt={gymName} className="h-10 w-10 rounded-lg object-cover" /> : <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--theme-button-bg)] font-black text-[var(--theme-button-text)]">GP</span>}
-              <span className="text-xl font-black">{gymName}</span>
+              {logoUrl ? <img src={logoUrl} alt={gymName} className="h-9 w-9 rounded-lg object-cover md:h-10 md:w-10" /> : <span className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--theme-button-bg)] font-black text-[var(--theme-button-text)] md:h-10 md:w-10">GP</span>}
+              <span className="text-lg font-black md:text-xl">{gymName}</span>
             </div>
-            <p className="mt-4 text-sm leading-7 text-[var(--gs-muted)]">{t('about.footer.description')}</p>
-            <div className="mt-6 flex items-center gap-3">
-              <a href="#" className="grid h-9 w-9 place-items-center rounded-full border border-[var(--gs-border)] text-sm text-[var(--gs-muted)] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]" aria-label="Facebook">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
+            <p className="mt-2 text-xs leading-relaxed text-[var(--gs-muted)] md:mt-4 md:text-sm">{t('about.footer.description')}</p>
+            <div className="mt-3 flex items-center gap-2 md:mt-6 md:gap-3">
+              <a href="#" className="grid h-8 w-8 place-items-center rounded-full border border-[var(--gs-border)] text-xs text-[var(--gs-muted)] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)] md:h-9 md:w-9 md:text-sm" aria-label="Facebook">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:h-4 md:w-4"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
               </a>
-              <a href="#" className="grid h-9 w-9 place-items-center rounded-full border border-[var(--gs-border)] text-sm text-[var(--gs-muted)] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]" aria-label="Instagram">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
+              <a href="#" className="grid h-8 w-8 place-items-center rounded-full border border-[var(--gs-border)] text-xs text-[var(--gs-muted)] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)] md:h-9 md:w-9 md:text-sm" aria-label="Instagram">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:h-4 md:w-4"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
               </a>
-              <a href="#" className="grid h-9 w-9 place-items-center rounded-full border border-[var(--gs-border)] text-sm text-[var(--gs-muted)] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]" aria-label="YouTube">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z" /><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" /></svg>
+              <a href="#" className="grid h-8 w-8 place-items-center rounded-full border border-[var(--gs-border)] text-xs text-[var(--gs-muted)] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)] md:h-9 md:w-9 md:text-sm" aria-label="YouTube">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:h-4 md:w-4"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z" /><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" /></svg>
               </a>
             </div>
           </div>
-          <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--theme-accent)]">{t('about.footer.features_title')}</h3>
-            <ul className="mt-5 space-y-3">
-              <li><button type="button" className="text-sm text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)]" onClick={() => goTo('/about')}>{t('nav.checkin')}</button></li>
-              <li><button type="button" className="text-sm text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)]" onClick={() => goTo('/about')}>{t('nav.book_pt')}</button></li>
-              <li><button type="button" className="text-sm text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)]" onClick={() => goTo('/about')}>{t('nav.health')}</button></li>
-              <li><button type="button" className="text-sm text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)]" onClick={() => goTo('/about')}>{t('nav.workout')}</button></li>
+          <div className="col-span-1">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-accent)] md:text-sm">{t('about.footer.features_title')}</h3>
+            <ul className="mt-3 space-y-1.5 md:mt-5 md:space-y-3">
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('nav.checkin')}</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('nav.book_pt')}</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('nav.health')}</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('nav.workout')}</button></li>
             </ul>
           </div>
-          <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--theme-accent)]">{t('about.footer.support_title')}</h3>
-            <ul className="mt-5 space-y-3">
-              <li><button type="button" className="text-sm text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)]" onClick={() => goTo('/help')}>{t('nav.help')}</button></li>
-              <li><button type="button" className="text-sm text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)]" onClick={() => goTo('/policies')}>{t('nav.policies')}</button></li>
-              <li><button type="button" className="text-sm text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)]" onClick={() => goTo('/about')}>{t('nav.feedback')}</button></li>
-              <li><button type="button" className="text-sm text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)]" onClick={() => goTo('/about')}>{t('about.footer.about')}</button></li>
+          <div className="col-span-1">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-accent)] md:text-sm">{t('about.footer.support_title')}</h3>
+            <ul className="mt-3 space-y-1.5 md:mt-5 md:space-y-3">
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/help')}>{t('nav.help')}</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/policies')}>{t('nav.policies')}</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('nav.feedback')}</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('about.footer.about')}</button></li>
             </ul>
           </div>
-          <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--theme-accent)]">{t('about.footer.contact_title')}</h3>
-            <ul className="mt-5 space-y-4">
-              <li className="flex items-center gap-3 text-sm text-[var(--gs-muted)]">
-                <Mail size={15} className="shrink-0 text-[var(--theme-accent)]" />
+          <div className="col-span-2 lg:col-span-1">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-accent)] md:text-sm">{t('about.footer.contact_title')}</h3>
+            <ul className="mt-3 space-y-2 md:mt-5 md:space-y-4">
+              <li className="flex items-center gap-2 text-xs text-[var(--gs-muted)] md:gap-3 md:text-sm">
+                <Mail size={13} className="shrink-0 text-[var(--theme-accent)] md:size-[15px]" />
                 <span>{t('about.footer.email')}</span>
               </li>
-              <li className="flex items-center gap-3 text-sm text-[var(--gs-muted)]">
-                <Phone size={15} className="shrink-0 text-[var(--theme-accent)]" />
+              <li className="flex items-center gap-2 text-xs text-[var(--gs-muted)] md:gap-3 md:text-sm">
+                <Phone size={13} className="shrink-0 text-[var(--theme-accent)] md:size-[15px]" />
                 <span>{t('about.footer.phone')}</span>
               </li>
-              <li className="flex items-center gap-3 text-sm text-[var(--gs-muted)]">
-                <MapPin size={15} className="shrink-0 text-[var(--theme-accent)]" />
+              <li className="flex items-center gap-2 text-xs text-[var(--gs-muted)] md:gap-3 md:text-sm">
+                <MapPin size={13} className="shrink-0 text-[var(--theme-accent)] md:size-[15px]" />
                 <span>{t('about.footer.address')}</span>
               </li>
             </ul>
           </div>
         </div>
-        <div className="mx-auto mt-14 flex max-w-7xl items-center justify-between border-t border-[var(--gs-border)] pt-6 text-sm text-[var(--gs-muted)]">
+        <div className="mx-auto mt-6 flex max-w-7xl flex-col items-start gap-2 border-t border-[var(--gs-border)] pt-5 text-xs text-[var(--gs-muted)] md:mt-14 md:flex-row md:items-center md:justify-between md:pt-6 md:text-sm">
           <span>© {new Date().getFullYear()} {gymName}. {t('about.footer.copyright')}</span>
           <div className="flex items-center gap-2">
             <button

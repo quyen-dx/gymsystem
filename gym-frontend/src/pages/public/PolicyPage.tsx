@@ -112,7 +112,7 @@ export default function PolicyPage() {
         {/* Toolbar */}
         <div className="support-toolbar">
           {/* Pill Tabs */}
-          <div className="support-pills">
+          <div className="support-pills support-pills-scroll">
             <button
               type="button"
               onClick={() => setActiveCategory(null)}

@@ -13,6 +13,7 @@ import { useCart } from '../../../context/useCart'
 import { useAuth } from '../../../hooks/useAuth'
 import { addReview, getProductById } from '../../../services/productService'
 import type { MemberProduct } from '../../../types/member/product'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const normalizeImageList = (images: unknown): string[] => {
   if (Array.isArray(images)) {
@@ -94,12 +95,12 @@ export default function ProductDetailPage() {
         ...current,
         reviews: current.reviews.map((review) =>
           String(review.userId) === String(user._id)
-            ? { ...review, name: user.name, avatar: user.avatar || '' }
+            ? { ...review, name: getUserDisplayName(user, review.name || 'User'), avatar: user.avatar || '' }
             : review,
         ),
       }
     })
-  }, [user?._id, user?.name, user?.avatar])
+  }, [user?._id, user?.fullName, user?.displayName, user?.name, user?.avatar])
 
   useEffect(() => {
     if (!product) return

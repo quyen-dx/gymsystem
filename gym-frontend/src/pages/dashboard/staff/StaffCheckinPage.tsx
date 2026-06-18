@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { checkInService } from '../../../services/checkInService'
 import type { TodayCheckinItem, VerifiedMember, VerifiedMembership } from '../../../types/admin/checkin'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const { Text, Title } = Typography
 
@@ -209,7 +210,7 @@ export default function StaffCheckinPage() {
                 <div key={c._id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--gs-border)' }}>
                   <div style={{ width: 32, height: 32, borderRadius: '50%', background: c.memberId?.avatar ? `url(${c.memberId.avatar}) center/cover` : 'var(--gs-border)' }} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{c.memberId?.name}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{getUserDisplayName(c.memberId, 'Thành viên')}</div>
                     <div style={{ fontSize: 11, color: 'var(--gs-text-muted)' }}>
                       {new Date(c.checkinTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                     </div>
@@ -230,7 +231,7 @@ export default function StaffCheckinPage() {
         <div style={{ width: 100, height: 100, borderRadius: '50%', margin: '0 auto 16px', background: member?.avatar ? `url(${member.avatar}) center/cover` : 'var(--gs-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {!member?.avatar && <UserOutlined style={{ fontSize: 40, color: 'var(--gs-text-muted)' }} />}
         </div>
-        <Title level={3}>{member?.name}</Title>
+        <Title level={3}>{getUserDisplayName(member, 'Thành viên')}</Title>
         <Text type="secondary">{member?.phone || member?.email}</Text>
 
         {membership && (
@@ -274,7 +275,7 @@ export default function StaffCheckinPage() {
       <Card className="rounded-[24px]" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.1), rgba(59,130,246,0.05))' }}>
         <CheckCircleOutlined style={{ fontSize: 72, color: '#10B981' }} />
         <Title level={3} style={{ marginTop: 16 }}>{t('staff.checkin.success_title')}</Title>
-        <Text>{member?.name}</Text>
+        <Text>{getUserDisplayName(member, 'Thành viên')}</Text>
         {streakDay > 1 && (
           <div style={{ marginTop: 12 }}>
             <Tag color="orange" style={{ fontSize: 16, padding: '4px 12px' }}>🔥 {streakDay} {t('staff.checkin.streak_days')}</Tag>

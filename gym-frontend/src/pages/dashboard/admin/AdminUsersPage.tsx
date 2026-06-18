@@ -1,6 +1,7 @@
 import {
   DeleteOutlined,
   EditOutlined,
+  EyeOutlined,
   FacebookOutlined,
   LockOutlined,
   MailOutlined, PhoneOutlined,
@@ -22,13 +23,16 @@ import {
 } from 'antd'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { useAuth } from '../../../hooks/useAuth'
 import api from '../../../services/api'
 import type { AdminUser } from '../../../types/admin/user'
+import { getUserDisplayName, getUserInitialName } from '../../../utils/userDisplay'
 import AdminHistoryButton from './AdminHistoryButton'
 
 const roleColors: Record<string, string> = {
+  super_admin: 'gold',
   admin: 'red',
   pt: 'blue',
   staff: 'orange',
@@ -40,6 +44,7 @@ const PROTECTED_ADMIN_EMAIL = 'daoxuanquyen333@gmail.com'
 
 export default function AdminUsersPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(false)
@@ -93,6 +98,11 @@ export default function AdminUsersPage() {
       return
     }
 
+    if (currentUser?.role !== 'super_admin' && (user.role === 'super_admin' || user.role === 'admin')) {
+      message.warning(t('admin.users.messages.no_edit_admin'))
+      return
+    }
+
     if (user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL) {
       message.warning(t('admin.users.messages.no_edit_protected'))
       return
@@ -130,6 +140,10 @@ export default function AdminUsersPage() {
   const isSelf = (userId: string) => userId === currentUser?._id
   const isProtectedAdmin = (user: AdminUser) => user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL
 
+  // Disable action on admin/super_admin targets for non-super_admin users
+  const cannotManageAdmin = (u: AdminUser) =>
+    currentUser?.role !== 'super_admin' && (u.role === 'super_admin' || u.role === 'admin')
+
   const columns = [
     {
       title: t('admin.table_no'),
@@ -138,19 +152,25 @@ export default function AdminUsersPage() {
       render: (_: any, __: AdminUser, index: number) => (page - 1) * 10 + index + 1,
     },
     {
+      title: t('admin.users.columns.member_code'),
+      dataIndex: 'memberCode',
+      width: 120,
+      render: (code: string) => code || '—',
+    },
+    {
       title: t('admin.users.columns.user'),
-      width: 220,
+      width: 200,
       render: (_: any, u: AdminUser) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Avatar
-            size={40}
+            size={36}
             src={
               u.avatar ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || 'U')}`
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(getUserInitialName(u, 'U'))}`
             }
           />
           <div>
-            <div style={{ fontWeight: 600 }}>{u.name}</div>
+            <div style={{ fontWeight: 600 }}>{getUserDisplayName(u, 'Người dùng')}</div>
             <Tag style={{ marginTop: 2 }} color={roleColors[u.role]}>
               {u.role.toUpperCase()}
             </Tag>
@@ -240,17 +260,32 @@ export default function AdminUsersPage() {
     },
     {
       title: t('admin.users.columns.actions'),
-      width: 120,
+      width: 160,
       render: (_: any, u: AdminUser) => {
         const selfAccount = isSelf(u._id)
         const protectedAccount = isProtectedAdmin(u)
-        const disabledActions = selfAccount || protectedAccount
+        const noAdminPermission = cannotManageAdmin(u)
+        const disabledActions = selfAccount || protectedAccount || noAdminPermission
         const disabledTooltip = selfAccount
           ? t('admin.users.tooltips.no_self_action')
-          : t('admin.users.tooltips.protected_admin')
+          : protectedAccount
+          ? t('admin.users.tooltips.protected_admin')
+          : noAdminPermission
+          ? t('admin.users.tooltips.no_admin_action')
+          : ''
 
         return (
           <Space>
+            <Tooltip title={disabledActions && (u.role === 'admin' || u.role === 'super_admin') ? disabledTooltip : t('admin.users.tooltips.view_detail')}>
+              <span>
+                <Button
+                  size="small"
+                  icon={<EyeOutlined />}
+                  disabled={disabledActions && (u.role === 'admin' || u.role === 'super_admin')}
+                  onClick={() => navigate(`/admin/users/${u._id}`)}
+                />
+              </span>
+            </Tooltip>
             <Tooltip title={disabledActions ? disabledTooltip : t('admin.users.tooltips.change_role')}>
               <span>
                 <Button
@@ -272,11 +307,11 @@ export default function AdminUsersPage() {
               </span>
             </Tooltip>
             <Popconfirm
-              title="Xóa người dùng này?"
-              description="Hành động này không thể hoàn tác."
+              title={t('admin.users.popconfirm.delete_title')}
+              description={t('admin.users.popconfirm.delete_description')}
               onConfirm={() => handleDelete(u._id)}
-              okText="Xóa"
-              cancelText="Hủy"
+              okText={t('admin.users.popconfirm.ok_text')}
+              cancelText={t('admin.users.popconfirm.cancel_text')}
               disabled={disabledActions}
             >
               <Tooltip title={disabledActions ? disabledTooltip : t('admin.users.tooltips.delete')}>
@@ -322,6 +357,7 @@ export default function AdminUsersPage() {
                 setPage(1)
               }}
               options={[
+                { label: 'Super Admin', value: 'super_admin' },
                 { label: 'Admin', value: 'admin' },
                 { label: 'PT', value: 'pt' },
                 { label: 'Staff', value: 'staff' },
@@ -372,13 +408,23 @@ export default function AdminUsersPage() {
         <Form layout="vertical" form={form} onFinish={handleUpdateRole}>
           <Form.Item label="Role" name="role" rules={[{ required: true }]}>
             <Select
-              options={[
-                { label: 'Admin', value: 'admin' },
-                { label: 'PT', value: 'pt' },
-                { label: 'Staff', value: 'staff' },
-                { label: 'Member', value: 'member' },
-                { label: 'Seller', value: 'seller' },
-              ]}
+              options={
+                currentUser?.role === 'super_admin'
+                  ? [
+                      { label: 'Super Admin', value: 'super_admin' },
+                      { label: 'Admin', value: 'admin' },
+                      { label: 'PT', value: 'pt' },
+                      { label: 'Staff', value: 'staff' },
+                      { label: 'Member', value: 'member' },
+                      { label: 'Seller', value: 'seller' },
+                    ]
+                  : [
+                      { label: 'PT', value: 'pt' },
+                      { label: 'Staff', value: 'staff' },
+                      { label: 'Member', value: 'member' },
+                      { label: 'Seller', value: 'seller' },
+                    ]
+              }
             />
           </Form.Item>
           <Button type="primary" htmlType="submit" block loading={submitLoading}>

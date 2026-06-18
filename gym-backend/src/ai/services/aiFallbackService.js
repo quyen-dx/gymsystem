@@ -1,8 +1,9 @@
 import { generateResponse as generateGeminiResponse } from './providers/geminiProvider.js'
 import { generateResponse as generateOpenRouterResponse, getOpenRouterModels } from './providers/openrouterProvider.js'
 import { generateResponse as generateGroqResponse, GROQ_MODELS } from './providers/groqProvider.js'
+import { perfStart, perfEnd } from './perfLogger.js'
 
-const DEFAULT_PROVIDER_TIMEOUT_MS = 10_000
+const DEFAULT_PROVIDER_TIMEOUT_MS = 8_000
 const GEMINI_MODEL = 'gemini-2.5-flash'
 const unavailableModels = new Map()
 
@@ -14,14 +15,6 @@ const withTimeout = (promise, timeoutMs, label) => Promise.race([
     setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
   }),
 ])
-
-const logTry = (provider, model) => {
-  console.log('[AI] Provider:', provider)
-  console.log('[AI] Model:', model)
-}
-
-const logSuccess = () => console.log('[AI] Success')
-const logFailed = (error) => console.log('[AI] Failed:', error?.message || String(error))
 
 const modelKey = (provider, model) => `${provider}:${model}`
 
@@ -36,7 +29,7 @@ const markModelUnavailable = (provider, model) => {
   unavailableModels.set(modelKey(provider, model), Date.now() + MODEL_SKIP_TTL_MS)
 }
 
-const getFallbackStatus = (error) => {
+const isTransientError = (error) => {
   const message = error?.message || String(error)
   const lower = message.toLowerCase()
   if (/\b404\b/.test(message) || lower.includes('no endpoints found') || lower.includes('not found')) return 'model_unavailable'
@@ -45,15 +38,6 @@ const getFallbackStatus = (error) => {
   if (/\b429\b/.test(message) || lower.includes('quota') || lower.includes('rate limit')) return 'quota_or_rate_limit'
   if (lower.includes('not configured')) return 'not_configured'
   return 'failed'
-}
-
-const logProviderFallback = ({ provider, model, status, reason }) => {
-  console.log('[PROVIDER_FALLBACK]', {
-    provider,
-    model,
-    status,
-    reason: String(reason || '').slice(0, 240),
-  })
 }
 
 const normalizeResult = (result, failedProviders) => ({
@@ -98,70 +82,86 @@ const buildDefaultAttempts = (request, options = {}) => [
   })),
 ]
 
+const firstSuccess = async (entries, failedProviders) => {
+  return new Promise((resolve) => {
+    let settled = 0
+    const total = entries.length
+    if (total === 0) return resolve(null)
+    for (const { promise, attempt } of entries) {
+      promise.then(
+        (value) => {
+          resolve(value)
+        },
+        (err) => {
+          settled++
+          const status = isTransientError(err)
+          if (status === 'model_unavailable') {
+            markModelUnavailable(attempt.provider, attempt.model)
+          }
+          failedProviders.push({
+            provider: attempt.provider,
+            model: attempt.model,
+            status,
+            error: err?.message || String(err),
+          })
+          if (settled === total) resolve(null)
+        }
+      )
+    }
+  })
+}
+
 export async function runAIWithFallback(request, options = {}) {
   const timeoutMs = options.timeoutMs || DEFAULT_PROVIDER_TIMEOUT_MS
   const failedProviders = []
 
   const attempts = Array.isArray(options.attempts) ? options.attempts : buildDefaultAttempts(request, options)
 
-  for (const attempt of attempts) {
-    if (isModelSkipped(attempt.provider, attempt.model)) {
-      const reason = 'model unavailable in runtime skip cache'
-      logProviderFallback({
-        provider: attempt.provider,
-        model: attempt.model,
-        status: 'skipped_unavailable',
-        reason,
-      })
+  const activeAttempts = attempts.filter((attempt) => {
+    const skipped = isModelSkipped(attempt.provider, attempt.model)
+    if (skipped) {
       failedProviders.push({
         provider: attempt.provider,
         model: attempt.model,
         status: 'skipped_unavailable',
-        error: reason,
+        error: 'cached unavailable',
       })
-      continue
     }
+    return !skipped
+  })
 
-    logTry(attempt.provider, attempt.model)
-    try {
-      const result = await withTimeout(
-        attempt.run(),
-        timeoutMs,
-        `${attempt.provider} ${attempt.model}`,
-      )
-      logSuccess()
-      console.log('[AI] final source:', result.provider, result.model)
-      return normalizeResult(result, failedProviders)
-    } catch (error) {
-      const status = getFallbackStatus(error)
-      const reason = error?.message || String(error)
-      logFailed(error)
-      logProviderFallback({
-        provider: attempt.provider,
-        model: attempt.model,
-        status,
-        reason,
-      })
-      if (status === 'model_unavailable') {
-        markModelUnavailable(attempt.provider, attempt.model)
-      }
-      failedProviders.push({
-        provider: attempt.provider,
-        model: attempt.model,
-        status,
-        error: reason,
-      })
-    }
+  if (activeAttempts.length === 0) {
+    const error = new Error('All AI providers failed (all skipped)')
+    error.failedProviders = failedProviders
+    throw error
   }
 
-  console.log('[AI] final source:', 'rule_based', 'local')
-  const error = new Error('All AI providers failed')
+  const total = activeAttempts.length
+  perfStart('ai_fallback_providers')
+  const entries = activeAttempts.map((attempt) => ({
+    promise: withTimeout(attempt.run(), timeoutMs, `${attempt.provider} ${attempt.model}`)
+      .then((result) => {
+        perfEnd('ai_fallback_providers')
+        return { ...result, _provider: attempt.provider, _model: attempt.model }
+      }),
+    attempt,
+  }))
+
+  const winner = await firstSuccess(entries, failedProviders)
+  if (winner) {
+    return normalizeResult(
+      { text: winner.text, provider: winner._provider || winner.provider, model: winner._model || winner.model },
+      failedProviders
+    )
+  }
+
+  const error = new Error(`All ${total} AI providers failed`)
   error.failedProviders = failedProviders
   throw error
 }
 
 export const __providerFallbackTestHooks = {
   unavailableModels,
-  getFallbackStatus,
+  getFallbackStatus: isTransientError,
   isModelSkipped,
 }

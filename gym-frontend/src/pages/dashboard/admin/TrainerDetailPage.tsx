@@ -27,7 +27,9 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { trainerService } from '../../../services/trainerService'
+import { useTheme } from '../../../context/ThemeContext'
 import type { PT, PTDaySchedule } from '../../../types/admin/trainer'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const { Text, Title } = Typography
 
@@ -43,6 +45,7 @@ export default function TrainerDetailPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { tokens } = useTheme()
   const [pt, setPt] = useState<PT | null>(null)
   const [bookings, setBookings] = useState<PTDaySchedule['bookings']>([])
   const [loading, setLoading] = useState(true)
@@ -139,7 +142,7 @@ export default function TrainerDetailPage() {
                 margin: '0 auto 12px',
               }}
             />
-            <Title level={4} style={{ margin: 0 }}>{pt.name}</Title>
+            <Title level={4} style={{ margin: 0 }}>{getUserDisplayName(pt, 'PT')}</Title>
             <Text type="secondary">{pt.email || pt.phone}</Text>
             <div style={{ marginTop: 8 }}>
               <Rate disabled value={pt.rating} allowHalf style={{ fontSize: 16 }} character={<StarFilled />} />
@@ -154,7 +157,7 @@ export default function TrainerDetailPage() {
             <div style={{ marginTop: 16, padding: '12px 0', borderTop: '1px solid var(--gs-border)' }}>
               <Space size={8} wrap style={{ justifyContent: 'center' }}>
                 {pt.experienceYears > 0 && (
-                  <Badge count={`${pt.experienceYears}y KN`} style={{ backgroundColor: '#8B5CF6' }} overflowCount={99} />
+                  <Badge count={`${pt.experienceYears}y KN`} style={{ backgroundColor: tokens.accent }} overflowCount={99} />
                 )}
                 {pt.totalSessions > 0 && (
                   <Badge count={`${pt.totalSessions} buổi`} style={{ backgroundColor: '#3B82F6' }} overflowCount={9999} />
@@ -168,7 +171,7 @@ export default function TrainerDetailPage() {
             {pt.specialties?.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 {pt.specialties.map((s) => (
-                  <Tag key={s} color="purple" style={{ marginBottom: 4 }}>{s}</Tag>
+                  <Tag key={s} color={tokens.accent} style={{ marginBottom: 4 }}>{s}</Tag>
                 ))}
               </div>
             )}
@@ -235,21 +238,21 @@ export default function TrainerDetailPage() {
                       style={{
                         padding: 10,
                         borderRadius: 12,
-                        background: isToday ? 'rgba(139,92,246,0.1)' : 'var(--gs-card)',
-                        border: isToday ? '1px solid #8B5CF6' : '1px solid var(--gs-border)',
+                        background: isToday ? tokens.accentMuted : 'var(--gs-card)',
+                        border: isToday ? `1px solid ${tokens.accent}` : '1px solid var(--gs-border)',
                         minHeight: 100,
                       }}
                     >
                       <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
                         {DAY_LABELS[day.dayOfWeek]} {new Date(day.date).getDate()}/{new Date(day.date).getMonth() + 1}
-                        {isToday && <Tag color="purple" style={{ marginLeft: 4, fontSize: 10 }}>Hôm nay</Tag>}
+                        {isToday && <Tag color={tokens.accent} style={{ marginLeft: 4, fontSize: 10 }}>Hôm nay</Tag>}
                       </div>
                       {day.bookings.length > 0 ? (
                         day.bookings.map((b) => (
                           <div key={b._id} style={{ fontSize: 12, marginBottom: 4, padding: '2px 6px', background: 'rgba(59,130,246,0.08)', borderRadius: 6 }}>
                             <ClockCircleOutlined style={{ marginRight: 4, fontSize: 10 }} />
                             <span style={{ fontWeight: 500 }}>{b.slot}</span>
-                            <div style={{ color: 'var(--gs-text-muted)' }}>{b.memberId?.name || '—'}</div>
+                            <div style={{ color: 'var(--gs-text-muted)' }}>{getUserDisplayName(b.memberId, '—')}</div>
                           </div>
                         ))
                       ) : (

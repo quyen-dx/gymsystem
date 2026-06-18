@@ -33,7 +33,7 @@ const GoogleBrandIcon = () => (
 )
 
 const getDashboardPath = (role: string) => {
-  if (role === 'admin') return '/admin'
+  if (role === 'super_admin' || role === 'admin') return '/admin'
   if (role === 'seller') return '/seller'
   if (role === 'staff') return '/staff'
   if (role === 'pt') return '/pt'
@@ -85,7 +85,7 @@ export default function LoginPage() {
     window.location.href = `${API_URL}/auth/facebook`
   }
   return (
-    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-8 sm:overflow-hidden sm:p-0">
+    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-y-auto overflow-x-hidden px-4 py-8 sm:overflow-hidden sm:p-0">
 
       {/* BACKGROUND */}
       <div

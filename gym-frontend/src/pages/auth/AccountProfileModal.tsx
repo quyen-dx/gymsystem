@@ -9,8 +9,6 @@ import {
   LogoutOutlined,
   PhoneOutlined,
   PlusOutlined,
-  RightOutlined,
-  ShoppingCartOutlined,
   StarFilled,
   StarOutlined,
   UserOutlined,
@@ -19,12 +17,12 @@ import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, message, Modal, Spa
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { generateTheme, PRESET_ACCENT_COLORS, resolveEffectiveTheme, useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../hooks/useAuth'
 import { createAddress, deleteAddress, getAddresses, setDefaultAddress, updateAddress } from '../../services/addressService'
 import { authService } from '../../services/authService'
+import { getUserDisplayName, getUserInitialName } from '../../utils/userDisplay'
 
 const getUsernameFromEmail = (email?: string | null) => {
   if (!email) return ''
@@ -105,21 +103,6 @@ const sectionIconStyle = {
   flexShrink: 0,
 } as CSSProperties
 
-const actionItemStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  padding: '12px 16px',
-  background: 'var(--theme-elevated)',
-  border: '1px solid var(--theme-border)',
-  borderRadius: 10,
-  cursor: 'pointer',
-  marginBottom: 8,
-  transition: 'border-color 0.2s, background 0.2s',
-  width: '100%',
-  textAlign: 'left',
-} as CSSProperties
-
 type ProfileTabKey = 'profile' | 'address' | 'password' | 'appearance'
 
 type ProfileTabItem = {
@@ -159,6 +142,8 @@ const ProfileHeader = ({
   isMobile: boolean
   t: (key: string, opts?: any) => string
 }) => {
+  const displayName = getUserDisplayName(user, t('profile.account_name'))
+  const avatarName = getUserInitialName(user, 'U')
   const coverSrc = coverPreview !== null && coverPreview !== ''
     ? coverPreview
     : coverPreview === ''
@@ -257,7 +242,7 @@ const ProfileHeader = ({
             src={
               avatarPreview ||
               user.avatar ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'U')}`
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarName)}`
             }
             icon={<UserOutlined />}
             className="profile-avatar-image"
@@ -269,7 +254,7 @@ const ProfileHeader = ({
         </div>
 
         <div className="profile-header-meta">
-          <h2>{user.name || t('profile.account_name')}</h2>
+          <h2>{displayName}</h2>
           <button type="button" onClick={onCopyContact}>
             <span>{contactText}</span>
             {(user.email || user.phone) && <CopyOutlined />}
@@ -433,12 +418,11 @@ export default function AccountProfileModal({
   onClose: () => void
 }) {
   const { t, i18n } = useTranslation()
-  const { user, updateUser, logout } = useAuth()
+  const { user, updateUser, refreshUser, logout } = useAuth()
   const { applyAccentFast, applyThemeFull, applyThemeMode, commitPending, accentColor: savedAccentColor } = useTheme()
   const { settings: systemSettings } = useSystemSettings()
   const { token } = theme.useToken()
   const screens = Grid.useBreakpoint()
-  const navigate = useNavigate()
   const [form] = Form.useForm()
   const [passwordForm] = Form.useForm()
   const [addressForm] = Form.useForm()
@@ -472,11 +456,6 @@ export default function AccountProfileModal({
     }
   }, [user?.accentColor])
 
-  const goToOrders = () => {
-    handleClose()
-    navigate('/orders')
-  }
-
   const handlePresetSelect = (hex: string) => {
     void saveAccentColor(hex)
   }
@@ -496,18 +475,14 @@ export default function AccountProfileModal({
     const previousPreference = user.themePreference || 'system'
     const systemTheme = systemSettings.general.defaultTheme === 'light' ? 'light' : 'dark'
     const payload = { themePreference: preference }
-    console.debug('[profile-theme] currentUser before update', user)
-    console.debug('[profile-theme] payload sent API', payload)
     applyThemeMode(resolveEffectiveTheme(systemTheme, preference))
     updateUser({ ...user, themePreference: preference })
 
     setLoading(true)
     try {
-      const { data } = await authService.updateProfile(payload)
-      console.debug('[profile-theme] response API', data)
-      updateUser(data.user)
-      console.debug('[profile-theme] currentUser after update', data.user)
-      applyThemeMode(resolveEffectiveTheme(systemTheme, data.user.themePreference))
+      await authService.updateProfile(payload)
+      const freshUser = await refreshUser()
+      applyThemeMode(resolveEffectiveTheme(systemTheme, freshUser?.themePreference || preference))
       message.success(t('profile.msg_theme_update_success'))
     } catch (err: any) {
       applyThemeMode(resolveEffectiveTheme(systemTheme, previousPreference))
@@ -526,8 +501,6 @@ export default function AccountProfileModal({
     const nextAccent = hex ? hex.toUpperCase() : ''
     const displayColor = nextAccent || systemDefault
     const payload = { accentColor: nextAccent }
-    console.debug('[profile-theme] currentUser before update', user)
-    console.debug('[profile-theme] payload sent API', payload)
     preventCloseRef.current = true
     setAccentColor(displayColor)
     applyThemeFull(displayColor)
@@ -535,12 +508,11 @@ export default function AccountProfileModal({
 
     setLoading(true)
     try {
-      const { data } = await authService.updateProfile(payload)
-      console.debug('[profile-theme] response API', data)
-      const persistedAccent = data.user.accentColor || systemDefault
+      await authService.updateProfile(payload)
+      const freshUser = await refreshUser()
+      const persistedAccent = freshUser?.accentColor || systemDefault
       setAccentColor(persistedAccent)
       applyThemeFull(persistedAccent)
-      updateUser(data.user)
       message.success(t('profile.msg_theme_update_success'))
     } catch (err: any) {
       setAccentColor(previousAccent)
@@ -568,8 +540,8 @@ export default function AccountProfileModal({
     formData.append('avatar', file)
 
     try {
-      const { data } = await authService.updateProfile(formData)
-      updateUser(data.user)
+      await authService.updateProfile(formData)
+      await refreshUser()
       setAvatarPreview(null)
       if (fileRef.current) fileRef.current.value = ''
       message.success(t('profile.msg_avatar_update_success'))
@@ -595,8 +567,8 @@ export default function AccountProfileModal({
     formData.append('coverImage', file)
 
     try {
-      const { data } = await authService.updateProfile(formData)
-      updateUser(data.user)
+      await authService.updateProfile(formData)
+      await refreshUser()
       setCoverPreview(null)
       setCoverRemoved(false)
       if (coverRef.current) coverRef.current.value = ''
@@ -623,8 +595,8 @@ export default function AccountProfileModal({
     formData.append('removeCoverImage', 'true')
 
     try {
-      const { data } = await authService.updateProfile(formData)
-      updateUser(data.user)
+      await authService.updateProfile(formData)
+      await refreshUser()
       setCoverPreview(null)
       setCoverRemoved(false)
       if (coverRef.current) coverRef.current.value = ''
@@ -692,8 +664,9 @@ export default function AccountProfileModal({
       if (values.email) formData.append('email', values.email)
       if (values.phone) formData.append('phone', values.phone)
       if (values.dateOfBirth) formData.append('dateOfBirth', values.dateOfBirth)
-      const { data } = await authService.updateProfile(formData)
-      updateUser(data.user)
+      if (values.fullName !== undefined) formData.append('fullName', values.fullName || '')
+      await authService.updateProfile(formData)
+      await refreshUser()
       message.success(t('profile.msg_update_success'))
       handleClose()
     } catch (err: any) {
@@ -859,28 +832,6 @@ export default function AccountProfileModal({
     </div>
   )
 
-  const renderActionItem = (
-    icon: ReactNode,
-    title: string,
-    description: string,
-    onClick: () => void,
-    disabled = false,
-  ) => (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{ ...actionItemStyle, opacity: disabled ? 0.65 : 1 }}
-    >
-      <div style={{ ...sectionIconStyle, width: 36, height: 36, fontSize: 16 }}>{icon}</div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--theme-text)' }}>{title}</div>
-        <div style={{ fontSize: 11, color: 'var(--theme-muted)', marginTop: 2 }}>{description}</div>
-      </div>
-      <RightOutlined style={{ color: 'var(--theme-muted)', fontSize: 12 }} />
-    </button>
-  )
-
   const sharedContent = (
     <>
       <ProfileHeader
@@ -980,7 +931,6 @@ export default function AccountProfileModal({
                 </div>
 
                 <div style={{ marginBottom: 12 }}>
-                  {renderActionItem(<ShoppingCartOutlined />, t('profile.orders_title'), t('profile.orders_subtitle'), goToOrders)}
                   <Button
                     block
                     icon={<LogoutOutlined />}

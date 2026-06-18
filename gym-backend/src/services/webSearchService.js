@@ -143,6 +143,65 @@ export const searchFitnessWeb = async (query, options = {}) => {
     }
 }
 
+export const webSearchNutrition = async (query, options = {}) => {
+    const normalized = normalizeText(query).trim()
+    const nutritionIntent = /\b(an gi|nen an|bua|thuc don|dinh duong|calo|calorie|macro|protein|diet|meal|nutrition|giam can|giam mo|tang co|healthy)\b/.test(normalized)
+    if (!nutritionIntent || !isFitnessSearchAllowed(query)) {
+        return {
+            used: false,
+            reason: 'not_nutrition_query',
+            results: [],
+            sources: [],
+            context: '',
+        }
+    }
+
+    const nutritionQuery = [
+        'evidence based sports nutrition meal diet calories',
+        query,
+    ].join(' ')
+    const result = await searchWeb(nutritionQuery, { maxResults: options.maxResults || 4 })
+    const results = (result.results || []).filter((item) =>
+        isFitnessSearchAllowed([item.title, item.content, item.url].filter(Boolean).join(' '))
+    )
+    const sources = results
+        .map((item) => buildSourceMetadata(item))
+        .filter(Boolean)
+    return {
+        ...result,
+        nutritionQuery,
+        used: results.length > 0,
+        reason: results.length > 0 ? result.reason : (result.reason || 'no_nutrition_results'),
+        results,
+        sources,
+        context: buildWebSearchContext(results),
+    }
+}
+
+const buildSourceMetadata = (item = {}) => {
+    const url = typeof item.url === 'string' ? item.url.trim() : ''
+    if (!url) return null
+    let domain = ''
+    try {
+        domain = new URL(url).hostname.replace(/^www\./, '')
+    } catch {
+        domain = ''
+    }
+    const title = typeof item.title === 'string' && item.title.trim()
+        ? item.title.trim()
+        : (domain || url)
+    const faviconDomain = domain || url
+    return {
+        title,
+        url,
+        domain,
+        favicon: faviconDomain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(faviconDomain)}&sz=32` : '',
+        sourceTitle: title,
+        sourceUrl: url,
+        sourceDomain: domain,
+    }
+}
+
 export const isShopeeLinkIntent = (query) => {
     const normalized = normalizeText(query).trim()
     if (!normalized) return false

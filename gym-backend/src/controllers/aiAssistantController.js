@@ -3,9 +3,14 @@ import Product from '../models/Product.js'
 import User from '../models/User.js'
 import AiChatHistory from '../models/AiChatHistory.js'
 import {
+    analyzeBodyImages,
+    analyzeInBodyImage,
+    classifyImageType,
     classifyQueryIntent,
     generateAssistantResponse,
     generateAssistantResponseStream,
+    generateRecommendationsFromAnalysis,
+    visionChat,
 } from '../services/aiAssistantService.js'
 import {
     buildAiMemoryContext,
@@ -24,6 +29,8 @@ import {
 } from '../services/webSearchService.js'
 import AppError from '../utils/appError.js'
 import { runGymAiAction } from '../ai/services/aiService.js'
+import { gymProAgent } from '../ai/agent/gymProAgent.js'
+import { agentMemory } from '../ai/agent/agentMemory.js'
 
 const MAX_CHAT_SESSIONS = 20
 const CHAT_RETENTION_DAYS = 30
@@ -48,6 +55,68 @@ const writeSseEvent = (res, event, data = {}) => {
     return true
 }
 
+const writeSseStatus = (res, status, message) => {
+    writeSseEvent(res, 'status', { status, message })
+}
+
+const normalizeSearchText = (value) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
+    .toLowerCase()
+
+const DB_SIGNAL_WORDS = [
+    /\b(goi tap|goi|membership|plan|plans)\b/,
+    /\b(pt|huan luyen vien|trainer|coach)\b/,
+    /\b(lich tap|booking|dat lich|checkin|diem danh)\b/,
+    /\b(don hang|order|hoa don)\b/,
+    /\b(ho so|profile|thong tin ca nhan)\b/,
+    /\b(chi so|bmi|suc khoe da luu|can nang|weight)\b/,
+    /\b(muc tieu|muc tieu ca nhan|goal)\b/,
+    /\b(san pham|product|mua|shop|hang)\b/,
+]
+
+const NUTRITION_SIGNAL_WORDS = [
+    /\b(an gi|nen an|bua an|bua|thuc don|dinh duong|diet|meal|calo|calorie|che do an)\b/,
+    /\b(an|com|uong|do an|thuc an)\b/,
+    /\b(giam can|giam mo|fat loss|tang co|tang can|muscle gain|giam beo)\b/,
+    /\b(protein|whey|creatine|supplement|thuc pham bo sung|vitamin|khoang chat)\b/,
+    /\b(truoc khi tap|sau khi tap|truoc buoi tap|sau buoi tap|an truoc khi|an sau khi)\b/,
+    /\b(uong gi|thuc pham nao|thuc pham)\b/,
+]
+
+const HEALTH_SIGNAL_WORDS = [
+    /\b(suc khoe|health|kham|tu van suc khoe)\b/,
+    /\b(chi so co the|body metrics|inbody)\b/,
+]
+
+const resolveInitialAiStatus = (query, aiMode) => {
+    if (aiMode === 'general') return null
+    const n = normalizeSearchText(query)
+    if (!n) return null
+
+    for (const signal of DB_SIGNAL_WORDS) {
+        if (signal.test(n)) {
+            return { status: 'fetching_database', message: 'Đang lấy dữ liệu từ GymPro...' }
+        }
+    }
+
+    for (const signal of NUTRITION_SIGNAL_WORDS) {
+        if (signal.test(n)) {
+            return { status: 'nutrition_reasoning', message: 'Đang tổng hợp gợi ý dinh dưỡng...' }
+        }
+    }
+
+    for (const signal of HEALTH_SIGNAL_WORDS) {
+        if (signal.test(n)) {
+            return { status: 'fetching_health_profile', message: 'Đang kiểm tra hồ sơ sức khỏe của bạn...' }
+        }
+    }
+
+    return null
+}
+
 const initSseResponse = (res) => {
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
     res.setHeader('Cache-Control', 'no-cache, no-transform')
@@ -65,6 +134,52 @@ const getSessionLastActivityMs = (session) => {
     const value = latestMessageAt || session.createdAt
     const time = new Date(value).getTime()
     return Number.isFinite(time) ? time : 0
+}
+
+const normalizeAiResponse = (data, defaultIntent = 'general') => {
+    if (!data) return { answer: 'Không nhận được phản hồi.', type: 'text', intent: defaultIntent }
+
+    let output = data
+
+    // If data is a JSON string
+    if (typeof output === 'string') {
+        const trimmed = output.trim()
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            try {
+                output = JSON.parse(trimmed)
+            } catch {
+                output = { answer: trimmed }
+            }
+        } else {
+            output = { answer: trimmed }
+        }
+    }
+
+    // Deep check for nested JSON in answer
+    if (typeof output?.answer === 'string') {
+        const maybeNested = output.answer.trim()
+        if (maybeNested.startsWith('{')) {
+            try {
+                const nested = JSON.parse(maybeNested)
+                // If nested object has its own answer, merge or take it
+                if (nested?.answer) {
+                    output = { ...output, ...nested }
+                }
+            } catch {
+                // Not a valid JSON, keep as is
+            }
+        }
+    }
+
+    // Final flattening/normalization
+    const finalAnswer = output.answer || output.message || output.text || (typeof output === 'string' ? output : String(output))
+
+    return {
+        ...output,
+        intent: output.intent || defaultIntent,
+        type: output.type || 'text',
+        answer: typeof finalAnswer === 'string' ? finalAnswer : JSON.stringify(finalAnswer),
+    }
 }
 
 const normalizeSessions = (sessions) => {
@@ -102,8 +217,21 @@ const normalizeSessions = (sessions) => {
                             ...(safeMessage.metadata && typeof safeMessage.metadata === 'object' && !Array.isArray(safeMessage.metadata) ? { metadata: safeMessage.metadata } : {}),
                             ...(Array.isArray(safeMessage.suggestions) ? { suggestions: safeMessage.suggestions.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 4) } : {}),
                             ...(safeMessage.webSearch && typeof safeMessage.webSearch === 'object' ? { webSearch: normalizeWebSearchPayload(safeMessage.webSearch) } : {}),
+                            ...(Array.isArray(safeMessage.attachments) ? {
+                                attachments: safeMessage.attachments
+                                    .filter((item) => item && typeof item === 'object')
+                                    .map((item) => ({
+                                        type: item.type === 'image' ? 'image' : 'image',
+                                        url: String(item.url || '').slice(0, 1000),
+                                        name: String(item.name || '').slice(0, 160),
+                                        mimeType: String(item.mimeType || '').slice(0, 80),
+                                        size: Number.isFinite(Number(item.size)) ? Number(item.size) : 0,
+                                    }))
+                                    .filter((item) => item.url)
+                                    .slice(0, 4),
+                            } : {}),
                         }
-                    }).filter((message) => message.content || message.type || message.planPayload)
+                    }).filter((message) => message.content || message.type || message.planPayload || (Array.isArray(message.attachments) && message.attachments.length > 0))
                     : [],
             }
         })
@@ -128,15 +256,114 @@ const buildSearchRegex = (values) => {
 }
 
 const isPrivacyQuestion = (query) => {
-    return /(số điện thoại|email|thông tin cá nhân|địa chỉ|liên hệ|contact|phone)/i.test(query)
+    const normalized = normalizeSearchText(query)
+    const asksSensitive = /\b(email|so dien thoai|phone|contact|thong tin ca nhan|tai khoan|password|mat khau|token|cookie|jwt)\b/.test(normalized)
+    if (!asksSensitive) return false
+    const asksOwnData = /\b(cua toi|my|mine|me)\b/.test(normalized)
+    if (asksOwnData && !/\b(password|mat khau|token|cookie|jwt)\b/.test(normalized)) return false
+    return /\b(nguoi khac|member khac|user khac|hoi vien khac|tat ca|danh sach|other user|another user|all members|password|mat khau|token|cookie|jwt)\b/.test(normalized)
 }
 
-const normalizeSearchText = (value) => String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'd')
-    .toLowerCase()
+export const uploadAiChatImage = async (req, res, next) => {
+    try {
+        if (!req.file) return next(new AppError('Không có file ảnh', 400))
+        return res.json({
+            attachment: {
+                type: 'image',
+                url: req.file.path,
+                name: req.file.originalname || '',
+                mimeType: req.file.mimetype || '',
+                size: req.file.size || 0,
+            },
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+const fetchGymDataForRecommendations = async () => {
+    const [plans, pts] = await Promise.all([
+        Plan.find({ isActive: true })
+            .select('nameVi nameEn price durationDays descriptionVi descriptionEn featuresVi featuresEn color')
+            .sort({ price: 1 })
+            .lean(),
+        User.find({ role: 'pt', isActive: true })
+            .select('name specialties rating experienceYears bio')
+            .sort({ rating: -1 })
+            .lean(),
+    ])
+    return { plans, pts }
+}
+
+export const analyzeBody = async (req, res, next) => {
+    try {
+        const { attachments, language } = req.body
+        if (!Array.isArray(attachments) || attachments.length === 0) {
+            return next(new AppError('Vui lòng gửi ít nhất 1 ảnh để phân tích', 400))
+        }
+
+        const imageUrls = attachments
+            .filter((att) => att && typeof att.url === 'string')
+            .map((att) => att.url)
+
+        if (imageUrls.length === 0) {
+            return next(new AppError('Không tìm thấy URL ảnh hợp lệ', 400))
+        }
+
+        const [result, gymData] = await Promise.all([
+            analyzeBodyImages(imageUrls, language),
+            fetchGymDataForRecommendations(),
+        ])
+
+        let recommendations = null
+        if (gymData.plans.length > 0 || gymData.pts.length > 0) {
+            try {
+                recommendations = await generateRecommendationsFromAnalysis(result, 'body', gymData, language)
+            } catch (recError) {
+                console.error('Failed to generate body recommendations:', recError)
+            }
+        }
+
+        return res.json({ result, recommendations })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const analyzeInBody = async (req, res, next) => {
+    try {
+        const { attachments, language } = req.body
+        if (!Array.isArray(attachments) || attachments.length === 0) {
+            return next(new AppError('Vui lòng gửi ít nhất 1 ảnh phiếu InBody', 400))
+        }
+
+        const imageUrls = attachments
+            .filter((att) => att && typeof att.url === 'string')
+            .map((att) => att.url)
+
+        if (imageUrls.length === 0) {
+            return next(new AppError('Không tìm thấy URL ảnh hợp lệ', 400))
+        }
+
+        const [result, gymData] = await Promise.all([
+            analyzeInBodyImage(imageUrls, language),
+            fetchGymDataForRecommendations(),
+        ])
+
+        let recommendations = null
+        if (gymData.plans.length > 0 || gymData.pts.length > 0) {
+            try {
+                recommendations = await generateRecommendationsFromAnalysis(result, 'inbody', gymData, language)
+            } catch (recError) {
+                console.error('Failed to generate InBody recommendations:', recError)
+            }
+        }
+
+        return res.json({ result, recommendations })
+    } catch (error) {
+        next(error)
+    }
+}
 
 const getSearchTokens = (query) => normalizeSearchText(query).match(/[a-z0-9]+/g) || []
 const normalizeLiteralText = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
@@ -314,14 +541,41 @@ const normalizeSourcesPayload = (sources) => {
     if (Array.isArray(sources)) {
         return sources
             .filter((item) => item && typeof item === 'object' && typeof item.url === 'string' && item.url.trim())
-            .map((item) => ({
-                title: typeof item.title === 'string' ? item.title : '',
-                url: item.url,
-            }))
+            .map((item) => {
+                const url = item.url.trim()
+                const sourceUrl = typeof item.sourceUrl === 'string' && item.sourceUrl.trim() ? item.sourceUrl.trim() : url
+                let domain = typeof item.domain === 'string' && item.domain.trim()
+                    ? item.domain.trim()
+                    : (typeof item.sourceDomain === 'string' && item.sourceDomain.trim() ? item.sourceDomain.trim() : '')
+                if (!domain) {
+                    try {
+                        domain = new URL(url).hostname.replace(/^www\./, '')
+                    } catch {
+                        domain = ''
+                    }
+                }
+                const title = typeof item.title === 'string' && item.title.trim()
+                    ? item.title.trim()
+                    : (typeof item.sourceTitle === 'string' && item.sourceTitle.trim() ? item.sourceTitle.trim() : domain || url)
+                const favicon = typeof item.favicon === 'string' && item.favicon.trim()
+                    ? item.favicon.trim()
+                    : (domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32` : '')
+                return {
+                    title,
+                    url,
+                    domain,
+                    favicon,
+                    sourceTitle: title,
+                    sourceUrl,
+                    sourceDomain: domain,
+                }
+            })
             .slice(0, 5)
     }
     return normalizeObject(sources)
 }
+
+const hasUnsafeRenderedToken = (value = '') => /\b(undefined|null|NaN)\b|\[object Object\]/i.test(String(value || ''))
 
 const cleanAssistantAnswer = (value) => {
     const cleaned = String(value || '')
@@ -342,7 +596,12 @@ const cleanAssistantAnswer = (value) => {
             return ''
         }
     }
-    return cleaned
+    const sanitized = cleaned
+        .replace(/\b(undefined|null|NaN)\b/gi, '')
+        .replace(/\[object Object\]/gi, '')
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim()
+    return hasUnsafeRenderedToken(sanitized) ? '' : sanitized
 }
 
 const normalizeAiActionResponse = (response, mode = 'gym') => {
@@ -706,7 +965,8 @@ export const aiAssistant = async (req, res, next) => {
         const memoryContext = buildAiMemoryContext(await getAiUserMemory(req.user?._id))
 
         if (aiMode === 'gym') {
-            const actionResponse = await runGymAiAction({
+            // Try GymProAgent first — single agent with tool calling
+            const agentResponse = await gymProAgent({
                 query: effectiveQuery,
                 userMessage: normalizedQuery,
                 user: req.user,
@@ -714,20 +974,55 @@ export const aiAssistant = async (req, res, next) => {
                 language,
             })
 
+            let actionResponse
+            if (!agentResponse.shouldUseLegacyRouter || !agentResponse.answer) {
+                actionResponse = {
+                    answer: agentResponse.answer,
+                    type: agentResponse.responseType || 'text_advice',
+                    suggestions: agentResponse.suggestions || [],
+                    data: agentResponse.payload?.data || {},
+                    plans: agentResponse.payload?.plans || [],
+                    cards: [],
+                    mode: 'gym',
+                    provider: 'gym_pro_agent',
+                    model: 'agent',
+                    metadata: {
+                        answerLanguage: language,
+                        questionAnalysis: { subject: agentResponse.memoryUpdate?.lastSubject || 'general', action: agentResponse.memoryUpdate?.lastAction || 'info', intent: 'agent_handled' },
+                        classifierSource: 'gym_pro_agent',
+                        usedTools: agentResponse.usedTools,
+                        confidence: agentResponse.confidence,
+                    },
+                }
+                console.log('[GYM_PRO_AGENT] handled:', normalizedQuery, '| tools:', agentResponse.usedTools, '| confidence:', agentResponse.confidence)
+            }
+
+            if (!actionResponse || agentResponse.shouldUseLegacyRouter) {
+                // Fallback to legacy router
+                actionResponse = await runGymAiAction({
+                    query: effectiveQuery,
+                    userMessage: normalizedQuery,
+                    user: req.user,
+                    conversationContext,
+                    language,
+                })
+                console.log('[GYM_PRO_AGENT] fallback to legacy router:', normalizedQuery)
+            }
+
             await recordAuditLog({
                 req,
                 module: 'ai',
                 action: 'create',
                 entity: req.user,
-                details: `AI Gym Action query: ${normalizedQuery} | tool: ${actionResponse.tool || 'none'}`,
+                details: `AI Gym Action query: ${normalizedQuery} | tool: ${actionResponse?.tool || 'none'} | agent: ${actionResponse?.provider || 'legacy'}`,
             })
 
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
-        return res.json({
+        return res.json(normalizeAiResponse({
             ...actionResponse,
             pts: actionResponse.data?.pts || [],
             products: actionResponse.data?.products || [],
-        })
+        }, 'gym'))
         }
 
         if (aiMode !== 'gym' && isShopeeLinkIntent(effectiveQuery)) {
@@ -740,7 +1035,7 @@ export const aiAssistant = async (req, res, next) => {
                 details: `AI Shopee link lookup: ${normalizedQuery} | webSearch: ${shopeeResponse.webSearch.used ? 'used' : 'fallback_search_url'} | mode: ${aiMode}`,
             })
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
-            return res.json(shopeeResponse)
+            return res.json(normalizeAiResponse(shopeeResponse, 'shopee'))
         }
 
         const toolIntent = detectToolIntent(effectiveQuery, aiMode)
@@ -804,7 +1099,7 @@ export const aiAssistant = async (req, res, next) => {
             if (productResults.length === 0 && categoryRequested) {
                 const payload = await buildGlobalCategoryPayload(strictGroup ? strictGroup.terms : categoryTerms)
                 await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
-                return res.json({
+                return res.json(normalizeAiResponse({
                     answer: JSON.stringify(payload),
                     pts: [],
                     products: [],
@@ -812,7 +1107,7 @@ export const aiAssistant = async (req, res, next) => {
                     mode: aiMode,
                     tool: 'searchProducts',
                     data: payload,
-                })
+                }, 'product_search'))
             }
 
             if (!strictGroup && productResults.length === 0) {
@@ -840,7 +1135,7 @@ export const aiAssistant = async (req, res, next) => {
 
                 await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
 
-                return res.json({
+                return res.json(normalizeAiResponse({
                     answer: JSON.stringify(payload),
                     pts: [],
                     products: [],
@@ -848,7 +1143,7 @@ export const aiAssistant = async (req, res, next) => {
                     mode: aiMode,
                     tool: 'searchProducts',
                     data: payload,
-                })
+                }, 'product_search'))
             }
 
             let message = usedFallback && productResults.length > 0 && searchTerms.length > 0
@@ -885,7 +1180,7 @@ export const aiAssistant = async (req, res, next) => {
 
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
 
-            return res.json({
+            return res.json(normalizeAiResponse({
                 answer: JSON.stringify(payload),
                 pts: [],
                 products: productResults.map(mapProductResult),
@@ -893,7 +1188,7 @@ export const aiAssistant = async (req, res, next) => {
                 mode: aiMode,
                 tool: 'searchProducts',
                 data: payload,
-            })
+            }, 'product_search'))
         }
 
         if (toolIntent === 'pt') {
@@ -927,7 +1222,7 @@ export const aiAssistant = async (req, res, next) => {
 
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
 
-            return res.json({
+            return res.json(normalizeAiResponse({
                 answer: JSON.stringify(payload),
                 pts: ptResults.map(mapPtResult),
                 products: [],
@@ -935,18 +1230,18 @@ export const aiAssistant = async (req, res, next) => {
                 mode: aiMode,
                 tool: 'searchPT',
                 data: payload,
-            })
+            }, 'pt_search'))
         }
 
         if (isPrivacyQuestion(normalizedQuery)) {
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
-            return res.json({
-                answer: 'Tôi không thể cung cấp thông tin cá nhân của người dùng khác.',
+            return res.json(normalizeAiResponse({
+                answer: 'Mình không thể cung cấp thông tin cá nhân của người dùng khác để bảo vệ quyền riêng tư.',
                 pts: [],
                 products: [],
                 plans: [],
                 mode: aiMode,
-            })
+            }, 'privacy'))
         }
 
         if (aiMode === 'general') {
@@ -982,14 +1277,14 @@ export const aiAssistant = async (req, res, next) => {
 
                 await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
 
-                return res.json({
+                return res.json(normalizeAiResponse({
                     answer: missingKeyMessage,
                     pts: [],
                     products: [],
                     plans: [],
                     mode: aiMode,
                     webSearch,
-                })
+                }, 'web_search_failed'))
             }
 
             const answer = await generateAssistantResponse(
@@ -1018,7 +1313,7 @@ export const aiAssistant = async (req, res, next) => {
 
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
 
-            return res.json({
+            return res.json(normalizeAiResponse({
                 answer,
                 pts: [],
                 products: [],
@@ -1030,7 +1325,7 @@ export const aiAssistant = async (req, res, next) => {
                     reason: webSearch.reason,
                     results: webSearch.results,
                 },
-            })
+            }, 'general'))
         }
 
         const classification = await classifyQueryIntent(effectiveQuery)
@@ -1107,7 +1402,7 @@ export const aiAssistant = async (req, res, next) => {
 
         await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
 
-        res.json({
+        return res.json(normalizeAiResponse({
             answer,
             pts,
             products,
@@ -1119,7 +1414,7 @@ export const aiAssistant = async (req, res, next) => {
                 reason: webSearch.reason,
                 results: webSearch.results,
             },
-        })
+        }, 'gym_advice'))
     } catch (error) {
         next(error)
     }
@@ -1149,6 +1444,56 @@ export const aiAssistantStream = async (req, res, next) => {
             intent: requestContext.intent || 'member_question',
             source: requestContext.source || 'user_message',
         })
+        const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : []
+
+        if (attachments.length > 0) {
+            initSseResponse(res)
+
+            req.on('close', () => {
+                console.log('[AI Vision stream] client closed connection')
+            })
+
+            try {
+                writeSseStatus(res, 'analyzing_image', 'Đang phân tích ảnh...')
+
+                const classification = await classifyImageType(
+                    attachments.filter((a) => a && typeof a.url === 'string').map((a) => a.url)
+                )
+
+                writeSseEvent(res, 'meta', {
+                    mode: 'vision',
+                    imageType: classification.type,
+                    imageReason: classification.reason,
+                })
+
+                const imageStatusMap = {
+                    inbody: 'Đang đọc chỉ số InBody...',
+                    food: 'Đang phân tích bữa ăn...',
+                    exercise: 'Đang phân tích bài tập...',
+                }
+                writeSseStatus(res, 'analyzing_image', imageStatusMap[classification.type] || 'Đang xử lý ảnh...')
+
+                const result = await visionChat(normalizedQuery, attachments, language)
+
+                writeSseStatus(res, 'reasoning', 'Đang tổng hợp nhận xét từ ảnh...')
+
+                writeSseEvent(res, 'chunk', { text: result.text })
+
+                writeSseEvent(res, 'done', normalizeAiResponse({
+                    answer: result.text,
+                    mode: 'vision',
+                    imageType: result.imageType,
+                    ...(result.data ? { data: result.data } : {}),
+                }, 'vision'))
+
+                return res.end()
+            } catch (visionError) {
+                console.error('AI Vision stream error:', visionError)
+                writeSseEvent(res, 'error', { message: visionError?.message || 'Lỗi phân tích ảnh' })
+                return res.end()
+            }
+        }
+
         const effectiveQuery = buildEffectiveQuery(normalizedQuery, conversationContext)
         const aiMode = mode === 'general' ? 'general' : 'gym'
         const memoryContext = buildAiMemoryContext(await getAiUserMemory(req.user?._id))
@@ -1160,6 +1505,13 @@ export const aiAssistantStream = async (req, res, next) => {
         })
 
         if (aiMode === 'gym') {
+            const initialStatus = resolveInitialAiStatus(effectiveQuery, aiMode)
+            if (initialStatus) {
+                writeSseStatus(res, initialStatus.status, initialStatus.message)
+            } else {
+                writeSseStatus(res, 'reasoning', 'Đang tổng hợp câu trả lời...')
+            }
+
             writeSseEvent(res, 'meta', {
                 mode: aiMode,
                 aiAction: true,
@@ -1176,6 +1528,8 @@ export const aiAssistantStream = async (req, res, next) => {
             })
             const safeActionResponse = normalizeAiActionResponse(actionResponse, aiMode)
 
+            writeSseStatus(res, 'reasoning', 'Đang tổng hợp câu trả lời...')
+
             writeSseEvent(res, 'meta', {
                 mode: aiMode,
                 aiAction: Boolean(safeActionResponse.aiAction),
@@ -1183,9 +1537,9 @@ export const aiAssistantStream = async (req, res, next) => {
                 status: 'tool_complete',
             })
             writeSseEvent(res, 'chunk', { text: safeActionResponse.answer })
-            writeSseEvent(res, 'done', {
+            writeSseEvent(res, 'done', normalizeAiResponse({
                 ...safeActionResponse,
-            })
+            }, 'gym'))
 
             await recordAuditLog({
                 req,
@@ -1205,7 +1559,7 @@ export const aiAssistantStream = async (req, res, next) => {
                 webSearch: shopeeResponse.webSearch,
             })
             writeSseEvent(res, 'chunk', { text: shopeeResponse.answer })
-            writeSseEvent(res, 'done', shopeeResponse)
+            writeSseEvent(res, 'done', normalizeAiResponse(shopeeResponse, 'shopee'))
             await recordAuditLog({
                 req,
                 module: 'ai',
@@ -1220,18 +1574,19 @@ export const aiAssistantStream = async (req, res, next) => {
         const toolIntent = detectToolIntent(effectiveQuery, aiMode)
 
         if (toolIntent) {
+            writeSseStatus(res, 'fetching_database', 'Đang tra cứu dữ liệu...')
             writeSseEvent(res, 'fallback', {
                 reason: `tool_${toolIntent}`,
                 message: 'Tool response uses JSON fallback.',
             })
-            writeSseEvent(res, 'done', { answer: '', mode: aiMode, fallback: true })
+            writeSseEvent(res, 'done', normalizeAiResponse({ answer: '', mode: aiMode, fallback: true }, `tool_${toolIntent}`))
             return res.end()
         }
 
         if (isPrivacyQuestion(normalizedQuery)) {
-            const answer = 'Tôi không thể cung cấp thông tin cá nhân của người dùng khác.'
+            const answer = 'Mình không thể cung cấp thông tin cá nhân của người dùng khác để bảo vệ quyền riêng tư.'
             writeSseEvent(res, 'chunk', { text: answer })
-            writeSseEvent(res, 'done', { answer, mode: aiMode })
+            writeSseEvent(res, 'done', normalizeAiResponse({ answer, mode: aiMode }, 'privacy'))
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
             return res.end()
         }
@@ -1253,6 +1608,7 @@ export const aiAssistantStream = async (req, res, next) => {
             }
 
             if (needsWebSearch) {
+                writeSseStatus(res, 'searching_web', 'Đang tìm kiếm thông tin mới nhất...')
                 try {
                     webSearch = {
                         needed: true,
@@ -1269,6 +1625,8 @@ export const aiAssistantStream = async (req, res, next) => {
                 }
             }
 
+            writeSseStatus(res, 'reasoning', 'Đang tổng hợp câu trả lời...')
+
             writeSseEvent(res, 'meta', {
                 mode: aiMode,
                 webSearch: {
@@ -1284,7 +1642,7 @@ export const aiAssistantStream = async (req, res, next) => {
                     ? 'Câu hỏi này cần dữ liệu realtime, nhưng backend chưa cấu hình TAVILY_API_KEY để search web.'
                     : 'Câu hỏi này cần dữ liệu realtime, nhưng hiện Tavily web search đang lỗi. Mình chưa thể trả lời chắc chắn mà không có nguồn mới.'
                 writeSseEvent(res, 'chunk', { text: answer })
-                writeSseEvent(res, 'done', { answer, mode: aiMode, webSearch })
+                writeSseEvent(res, 'done', normalizeAiResponse({ answer, mode: aiMode, webSearch }, 'web_search_failed'))
                 await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
                 return res.end()
             }
@@ -1315,7 +1673,7 @@ export const aiAssistantStream = async (req, res, next) => {
                 details: `AI Assistant general stream query: ${normalizedQuery} | webSearch: ${webSearch.used ? 'used' : 'skipped'} | reason: ${webSearch.reason}`,
             })
 
-            writeSseEvent(res, 'done', {
+            writeSseEvent(res, 'done', normalizeAiResponse({
                 answer,
                 mode: aiMode,
                 webSearch: {
@@ -1324,10 +1682,12 @@ export const aiAssistantStream = async (req, res, next) => {
                     reason: webSearch.reason,
                     results: webSearch.results,
                 },
-            })
+            }, 'general'))
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
             return res.end()
         }
+
+        writeSseStatus(res, 'fetching_database', 'Đang lấy dữ liệu từ GymPro...')
 
         const classification = await classifyQueryIntent(effectiveQuery)
         const searchTerms = [classification.goal, ...(classification.keywords || []), effectiveQuery]
@@ -1377,6 +1737,12 @@ export const aiAssistantStream = async (req, res, next) => {
         const plans = planResults.map(mapPlanResult)
         const gymWebSearch = await resolveGymFitnessWebSearch(effectiveQuery)
 
+        if (gymWebSearch.needed) {
+            writeSseStatus(res, 'searching_web', 'Đang tìm kiếm thông tin mới nhất...')
+        }
+
+        writeSseStatus(res, 'reasoning', 'Đang tổng hợp câu trả lời...')
+
         writeSseEvent(res, 'meta', {
             mode: aiMode,
             pts,
@@ -1416,7 +1782,7 @@ export const aiAssistantStream = async (req, res, next) => {
             details: `AI Assistant stream được gọi với truy vấn: ${normalizedQuery} | mode: ${aiMode} | fitnessWebSearch: ${gymWebSearch.used ? 'used' : gymWebSearch.reason}`,
         })
 
-        writeSseEvent(res, 'done', {
+        writeSseEvent(res, 'done', normalizeAiResponse({
             answer,
             pts,
             products,
@@ -1428,7 +1794,7 @@ export const aiAssistantStream = async (req, res, next) => {
                 reason: gymWebSearch.reason,
                 results: gymWebSearch.results,
             },
-        })
+        }, 'gym_advice'))
         await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
         return res.end()
     } catch (error) {

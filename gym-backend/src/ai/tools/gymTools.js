@@ -4,8 +4,12 @@ import Membership from '../../models/Membership.js'
 import Plan from '../../models/Plan.js'
 import Product from '../../models/Product.js'
 import User from '../../models/User.js'
+import PT from '../../models/PT.js'
+import PTSchedule from '../../models/PTSchedule.js'
 import { invalidatePersonalContextCache } from '../../services/conversationContextCache.js'
 import { createMembership as createMembershipService } from '../../services/membershipService.js'
+import { getSmartRecommendations } from '../services/smartRecommendService.js'
+import { analyzeWorkoutHistory, generateWorkoutPlan } from '../services/workoutAnalyzerService.js'
 
 const toObjectId = (value, fieldName) => {
   if (!mongoose.Types.ObjectId.isValid(value)) {
@@ -41,6 +45,25 @@ const calculateRemainingDays = (endDate) => {
   const end = new Date(endDate)
   end.setHours(23, 59, 59, 999)
   return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
+}
+
+const DAY_LABELS = { vi: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] }
+const SHIFT_LABELS = { vi: { morning: 'Sáng', afternoon: 'Chiều', evening: 'Tối' }, en: { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' } }
+
+const buildScheduleLabel = (schedules, lang = 'vi') => {
+  if (!schedules || schedules.length === 0) return ''
+  const days = DAY_LABELS[lang]
+  const shifts = SHIFT_LABELS[lang]
+  const grouped = {}
+  for (const s of schedules) {
+    const dayLabel = days[s.dayOfWeek] || `Day${s.dayOfWeek}`
+    const shiftLabel = shifts[s.shift] || s.shift
+    if (!grouped[dayLabel]) grouped[dayLabel] = []
+    if (!grouped[dayLabel].includes(shiftLabel)) grouped[dayLabel].push(shiftLabel)
+  }
+  return Object.entries(grouped)
+    .map(([day, shiftList]) => `${day}: ${shiftList.join(', ')}`)
+    .join(' | ')
 }
 
 export const gymToolDeclarations = [
@@ -115,11 +138,45 @@ export const gymToolDeclarations = [
       required: ['ptId', 'date', 'slot'],
     },
   },
+  {
+    name: 'getSmartRecommendations',
+    description: 'Đưa ra gợi ý thông minh kết hợp gói tập, PT, và sản phẩm dựa trên mục tiêu, ngân sách, tần suất tập của user.',
+    parametersJsonSchema: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string', description: 'Mục tiêu tập luyện: muscle_gain, fat_loss, weight_gain, endurance, general_fitness' },
+        budget: { type: 'string', description: 'Ngân sách, ví dụ: 500k/tháng, 2 triệu, 1 củ' },
+        frequency: { type: 'string', description: 'Tần suất tập, ví dụ: 3 buổi/tuần, 5 lần/tuần' },
+      },
+    },
+  },
+  {
+    name: 'analyzeWorkout',
+    description: 'Phân tích lịch sử tập luyện của user: tần suất, điểm mạnh, điểm cần cải thiện, gợi ý cải thiện.',
+    parametersJsonSchema: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', description: 'Kỳ phân tích: 7d, 30d, 90d, all' },
+      },
+    },
+  },
+  {
+    name: 'generateWorkoutPlan',
+    description: 'Tạo giáo án tập luyện chi tiết theo mục tiêu, tần suất, level của user.',
+    parametersJsonSchema: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string', description: 'Mục tiêu: muscle_gain, fat_loss, weight_gain, endurance, general_fitness' },
+        frequency: { type: 'string', description: 'Số buổi/tuần, vd: 3, 4, 5' },
+        level: { type: 'string', description: 'Trình độ: beginner, intermediate' },
+      },
+    },
+  },
 ]
 
 export const getAvailablePlans = async () => {
   const plans = await Plan.find({ isActive: true })
-    .select('name price durationDays description color')
+    .select('name nameVi nameEn price durationDays description descriptionVi descriptionEn featuresVi featuresEn color updatedAt')
     .sort({ price: 1 })
     .lean()
 
@@ -127,11 +184,20 @@ export const getAvailablePlans = async () => {
     count: plans.length,
     plans: plans.map((p) => ({
       id: p._id,
-      name: p.name,
+      _id: p._id,
+      name: p.name || p.nameVi || p.nameEn,
+      nameVi: p.nameVi || p.name,
+      nameEn: p.nameEn || p.name,
       price: p.price,
       duration: `${p.durationDays} ngày`,
+      durationDays: p.durationDays,
       description: p.description,
+      descriptionVi: p.descriptionVi || p.description,
+      descriptionEn: p.descriptionEn || p.description,
+      featuresVi: p.featuresVi || [],
+      featuresEn: p.featuresEn || [],
       color: p.color || '#000',
+      updatedAt: p.updatedAt,
     })),
   }
 }
@@ -199,38 +265,71 @@ export const getUpcomingBookings = async ({ userId }) => {
 
 export const getAvailablePTs = async ({ specialization = '' } = {}) => {
   const keyword = String(specialization || '').trim()
-  const queryRegex = buildSearchRegex(keyword)
-  const filter = {
-    role: 'pt',
-    isActive: true,
-    ...(keyword
-      ? {
-        $or: [
-          { name: queryRegex },
-          { bio: queryRegex },
-          { specialties: queryRegex },
-        ],
-      }
-      : {}),
+  let pts = []
+  if (keyword) {
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const baseFilter = { role: 'pt', isActive: true }
+    // Step 1: exact name match (phrase)
+    pts = await User.find({ ...baseFilter, name: new RegExp('^' + escaped + '$', 'i') })
+      .select('name avatar phone email contactEmail specialties rating experienceYears bio')
+      .sort({ rating: -1, experienceYears: -1 })
+      .limit(8)
+      .lean()
+    // Step 2: partial name match (phrase contains)
+    if (pts.length === 0) {
+      pts = await User.find({ ...baseFilter, name: new RegExp(escaped, 'i') })
+        .select('name avatar phone email contactEmail specialties rating experienceYears bio')
+        .sort({ rating: -1, experienceYears: -1 })
+        .limit(8)
+        .lean()
+    }
+    // Step 3: broad search on name/bio/specialties
+    if (pts.length === 0) {
+      const broadRegex = new RegExp(keyword.split(/[\s,;|]+/).map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i')
+      pts = await User.find({ ...baseFilter, $or: [{ name: broadRegex }, { bio: broadRegex }, { specialties: broadRegex }] })
+        .select('name avatar phone email contactEmail specialties rating experienceYears bio')
+        .sort({ rating: -1, experienceYears: -1 })
+        .limit(8)
+        .lean()
+    }
+  } else {
+    pts = await User.find({ role: 'pt', isActive: true })
+      .select('name avatar phone email contactEmail specialties rating experienceYears bio')
+      .sort({ rating: -1, experienceYears: -1 })
+      .limit(8)
+      .lean()
   }
 
-  const pts = await User.find(filter)
-    .select('name avatar specialties rating experienceYears bio')
-    .sort({ rating: -1, experienceYears: -1 })
-    .limit(8)
-    .lean()
+  // Fetch PT model records + schedules for each
+  const ptModels = await PT.find({ userId: { $in: pts.map((p) => p._id) } }).select('_id userId totalSessions totalStudents certificates').lean()
+  const ptModelMap = {}
+  for (const pm of ptModels) {
+    ptModelMap[String(pm.userId)] = pm
+  }
+  const ptIds = ptModels.map((p) => p._id)
+  const scheduleDocs = ptIds.length > 0 ? await PTSchedule.find({ ptId: { $in: ptIds } }).sort({ dayOfWeek: 1 }).lean() : []
 
   return {
     count: pts.length,
-    pts: pts.map((pt) => ({
-      id: pt._id,
-      name: pt.name,
-      avatar: pt.avatar || '',
-      specialties: pt.specialties || [],
-      rating: pt.rating || 0,
-      experienceYears: pt.experienceYears || 0,
-      bio: pt.bio || '',
-    })),
+    pts: pts.map((pt) => {
+      const pm = ptModelMap[String(pt._id)]
+      const schedules = pm ? scheduleDocs.filter((s) => String(s.ptId) === String(pm._id)) : []
+      return {
+        id: pt._id,
+        name: pt.name,
+        avatar: pt.avatar || '',
+        phone: pt.phone || '',
+        email: pt.email || pt.contactEmail || '',
+        specialties: pt.specialties || [],
+        rating: pt.rating || 0,
+        experienceYears: pt.experienceYears || 0,
+        bio: pt.bio || '',
+        totalSessions: pm?.totalSessions || 0,
+        totalStudents: pm?.totalStudents || 0,
+        schedule: buildScheduleLabel(schedules),
+        scheduleRaw: schedules.map((s) => ({ dayOfWeek: s.dayOfWeek, shift: s.shift })),
+      }
+    }),
   }
 }
 
@@ -334,6 +433,24 @@ export const createBookingRequest = async ({ userId, ptId, date, slot, note = ''
   }
 }
 
+export const getSmartRecommendationsHandler = async ({ userId, goal, budget, frequency }) => {
+  const query = [goal, budget, frequency].filter(Boolean).join(' ')
+  return getSmartRecommendations({ userId, query })
+}
+
+export const analyzeWorkoutHandler = async ({ userId, period = '30d' }) => {
+  const analysis = await analyzeWorkoutHistory({ userId, period })
+  return {
+    type: 'workout_analyzer',
+    ...analysis,
+  }
+}
+
+export const generateWorkoutPlanHandler = async ({ userId, goal = 'general_fitness', frequency = 4, level = 'beginner' }) => {
+  const plan = await generateWorkoutPlan({ userId, goal, frequency: parseInt(frequency, 10) || 4, level })
+  return { type: 'workout_plan', ...plan }
+}
+
 export const gymTools = {
   getAvailablePlans,
   getMembershipInfo,
@@ -342,6 +459,9 @@ export const gymTools = {
   getAvailablePTs,
   getRecommendedProducts,
   createBookingRequest,
+  getSmartRecommendations: getSmartRecommendationsHandler,
+  analyzeWorkout: analyzeWorkoutHandler,
+  generateWorkoutPlan: generateWorkoutPlanHandler,
 }
 
 export const runGymTool = async (name, args, context) => {

@@ -76,7 +76,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'pt', 'staff', 'member', 'seller'],
+      enum: ['super_admin', 'admin', 'pt', 'staff', 'member', 'seller'],
       default: 'member',
     },
     isSeller: {
@@ -144,6 +144,73 @@ const userSchema = new mongoose.Schema(
       type: String,
       select: false,
     },
+    memberCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
+    // Extended profile fields
+    fullName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    nationality: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    language: {
+      type: String,
+      default: 'vi',
+      trim: true,
+    },
+    timezone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    country: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    province: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    detailedAddress: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    emergencyContact: {
+      name: { type: String, default: '', trim: true },
+      phone: { type: String, default: '', trim: true },
+      relationship: { type: String, default: '', trim: true },
+    },
+    healthInfo: {
+      height: { type: Number, default: null },
+      weight: { type: Number, default: null },
+      goals: [{ type: String, trim: true }],
+      activityLevel: { type: String, default: '', trim: true },
+      notes: { type: String, default: '', trim: true },
+    },
+    identityType: { type: String, default: '', trim: true },
+    identityNumber: { type: String, default: '', trim: true },
+    identityCountry: { type: String, default: '', trim: true },
+    identityFrontImage: { type: String, default: '' },
+    identityBackImage: { type: String, default: '' },
+    identityStatus: {
+      type: String,
+      enum: ['', 'pending', 'approved', 'rejected'],
+      default: '',
+    },
+    identityRejectReason: { type: String, default: '', trim: true },
+    identityReviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    identityReviewedAt: { type: Date, default: null },
   },
   { timestamps: true },
 )
@@ -166,6 +233,20 @@ userSchema.pre('save', async function () {
   if (!this.isModified('password') || !this.password) return
   if (this.$locals?.skipPasswordHashing) return
   this.password = await bcrypt.hash(this.password, 12)
+})
+
+userSchema.pre('save', async function () {
+  if (this.memberCode) return
+  const lastUser = await mongoose.model('User').findOne({ memberCode: { $nin: [null, ''] } })
+    .sort({ memberCode: -1 })
+    .select('memberCode')
+    .lean()
+  let nextNum = 1
+  if (lastUser?.memberCode) {
+    const match = lastUser.memberCode.match(/\d+$/)
+    if (match) nextNum = parseInt(match[0], 10) + 1
+  }
+  this.memberCode = `GP${String(nextNum).padStart(6, '0')}`
 })
 
 userSchema.methods.comparePassword = async function (candidatePassword) {

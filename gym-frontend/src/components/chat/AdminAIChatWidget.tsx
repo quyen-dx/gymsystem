@@ -214,7 +214,6 @@ export default function AdminAIChatWidget() {
           </div>
         </div>
       )}
-      {/* h */}
     </>,
     document.body,
   )

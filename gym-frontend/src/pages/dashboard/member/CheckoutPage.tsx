@@ -181,7 +181,7 @@ export default function CheckoutPage() {
       await refreshWallet()
       setCart([])
       message.success(t('checkout.msg_payment_success'))
-      navigate('/orders')
+      navigate('/cart?tab=orders')
     } catch (error: any) {
       const originalMessage = error?.response?.data?.message || ''
       let errorMessage = t('checkout.msg_payment_failed')

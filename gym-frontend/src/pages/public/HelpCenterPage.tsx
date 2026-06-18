@@ -97,29 +97,10 @@ export default function HelpCenterPage() {
           </div>
         </div>
 
-        {/* Quick Topics */}
-        {categories.length > 0 && (
-          <div>
-            <div className="support-quick-topics" style={{ marginBottom: 6 }}>
-              {categories.map(({ display }) => (
-                <button
-                  key={display}
-                  type="button"
-                  onClick={() => setActiveCategory(display)}
-                  className={`support-quick-topic ${activeCategory === display ? 'active' : ''}`}
-                >
-                  {topicIcons[display] || <HelpCircle size={16} />}
-                  {display}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Toolbar */}
         <div className="support-toolbar">
           {/* Pill Tabs */}
-          <div className="support-pills">
+          <div className="support-pills support-pills-scroll">
             <button
               type="button"
               onClick={() => setActiveCategory(null)}
