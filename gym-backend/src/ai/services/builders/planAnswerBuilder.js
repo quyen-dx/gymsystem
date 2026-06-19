@@ -166,7 +166,9 @@ export const buildPlanInfoDirectAnswer = ({ query, plans, language, targetBenefi
   })()
   if (isListQuery) {
     return makeTextOnlyPlanPayload(makeCatalogText({
-      intro: lang === 'en' ? 'Here are the current membership plans at GymPro:' : 'Đây là các gói tập hiện có tại GymPro:',
+      intro: lang === 'en'
+        ? `GymPro currently has ${plans.length} active membership plan(s):`
+        : `GymPro hiện có ${plans.length} gói tập đang hoạt động:`,
     }))
   }
   const isGeneralBenefitQuery = /\b(co .* khong)\b/.test(normalized) && !/\b(goi|goi tap|plan|membership|package)\b/.test(normalized)

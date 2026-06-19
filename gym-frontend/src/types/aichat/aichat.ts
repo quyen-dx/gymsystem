@@ -131,6 +131,7 @@ export type ChatResponseType =
     | 'product_list'
     | 'product_recommend'
     | 'notification_list'
+    | 'navigation_answer'
     | 'policy_answer'
     | 'policy_refund'
     | 'policy_privacy'
@@ -156,6 +157,12 @@ export type ChatMessage = {
     conclusion?: string
     data?: Record<string, unknown>
     cards?: unknown[]
+    links?: {
+        label: string
+        path: string
+        allowedRoles?: string[]
+        featureFlag?: string | null
+    }[]
     aiAction?: {
         action?: string
         color?: string

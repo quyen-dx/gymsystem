@@ -1,3 +1,5 @@
+import { AI_DOC_FILES, getRelevantAiDocs } from '../services/aiDocsService.js'
+
 const normalize = (value = '') => String(value)
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -166,6 +168,15 @@ export const planTools = ({ query, memory = {}, context = {} }) => {
     ? Math.min(1, (subject.confidence * 0.6 + (action.confidence || 0) * 0.4))
     : followUp ? 0.6 : 0
 
+  const aiDocs = getRelevantAiDocs({
+    subject: resolvedSubject || followUp?.type || 'core',
+    action: resolvedAction || '',
+    intent: context.intent || '',
+    purpose: 'tool_planner',
+    files: [AI_DOC_FILES.master, AI_DOC_FILES.business],
+    maxChars: 5000,
+  })
+
   return {
     subject: resolvedSubject || null,
     action: resolvedAction || null,
@@ -174,6 +185,11 @@ export const planTools = ({ query, memory = {}, context = {} }) => {
     confidence: Math.max(0, Math.min(1, confidence)),
     entities: { goal, budget: hasBudget, frequencyPerWeek: hasFrequency },
     isFollowUp: Boolean(followUp),
+    aiDocs: {
+      loadedFiles: aiDocs.loadedFiles,
+      sections: aiDocs.sections,
+      subject: aiDocs.subject,
+    },
   }
 }
 

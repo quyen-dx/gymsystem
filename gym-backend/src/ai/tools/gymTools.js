@@ -8,6 +8,7 @@ import PT from '../../models/PT.js'
 import PTSchedule from '../../models/PTSchedule.js'
 import { invalidatePersonalContextCache } from '../../services/conversationContextCache.js'
 import { createMembership as createMembershipService } from '../../services/membershipService.js'
+import { searchFaqs, searchPolicies } from '../services/faqPolicySearchService.js'
 import { getSmartRecommendations } from '../services/smartRecommendService.js'
 import { analyzeWorkoutHistory, generateWorkoutPlan } from '../services/workoutAnalyzerService.js'
 
@@ -170,6 +171,30 @@ export const gymToolDeclarations = [
         frequency: { type: 'string', description: 'Số buổi/tuần, vd: 3, 4, 5' },
         level: { type: 'string', description: 'Trình độ: beginner, intermediate' },
       },
+    },
+  },
+  {
+    name: 'searchFaqs',
+    description: 'Tìm FAQ đã publish trong database cho câu hỏi hướng dẫn, tài khoản, đăng nhập, gói tập, đặt lịch, check-in, thanh toán hoặc hỗ trợ.',
+    parametersJsonSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Câu hỏi của user.' },
+        category: { type: 'string', description: 'Category ưu tiên, ví dụ: Tài khoản, Gói tập, Đặt lịch, Check-in, Thanh toán.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'searchPolicies',
+    description: 'Tìm Policy đã publish trong database cho câu hỏi về chính sách, hoàn tiền, thanh toán, bảo mật, điều khoản, hội viên, bảo lưu hoặc quy định.',
+    parametersJsonSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Câu hỏi của user.' },
+        category: { type: 'string', description: 'Category ưu tiên, ví dụ: Hoàn tiền, Thanh toán, Bảo mật, Chính sách.' },
+      },
+      required: ['query'],
     },
   },
 ]
@@ -462,6 +487,8 @@ export const gymTools = {
   getSmartRecommendations: getSmartRecommendationsHandler,
   analyzeWorkout: analyzeWorkoutHandler,
   generateWorkoutPlan: generateWorkoutPlanHandler,
+  searchFaqs,
+  searchPolicies,
 }
 
 export const runGymTool = async (name, args, context) => {

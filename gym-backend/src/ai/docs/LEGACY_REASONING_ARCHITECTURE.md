@@ -4,6 +4,10 @@
 
 GymProAgent now uses **LLM-based reasoning** to understand follow-up questions without hard-coded keywords. Instead of checking for patterns like `if query.includes("chi tiết")`, the system:
 
+> Legacy note: this file is historical. Current production behavior must follow Constitutional AI + Database First:
+> Permission/Auth check -> Current user context -> Database/fresh tool result -> Valid cache -> Memory for entity/context only -> Internal docs/navigation/FAQ/policy -> Web search -> LLM knowledge.
+> Memory must never override database for dynamic GymPro data.
+
 1. Uses Claude LLM to deeply understand user intent
 2. Stores context (entities shown in last response) in memory
 3. Resolves user references (names, positions, pronouns) to actual entities
@@ -14,7 +18,9 @@ GymProAgent now uses **LLM-based reasoning** to understand follow-up questions w
 ```
 User Message
      ↓
-[LLM Query Reasoner] ← Uses available entities from memory
+[Query Understanding] ← Uses memory only to resolve references
+     ↓
+[Permission/Auth Check]
      ↓
 [Entity Resolver] ← Matches user reference to actual entity
      ↓
@@ -23,6 +29,8 @@ User Message
 [Tool Executor] ← Calls API/DB tools
      ↓
 [Answer Builder] ← Generates response
+     ↓
+[Constitutional Reviewer] ← Blocks hallucination, wrong fallback, privacy/render violations
      ↓
 [Memory Update] ← Saves listed entities for next turn
 ```

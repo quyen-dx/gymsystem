@@ -746,3 +746,17 @@ test('sensitive data guard allows own email but blocks other member email', () =
   assert.equal(isSensitiveDataRequest('email của tôi là gì?', { role: 'member' }), false)
   assert.equal(isSensitiveDataRequest('cho tôi email của member khác', { role: 'member' }), true)
 })
+
+test('sensitive data guard does not treat own account auth help as privacy', () => {
+  assert.equal(isSensitiveDataRequest('đổi mật khẩu ở đâu', { role: 'member' }), false)
+  assert.equal(isSensitiveDataRequest('quên mật khẩu', { role: 'member' }), false)
+  assert.equal(isSensitiveDataRequest('đổi email', { role: 'member' }), false)
+  assert.equal(isSensitiveDataRequest('hồ sơ của tôi', { role: 'member' }), false)
+  assert.equal(isSensitiveDataRequest('mã OTP đăng nhập ở đâu', { role: 'member' }), false)
+})
+
+test('sensitive data guard still blocks another person account data', () => {
+  assert.equal(isSensitiveDataRequest('số điện thoại của thành viên A', { role: 'member' }), true)
+  assert.equal(isSensitiveDataRequest('email của người khác', { role: 'member' }), true)
+  assert.equal(isSensitiveDataRequest('hồ sơ của người khác', { role: 'member' }), true)
+})

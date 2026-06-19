@@ -30,6 +30,7 @@ const levenshteinDistance = (a, b) => {
 const fuzzyMatch = (query, entities, threshold = 0.6) => {
     if (!query || !entities || entities.length === 0) return null
     const nQuery = normalize(query)
+    const queryTokens = nQuery.split(/\s+/).filter((token) => token.length >= 2)
     let best = null
     let bestScore = 0
     for (const entity of entities) {
@@ -38,22 +39,38 @@ const fuzzyMatch = (query, entities, threshold = 0.6) => {
             if (!name) continue
             // Exact match
             if (nQuery === name) return entity
-            // Substring match (high priority)
+
+            const nameTokens = name.split(/\s+/).filter((token) => token.length >= 2)
+            const tokenOverlap = queryTokens.filter((token) => nameTokens.includes(token)).length
+            const queryCoverage = queryTokens.length > 0 ? tokenOverlap / queryTokens.length : 0
+            const nameCoverage = nameTokens.length > 0 ? tokenOverlap / nameTokens.length : 0
+
+            // Safe substring match. Short aliases like "VIP" are valid only when the
+            // user reference is also short; they must not steal long unknown names.
             if (name.includes(nQuery) || nQuery.includes(name)) {
-                const score = Math.max(nQuery.length, name.length) / Math.min(nQuery.length, name.length)
-                if (score > bestScore) {
-                    bestScore = score
-                    best = entity
+                const shorter = Math.min(nQuery.length, name.length)
+                const longer = Math.max(nQuery.length, name.length)
+                const lengthRatio = shorter / longer
+                const shortExactAlias = nQuery.length <= 12 && name.includes(nQuery)
+                const nearFullName = lengthRatio >= 0.72 || (queryCoverage >= 0.75 && nameCoverage >= 0.75)
+                if ((shortExactAlias || nearFullName) && !(name.length <= 5 && nQuery.length > 12)) {
+                    const score = Math.max(0.8, Math.min(0.98, lengthRatio + Math.min(queryCoverage, nameCoverage) * 0.2))
+                    if (score > bestScore) {
+                        bestScore = score
+                        best = entity
+                    }
+                    continue
                 }
-            } else {
-                // Levenshtein distance
-                const maxLen = Math.max(nQuery.length, name.length)
-                const distance = levenshteinDistance(nQuery, name)
-                const score = (maxLen - distance) / maxLen
-                if (score >= threshold && score > bestScore) {
-                    bestScore = score
-                    best = entity
-                }
+            }
+
+            // Levenshtein distance with a higher effective floor for long names.
+            const maxLen = Math.max(nQuery.length, name.length)
+            const distance = levenshteinDistance(nQuery, name)
+            const score = (maxLen - distance) / maxLen
+            const effectiveThreshold = maxLen >= 12 ? Math.max(threshold, 0.78) : threshold
+            if (score >= effectiveThreshold && score > bestScore) {
+                bestScore = score
+                best = entity
             }
         }
     }
@@ -94,7 +111,7 @@ const resolveEntityReference = ({
 
     // 1. Direct name match via fuzzy matching. Do this before positional matching so names
     // like "cgpt 1" are not mistaken for "the first item".
-    const matched = fuzzyMatch(userReference, lastListedEntities, 0.6)
+    const matched = fuzzyMatch(userReference, lastListedEntities, 0.72)
     if (matched) {
         const distance = levenshteinDistance(normalize(userReference), normalize(matched.name || matched.nameVi || matched.nameEn))
         const maxLen = Math.max(

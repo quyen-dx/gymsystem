@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import type { AiSource, ChatMessage, PlanPayloadPlan } from '../../types/aichat/aichat'
 import { ComboRecommendCard } from './ComboRecommendCard'
 import { CompareTwoPlansCard } from './CompareTwoPlansCard'
@@ -68,6 +69,7 @@ function tryExtractAnswerFromJsonText(input: unknown): string {
 
 export function AssistantMessageBubble({ message, content, loadingMessage }: Props) {
   const { i18n } = useTranslation()
+  const navigate = useNavigate()
   const lang = message.metadata?.answerLanguage === 'en'
     ? 'en'
     : message.metadata?.answerLanguage === 'vi'
@@ -303,6 +305,40 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
     )
   }
 
+  const renderNavigationLinks = () => {
+    const links = Array.isArray(message.links)
+      ? message.links
+      : (Array.isArray((message.data as any)?.links) ? (message.data as any).links : [])
+    const safeLinks = links
+      .filter((link: any) => typeof link?.path === 'string' && typeof link?.label === 'string')
+      .slice(0, 3)
+    if (safeLinks.length === 0) return null
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+        {safeLinks.map((link: any) => (
+          <button
+            key={`${link.path}-${link.label}`}
+            type="button"
+            onClick={() => navigate(link.path)}
+            className="ai-plan-row"
+            style={{
+              cursor: 'pointer',
+              border: '1px solid var(--theme-accent-border, color-mix(in srgb, var(--theme-accent) 36%, transparent))',
+              background: 'var(--theme-accent-muted, color-mix(in srgb, var(--theme-accent) 12%, transparent))',
+              color: 'var(--theme-text)',
+              font: 'inherit',
+              fontWeight: 800,
+              padding: '8px 12px',
+              textAlign: 'left',
+            }}
+          >
+            {link.label}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
   const answerText = tryExtractAnswerFromJsonText(stripUnsafeModelOutput(tryExtractAnswerFromJsonText(message.answer)))
   const displayText = answerText || text
 
@@ -389,6 +425,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
       {displayText && renderText(displayText)}
       {renderGenericCards()}
       {renderSourceList()}
+      {renderNavigationLinks()}
       {!displayText && (
         <span className="ai-loading-text">{loadingMessage || 'đang suy nghĩ...'}</span>
       )}

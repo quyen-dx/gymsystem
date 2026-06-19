@@ -42,7 +42,9 @@ export const buildPlanListResponse = ({ plans, lang = 'vi' }) => {
   const total = plans.length
   const limit = 5
   const shown = plans.slice(0, limit)
-  const header = lang === 'en' ? 'Here are the current membership plans at GymPro:' : 'Đây là các gói tập hiện có tại GymPro:'
+  const header = lang === 'en'
+    ? `GymPro currently has ${total} active membership plan(s):`
+    : `GymPro hiện có ${total} gói tập đang hoạt động:`
 
   const lines = [header]
 

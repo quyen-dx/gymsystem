@@ -4,13 +4,13 @@ import { __queryReasonerTestHooks } from './queryReasoner.js'
 
 const { buildReasonerSystemPrompt, buildUserPrompt, parseAiResult } = __queryReasonerTestHooks
 
-test('queryReasoner prompt contains relevant reasoning guide rules', () => {
+test('queryReasoner prompt contains membership intent rules and constitution', () => {
   const prompt = buildReasonerSystemPrompt()
 
-  assert.match(prompt, /GymPro reasoning guide excerpts/)
-  assert.match(prompt, /Database GymPro là nguồn sự thật cao nhất/)
-  assert.match(prompt, /Web Search Rule/)
-  assert.match(prompt, /Không được/)
+  assert.match(prompt, /MEMBERSHIP INTENT RULES/)
+  assert.match(prompt, /membership_detail/)
+  assert.match(prompt, /membership_list/)
+  assert.match(prompt, /membership_recommendation/)
 })
 
 test('PT follow-up prompt includes memory entities for entity resolver', () => {
@@ -67,5 +67,5 @@ test('queryReasoner parses web search and clarification fields without dropping 
   assert.equal(parsed.subject, 'nutrition')
   assert.equal(parsed.action, 'advice')
   assert.equal(parsed.shouldUseWebSearch, true)
-  assert.deepEqual(parsed.needsTools, ['getRecommendedProducts', 'webSearchNutrition'])
+  assert.deepEqual(parsed.requiredTools, ['getRecommendedProducts', 'webSearchNutrition'])
 })

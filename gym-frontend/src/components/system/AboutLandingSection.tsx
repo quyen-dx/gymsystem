@@ -324,44 +324,60 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         </div>
       </header>
 
-      <section className="relative h-dvh min-h-[620px] overflow-hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <section
+        className="relative mt-18 h-[calc(100svh-72px)] min-h-[560px] overflow-hidden md:mt-0 md:h-screen md:min-h-[720px]"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}>
         {heroSlides.map((slide, index) => (
           <div
             key={slide.image}
-            className={`absolute inset-0 transition-opacity duration-700 ${index === activeSlide ? 'opacity-100' : 'opacity-0'}`}
+            className={`absolute inset-0 overflow-hidden bg-cover bg-center transition-opacity duration-700 ${index === activeSlide ? 'opacity-100' : 'opacity-0'}`}
+            style={{
+              backgroundImage: `url(${slide.image})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
             aria-hidden={index !== activeSlide}
           >
-            <img src={slide.image} alt="" className="h-full w-full object-cover" />
-            <div className="absolute inset-0" style={{ background: heroOverlay }} />
+            <img src={slide.image} alt="" className="absolute inset-0 hidden h-full w-full object-cover object-center md:block" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/55 to-black/80 md:hidden" />
+            <div className="absolute inset-0 hidden md:block" style={{ background: heroOverlay }} />
           </div>
         ))}
-        <div className="relative z-10 mx-auto flex h-full max-w-7xl items-center px-4 md:px-8 lg:px-16">
-          <div className="max-w-4xl pt-20">
-            <p className="mb-5 text-base font-extrabold uppercase tracking-[0.2em] text-[var(--theme-accent)] md:text-lg">{gymName}</p>
-            <h1 className="max-w-full break-words text-3xl font-black leading-[1.08] tracking-[1px] text-[var(--hero-text)] md:text-5xl lg:text-7xl">
-              {t(heroSlides[activeSlide].titleKey)}
-            </h1>
-            <p className="mt-6 max-w-2xl text-base leading-8 text-[var(--hero-muted)] md:text-xl">{t(heroSlides[activeSlide].subtitleKey)}</p>
-            {landingFlags.startNowButtonEnabled && (
-              <Button type="primary" className="mt-8 !h-13 !rounded-full !px-8 !font-extrabold" onClick={() => goTo(heroSlides[activeSlide].link)}>
-                {t(heroSlides[activeSlide].ctaKey)}
-              </Button>
-            )}
+
+        <div className="absolute inset-0 z-10 flex items-end px-5 pb-32 pt-28 md:items-center md:px-8 md:pb-0 md:pt-0 lg:px-16">
+          <div className="mx-auto w-full max-w-7xl">
+            <div className="w-full max-w-[340px] md:max-w-4xl md:pt-20">
+              <p className="mb-4 text-xs font-extrabold uppercase tracking-[0.22em] text-[var(--theme-accent)] md:mb-5 md:text-lg">{gymName}</p>
+              <h1 className="max-w-full break-words text-[clamp(28px,8vw,38px)] font-black leading-[1.08] text-white drop-shadow-[0_3px_16px_rgba(0,0,0,0.8)] md:text-5xl md:text-[var(--hero-text)] md:drop-shadow-none lg:text-7xl">
+                {t(heroSlides[activeSlide].titleKey)}
+              </h1>
+              <p className="mt-4 text-[15px] leading-7 text-white/90 drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)] md:mt-6 md:max-w-2xl md:text-xl md:text-[var(--hero-muted)] md:drop-shadow-none">
+                {t(heroSlides[activeSlide].subtitleKey)}
+              </p>
+              {landingFlags.startNowButtonEnabled && (
+                <Button type="primary" className="mt-6 !h-[44px] !rounded-full !px-5 !text-sm !font-extrabold md:mt-8 md:!h-[52px] md:!px-8 md:!text-base" onClick={() => goTo(heroSlides[activeSlide].link)}>
+                  {t(heroSlides[activeSlide].ctaKey)}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
-        <button type="button" className="slider-nav slider-nav-prev flex h-8 w-8 place-items-center rounded-full border border-[var(--gs-border)] bg-[var(--gs-card)]/70 text-[var(--hero-text)] backdrop-blur hover:border-[var(--theme-accent)] md:h-10 md:w-10" onClick={prevSlide}>
+
+        <button type="button" aria-label="Previous slide" className="slider-nav slider-nav-prev flex h-[34px] w-[34px] place-items-center rounded-full border border-white/25 bg-black/35 text-white backdrop-blur hover:border-[var(--theme-accent)] max-md:hidden md:h-10 md:w-10 md:border-[var(--gs-border)] md:bg-[var(--gs-card)]/70 md:text-[var(--hero-text)]" onClick={prevSlide}>
           <LeftOutlined />
         </button>
-        <button type="button" className="slider-nav slider-nav-next flex h-8 w-8 place-items-center rounded-full border border-[var(--gs-border)] bg-[var(--gs-card)]/70 text-[var(--hero-text)] backdrop-blur hover:border-[var(--theme-accent)] md:h-10 md:w-10" onClick={nextSlide}>
+        <button type="button" aria-label="Next slide" className="slider-nav slider-nav-next flex h-[34px] w-[34px] place-items-center rounded-full border border-white/25 bg-black/35 text-white backdrop-blur hover:border-[var(--theme-accent)] max-md:hidden md:h-10 md:w-10 md:border-[var(--gs-border)] md:bg-[var(--gs-card)]/70 md:text-[var(--hero-text)]" onClick={nextSlide}>
           <RightOutlined />
         </button>
-        <div className="absolute bottom-8 left-0 right-0 z-20 flex justify-center gap-3">
+
+        <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 justify-center gap-3 pb-[env(safe-area-inset-bottom)] md:bottom-8 md:pb-0">
           {heroSlides.map((_, index) => (
             <button
               key={index}
               type="button"
               aria-label={`Slide ${index + 1}`}
-              className={`h-2.5 rounded-full transition-all ${index === activeSlide ? 'w-10 bg-[var(--theme-accent)]' : 'w-2.5 bg-[var(--hero-muted)]'}`}
+              className={`h-2.5 rounded-full transition-all ${index === activeSlide ? 'w-10 bg-[var(--theme-accent)]' : 'w-2.5 bg-white/50'}`}
               onClick={() => setActiveSlide(index)}
             />
           ))}
@@ -372,7 +388,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-px px-5 py-8 md:grid-cols-4 md:px-8">
           {stats.map((item, i) => (
             <div key={item.value} className={`reveal text-center ${statsReveal.visible ? 'visible' : ''}`} style={{ transitionDelay: `${i * 100}ms` }}>
-              <strong className="block text-6xl font-black leading-none text-[var(--theme-accent)]">{item.value}</strong>
+              <strong className="block text-4xl font-black leading-none text-[var(--theme-accent)] md:text-6xl">{item.value}</strong>
               <span className="mt-2 block text-sm uppercase tracking-[0.16em] text-[var(--gs-muted)]">{t(item.labelKey)}</span>
             </div>
           ))}
@@ -419,10 +435,10 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
       <section {...introReveal.attr} id="about" className="mx-auto grid max-w-7xl gap-10 px-5 py-18 md:grid-cols-[1fr_0.9fr] md:px-8 md:py-24">
         <div className={`reveal-left ${introReveal.visible ? 'visible' : ''}`}>
           <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.intro.eyebrow')}</p>
-          <h2 className="mt-4 text-6xl font-black leading-none md:text-[82px]">{aboutTitle}</h2>
+          <h2 className="mt-4 break-words text-4xl font-black leading-none md:text-[82px]">{aboutTitle}</h2>
           <p className="mt-6 whitespace-pre-wrap text-base leading-8 text-[var(--gs-muted)] md:text-lg">{aboutContent}</p>
         </div>
-        <img className={`reveal-right h-[420px] w-full rounded-lg border border-[var(--gs-border)] object-cover ${introReveal.visible ? 'visible' : ''}`} src="https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=1200&q=86" alt={aboutTitle} />
+        <img className={`reveal-right h-[300px] w-full rounded-lg border border-[var(--gs-border)] object-cover md:h-[420px] ${introReveal.visible ? 'visible' : ''}`} src="https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=1200&q=86" alt={aboutTitle} />
       </section>
 
       {landingFlags.servicesSectionEnabled && <section {...featuresReveal.attr} id="features" className="bg-[var(--gs-page)] px-5 py-18 md:px-8 md:py-24">
@@ -443,7 +459,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
 
       <section {...ptReveal.attr} id="trainers" className="mx-auto max-w-7xl px-5 py-18 md:px-8 md:py-24">
         <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.pts.eyebrow')}</p>
-        <h2 className="mt-4 text-6xl font-black leading-none md:text-[82px]">{t('about.pts.title')}</h2>
+        <h2 className="mt-4 break-words text-4xl font-black leading-none md:text-[82px]">{t('about.pts.title')}</h2>
         <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {ptItems.map((pt, i) => (
             <article key={pt.name} className={`reveal rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 text-center ${ptReveal.visible ? 'visible' : ''}`} style={{ transitionDelay: `${i * 100}ms` }}>
@@ -490,7 +506,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         style={{ background: 'linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.82)), url(https://images.unsplash.com/photo-1517963879433-6ad2b056d712?auto=format&fit=crop&w=1900&q=88) center/cover' }}
       >
         <div className={`reveal text-white ${ctaReveal.visible ? 'visible' : ''}`}>
-          <h2 className="mx-auto max-w-4xl text-7xl font-black leading-[0.9] md:text-[110px]">{t('about.cta.title')}</h2>
+          <h2 className="mx-auto max-w-4xl break-words text-4xl font-black leading-[0.95] md:text-[110px] md:leading-[0.9]">{t('about.cta.title')}</h2>
           <Button type="primary" className="mt-9 !h-13 !rounded-full !px-9 !font-extrabold" onClick={() => goTo('/register')}>
             {t('about.cta.register')}
           </Button>
