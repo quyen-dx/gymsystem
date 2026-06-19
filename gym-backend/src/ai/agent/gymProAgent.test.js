@@ -1,21 +1,22 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { agentMemory } from './agentMemory.js'
+import { gymProAgent } from './gymProAgent.js'
 import { reasonQuery } from './queryReasoner.js'
 
 // === Query Reasoner Tests (CU layer fast path, no LLM needed) ===
 
-test('reasonQuery: "gym có mấy gói" → plan subject, list action', async () => {
+test('reasonQuery: "gym có mấy gói" → plan/list', async () => {
   const result = await reasonQuery({ query: 'gym có mấy gói', memory: {}, language: 'vi' })
   assert.equal(result.subject, 'plan')
   assert.equal(result.confidence > 0, true)
-  assert.ok(result.needsTools.includes('getAvailablePlans'))
+  assert.ok(result.requiredTools.includes('getAvailablePlans'))
 })
 
-test('reasonQuery: "có bao nhiêu gói tập" → plan subject', async () => {
+test('reasonQuery: "có bao nhiêu gói tập" → plan/list', async () => {
   const result = await reasonQuery({ query: 'có bao nhiêu gói tập', memory: {}, language: 'vi' })
   assert.equal(result.subject, 'plan')
-  assert.ok(result.needsTools.includes('getAvailablePlans'))
+  assert.ok(result.requiredTools.includes('getAvailablePlans'))
 })
 
 test('reasonQuery: "gói nào rẻ nhất" → plan subject', async () => {
@@ -24,10 +25,10 @@ test('reasonQuery: "gói nào rẻ nhất" → plan subject', async () => {
   assert.ok(result.confidence > 0)
 })
 
-test('reasonQuery: "tôi muốn giảm cân thì chọn gói nào" → plan/recommend with goal', async () => {
+test('reasonQuery: "tôi muốn giảm cân thì chọn gói nào" → recommend with goal', async () => {
   const result = await reasonQuery({ query: 'tôi muốn giảm cân thì chọn gói nào', memory: {}, language: 'vi' })
   assert.equal(result.subject, 'plan')
-  assert.ok(result.needsTools.includes('getAvailablePlans') || result.needsTools.includes('getSmartRecommendations'))
+  assert.equal(result.intent, 'membership_recommendation')
 })
 
 test('reasonQuery: "tôi tập 3 buổi/tuần thì sao" → subject detected', async () => {
@@ -46,7 +47,7 @@ test('reasonQuery: "so sánh nó với gói premium" → follow-up with memory',
   const memory = { lastSubject: 'plan', lastMentionedPlanName: 'Premium', lastMentionedPlanId: 'premium123' }
   const result = await reasonQuery({ query: 'so sánh nó với gói premium', memory, language: 'vi' })
   assert.equal(result.subject, 'plan')
-  assert.ok(result.needsTools.includes('getAvailablePlans'))
+  assert.ok(result.requiredTools.includes('getAvailablePlans'))
 })
 
 test('reasonQuery: "gói đó có PT không" → follow-up detection', async () => {
@@ -58,7 +59,7 @@ test('reasonQuery: "gói đó có PT không" → follow-up detection', async () 
 test('reasonQuery: "có PT nào dạy giỏi không" → pt subject', async () => {
   const result = await reasonQuery({ query: 'có PT nào dạy giỏi không', memory: {}, language: 'vi' })
   assert.equal(result.subject, 'pt')
-  assert.ok(result.needsTools.includes('getAvailablePTs'))
+  assert.ok(result.requiredTools.includes('getAvailablePTs'))
 })
 
 test('reasonQuery: "đọc ảnh này giúp tôi" → low confidence', async () => {
@@ -69,6 +70,19 @@ test('reasonQuery: "đọc ảnh này giúp tôi" → low confidence', async () 
 test('reasonQuery: "tôi muốn đặt lịch với PT" → subject detected', async () => {
   const result = await reasonQuery({ query: 'tôi muốn đặt lịch với PT', memory: {}, language: 'vi' })
   assert.ok(result.subject)
+})
+
+test('gymProAgent denies another user sensitive data before FAQ search', async () => {
+  const result = await gymProAgent({
+    query: 'email của người khác là gì',
+    user: { _id: 'user1', role: 'member' },
+    conversationContext: { conversationId: 'privacy-test' },
+    language: 'vi',
+  })
+
+  assert.match(result.answer, /không thể cung cấp thông tin cá nhân/i)
+  assert.deepEqual(result.usedTools, [])
+  assert.equal(result.shouldUseLegacyRouter, false)
 })
 
 // === Agent Memory Tests ===

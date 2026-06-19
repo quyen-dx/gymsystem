@@ -41,6 +41,49 @@ const logAiAnswerBeforeSend = (label, answer) => {
     console.log(`[AI Assistant:${label}] answer length:`, text.length)
 }
 
+const makeTraceId = () => `ai_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+
+const redactLogValue = (value = '') => String(value || '')
+    .replace(/[a-f0-9]{24}/gi, '[object-id]')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+    .replace(/(\+?84|0)\d{8,10}/g, '[phone]')
+    .replace(/\b(password|mat khau|mật khẩu|token|jwt|secret|hash)\b[^,\n]*/gi, '$1=[redacted]')
+
+const getResponseMeta = (response = {}) => {
+    const metadata = response.metadata && typeof response.metadata === 'object' ? response.metadata : {}
+    const questionAnalysis = metadata.questionAnalysis && typeof metadata.questionAnalysis === 'object'
+        ? metadata.questionAnalysis
+        : {}
+    return {
+        intent: metadata.intent || questionAnalysis.intent || response.intent || response.payload?.intent || '',
+        action: metadata.action || questionAnalysis.action || response.action || response.memoryUpdate?.lastAction || '',
+        subject: metadata.subject || questionAnalysis.subject || response.subject || response.memoryUpdate?.lastSubject || '',
+        entityName: metadata.entityName || response.entityName || response.memoryUpdate?.lastMentionedPlanName || response.memoryUpdate?.lastMentionedPTName || '',
+    }
+}
+
+const safeAiRequestLog = ({ traceId, mode, path, response = {}, fallbackUsed = false, navigationPath = '' }) => {
+    const meta = getResponseMeta(response)
+    const payload = response.payload && typeof response.payload === 'object' ? response.payload : {}
+    const audit = response.audit && typeof response.audit === 'object' ? response.audit : {}
+    return {
+        traceId,
+        mode,
+        path,
+        agentUsed: response.metadata?.agentUsed || response.provider || 'unknown',
+        intent: redactLogValue(meta.intent),
+        action: redactLogValue(meta.action),
+        subject: redactLogValue(meta.subject),
+        entityName: redactLogValue(meta.entityName),
+        resolvedEntityType: payload?.type || '',
+        selectedTools: Array.isArray(response.usedTools) ? response.usedTools : Array.isArray(response.metadata?.usedTools) ? response.metadata.usedTools : [],
+        permissionResult: response.metadata?.permissionResult || (audit.source === 'permission' ? 'denied' : 'unknown'),
+        fallbackUsed,
+        navigationPath: redactLogValue(navigationPath || payload?.navigation?.path || payload?.links?.[0]?.path || ''),
+        reviewerStatus: response.metadata?.reviewerStatus || 'unknown',
+    }
+}
+
 const writeSseEvent = (res, event, data = {}) => {
     if (res.destroyed || res.writableEnded) return false
     const seq = (res.locals.sseSeq || 0) + 1
@@ -638,6 +681,45 @@ const updateAiMemoryAfterResponse = async (req, query, mode) => {
     }
 }
 
+const sanitizePlanMemoryItem = (item, index) => {
+    if (!item || typeof item !== 'object') return null
+    const id = item.id || item._id || ''
+    const name = item.name || item.nameVi || item.nameEn || ''
+    return {
+        id: typeof id === 'string' ? id.slice(0, 80) : String(id || '').slice(0, 80),
+        name: typeof name === 'string' ? name.slice(0, 120) : '',
+        nameVi: typeof item.nameVi === 'string' ? item.nameVi.slice(0, 120) : undefined,
+        nameEn: typeof item.nameEn === 'string' ? item.nameEn.slice(0, 120) : undefined,
+        price: Number.isFinite(Number(item.price)) ? Number(item.price) : undefined,
+        durationDays: Number.isFinite(Number(item.durationDays)) ? Number(item.durationDays) : undefined,
+        position: Number.isFinite(Number(item.position)) ? Number(item.position) : index + 1,
+    }
+}
+
+const sanitizePtMemoryItem = (item, index) => {
+    if (!item || typeof item !== 'object') return null
+    const id = item.id || item._id || ''
+    return {
+        id: typeof id === 'string' ? id.slice(0, 80) : String(id || '').slice(0, 80),
+        name: typeof item.name === 'string' ? item.name.slice(0, 120) : '',
+        specialties: Array.isArray(item.specialties)
+            ? item.specialties.filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim().slice(0, 80)).slice(0, 6)
+            : [],
+        position: Number.isFinite(Number(item.position)) ? Number(item.position) : index + 1,
+    }
+}
+
+const sanitizeActiveEntity = (value) => {
+    if (!value || typeof value !== 'object') return null
+    const id = value.id || value._id || ''
+    return {
+        type: typeof value.type === 'string' ? value.type.slice(0, 30) : '',
+        id: typeof id === 'string' ? id.slice(0, 80) : String(id || '').slice(0, 80),
+        name: typeof value.name === 'string' ? value.name.slice(0, 120) : '',
+        position: Number.isFinite(Number(value.position)) ? Number(value.position) : undefined,
+    }
+}
+
 const sanitizeConversationContext = (value) => {
     const source = value && typeof value === 'object' ? value : {}
     const recentMessages = Array.isArray(source.recentMessages)
@@ -653,6 +735,13 @@ const sanitizeConversationContext = (value) => {
             }))
         : []
 
+    const lastListedPlans = Array.isArray(source.lastListedPlans)
+        ? source.lastListedPlans.map(sanitizePlanMemoryItem).filter(Boolean).slice(0, 20)
+        : []
+    const lastListedPTs = Array.isArray(source.lastListedPTs)
+        ? source.lastListedPTs.map(sanitizePtMemoryItem).filter(Boolean).slice(0, 20)
+        : []
+
     return {
         conversationId: typeof source.conversationId === 'string' ? source.conversationId.slice(0, 120) : '',
         sessionId: typeof source.sessionId === 'string' ? source.sessionId.slice(0, 120) : '',
@@ -660,6 +749,11 @@ const sanitizeConversationContext = (value) => {
         lastIntent: typeof source.lastIntent === 'string' ? source.lastIntent : '',
         lastSubject: typeof source.lastSubject === 'string' ? source.lastSubject : '',
         lastAction: typeof source.lastAction === 'string' ? source.lastAction : '',
+        lastMentionedPlan: typeof source.lastMentionedPlan === 'string' ? source.lastMentionedPlan.slice(0, 120) : '',
+        lastMentionedPT: typeof source.lastMentionedPT === 'string' ? source.lastMentionedPT.slice(0, 120) : '',
+        lastListedPlans,
+        lastListedPTs,
+        activeEntity: sanitizeActiveEntity(source.activeEntity),
         lastSearchQuery: typeof source.lastSearchQuery === 'string' ? source.lastSearchQuery.slice(0, 300) : '',
         lastMode: typeof source.lastMode === 'string' ? source.lastMode : '',
         lastProduct: typeof source.lastProduct === 'string' ? source.lastProduct : '',
@@ -936,6 +1030,102 @@ const mapPlanResult = (plan) => ({
     color: plan.color,
 })
 
+const normalizeGymProAgentResponse = (agentResponse, { language, traceId }) => {
+    const payload = agentResponse?.payload && typeof agentResponse.payload === 'object'
+        ? agentResponse.payload
+        : {}
+    const data = payload.data && typeof payload.data === 'object' ? payload.data : {}
+    const responseType = agentResponse?.responseType || payload.type || 'text_advice'
+    const plans = Array.isArray(payload.plans) ? payload.plans : Array.isArray(data.plans) ? data.plans : []
+    const pts = Array.isArray(payload.pts) ? payload.pts : Array.isArray(data.pts) ? data.pts : []
+    const links = Array.isArray(agentResponse?.links) ? agentResponse.links : Array.isArray(payload.links) ? payload.links : []
+
+    return normalizeAiActionResponse({
+        answer: agentResponse?.answer || '',
+        type: responseType,
+        responseType,
+        suggestions: agentResponse?.suggestions || [],
+        data: {
+            ...data,
+            ...(Object.keys(payload).length > 0 ? { planPayload: payload } : {}),
+            links,
+        },
+        plans,
+        pts,
+        links,
+        mode: 'gym',
+        provider: 'gymProAgent',
+        model: 'agent',
+        usedTools: agentResponse?.usedTools || [],
+        payload,
+        planPayload: payload,
+        audit: agentResponse?.audit || null,
+        metadata: {
+            ...(agentResponse?.metadata || {}),
+            traceId,
+            agentUsed: 'gymProAgent',
+            fallbackUsed: false,
+            answerLanguage: language,
+            usedTools: agentResponse?.usedTools || [],
+            confidence: agentResponse?.confidence,
+            reviewerStatus: 'reviewed',
+            questionAnalysis: {
+                subject: agentResponse?.memoryUpdate?.lastSubject || '',
+                action: agentResponse?.memoryUpdate?.lastAction || '',
+                intent: responseType,
+            },
+        },
+    }, 'gym')
+}
+
+export const runGymProAiCore = async ({
+    query,
+    userMessage,
+    user,
+    conversationContext,
+    language,
+    traceId = makeTraceId(),
+    path = 'non-stream',
+} = {}) => {
+    try {
+        const agentResponse = await gymProAgent({
+            query,
+            userMessage,
+            user,
+            conversationContext,
+            language,
+        })
+        const safeResponse = normalizeGymProAgentResponse(agentResponse, { language, traceId })
+        console.log('[AI_TRACE]', safeAiRequestLog({ traceId, mode: 'gym', path, response: safeResponse, fallbackUsed: false }))
+        return safeResponse
+    } catch (error) {
+        console.error('[AI_TRACE] gymProAgent runtime fallback:', {
+            traceId,
+            path,
+            error: error?.message || 'unknown',
+        })
+        const legacyResponse = await runGymAiAction({
+            query,
+            userMessage,
+            user,
+            conversationContext,
+            language,
+        })
+        const safeResponse = normalizeAiActionResponse({
+            ...legacyResponse,
+            metadata: {
+                ...(legacyResponse?.metadata || {}),
+                traceId,
+                agentUsed: 'legacyFallback',
+                fallbackUsed: true,
+                fallbackReason: 'gymProAgent_runtime_error',
+            },
+        }, 'gym')
+        console.log('[AI_TRACE]', safeAiRequestLog({ traceId, mode: 'gym', path, response: safeResponse, fallbackUsed: true }))
+        return safeResponse
+    }
+}
+
 export const aiAssistant = async (req, res, next) => {
     try {
         const { query, mode = 'gym' } = req.body
@@ -950,8 +1140,9 @@ export const aiAssistant = async (req, res, next) => {
             ? req.body.requestContext
             : {}
         const language = normalizeLanguage(req.body?.language || requestContext.language)
+        const traceId = makeTraceId()
         console.log('CHAT REQUEST:', {
-            message: normalizedQuery,
+            traceId,
             assistantType: requestContext.assistantType || 'member',
             domain: requestContext.domain || 'gym',
             language,
@@ -965,56 +1156,22 @@ export const aiAssistant = async (req, res, next) => {
         const memoryContext = buildAiMemoryContext(await getAiUserMemory(req.user?._id))
 
         if (aiMode === 'gym') {
-            // Try GymProAgent first — single agent with tool calling
-            const agentResponse = await gymProAgent({
+            const actionResponse = await runGymProAiCore({
                 query: effectiveQuery,
                 userMessage: normalizedQuery,
                 user: req.user,
                 conversationContext,
                 language,
+                traceId,
+                path: 'non-stream',
             })
-
-            let actionResponse
-            if (!agentResponse.shouldUseLegacyRouter || !agentResponse.answer) {
-                actionResponse = {
-                    answer: agentResponse.answer,
-                    type: agentResponse.responseType || 'text_advice',
-                    suggestions: agentResponse.suggestions || [],
-                    data: agentResponse.payload?.data || {},
-                    plans: agentResponse.payload?.plans || [],
-                    cards: [],
-                    mode: 'gym',
-                    provider: 'gym_pro_agent',
-                    model: 'agent',
-                    metadata: {
-                        answerLanguage: language,
-                        questionAnalysis: { subject: agentResponse.memoryUpdate?.lastSubject || 'general', action: agentResponse.memoryUpdate?.lastAction || 'info', intent: 'agent_handled' },
-                        classifierSource: 'gym_pro_agent',
-                        usedTools: agentResponse.usedTools,
-                        confidence: agentResponse.confidence,
-                    },
-                }
-                console.log('[GYM_PRO_AGENT] handled:', normalizedQuery, '| tools:', agentResponse.usedTools, '| confidence:', agentResponse.confidence)
-            }
-
-            if (!actionResponse || agentResponse.shouldUseLegacyRouter) {
-                // Fallback to legacy router
-                actionResponse = await runGymAiAction({
-                    query: effectiveQuery,
-                    userMessage: normalizedQuery,
-                    user: req.user,
-                    conversationContext,
-                    language,
-                })
-                console.log('[GYM_PRO_AGENT] fallback to legacy router:', normalizedQuery)
-            }
 
             await recordAuditLog({
                 req,
                 module: 'ai',
                 action: 'create',
                 entity: req.user,
-                details: `AI Gym Action query: ${normalizedQuery} | tool: ${actionResponse?.tool || 'none'} | agent: ${actionResponse?.provider || 'legacy'}`,
+                details: `AI Gym Action trace=${traceId} | agent=${actionResponse?.metadata?.agentUsed || actionResponse?.provider || 'unknown'} | fallback=${Boolean(actionResponse?.metadata?.fallbackUsed)}`,
             })
 
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
@@ -1434,8 +1591,9 @@ export const aiAssistantStream = async (req, res, next) => {
             ? req.body.requestContext
             : {}
         const language = normalizeLanguage(req.body?.language || requestContext.language)
+        const traceId = makeTraceId()
         console.log('CHAT REQUEST:', {
-            message: normalizedQuery,
+            traceId,
             assistantType: requestContext.assistantType || 'member',
             domain: requestContext.domain || 'gym',
             language,
@@ -1512,21 +1670,21 @@ export const aiAssistantStream = async (req, res, next) => {
                 writeSseStatus(res, 'reasoning', 'Đang tổng hợp câu trả lời...')
             }
 
-            writeSseEvent(res, 'meta', {
+            writeSseEvent(res, 'start', {
                 mode: aiMode,
-                aiAction: true,
-                toolCalling: true,
-                status: 'calling_tool',
+                agentUsed: 'gymProAgent',
+                traceId,
             })
 
-            const actionResponse = await runGymAiAction({
+            const safeActionResponse = await runGymProAiCore({
                 query: effectiveQuery,
                 userMessage: normalizedQuery,
                 user: req.user,
                 conversationContext,
                 language,
+                traceId,
+                path: 'stream',
             })
-            const safeActionResponse = normalizeAiActionResponse(actionResponse, aiMode)
 
             writeSseStatus(res, 'reasoning', 'Đang tổng hợp câu trả lời...')
 
@@ -1535,7 +1693,11 @@ export const aiAssistantStream = async (req, res, next) => {
                 aiAction: Boolean(safeActionResponse.aiAction),
                 tool: safeActionResponse.tool || null,
                 status: 'tool_complete',
+                agentUsed: safeActionResponse.metadata?.agentUsed || safeActionResponse.provider || 'unknown',
+                fallbackUsed: Boolean(safeActionResponse.metadata?.fallbackUsed),
+                traceId,
             })
+            writeSseEvent(res, 'message', { text: safeActionResponse.answer })
             writeSseEvent(res, 'chunk', { text: safeActionResponse.answer })
             writeSseEvent(res, 'done', normalizeAiResponse({
                 ...safeActionResponse,
@@ -1546,7 +1708,7 @@ export const aiAssistantStream = async (req, res, next) => {
                 module: 'ai',
                 action: 'create',
                 entity: req.user,
-                details: `AI Gym Action stream query: ${normalizedQuery} | tool: ${safeActionResponse.tool || 'none'}`,
+                details: `AI Gym Action stream trace=${traceId} | agent=${safeActionResponse?.metadata?.agentUsed || safeActionResponse?.provider || 'unknown'} | fallback=${Boolean(safeActionResponse?.metadata?.fallbackUsed)}`,
             })
             await updateAiMemoryAfterResponse(req, normalizedQuery, aiMode)
             return res.end()

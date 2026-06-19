@@ -3175,9 +3175,15 @@ html[data-theme="dark"] .dashboard-sidebar-item:not(.is-active):hover {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 20;
+  z-index: 5;
   align-items: center;
   justify-content: center;
+}
+
+@media (min-width: 768px) {
+  .slider-nav {
+    z-index: 20;
+  }
 }
 
 .slider-nav-prev {

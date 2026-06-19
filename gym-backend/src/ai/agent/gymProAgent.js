@@ -1,16 +1,25 @@
 import { runAIWithFallback } from '../services/aiFallbackService.js'
 import { recordAiAudit } from '../services/aiAuditService.js'
+import { constitutionalReview } from '../services/constitutionalReviewer.js'
 import { chooseRecommendedPlan } from '../services/dbResponder.js'
+import { buildFaqPolicyAnswer } from '../services/faqPolicySearchService.js'
+import { buildNavigationAnswer, resolveNavigation } from '../services/navigationResolver.js'
 import { buildEmptyDataResponse, buildPlanListResponse, buildPlanRecommendResponse, buildPtListResponse, buildWorkoutAdviceResponse, makeIntroduction } from '../services/naturalResponseBuilder.js'
-import { getReasoningGuide } from '../services/reasoningGuideService.js'
+import { AI_DOC_FILES, loadAiDoc, getRelevantAiDocs, logAiDocsLoaded } from '../services/aiDocsService.js'
 import { runGymTool } from '../tools/gymTools.js'
-import { SEPARATOR, bulletList, formatEmailText, formatPriceText, safeText, titleText } from '../services/render/renderTextUtils.js'
+import { SEPARATOR, bulletList, formatDaysText, formatEmailText, formatPriceText, safeText, titleText } from '../services/render/renderTextUtils.js'
 import { agentMemory } from './agentMemory.js'
 import { optimizeQuery } from './queryOptimizer.js'
 import { reasonQuery } from './queryReasoner.js'
 import { perfStart, perfEnd, perfLog } from '../services/perfLogger.js'
 
-const ANSWER_SYSTEM_PROMPT = `You are GymPro AI — a fitness assistant for a Vietnamese gym.
+const CONSTITUTION_DOC = loadAiDoc(AI_DOC_FILES.constitution)
+
+const CONSTITUTION_TEXT = CONSTITUTION_DOC.loaded && CONSTITUTION_DOC.content
+  ? `\n\n=== GymPro Constitution ===\n${CONSTITUTION_DOC.content}\n=== End of Constitution ===\n`
+  : ''
+
+const ANSWER_SYSTEM_PROMPT = `${CONSTITUTION_TEXT}You are GymPro AI — a fitness assistant for a Vietnamese gym.
 Your job: synthesize a natural, conversational answer using the tool data provided.
 
 Rules:
@@ -47,7 +56,15 @@ const buildLLMAnswer = async ({ query, analysis, plans, pts, memberships, smartR
     dataSections.push(`Previous: ${memory.lastSubject}/${memory.lastAction || ''}`)
   }
 
-  const guide = getReasoningGuide({ subject, sections: ['Response Rule', 'Safety Rule'], maxChars: 2000 })
+  const guide = getRelevantAiDocs({
+    subject,
+    action: analysis?.action || '',
+    intent: analysis?.intent || '',
+    responseType: analysis?.responseType || '',
+    purpose: 'render',
+    files: [AI_DOC_FILES.render],
+    maxChars: 2000,
+  })
 
   const userPrompt = `Q: "${query}"\nSubject: ${subject}, action: ${analysis?.action || ''}\n${guide.content ? `Guide: ${guide.content}\n` : ''}Data:\n${dataSections.join('\n') || 'none'}\nAnswer naturally in ${lang === 'en' ? 'English' : 'Vietnamese'}.`
 
@@ -69,13 +86,19 @@ const extractPTNameFromQuery = (query) => {
   // Match patterns: "pt <name>", "trainer <name>", "huan luyen vien <name>"
   const match = n.match(/\b(pt|trainer|huan luyen vien)\s+(.+)/i)
   if (match) {
-    const name = match[2].replace(/\b(chi tiet|thong tin|ve|la|nay|kia|do|day)\b/gi, '').trim()
+    const name = match[2]
+      .split(/\b(?:dang|hien|nhan|co|bao nhieu|neu|thi|dung|đang|hiện|nhận|có|bao nhiêu|nếu|thì|đừng)\b|\?/i)[0]
+      .replace(/\b(chi tiet|thong tin|ve|la|nay|kia|do|day)\b/gi, '')
+      .trim()
     if (name && name.length > 1) return name
   }
   // Fallback: last word after "ve" + "pt" pattern
   const veMatch = n.match(/\bve\s+pt\s+(.+)/i)
   if (veMatch) {
-    const name = veMatch[1].replace(/\b(chi tiet|thong tin)\b/gi, '').trim()
+    const name = veMatch[1]
+      .split(/\b(?:dang|hien|nhan|co|bao nhieu|neu|thi|dung|đang|hiện|nhận|có|bao nhiêu|nếu|thì|đừng)\b|\?/i)[0]
+      .replace(/\b(chi tiet|thong tin)\b/gi, '')
+      .trim()
     if (name && name.length > 1) return name
   }
   return null
@@ -88,6 +111,13 @@ const normalizeQuery = (text = '') => text
   .replace(/Đ/g, 'd')
   .toLowerCase()
   .trim()
+
+const isOtherPersonSensitiveQuery = (query = '') => {
+  const n = normalizeQuery(query)
+  const sensitive = /\b(email|e mail|so dien thoai|phone|lien he|thong tin ca nhan|tai khoan|profile|ho so|mat khau|password)\b/.test(n)
+  const otherPerson = /\b(nguoi khac|member khac|user khac|hoi vien khac|thanh vien|thanh vien khac|khach hang khac|cua thanh vien|cua member|cua user|anh do|chi do|nguoi do|other user|another user)\b/.test(n)
+  return sensitive && otherPerson
+}
 
 const hasAnyToolData = (toolResults) => {
   if (!toolResults || toolResults.length === 0) return false
@@ -122,6 +152,39 @@ const findPlanByName = (planName, plans) => {
   }) || null
 }
 
+const buildPlanNotFoundResponse = (planName, lang = 'vi') => {
+  const name = safeText(planName, lang === 'en' ? 'that plan' : 'gói này')
+  return lang === 'en'
+    ? `GymPro does not currently have data for the "${name}" membership plan.`
+    : `Hiện GymPro chưa tìm thấy dữ liệu gói "${name}".`
+}
+
+const formatPlanDetailResponse = (plan, lang = 'vi') => {
+  const name = lang === 'en'
+    ? (plan?.nameEn || plan?.nameVi || plan?.name)
+    : (plan?.nameVi || plan?.nameEn || plan?.name)
+  const price = formatPriceText(plan?.price, lang, lang === 'en' ? 'Not updated' : 'Chưa cập nhật')
+  const duration = formatDaysText(plan?.durationDays, lang, lang === 'en' ? 'Not updated' : 'Chưa cập nhật')
+  const features = (lang === 'en' ? (plan?.featuresEn || plan?.featuresVi || []) : (plan?.featuresVi || plan?.featuresEn || []))
+    .filter((feature) => typeof feature === 'string' && feature.trim())
+    .map((feature) => feature.trim())
+    .slice(0, 6)
+  const description = safeText(lang === 'en' ? (plan?.descriptionEn || plan?.descriptionVi || plan?.description) : (plan?.descriptionVi || plan?.descriptionEn || plan?.description))
+  const lines = [titleText(name || (lang === 'en' ? 'Membership plan' : 'Gói tập'))]
+  lines.push('', `${lang === 'en' ? 'Price' : 'Giá'}: ${price}`)
+  lines.push(`${lang === 'en' ? 'Duration' : 'Thời hạn'}: ${duration}`)
+  if (features.length > 0) lines.push('', lang === 'en' ? 'Benefits:' : 'Quyền lợi:', '', ...bulletList(features))
+  if (description) lines.push('', lang === 'en' ? 'Description:' : 'Mô tả:', '', description)
+  return lines.join('\n')
+}
+
+const buildPtNotFoundResponse = (ptName, lang = 'vi') => {
+  const name = safeText(ptName, lang === 'en' ? 'that PT' : 'PT này')
+  return lang === 'en'
+    ? `GymPro does not currently have data for PT "${name}".`
+    : `Hiện GymPro chưa tìm thấy dữ liệu PT "${name}". Bạn có muốn xem danh sách PT hiện có không?`
+}
+
 const buildPlanClarification = (plans = [], lang = 'vi') => {
   const names = (Array.isArray(plans) ? plans : [])
     .map((plan) => lang === 'en' ? (plan.nameEn || plan.nameVi || plan.name) : (plan.nameVi || plan.nameEn || plan.name))
@@ -149,6 +212,11 @@ const isComparisonIntent = (query) => {
   return /\b(so sanh|khac|vs|versus|compare)\b/.test(n)
 }
 
+const isNavigationLocationIntent = (query) => {
+  const n = normalizeQuery(query)
+  return /\b(o dau|vao dau|bam cho nao|mo trang nao|trang nao|duong dan|lam sao de vao|cach thao tac)\b/.test(n)
+}
+
 const isPTDetailIntent = (query) => {
   const n = normalizeQuery(query)
   return /\b(chi tiet|thong tin|profile|ho so|gioi thieu|detail|details|about)\b/.test(n)
@@ -163,6 +231,7 @@ const formatPTDetailResponse = (pt, lang = 'vi') => {
   if (pt?.phone) lines.push('', `${lang === 'en' ? 'Phone' : 'SĐT'}: ${pt.phone}`)
   if (email) lines.push('', `Email: ${email}`)
   if (pt?.experienceYears) lines.push('', lang === 'en' ? 'Experience' : 'Kinh nghiệm', '', lang === 'en' ? `${pt.experienceYears} year(s)` : `${pt.experienceYears} năm`)
+  if (Number.isFinite(Number(pt?.totalStudents))) lines.push('', lang === 'en' ? 'Current students' : 'Học viên đang nhận', '', `${Number(pt.totalStudents)}`)
   if (specialties.length > 0) {
     lines.push('', lang === 'en' ? 'Expertise' : 'Chuyên môn', '', ...bulletList(specialties))
   }
@@ -207,44 +276,89 @@ const withAudit = (response, audit) => {
   return { ...response, audit }
 }
 
-const buildDirectToolAnswer = ({ query, optimizer, toolResults, memory, lang }) => {
+const NAVIGATION_SUBJECTS = ['account', 'faq', 'policy', 'navigation', 'booking', 'checkin', 'health', 'workout', 'order', 'forgot_password', 'product', 'payment', 'feedback']
+
+const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, lang, userRole }) => {
   const n = normalizeQuery(query)
   const plans = toolResults.getAvailablePlans?.plans || []
   const pts = toolResults.getAvailablePTs?.pts || []
   const products = toolResults.getRecommendedProducts?.products || []
+  const faqSearch = toolResults.searchFaqs || null
+  const policySearch = toolResults.searchPolicies || null
+
+  if (NAVIGATION_SUBJECTS.includes(optimizer.subject)) {
+    const faqPolicyAnswer = buildFaqPolicyAnswer({ faqSearch, policySearch, query, language: lang })
+    const hasDbMatch = Boolean(faqSearch?.matched || policySearch?.matched)
+    const answer = faqPolicyAnswer
+      || (lang === 'en'
+        ? 'GymPro does not currently have published FAQ or policy data for this question.'
+        : 'Hiện GymPro chưa có FAQ hoặc chính sách đã công bố cho câu hỏi này.')
+    const navigation = await resolveNavigation({
+      query,
+      subject: optimizer.subject,
+      action: optimizer.action,
+      intent: optimizer.intent || 'navigation',
+      userRole,
+    })
+    const navigationAnswer = buildNavigationAnswer({ navigation, baseAnswer: hasDbMatch || faqPolicyAnswer ? answer : '', lang })
+    const responseType = navigationAnswer.links.length > 0 || navigation?.blocked
+      ? 'navigation_answer'
+      : (optimizer.subject === 'policy' ? 'policy_answer' : 'text_advice')
+    return {
+      answer: navigationAnswer.answer,
+      responseType,
+      payload: { type: responseType, faqSearch, policySearch, links: navigationAnswer.links, navigation },
+      links: navigationAnswer.links,
+      mentionedFaq: faqSearch?.matched || null,
+      mentionedPolicy: policySearch?.matched || null,
+    }
+  }
 
   if (optimizer.subject === 'plan') {
     if (plans.length === 0) return { answer: buildEmptyDataResponse({ subject: 'plan', lang }), responseType: 'text_advice', payload: { type: 'text_advice', plans: [] } }
     if (/\b(dat nhat|cao nhat|expensive|highest)\b/.test(n)) {
       const plan = pickMostExpensivePlan(plans)
+      const answer = plan
+        ? formatPlanDetailResponse(plan, lang)
+        : buildEmptyDataResponse({ subject: 'plan', lang })
       return {
-        answer: buildPlanRecommendResponse({ plan, reason: lang === 'en' ? 'This is the highest-priced active plan in GymPro data.' : 'Đây là gói có giá cao nhất trong dữ liệu GymPro hiện tại.', alternatives: plans.filter((p) => String(p.id || p._id) !== String(plan?.id || plan?._id)).slice(0, 2), lang }),
-        responseType: 'plan_recommend',
-        payload: { type: 'plan_recommend', recommendedPlan: plan, plans },
+        answer,
+        responseType: 'text_advice',
+        payload: { type: 'text_advice', plans: plan ? [plan] : [] },
         mentionedPlan: plan,
       }
     }
     if (/\b(re nhat|it tien nhat|thap nhat|cheapest|lowest)\b/.test(n)) {
       const plan = pickCheapestPlan(plans)
+      const answer = plan
+        ? formatPlanDetailResponse(plan, lang)
+        : buildEmptyDataResponse({ subject: 'plan', lang })
       return {
-        answer: buildPlanRecommendResponse({ plan, reason: lang === 'en' ? 'This is the lowest-priced active plan in GymPro data.' : 'Đây là gói có giá thấp nhất trong dữ liệu GymPro hiện tại.', alternatives: plans.filter((p) => String(p.id || p._id) !== String(plan?.id || plan?._id)).slice(0, 2), lang }),
-        responseType: 'plan_recommend',
-        payload: { type: 'plan_recommend', recommendedPlan: plan, plans },
+        answer,
+        responseType: 'text_advice',
+        payload: { type: 'text_advice', plans: plan ? [plan] : [] },
         mentionedPlan: plan,
       }
     }
     const target = optimizer.targetEntity?.id
       ? plans.find((p) => String(p.id || p._id) === String(optimizer.targetEntity.id))
-      : extractMentionedPlan(query, plans)
+      : (findPlanByName(optimizer.targetEntity?.name, plans) || extractMentionedPlan(query, plans))
     if (optimizer.action === 'detail' && target) {
       return {
-        answer: buildPlanRecommendResponse({ plan: target, lang }),
+        answer: formatPlanDetailResponse(target, lang),
         responseType: 'plan_detail',
         payload: { type: 'plan_detail', plans, cards: [target] },
         mentionedPlan: target,
       }
     }
     if (optimizer.action === 'detail' && !target) {
+      if (optimizer.targetEntity?.name) {
+        return {
+          answer: buildPlanNotFoundResponse(optimizer.targetEntity.name, lang),
+          responseType: 'text_advice',
+          payload: { type: 'text_advice', plans: [] },
+        }
+      }
       return {
         answer: buildPlanClarification(plans, lang),
         responseType: 'text_advice',
@@ -278,11 +392,20 @@ const buildDirectToolAnswer = ({ query, optimizer, toolResults, memory, lang }) 
     }))
     const selectedPT = optimizer.targetEntity?.id
       ? ptItems.find((pt) => String(pt.id) === String(optimizer.targetEntity.id))
-      : /\b(rating cao nhat|danh gia cao nhat|gioi nhat)\b/.test(n)
+      : optimizer.targetEntity?.name
+        ? ptItems.find((pt) => normalizeQuery(pt.name) === normalizeQuery(optimizer.targetEntity.name))
+        : /\b(rating cao nhat|danh gia cao nhat|gioi nhat)\b/.test(n)
         ? pickTopRatedPT(ptItems)
         : optimizer.action === 'detail'
-          ? ptItems[0]
+          ? null
           : null
+    if (optimizer.action === 'detail' && !selectedPT && optimizer.targetEntity?.name) {
+      return {
+        answer: buildPtNotFoundResponse(optimizer.targetEntity.name, lang),
+        responseType: 'text_advice',
+        payload: { type: 'text_advice', pts: [] },
+      }
+    }
     return {
       answer: selectedPT ? formatPTDetailResponse(selectedPT, lang) : buildPtListResponse({ pts: ptItems, lang }),
       responseType: selectedPT ? 'pt_detail' : 'pt_list',
@@ -325,13 +448,10 @@ const buildAgentAnswer = async ({
       return buildPlanListResponse({ plans, lang })
     }
     if (plans && plans.length > 0) {
-      if (isCheapestIntent(query) || (action === 'compare' && targetPlan)) {
+      if (isCheapestIntent(query)) {
         const cheapest = pickCheapestPlan(plans)
         if (cheapest) {
-          const reason = lang === 'en'
-            ? `At ${(cheapest.price || 0).toLocaleString()}₫, this is the most affordable option.`
-            : `Với giá ${(cheapest.price || 0).toLocaleString()}₫, đây là lựa chọn tiết kiệm nhất.`
-          return buildPlanRecommendResponse({ plan: cheapest, reason, alternatives: plans.filter((p) => p._id !== cheapest._id).slice(0, 2), lang })
+          return formatPlanDetailResponse(cheapest, lang)
         }
       }
       if (action === 'recommend' || hasBudget || hasFrequency || goal) {
@@ -344,8 +464,7 @@ const buildAgentAnswer = async ({
         }
       }
       if (targetPlan) {
-        const name = lang === 'en' ? (targetPlan.nameEn || targetPlan.nameVi) : (targetPlan.nameVi || targetPlan.nameEn)
-        return buildPlanRecommendResponse({ plan: targetPlan, lang })
+        return formatPlanDetailResponse(targetPlan, lang)
       }
       return buildPlanListResponse({ plans, lang })
     }
@@ -373,6 +492,81 @@ const buildAgentAnswer = async ({
   return null
 }
 
+const enforceFallbackBan = (analysis, fallbackKey) => {
+  const banned = analysis?.forbiddenFallbacks || []
+  if (banned.length === 0) return false
+  return banned.some((b) => fallbackKey.includes(b))
+}
+
+const roleCanAccess = (user, requiredRole) => {
+  if (!user) return false
+  const role = String(user.role || '').toLowerCase()
+  if (requiredRole === 'admin') return role === 'admin' || role === 'super_admin'
+  if (requiredRole === 'staff') return role === 'staff' || role === 'admin' || role === 'super_admin'
+  if (requiredRole === 'pt') return role === 'pt'
+  return true
+}
+
+const checkPermission = ({ user, analysis, query }) => {
+  const normalizedQuery = normalizeQuery(query)
+  const asksCredentialDisclosure = /\b(mat khau ma hoa|password hash|password|hash|token|jwt|secret|api key|cookie)\b/.test(normalizedQuery)
+    && /\b(xem|liet ke|cho xem|dua|tra|doan|guess|list|show|reveal|admin)\b/.test(normalizedQuery)
+  if (asksCredentialDisclosure) {
+    return { allowed: false, message: 'Tài khoản hiện tại không có quyền xem dữ liệu này.' }
+  }
+
+  if (!analysis?.needsPermissionCheck) return { allowed: true }
+
+  const role = String(user?.role || 'member').toLowerCase()
+
+  if (analysis.intent === 'report' && isNavigationLocationIntent(query) && /\b(doanh thu|revenue)\b/.test(normalizedQuery) && !['admin', 'super_admin', 'seller'].includes(role)) {
+    return { allowed: false, message: 'Tài khoản hiện tại không có quyền xem doanh thu.' }
+  }
+
+  if (analysis.intent === 'report' && !['admin', 'super_admin', 'seller'].includes(role)) {
+    return { allowed: false, message: 'Tài khoản hiện tại không có quyền xem dữ liệu này.' }
+  }
+
+  if (analysis.intent === 'report' && /admin|super_admin/i.test(query) && !['admin', 'super_admin'].includes(role)) {
+    return { allowed: false, message: 'Tài khoản hiện tại không có quyền xem dữ liệu này.' }
+  }
+
+  return { allowed: true }
+}
+
+const mergeConversationMemory = (storedMemory = {}, conversationContext = {}) => {
+  const merged = { ...(storedMemory || {}) }
+  if (conversationContext?.lastSubject) merged.lastSubject = conversationContext.lastSubject
+  if (conversationContext?.lastAction) merged.lastAction = conversationContext.lastAction
+  if (conversationContext?.lastIntent) merged.lastIntent = conversationContext.lastIntent
+  if (Array.isArray(conversationContext?.lastListedPlans) && conversationContext.lastListedPlans.length > 0) {
+    merged.lastListedPlans = conversationContext.lastListedPlans
+  }
+  if (Array.isArray(conversationContext?.lastListedPTs) && conversationContext.lastListedPTs.length > 0) {
+    merged.lastListedPTs = conversationContext.lastListedPTs
+  }
+  if (conversationContext?.lastMentionedPlan) merged.lastMentionedPlanName = conversationContext.lastMentionedPlan
+  if (conversationContext?.lastMentionedPT) merged.lastMentionedPTName = conversationContext.lastMentionedPT
+  const active = conversationContext?.activeEntity
+  if (active?.type === 'plan') {
+    merged.lastSubject = 'plan'
+    merged.lastMentionedPlanId = active.id || merged.lastMentionedPlanId
+    merged.lastMentionedPlanName = active.name || merged.lastMentionedPlanName
+    if (!Array.isArray(merged.lastListedPlans) || merged.lastListedPlans.length === 0) {
+      merged.lastListedPlans = [{ id: active.id || '', name: active.name || '', nameVi: active.name || '', position: active.position || 1 }]
+    }
+  }
+  if (active?.type === 'pt') {
+    merged.lastSubject = 'pt'
+    merged.lastMentionedPTId = active.id || merged.lastMentionedPTId
+    merged.lastMentionedPTName = active.name || merged.lastMentionedPTName
+    if (!Array.isArray(merged.lastListedPTs) || merged.lastListedPTs.length === 0) {
+      merged.lastListedPTs = [{ id: active.id || '', name: active.name || '', position: active.position || 1 }]
+    }
+  }
+  return merged
+}
+
 export const gymProAgent = async ({ query, userMessage, user, conversationContext, language = 'vi', memory: inputMemory }) => {
   const startedAt = Date.now()
   perfStart('gympro_agent_total')
@@ -381,8 +575,25 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   const userId = String(user?._id || user?.id || '')
   const conversationId = conversationContext?.conversationId || conversationContext?.sessionId || 'default'
 
-  const memory = inputMemory || agentMemory.get(userId, conversationId)
+  const memory = inputMemory || mergeConversationMemory(agentMemory.get(userId, conversationId), conversationContext)
   const n = normalizeQuery(queryText)
+
+  if (isOtherPersonSensitiveQuery(queryText)) {
+    const answer = lang === 'en'
+      ? "I can't provide another user's personal account information."
+      : 'Mình không thể cung cấp thông tin cá nhân của người dùng khác để bảo vệ quyền riêng tư.'
+    const audit = buildAudit({ source: 'local_fallback', usedTools: [], aiUsed: false, startedAt })
+    return withAudit({
+      answer,
+      usedTools: [],
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+      suggestions: [],
+      memoryUpdate: null,
+      confidence: 1,
+      shouldUseLegacyRouter: false,
+    }, audit)
+  }
 
   const introPattern = /\b(gympro|ban la ai|who are you|gioi thieu|introduce)\b/
   if (introPattern.test(n)) {
@@ -410,8 +621,29 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       const result = await runGymTool(optimizer.directTool, optimizer.args || {}, { userId })
       perfEnd('gympro_direct_tool')
       toolResults[optimizer.directTool] = result
-      const direct = buildDirectToolAnswer({ query: queryText, optimizer, toolResults, memory, lang })
+      const direct = await buildDirectToolAnswer({ query: queryText, optimizer, toolResults, memory, lang, userRole: user?.role || 'member' })
       if (direct?.answer) {
+        direct.answer = await constitutionalReview({
+          query: queryText,
+          answer: direct.answer,
+          subject: optimizer.subject,
+          analysis: {
+            subject: optimizer.subject,
+            action: optimizer.action,
+            intent: optimizer.intent,
+            entityName: optimizer.targetEntity?.name || '',
+            needsDatabase: true,
+            needsPermissionCheck: false,
+            requiredTools: [optimizer.directTool],
+            forbiddenFallbacks: optimizer.intent === 'membership_detail' ? ['membership_recommendation', 'faq', 'navigation'] : [],
+          },
+          toolData: {
+            plansCount: toolResults.getAvailablePlans?.plans?.length,
+            ptsCount: toolResults.getAvailablePTs?.pts?.length,
+            productsCount: toolResults.getRecommendedProducts?.products?.length,
+          },
+          lang,
+        })
         const memoryPatch = {
           lastSubject: optimizer.subject,
           lastAction: optimizer.action,
@@ -439,6 +671,7 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
           usedTools: [optimizer.directTool],
           responseType: direct.responseType,
           payload: direct.payload,
+          links: direct.links || direct.payload?.links || [],
           suggestions: lang === 'en' ? ['Show details', 'Compare options', 'Recommend for me'] : ['Xem chi tiết', 'So sánh lựa chọn', 'Gợi ý cho tôi'],
           memoryUpdate: memoryPatch,
           confidence: optimizer.confidence,
@@ -453,7 +686,21 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   perfStart('gympro_reasoner')
   const analysis = await reasonQuery({ query: queryText, memory, conversationContext, language: lang })
   perfEnd('gympro_reasoner')
-  console.log('[GYM_PRO_AGENT] analysis:', queryText, '→', analysis.subject, '/', analysis.action, 'confidence:', analysis.confidence, 'source:', analysis.source, 'tools:', analysis.needsTools)
+  const analysisTools = Array.isArray(analysis.requiredTools) ? analysis.requiredTools : (Array.isArray(analysis.needsTools) ? analysis.needsTools : [])
+  analysis.requiredTools = analysisTools
+  analysis.needsTools = analysisTools
+  analysis.entities = analysis.entities || { budget: null, goal: null, frequencyPerWeek: null, mentionedPlan: null, mentionedPT: null }
+  console.log('[GYM_PRO_AGENT] analysis:', 'intent=', analysis.intent, 'subject=', analysis.subject, 'action=', analysis.action, 'tools=', analysisTools.join(','), 'permissionCheck=', Boolean(analysis.needsPermissionCheck), 'confidence=', analysis.confidence)
+  logAiDocsLoaded({
+    docsInfo: getRelevantAiDocs({
+      subject: analysis.subject || 'core',
+      action: analysis.action || '',
+      intent: analysis.intent || '',
+      responseType: analysis.responseType || '',
+      purpose: 'agent',
+      maxChars: 3500,
+    }),
+  })
 
   if (!analysis.subject && !analysis.isFollowUp) {
     const audit = buildAudit({ source: 'ai_reasoning', optimizer, usedTools: [], aiUsed: true, startedAt })
@@ -463,13 +710,69 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     }, audit)
   }
 
+  const permissionResult = checkPermission({ user, analysis, query: queryText })
+  console.log('[GYM_PRO_AGENT] permissionResult:', permissionResult.allowed ? 'allowed' : 'denied')
+  if (!permissionResult.allowed) {
+    const audit = buildAudit({ source: 'permission', optimizer, usedTools: [], aiUsed: analysis.source === 'llm', startedAt })
+    return withAudit({
+      answer: permissionResult.message,
+      usedTools: [],
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+      suggestions: [],
+      memoryUpdate: null,
+      confidence: 1,
+      shouldUseLegacyRouter: false,
+    }, audit)
+  }
+
+  if (analysis.intent === 'report' && analysis.needsPermissionCheck && analysisTools.length === 0) {
+    const answer = lang === 'en'
+      ? 'This question requires live GymPro report data. I cannot skip the database, and the required report tools are not available here.'
+      : 'Câu hỏi này cần dữ liệu báo cáo trực tiếp từ GymPro. Mình không thể bỏ qua database, và hiện chưa có tool báo cáo phù hợp để lấy dữ liệu.'
+    const audit = buildAudit({ source: 'permission', optimizer, usedTools: [], aiUsed: analysis.source === 'llm', startedAt })
+    return withAudit({
+      answer,
+      usedTools: [],
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+      suggestions: [],
+      memoryUpdate: null,
+      confidence: analysis.confidence,
+      shouldUseLegacyRouter: false,
+    }, audit)
+  }
+
+  if (analysis.intent === 'report' && isNavigationLocationIntent(queryText)) {
+    const navigation = await resolveNavigation({
+      query: queryText,
+      subject: 'report',
+      action: 'find_location',
+      intent: /\b(doanh thu|revenue)\b/.test(normalizeQuery(queryText)) ? 'revenue_navigation' : 'report_navigation',
+      userRole: user?.role || 'member',
+    })
+    const navigationAnswer = buildNavigationAnswer({ navigation, lang })
+    const audit = buildAudit({ source: 'navigation', optimizer, usedTools: [], aiUsed: analysis.source === 'llm', startedAt })
+    return withAudit({
+      answer: navigationAnswer.answer,
+      usedTools: [],
+      responseType: 'navigation_answer',
+      payload: { type: 'navigation_answer', links: navigationAnswer.links, navigation },
+      links: navigationAnswer.links,
+      suggestions: [],
+      memoryUpdate: { lastSubject: 'navigation', lastAction: 'find_location' },
+      confidence: analysis.confidence,
+      shouldUseLegacyRouter: false,
+    }, audit)
+  }
+
   const toolResults = {}
   let hasError = false
   const context = { userId }
 
-  if (analysis.needsTools.length > 0) {
+  if (analysisTools.length > 0) {
     perfStart('gympro_tools')
-    for (const toolName of analysis.needsTools) {
+    for (const toolName of analysisTools) {
       try {
         let args = {}
         if (toolName === 'getSmartRecommendations') {
@@ -497,7 +800,22 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
 
   const targetPlan = analysis.followUpTarget
     ? (plans.find((p) => String(p._id || p.id) === String(analysis.followUpTarget.id || analysis.followUpTarget)) || findPlanByName(analysis.followUpTarget.name, plans) || extractMentionedPlan(queryText, plans))
-    : (findPlanByName(analysis.entities?.mentionedPlan, plans) || extractMentionedPlan(queryText, plans))
+    : (findPlanByName(analysis.entities?.mentionedPlan || analysis.entityName, plans) || extractMentionedPlan(queryText, plans))
+
+  if (analysis.intent === 'membership_detail' && analysis.entityName && plans.length > 0 && !targetPlan) {
+    const answer = buildPlanNotFoundResponse(analysis.entityName, lang)
+    const audit = buildAudit({ source: 'database', optimizer, usedTools: analysisTools, aiUsed: analysis.source === 'llm', startedAt })
+    return withAudit({
+      answer,
+      usedTools: analysisTools,
+      responseType: 'text_advice',
+      payload: { type: 'text_advice', plans: [] },
+      suggestions: [],
+      memoryUpdate: null,
+      confidence: analysis.confidence,
+      shouldUseLegacyRouter: false,
+    }, audit)
+  }
 
   if (analysis.shouldAskClarification && analysis.subject === 'plan' && !targetPlan) {
     const answer = buildPlanClarification(plans, lang)
@@ -532,8 +850,8 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     return withAudit({
       answer: comparisonText,
       usedTools: analysis.needsTools,
-      responseType: 'text_advice',
-      payload: { type: 'text_advice', plans },
+      responseType: 'plan_compare',
+      payload: { type: 'plan_compare_all', plans },
       suggestions: lang === 'en' ? ['Which plan fits my budget?', 'Show all plans'] : ['Gói nào phù hợp ngân sách?', 'Xem tất cả gói'],
       memoryUpdate: { lastSubject: 'plan', lastAction: 'compare', lastMentionedPlanId: targetPlan._id, lastMentionedPlanName: lang === 'en' ? (targetPlan.nameEn || targetPlan.nameVi) : (targetPlan.nameVi || targetPlan.nameEn) },
       confidence: 0.85,
@@ -569,9 +887,26 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
         // Use resolved PT ID from follow-up
         selectedPT = ptItems.find((p) => String(p.id) === String(analysis.followUpTarget.id))
       }
+      if (!selectedPT && (analysis.entities?.mentionedPT || analysis.entityName)) {
+        const requestedName = normalizeQuery(analysis.entities?.mentionedPT || analysis.entityName)
+        selectedPT = ptItems.find((p) => normalizeQuery(p.name) === requestedName)
+      }
       if (!selectedPT) {
-        // Fallback to first PT
-        selectedPT = ptItems[0]
+        const requestedName = analysis.entities?.mentionedPT || analysis.entityName
+        if (requestedName) {
+          const answer = buildPtNotFoundResponse(requestedName, lang)
+          const audit = buildAudit({ source: 'database', optimizer, usedTools: analysisTools, aiUsed: analysis.source === 'llm', startedAt })
+          return withAudit({
+            answer,
+            usedTools: analysisTools,
+            responseType: 'text_advice',
+            payload: { type: 'text_advice', pts: [] },
+            suggestions: lang === 'en' ? ['Show available trainers'] : ['Xem danh sách PT hiện có'],
+            memoryUpdate: null,
+            confidence: analysis.confidence,
+            shouldUseLegacyRouter: false,
+          }, audit)
+        }
       }
     }
 
@@ -604,11 +939,34 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   }
 
   const hasData = hasAnyToolData(Object.values(toolResults))
-  if (!hasData && !hasError) {
-    const audit = buildAudit({ source: 'tool', optimizer, usedTools: analysis.needsTools, aiUsed: analysis.source === 'llm', startedAt })
+  if (!hasData && !hasError && analysis.needsDatabase) {
+    const audit = buildAudit({ source: 'tool', optimizer, usedTools: analysisTools, aiUsed: analysis.source === 'llm', startedAt })
     return withAudit({
-      answer: null, usedTools: analysis.needsTools, responseType: null, payload: null, suggestions: [],
-      memoryUpdate: null, confidence: analysis.confidence * 0.5, shouldUseLegacyRouter: true,
+      answer: buildEmptyDataResponse({ subject: analysis.subject, lang }),
+      usedTools: analysisTools,
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+      suggestions: [],
+      memoryUpdate: null,
+      confidence: analysis.confidence,
+      shouldUseLegacyRouter: false,
+    }, audit)
+  }
+
+  if (hasError && analysis.needsDatabase) {
+    const answer = lang === 'en'
+      ? 'I cannot retrieve the required GymPro data right now.'
+      : 'Hiện mình chưa lấy được dữ liệu cần thiết từ GymPro.'
+    const audit = buildAudit({ source: 'tool_error', optimizer, usedTools: analysisTools, aiUsed: analysis.source === 'llm', startedAt })
+    return withAudit({
+      answer,
+      usedTools: analysisTools,
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+      suggestions: [],
+      memoryUpdate: null,
+      confidence: analysis.confidence * 0.6,
+      shouldUseLegacyRouter: false,
     }, audit)
   }
 
@@ -625,6 +983,23 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       goal: analysis.entities.goal || memory.lastGoal,
       subject: analysis.subject,
       action: analysis.action,
+    })
+  }
+
+  if (answer) {
+    const toolDataForReview = {
+      plansCount: plans?.length,
+      ptsCount: pts?.length,
+      hasMemberships: !!memberships,
+      hasSmartRec: !!smartRec,
+    }
+    answer = await constitutionalReview({
+      query: queryText,
+      answer,
+      subject: analysis.subject,
+      analysis,
+      toolData: toolDataForReview,
+      lang,
     })
   }
 
@@ -688,4 +1063,11 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     confidence: analysis.confidence,
     shouldUseLegacyRouter: false,
   }, audit)
+}
+
+export const __gymProAgentTestHooks = {
+  buildDirectToolAnswer,
+  checkPermission,
+  buildPlanNotFoundResponse,
+  buildPtNotFoundResponse,
 }

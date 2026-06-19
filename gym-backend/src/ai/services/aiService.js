@@ -2,7 +2,7 @@ import Membership from '../../models/Membership.js'
 import User from '../../models/User.js'
 import { buildWebSearchContext, searchFitnessWeb, webSearchNutrition } from '../../services/webSearchService.js'
 import { runAIWithFallback } from './aiFallbackService.js'
-import { getReasoningGuide } from './reasoningGuideService.js'
+import { AI_DOC_FILES, getRelevantAiDocs } from './aiDocsService.js'
 import {
   buildGenericNutritionAnswer as buildGenericNutritionAnswerFromBuilder,
   getNutritionWebSources as getNutritionWebSourcesFromBuilder,
@@ -50,6 +50,8 @@ import {
 } from './context/contextDataService.js'
 import { conversationalUnderstand } from './conversationalUnderstandingLayer.js'
 import { buildPlanRecommendationPayload } from './dbResponder.js'
+import { buildFaqPolicyAnswer, inferFaqCategory, inferPolicyCategory, isPolicyQuery, isStrongPolicyQuery, isSupportFaqQuery, searchFaqs as searchFaqsDb, searchPolicies as searchPoliciesDb } from './faqPolicySearchService.js'
+import { buildNavigationAnswer, resolveNavigation } from './navigationResolver.js'
 import { buildCheckinSummaryResponse, buildMembershipInfoResponse, buildPlanListResponse, buildPtListResponse, buildWorkoutAdviceResponse } from './naturalResponseBuilder.js'
 import {
   answerIsParseFailure,
@@ -97,16 +99,33 @@ const tAI = (key, language = 'vi') => {
 
 const PRIVACY_DENIED_MESSAGE = 'Mình không thể cung cấp thông tin cá nhân của người dùng khác để bảo vệ quyền riêng tư.'
 
+const hasOwnAccountHelpIntent = (normalized = '') => {
+  const accountSubject = /\b(tai khoan|account|profile|ho so|email|e-mail|password|mat khau|otp|login|dang nhap|register|dang ky|cai dat|settings)\b/.test(normalized)
+  if (!accountSubject) return false
+
+  const authOrProfileAction = /\b(doi|thay doi|cap nhat|sua|dat lai|reset|quen|lay lai|xem|o dau|cho nao|vao dau|huong dan|help|change|update|edit|forgot|where|view|login|dang nhap|register|dang ky|otp)\b/.test(normalized)
+  const explicitOwnScope = /\b(cua toi|toi|minh|my|mine|me|my account|tai khoan cua toi|ho so cua toi)\b/.test(normalized)
+  const accountSettings = /\b(cai dat tai khoan|account settings|profile|ho so|dang nhap|login|dang ky|register|otp)\b/.test(normalized)
+
+  return authOrProfileAction || explicitOwnScope || accountSettings
+}
+
+const asksOtherPersonData = (normalized = '') => /\b(nguoi khac|member khac|user khac|hoi vien khac|thanh vien khac|khach hang khac|tat ca|danh sach|all members|other user|another user|someone else|nguoi do|anh do|chi do|ban do|cua thanh vien|cua member|cua user)\b/.test(normalized)
+
 const isSensitiveDataRequest = (query = '', user = null) => {
   const normalized = normalizeForIntent(query)
-  const asksSensitive = /\b(email|e-mail|so dien thoai|số điện thoại|phone|contact|lien he|liên hệ|thong tin ca nhan|thông tin cá nhân|tai khoan|tài khoản|password|mat khau|mật khẩu|token|cookie|jwt)\b/.test(normalized)
+  const asksSensitive = /\b(email|e-mail|so dien thoai|số điện thoại|phone|contact|lien he|liên hệ|thong tin ca nhan|thông tin cá nhân|tai khoan|tài khoản|profile|ho so|hồ sơ|password|mat khau|mật khẩu|token|cookie|jwt)\b/.test(normalized)
   if (!asksSensitive) return false
+
+  if (hasOwnAccountHelpIntent(normalized) && !asksOtherPersonData(normalized) && !/\b(token|cookie|jwt)\b/.test(normalized)) {
+    return false
+  }
 
   const ownData = /\b(cua toi|của tôi|toi la gi|tôi là gì|my|mine|me)\b/.test(normalized)
   if (ownData && !/\b(password|mat khau|mật khẩu|token|cookie|jwt)\b/.test(normalized)) return false
 
   if (/\b(password|mat khau|mật khẩu|token|cookie|jwt)\b/.test(normalized)) return true
-  if (/\b(nguoi khac|người khác|member khac|member khác|user khac|user khác|hoi vien khac|hội viên khác|tat ca|tất cả|danh sach|danh sách|all members|other user|another user)\b/.test(normalized)) {
+  if (asksOtherPersonData(normalized)) {
     return getRole(user) !== 'admin' || /\b(password|mat khau|mật khẩu|token|cookie|jwt)\b/.test(normalized)
   }
   return false
@@ -2849,9 +2868,14 @@ const preloadReasoningContext = async ({ user, query, cacheContext }) => {
 
 // 2. Classifier system prompts & runners
 const buildClassifierSystemPrompt = () => {
-  const guide = getReasoningGuide({
+  const guide = getRelevantAiDocs({
     subject: 'core',
-    sections: ['Quy tắc dữ liệu', 'Thứ tự nguồn dữ liệu', 'Tool Planning', 'Query Reasoner', 'Safety Rule'],
+    purpose: 'query_reasoner',
+    files: [AI_DOC_FILES.architecture, AI_DOC_FILES.master],
+    sections: {
+      [AI_DOC_FILES.master]: ['Quy tắc dữ liệu', 'Thứ tự nguồn dữ liệu', 'Tool Planning', 'Query Reasoner', 'Safety Rule'],
+      [AI_DOC_FILES.architecture]: ['Layer 1 - Query Understanding', 'Layer 2 - Intent Classification', 'Layer 3 - Tool Planning', 'Layer 4 - Data Priority'],
+    },
     maxChars: 5000,
   })
   return `Bạn là AI Intent Classifier toàn hệ thống cho GymPro.
@@ -2862,10 +2886,16 @@ Nhiệm vụ:
 - Chỉ trả JSON hợp lệ.
 - Không giải thích ngoài JSON.
 
-GymPro reasoning guide từ docs/AI_GYMPRO_REASONING_MASTER.md:
+GymPro reasoning docs từ src/ai/docs:
 ${guide.content || 'Guide unavailable. Follow database-first and no-hardcode rules.'}
 
 Quy tắc:
+- Trước khi chọn privacy/security intent, phải xác định user đang hỏi về tài khoản/mật khẩu/email/hồ sơ/OTP/login/register/settings của chính họ hay dữ liệu người khác.
+- "đổi mật khẩu ở đâu" => account_password_help/account guidance, KHÔNG phải privacy.
+- "quên mật khẩu" => password_reset/account guidance, KHÔNG phải privacy.
+- "đổi email" => account_email_change/account guidance, KHÔNG phải privacy.
+- "hồ sơ của tôi" => profile_view/member_profile, KHÔNG phải privacy.
+- Chỉ dùng privacy/privacy_denied khi user hỏi dữ liệu của người khác như số điện thoại/email/hồ sơ của thành viên khác.
 - Nếu user hỏi "PT nào", "huấn luyện viên nào", "which trainer/PT" phù hợp/gợi ý/recommend cho mục tiêu, người mới, tăng cơ, ngân sách thấp => pt_advice, tools ["pts"]. KHÔNG trả plan_recommend và KHÔNG đề xuất gói tập thay cho PT.
 - Nếu user nói ngân sách, mới tập, sinh viên, muốn khỏe hơn, tăng cơ, giảm cân, tập mấy buổi/tuần, không cần PT, muốn tập lâu dài, phòng tập cơ bản mà KHÔNG hỏi PT cụ thể => membership_advice hoặc plan_comparison, KHÔNG phải shop/schedule.
 - Nếu câu quá ngắn/không rõ như "VIP?", "PT?", "Gói?", "Checkin?" => intent unclear_question, action unclear, shouldAskClarify=true, shouldRenderCard=false.
@@ -2896,7 +2926,7 @@ JSON Output structure:
   "language": "vi | en",
   "needsAIReasoning": true,
   "needsDatabase": true,
-  "tools": ["plans", "membership", "checkins", "pts", "ptAvailability", "bookings", "workout", "health", "products", "webSearchNutrition", "cart", "orders", "notifications", "faqs", "policies", "feedback", "reports", "members", "systemSettings", "landingCms"],
+  "tools": ["plans", "membership", "checkins", "pts", "ptAvailability", "bookings", "workout", "health", "products", "webSearchNutrition", "cart", "orders", "notifications", "faqs", "policies", "searchFaqs", "searchPolicies", "feedback", "reports", "members", "systemSettings", "landingCms"],
   "reason": "ngắn gọn lý do phân loại",
   "entities": {
     "budget": number | null,
@@ -2984,6 +3014,99 @@ const runAiClassifier = async ({ query, recentConversation, semanticMemory, tool
     console.error('Classifier run error:', error)
     return null
   }
+}
+
+const extractLegacyPlanName = (normalized = '') => {
+  const match = normalized.match(/\bgoi\s+(.+?)\s+(?:gia|bao nhieu tien|co quyen loi|quyen loi|co gi|gom|bao gom|chi tiet|thong tin|la gi|the nao)\b/)
+    || normalized.match(/\b(.+?)\s+(?:co quyen loi|quyen loi|co gi|gia bao nhieu|bao nhieu tien)\b/)
+  if (!match?.[1]) return ''
+  return match[1]
+    .replace(/\b(goi|cua|toi|hay|cho|biet|gia|price|cost)\b/g, ' ')
+    .replace(/\b\d+(\s+)?(k|nghin|trieu|m|tr|ty|vnd|dong)?\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const getLockedLegacyIntent = (query = '') => {
+  const n = normalizeForIntent(query)
+  const hasPlan = /\b(goi|plan|membership)\b/.test(n)
+  const hasPT = /\b(pt|trainer|coach|hlv|huan luyen vien)\b/.test(n)
+  const asksReport = /\b(doanh thu|bao cao|thong ke|hoi vien|member count|so luong hoi vien|email hoi vien|so dien thoai pt|don hang gan nhat|mat khau ma hoa|password hash)\b/.test(n)
+  const asksCompare = hasPlan && /\b(so sanh|khac nhau|khac gi|vs|versus|compare)\b/.test(n)
+  const asksPlanDetail = hasPlan
+    && /\b(gia|bao nhieu tien|price|cost|quyen loi|co gi|benefit|benefits|chi tiet|thong tin)\b/.test(n)
+    && !/\b(goi nao|nen chon|phu hop|hop voi|goi y|tu van|recommend|suggest)\b/.test(n)
+  const asksPlanList = hasPlan && /\b(cac goi|nhung goi|danh sach|liet ke|tat ca|co may|co bao nhieu|re nhat|dat nhat|cao nhat|thap nhat)\b/.test(n)
+  const asksPTDetail = hasPT && /\b(dang nhan|hoc vien|bao nhieu|chi tiet|thong tin|profile|ho so)\b/.test(n)
+
+  if (asksReport) {
+    return {
+      subject: 'report',
+      action: /\b(o dau|vao dau|mo trang nao|trang nao|duong dan)\b/.test(n) ? 'view' : 'summary',
+      intent: 'admin_report',
+      tools: ['reports', 'members'],
+      needsDatabase: true,
+      needsAIReasoning: false,
+      shouldAskClarify: false,
+      shouldRenderCard: false,
+      reason: 'locked: report/revenue query',
+    }
+  }
+  if (asksCompare) {
+    return {
+      subject: 'plan',
+      action: 'compare',
+      intent: 'plan_comparison',
+      tools: ['plans'],
+      needsDatabase: true,
+      needsAIReasoning: false,
+      shouldAskClarify: false,
+      shouldRenderCard: false,
+      reason: 'locked: membership compare',
+    }
+  }
+  if (asksPlanDetail) {
+    const planName = extractLegacyPlanName(n)
+    return {
+      subject: 'plan',
+      action: 'info',
+      intent: /\b(quyen loi|co gi|benefit|benefits|chi tiet|thong tin)\b/.test(n) ? 'membership_benefit_lookup' : 'membership_info',
+      tools: ['plans'],
+      needsDatabase: true,
+      needsAIReasoning: false,
+      shouldAskClarify: false,
+      shouldRenderCard: false,
+      reason: 'locked: membership detail',
+      mentionedPlanName: planName,
+    }
+  }
+  if (asksPlanList) {
+    return {
+      subject: 'plan',
+      action: 'list',
+      intent: 'membership_info',
+      tools: ['plans'],
+      needsDatabase: true,
+      needsAIReasoning: false,
+      shouldAskClarify: false,
+      shouldRenderCard: false,
+      reason: 'locked: membership list/sort',
+    }
+  }
+  if (asksPTDetail) {
+    return {
+      subject: 'pt',
+      action: 'info',
+      intent: 'pt_info',
+      tools: ['pts'],
+      needsDatabase: true,
+      needsAIReasoning: false,
+      shouldAskClarify: false,
+      shouldRenderCard: false,
+      reason: 'locked: pt detail',
+    }
+  }
+  return null
 }
 
 const normalizeClassifierResult = (classifierResult, query, user = null, language = 'vi', semanticMemory = {}) => {
@@ -3284,9 +3407,26 @@ const normalizeClassifierResult = (classifierResult, query, user = null, languag
     normalized.shouldRenderCard = false
   }
 
+  const lockedIntent = getLockedLegacyIntent(query)
+  if (lockedIntent) {
+    normalized.subject = lockedIntent.subject
+    normalized.action = lockedIntent.action
+    normalized.intent = lockedIntent.intent
+    normalized.tools = lockedIntent.tools
+    normalized.needsDatabase = lockedIntent.needsDatabase
+    normalized.needsAIReasoning = lockedIntent.needsAIReasoning
+    normalized.shouldAskClarify = lockedIntent.shouldAskClarify
+    normalized.shouldRenderCard = lockedIntent.shouldRenderCard
+    if (lockedIntent.mentionedPlanName && !normalized.entities.mentionedPlanNames.includes(lockedIntent.mentionedPlanName)) {
+      normalized.entities.mentionedPlanNames = [lockedIntent.mentionedPlanName]
+    }
+    normalized.confidence = Math.max(normalized.confidence, 0.91)
+    normalized.reason = `${normalized.reason} | ${lockedIntent.reason}`.trim()
+  }
+
   if (normalized.intent === 'admin_report' && !hasRole(user, ADMIN_ROLES)) {
-    normalized.intent = 'general_chat'
-    normalized.needsDatabase = false
+    normalized.shouldRenderCard = false
+    normalized.needsAIReasoning = false
     normalized.reason = `${normalized.reason} | role guard: admin_report denied for ${getRole(user)}`.trim()
   }
 
@@ -3744,9 +3884,14 @@ const compactToolDataForAi = (toolData = {}, language = 'vi') => {
 // 4. Answer Generator Prompts
 const buildAnswerGeneratorSystemPrompt = (language = 'vi', subject = 'core') => {
   const lang = normalizeLanguage(language)
-  const guide = getReasoningGuide({
+  const guide = getRelevantAiDocs({
     subject: subject || 'core',
-    sections: ['Quy tắc dữ liệu', 'Thứ tự nguồn dữ liệu', 'Response Rule', 'Safety Rule', 'Web Search Rule'],
+    purpose: 'render',
+    files: [AI_DOC_FILES.master, AI_DOC_FILES.render],
+    sections: {
+      [AI_DOC_FILES.master]: ['Quy tắc dữ liệu', 'Thứ tự nguồn dữ liệu', 'Response Rule', 'Safety Rule', 'Web Search Rule'],
+      [AI_DOC_FILES.render]: ['Nguyên Tắc Chung', 'Typography Rules', 'Plan List', 'PT List', 'Product List', 'Nutrition', 'Workout', 'Anti Patterns'],
+    },
     maxChars: 5500,
   })
   const languageInstruction = lang === 'en'
@@ -3765,7 +3910,7 @@ Không tự dịch dữ liệu database và không suy đoán bản dịch bị 
 Bạn là GymPro Operations Assistant - trợ lý thông minh cho toàn bộ hệ thống phòng gym.
 Bạn hỗ trợ theo role của user: Auth/Profile, Membership/Plans, Member info, Check-in QR, PT, Booking, Workout, Health, Reports/Dashboard, Products/Shop, Notifications, Feedback/Policies/FAQ, Theme/System settings.
 
-GymPro reasoning guide từ docs/AI_GYMPRO_REASONING_MASTER.md:
+GymPro AI docs từ src/ai/docs:
 ${guide.content || 'Guide unavailable. Follow database-first and no-hardcode rules.'}
 
 Nguyên tắc bắt buộc:
@@ -4092,6 +4237,81 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
     }
   }
 
+  if (isPolicyQuery(normalizedQuery) || isSupportFaqQuery(normalizedQuery)) {
+    try {
+      const supportFaqQuery = isSupportFaqQuery(normalizedQuery)
+      const usePolicy = isPolicyQuery(normalizedQuery) && (!supportFaqQuery || isStrongPolicyQuery(normalizedQuery))
+      const [policySearch, faqSearch] = await Promise.all([
+        usePolicy ? searchPoliciesDb({ query: normalizedQuery, category: inferPolicyCategory(normalizedQuery), limit: 5 }) : Promise.resolve(null),
+        searchFaqsDb({ query: normalizedQuery, category: inferFaqCategory(normalizedQuery), limit: 5 }),
+      ])
+      console.log(`[AI_TOOLS] selected: ${usePolicy ? 'policySearch' : 'faqSearch'}`)
+      const supportAnswer = buildFaqPolicyAnswer({ faqSearch, policySearch, query: normalizedQuery, language: lang })
+      if (supportAnswer) {
+        const navigation = await resolveNavigation({
+          query: normalizedQuery,
+          subject: usePolicy ? 'policy' : 'navigation',
+          action: 'find_location',
+          intent: usePolicy ? 'policy' : 'navigation',
+          userRole: user?.role || 'member',
+        })
+        const navigationAnswer = buildNavigationAnswer({ navigation, baseAnswer: supportAnswer, lang })
+        return {
+          type: navigationAnswer.links.length > 0 || navigation?.blocked ? 'navigation_answer' : (usePolicy ? 'policy_answer' : 'text_advice'),
+          responseType: navigationAnswer.links.length > 0 || navigation?.blocked ? 'navigation_answer' : (usePolicy ? 'policy_answer' : 'text_advice'),
+          answer: navigationAnswer.answer,
+          cards: [policySearch?.matched || faqSearch?.matched].filter(Boolean),
+          plans: [],
+          links: navigationAnswer.links,
+          suggestions: [],
+          mode: 'gym',
+          provider: 'rule_guard',
+          model: 'local',
+          data: { faqSearch, policySearch, links: navigationAnswer.links, navigation },
+          metadata: {
+            intent: usePolicy ? 'policy_lookup' : 'faq_answer',
+            subject: usePolicy ? 'policy' : 'faq',
+            answeredBy: usePolicy ? 'policy_database' : 'faq_database',
+            answerLanguage: lang,
+          },
+        }
+      }
+      if (supportFaqQuery || usePolicy) {
+        const navigation = await resolveNavigation({
+          query: normalizedQuery,
+          subject: usePolicy ? 'policy' : 'navigation',
+          action: 'find_location',
+          intent: usePolicy ? 'policy' : 'navigation',
+          userRole: user?.role || 'member',
+        })
+        const navigationAnswer = buildNavigationAnswer({ navigation, lang })
+        if (navigationAnswer.answer) {
+          return {
+            type: 'navigation_answer',
+            responseType: 'navigation_answer',
+            answer: navigationAnswer.answer,
+            cards: [],
+            plans: [],
+            links: navigationAnswer.links,
+            suggestions: [],
+            mode: 'gym',
+            provider: 'rule_guard',
+            model: 'local',
+            data: { faqSearch, policySearch, links: navigationAnswer.links, navigation },
+            metadata: {
+              intent: usePolicy ? 'policy_navigation' : 'support_navigation',
+              subject: usePolicy ? 'policy' : 'navigation',
+              answeredBy: 'navigation_resolver',
+              answerLanguage: lang,
+            },
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[FAQ_POLICY_SEARCH] failed, continuing AI flow:', err.message)
+    }
+  }
+
   let classifierResult = null
   let classifierSource = 'fallback_rule'
   let provider = 'none'
@@ -4375,7 +4595,7 @@ export const runGymAiAction = async ({ query, user, conversationContext, languag
       const cardType = ['plan_detail', 'plan_list'].includes(desiredType)
       const showRecommendationCard = aiAnswerPayload.type === 'plan_recommend'
         && recommendedPlan
-        && (classifierResult.intent === 'membership_advice' || classifierResult.intent === 'membership_info' || classifierResult.intent === 'plan_comparison')
+        && classifierResult.intent === 'membership_advice'
         && !asksPlanBenefitQuestion(normalizedQuery)
       const responseType = usedNutritionWebSearch ? 'nutrition_advice_with_sources' : (showRecommendationCard ? 'plan_recommend' : desiredType)
       const answerReason = splitReadableItems(aiAnswerPayload.reason || aiAnswerPayload.reasons)

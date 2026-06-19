@@ -66,3 +66,28 @@ test('queryOptimizer resolves memory follow-up by entity id', () => {
   assert.equal(result.reason, 'memory_entity_follow_up')
   assert.equal(result.targetEntity.id, 'pt2')
 })
+
+test('queryOptimizer routes support/navigation questions to FAQ search', () => {
+  const password = optimizeQuery({ query: 'đổi mật khẩu ở đâu', memory: {} })
+  const forgot = optimizeQuery({ query: 'tôi quên mật khẩu phải làm sao', memory: {} })
+  const profile = optimizeQuery({ query: 'tôi có thể thay đổi thông tin cá nhân không', memory: {} })
+  const paymentHistory = optimizeQuery({ query: 'xem lịch sử thanh toán ở đâu', memory: {} })
+
+  assert.equal(password.shouldUseAI, false)
+  assert.equal(password.directTool, 'searchFaqs')
+  assert.equal(password.subject, 'account')
+  assert.equal(password.intent, 'account_navigation')
+  assert.equal(forgot.directTool, 'searchFaqs')
+  assert.equal(profile.directTool, 'searchFaqs')
+  assert.equal(paymentHistory.directTool, 'searchFaqs')
+})
+
+test('queryOptimizer routes policy questions to policy search', () => {
+  const refund = optimizeQuery({ query: 'hoàn tiền như nào', memory: {} })
+  const privacy = optimizeQuery({ query: 'chính sách bảo mật', memory: {} })
+
+  assert.equal(refund.shouldUseAI, false)
+  assert.equal(refund.directTool, 'searchPolicies')
+  assert.equal(privacy.shouldUseAI, false)
+  assert.equal(privacy.directTool, 'searchPolicies')
+})

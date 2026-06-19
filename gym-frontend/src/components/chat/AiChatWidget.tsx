@@ -596,6 +596,7 @@ const normalizeChatMessage = (message: ChatMessage): ChatMessage => {
         ...(isRecord(safeMessage.metadata) ? { metadata: safeMessage.metadata } : {}),
         ...(isRecord(safeMessage.data) ? { data: safeMessage.data } : {}),
         ...(Array.isArray(safeMessage.cards) ? { cards: safeMessage.cards } : {}),
+        ...(Array.isArray(safeMessage.links) ? { links: safeMessage.links } : {}),
         ...(isRecord(safeMessage.aiAction) ? { aiAction: safeMessage.aiAction } : {}),
         ...(attachments.length > 0 ? { attachments } : {}),
         ...(alternatives ? { alternatives } : {}),
@@ -698,7 +699,7 @@ const AiAssistantAvatar = ({ size = 28 }: { size?: number }) => (
         style={{
             background: 'var(--theme-button-bg)',
             color: 'var(--theme-button-text)',
-            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
+            boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--theme-button-text) 20%, transparent)',
         }}
     />
 )
@@ -731,7 +732,7 @@ function AiChatFloatingButton() {
                     border-radius: 999px;
                     background: var(--theme-button-bg);
                     color: var(--theme-button-text);
-                    box-shadow: 0 16px 42px rgba(0, 116, 170, 0.26);
+                    box-shadow: 0 8px 28px color-mix(in srgb, var(--theme-button-bg) 40%, transparent);
                     cursor: pointer;
                     font: inherit;
                     font-weight: 800;
@@ -741,7 +742,7 @@ function AiChatFloatingButton() {
                 }
                 .ai-gympro-floating-chat:hover {
                     transform: translateY(-2px);
-                    box-shadow: 0 20px 54px rgba(0, 116, 170, 0.34);
+                    box-shadow: 0 12px 36px color-mix(in srgb, var(--theme-button-bg) 50%, transparent);
                     filter: brightness(1.04);
                 }
                 .ai-gympro-floating-chat:focus-visible {
@@ -756,8 +757,8 @@ function AiChatFloatingButton() {
                     min-width: 38px;
                     border-radius: 999px;
                     overflow: hidden;
-                    background: color-mix(in srgb, var(--theme-card) 84%, transparent);
-                    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.28);
+                    background: color-mix(in srgb, var(--theme-button-bg) 18%, transparent);
+                    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-button-text) 24%, transparent);
                 }
                 .ai-gympro-floating-chat-text {
                     white-space: nowrap;
@@ -1343,6 +1344,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                     webSearch: fallbackResponse.webSearch,
                     data: isRecord(fallbackResponse.data) ? fallbackResponse.data : undefined,
                     cards: Array.isArray(fallbackResponse.cards) ? fallbackResponse.cards : undefined,
+                    links: Array.isArray(fallbackResponse.links) ? fallbackResponse.links : undefined,
                     aiAction: fallbackAction || undefined,
                     ...getAiResponsePlanFields(fallbackResponse),
                 }))
@@ -1372,6 +1374,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                     webSearch: response.webSearch,
                     data: isRecord(response.data) ? response.data : undefined,
                     cards: Array.isArray(response.cards) ? response.cards : undefined,
+                    links: Array.isArray(response.links) ? response.links : undefined,
                     aiAction: actionPayload || undefined,
                     ...getAiResponsePlanFields(response),
                 }))
@@ -1392,6 +1395,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                     webSearch: response.webSearch,
                     data: isRecord(response.data) ? response.data : undefined,
                     cards: Array.isArray(response.cards) ? response.cards : undefined,
+                    links: Array.isArray(response.links) ? response.links : undefined,
                     aiAction: actionPayload || undefined,
                     ...getAiResponsePlanFields(response),
                 }))
@@ -1696,8 +1700,18 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                     .ai-chat-session-actions { opacity: 1 !important; }
                 }
 
-                .ai-chat-panel textarea::placeholder {
-                    color: ${dark ? 'rgba(255,255,255,0.48)' : 'rgba(237,235,230,0.35)'};
+                .ai-chat-panel textarea::placeholder,
+                .ai-chat-panel .ant-input::placeholder,
+                .ai-chat-panel input::placeholder {
+                    color: var(--gs-muted) !important;
+                    opacity: 0.85 !important;
+                }
+                .ant-input::placeholder,
+                .ant-input-textarea textarea::placeholder,
+                input::placeholder,
+                textarea::placeholder {
+                    color: var(--gs-muted) !important;
+                    opacity: 0.85 !important;
                 }
 
                 .ai-chat-panel .ant-segmented {
@@ -1763,7 +1777,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                     margin-top: 10px;
                     padding: 12px 14px;
                     border-radius: 12px;
-                    background: rgba(255,255,255,0.06);
+                    background: color-mix(in srgb, var(--gs-text) 6%, transparent);
                     max-width: 100%;
                     overflow-wrap: anywhere;
                 }
@@ -1810,8 +1824,8 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                     gap: 12px;
                     padding: 11px 13px;
                     border-radius: 12px;
-                    background: rgba(255,255,255,0.09);
-                    border: 1px solid rgba(255,255,255,0.13);
+                    background: color-mix(in srgb, var(--gs-card) 90%, transparent);
+                    border: 1px solid var(--gs-border);
                 }
 
                 .ai-chat-copy-btn {
@@ -1832,7 +1846,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                     transition: opacity 0.15s, background 0.15s;
                 }
                 .ai-chat-copy-btn:hover {
-                    background: rgba(128,128,128,0.12);
+                    background: color-mix(in srgb, var(--gs-text) 10%, transparent);
                     color: var(--theme-text, inherit);
                 }
                 .ai-chat-message-wrapper:hover .ai-chat-copy-btn {
@@ -2209,7 +2223,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                 const bubbleBg = isUser ? 'var(--theme-accent)' : 'transparent'
                                                 const bubbleColor = isUser
                                                     ? 'var(--theme-button-text)'
-                                                    : (dark ? '#ffffff' : '#111827')
+                                                    : panelText
                                                 const toolPayload = !isUser && message.role === 'assistant'
                                                     ? parseAiToolPayload(messageContent)
                                                     : null

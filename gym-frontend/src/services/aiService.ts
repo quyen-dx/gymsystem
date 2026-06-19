@@ -77,6 +77,7 @@ const normalizeAiPayload = (payload: unknown, fallbackAnswer = '', mode: AiMode 
         products: Array.isArray(safePayload.products) ? safePayload.products : [],
         plans: Array.isArray(safePayload.plans) ? safePayload.plans : [],
         cards: Array.isArray(safePayload.cards) ? safePayload.cards : [],
+        links: Array.isArray(safePayload.links) ? safePayload.links : [],
         action: isRecord(safePayload.action) ? safePayload.action : null,
         mode: safePayload.mode === 'general' ? 'general' : mode,
         sources: normalizeSources(safePayload.sources),
