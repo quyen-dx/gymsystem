@@ -72,6 +72,7 @@ import HelpCenterPage from './pages/public/HelpCenterPage'
 import MaintenancePage from './pages/public/MaintenancePage'
 import PartnershipPage from './pages/public/PartnershipPage'
 import PolicyPage from './pages/public/PolicyPage'
+import DepositScanPage from './pages/public/DepositScanPage'
 import AccountProfilePage from './pages/auth/AccountProfilePage'
 
 
@@ -243,6 +244,7 @@ function AppWithTheme() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/oauth-success" element={<OauthSuccessPage />} />
         <Route path="/maintenance" element={<MaintenanceRoute />} />
+        <Route path="/deposit-scan" element={<DepositScanPage />} />
         <Route path="/hop-tac" element={<PartnershipPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/help" element={<PrivateRoute><HelpCenterPage /></PrivateRoute>} />

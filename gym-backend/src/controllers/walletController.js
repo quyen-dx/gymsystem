@@ -1,7 +1,7 @@
 import mongoose from 'mongoose'
 import QRCode from 'qrcode'
 import Stripe from 'stripe'
-import { buildClientUrl } from '../config/appUrls.js'
+import { buildClientUrl, getBackendUrl } from '../config/appUrls.js'
 import Payment from '../models/Payment.js'
 import Transaction from '../models/Transaction.js'
 import Wallet from '../models/Wallet.js'
@@ -192,6 +192,66 @@ export const getMyDepositPayments = async (req, res, next) => {
     }
 }
 
+export const getManualQrDepositInfo = async (req, res, next) => {
+    try {
+        const { txnRef } = req.params
+        const payment = await Payment.findOne({
+            txnRef,
+            method: 'MANUAL_QR',
+            'metadata.purpose': 'WALLET_DEPOSIT',
+        }).select('txnRef amount status method paymentMethod createdAt metadata')
+
+        if (!payment) {
+            throw new AppError('Không tìm thấy mã QR nạp tiền', 404)
+        }
+
+        return res.json({
+            success: true,
+            data: {
+                txnRef: payment.txnRef,
+                amount: payment.amount,
+                status: payment.status,
+                method: payment.method || payment.paymentMethod,
+                createdAt: payment.createdAt,
+                scannedAt: payment.metadata?.scannedAt || null,
+                scanCount: payment.metadata?.scanCount || 0,
+                demoOnly: true,
+            },
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const handleManualQrScan = async (req, res, next) => {
+    try {
+        const { txnRef } = req.params
+        const payment = await Payment.findOne({
+            txnRef,
+            method: 'MANUAL_QR',
+            'metadata.purpose': 'WALLET_DEPOSIT',
+        })
+
+        if (!payment) {
+            return res.redirect(buildClientUrl('/deposit-scan', { error: 'not_found', txnRef }))
+        }
+
+        const scanCount = Number(payment.metadata?.scanCount || 0) + 1
+        payment.metadata = {
+            ...(payment.metadata || {}),
+            scannedAt: new Date(),
+            scanCount,
+            lastScanIp: getClientIp(req),
+            lastScanUserAgent: req.headers['user-agent'] || '',
+        }
+        await payment.save()
+
+        return res.redirect(buildClientUrl('/deposit-scan', { txnRef }))
+    } catch (error) {
+        next(error)
+    }
+}
+
 export const createManualQrDepositPayment = async (req, res, next) => {
     try {
         const amount = Number(req.body.amount)
@@ -201,11 +261,7 @@ export const createManualQrDepositPayment = async (req, res, next) => {
 
         await getOrCreateWallet(req.user._id)
         const txnRef = generateTxnRef(req.user._id).replace(/^WALLET/, 'MANUAL')
-        const manualUrl = buildClientUrl('/deposit', {
-            method: 'manual',
-            txnRef,
-            amount,
-        })
+        const manualUrl = `${getBackendUrl()}/api/wallet/manual-qr-scan/${encodeURIComponent(txnRef)}`
         const qrDataUrl = await QRCode.toDataURL(manualUrl, {
             errorCorrectionLevel: 'M',
             margin: 1,
