@@ -176,8 +176,8 @@ const SETTING_GROUPS: SettingGroup[] = [
   {
     key: 'ai',
     items: [
-      { path: 'ai.floatingChatbotEnabled', type: 'switch' },
-      { path: 'ai.planConsultingAiEnabled', type: 'switch' },
+      { path: 'ai.systemAiEnabled', type: 'switch' },
+      { path: 'ai.memberAiEnabled', type: 'switch' },
       { path: 'ai.adminAiEnabled', type: 'switch' },
     ],
   },

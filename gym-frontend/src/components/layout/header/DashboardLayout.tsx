@@ -308,7 +308,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
 
-      {settings.ai.floatingChatbotEnabled && settings.ai.adminAiEnabled && <AdminAIChatWidget />}
+      {settings.ai.systemAiEnabled && settings.ai.adminAiEnabled && <AdminAIChatWidget />}
     </div>
   )
 }

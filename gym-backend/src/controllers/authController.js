@@ -30,6 +30,7 @@ import {
   normalizeIdentifier,
   normalizePhone,
 } from '../utils/identifier.js'
+import { normalizeUserArrayMemberIdentity, normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
 
 const sendError = (res, error) => {
   console.error(error)
@@ -96,7 +97,7 @@ const clearRefreshCookie = (res) => {
 }
 
 const sanitizeUser = (user) => {
-  const responseUser = user.toObject ? user.toObject() : { ...user }
+  const responseUser = normalizeUserMemberIdentity(user)
   delete responseUser.password
   delete responseUser.refreshToken
   return responseUser
@@ -496,7 +497,7 @@ const validatePasswordStrength = (password) => {
 export const getMe = async (req, res) => {
   const user = await User.findById(req.user._id).select('+password')
   const hasPassword = !!user?.password
-  const responseUser = user ? user.toObject() : req.user.toObject()
+  const responseUser = normalizeUserMemberIdentity(user || req.user)
   delete responseUser.password
   delete responseUser.refreshToken
 
@@ -1018,7 +1019,7 @@ export const confirmEmailChange = async (req, res) => {
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
-    return res.json({ users })
+    return res.json({ users: normalizeUserArrayMemberIdentity(users) })
   } catch (error) {
     return sendError(res, error)
   }
@@ -1348,7 +1349,7 @@ export const getUserById = async (req, res) => {
     })
 
     return res.json({
-      user,
+      user: normalizeUserMemberIdentity(user),
       addresses,
       activeMembership,
       membershipHistory,

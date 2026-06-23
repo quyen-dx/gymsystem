@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt'
 import mongoose from 'mongoose'
+import { extractMemberNumber, formatMemberCode, normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
 
 const emailRegex = /^\S+@\S+\.\S+$/
 
@@ -150,6 +151,13 @@ const userSchema = new mongoose.Schema(
       sparse: true,
       trim: true,
     },
+    memberNumber: {
+      type: Number,
+      unique: true,
+      sparse: true,
+      min: 1,
+      index: true,
+    },
     // Extended profile fields
     fullName: {
       type: String,
@@ -235,18 +243,34 @@ userSchema.pre('save', async function () {
   this.password = await bcrypt.hash(this.password, 12)
 })
 
-userSchema.pre('save', async function () {
-  if (this.memberCode) return
-  const lastUser = await mongoose.model('User').findOne({ memberCode: { $nin: [null, ''] } })
-    .sort({ memberCode: -1 })
+const getNextMemberNumber = async (UserModel) => {
+  const [maxNumber] = await UserModel.aggregate([
+    { $match: { memberNumber: { $type: 'number' } } },
+    { $group: { _id: null, max: { $max: '$memberNumber' } } },
+  ])
+
+  const codedUsers = await UserModel.find({ memberCode: /^GP\d+$/i })
     .select('memberCode')
     .lean()
-  let nextNum = 1
-  if (lastUser?.memberCode) {
-    const match = lastUser.memberCode.match(/\d+$/)
-    if (match) nextNum = parseInt(match[0], 10) + 1
+
+  const legacyNumber = codedUsers.reduce((max, user) => (
+    Math.max(max, extractMemberNumber(user.memberCode) || 0)
+  ), 0)
+  return Math.max(Number(maxNumber?.max || 0), legacyNumber) + 1
+}
+
+userSchema.pre('save', async function () {
+  const UserModel = mongoose.model('User')
+
+  if (!this.memberNumber && this.memberCode) {
+    this.memberNumber = extractMemberNumber(this.memberCode)
   }
-  this.memberCode = `GP${String(nextNum).padStart(6, '0')}`
+
+  if (!this.memberNumber) {
+    this.memberNumber = await getNextMemberNumber(UserModel)
+  }
+
+  this.memberCode = formatMemberCode(this.memberNumber)
 })
 
 userSchema.methods.comparePassword = async function (candidatePassword) {
@@ -255,7 +279,7 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 }
 
 userSchema.methods.toJSON = function () {
-  const obj = this.toObject()
+  const obj = normalizeUserMemberIdentity(this.toObject())
   delete obj.password
   delete obj.refreshToken
   return obj

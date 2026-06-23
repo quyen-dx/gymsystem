@@ -13,6 +13,7 @@ export interface AdminUser {
   coverImage?: string
   createdAt: string
   memberCode?: string
+  memberNumber?: number
   fullName?: string
   gender?: string
   nationality?: string

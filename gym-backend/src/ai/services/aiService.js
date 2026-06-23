@@ -49,6 +49,7 @@ import {
   toObjectIdOrNull
 } from './context/contextDataService.js'
 import { conversationalUnderstand } from './conversationalUnderstandingLayer.js'
+import { buildContextualSuggestions } from './contextualSuggestions.js'
 import { buildPlanRecommendationPayload } from './dbResponder.js'
 import { buildFaqPolicyAnswer, inferFaqCategory, inferPolicyCategory, isPolicyQuery, isStrongPolicyQuery, isSupportFaqQuery, searchFaqs as searchFaqsDb, searchPolicies as searchPoliciesDb } from './faqPolicySearchService.js'
 import { buildNavigationAnswer, resolveNavigation } from './navigationResolver.js'
@@ -1616,36 +1617,11 @@ const buildPolicyFallbackAnswer = ({ query, toolData, language }) => {
 
 const getDomainSuggestions = (intent, language = 'vi') => {
   const lang = normalizeLanguage(language)
-  const vi = {
-    membership: ['Gói nào tiết kiệm nhất?', 'So sánh với gói khác', 'Tôi có nên nâng cấp không?'],
-    checkin: ['Tôi nên tập mấy buổi/tuần?', 'Gợi ý lịch tập tuần này', 'Làm sao giữ streak?'],
-    pt: ['Đặt lịch PT tối nay', 'PT nào phù hợp tăng cơ?', 'Xem lịch PT tuần này'],
-    policyRefund: ['Xem chính sách hoàn tiền', 'Liên hệ lễ tân', 'Chính sách thanh toán thế nào?'],
-    policyPrivacy: ['GymPro lưu dữ liệu nào?', 'Xem chính sách bảo mật', 'Tôi có thể yêu cầu xóa dữ liệu không?'],
-    policyPayment: ['Có thể thanh toán bằng cách nào?', 'Có xuất hóa đơn không?', 'Có hỗ trợ trả góp không?'],
-    shop: ['Whey nào phù hợp tăng cơ?', 'Sản phẩm nào đang bán chạy?', 'Đơn hàng của tôi ở đâu?'],
-    nutrition: ['Lên thực đơn 1 ngày cho tôi', 'Trước buổi tập nên ăn gì?', 'Sau tập nên ăn gì?'],
-  }
-  const en = {
-    membership: ['Which plan is the most economical?', 'Compare with another plan', 'Should I upgrade?'],
-    checkin: ['How many sessions per week should I train?', 'Suggest a weekly workout schedule', 'How do I keep my streak?'],
-    pt: ['Book a PT tonight', 'Which PT fits muscle gain?', 'Show PT schedule this week'],
-    policyRefund: ['View refund policy', 'Contact the front desk', 'What is the payment policy?'],
-    policyPrivacy: ['What data does GymPro store?', 'View privacy policy', 'Can I request data deletion?'],
-    policyPayment: ['Which payment methods are supported?', 'Can I get an invoice?', 'Is installment payment available?'],
-    shop: ['Which whey fits muscle gain?', 'Which products are best-selling?', 'Where is my order?'],
-    nutrition: ['Build a 1-day meal plan', 'What should I eat before training?', 'What should I eat after training?'],
-  }
-  const set = lang === 'en' ? en : vi
-  if (intent === 'checkin_goal' || intent === 'checkin_summary' || intent === 'checkin_info') return set.checkin
-  if (intent === 'pt_availability' || intent === 'pt_advice' || intent === 'pt_info' || intent === 'booking_action') return set.pt
-  if (intent === 'policy_refund') return set.policyRefund
-  if (intent === 'policy_privacy') return set.policyPrivacy
-  if (intent === 'policy_payment') return set.policyPayment
-  if (intent === 'shop_advice' || intent === 'shop_info') return set.shop
-  if (intent === 'nutrition_advice' || intent === 'nutrition_info') return set.nutrition
-  if (intent === 'membership_advice' || intent === 'membership_info' || intent === 'membership_benefit_lookup' || intent === 'plan_comparison' || intent === 'cheapest_long_term_plan') return set.membership
-  return lang === 'en' ? ['Which plan suits my budget?', 'How many days should I train?'] : ['Gói nào hợp ngân sách của tôi?', 'Tôi nên tập mấy buổi mỗi tuần?']
+  return buildContextualSuggestions({
+    intent,
+    subject: intent,
+    language: lang,
+  })
 }
 
 const buildClarificationAnswer = ({ analysis, query, language }) => {

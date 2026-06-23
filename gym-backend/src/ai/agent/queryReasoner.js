@@ -2,6 +2,7 @@ import { runAIWithFallback } from '../services/aiFallbackService.js'
 import { conversationalUnderstand } from '../services/conversationalUnderstandingLayer.js'
 import { AI_DOC_FILES, loadAiDoc, getRelevantAiDocs } from '../services/aiDocsService.js'
 import { entityResolver } from './entityResolver.js'
+import { routeGymQuery, toReasonerResult } from './domainRouter.js'
 
 const CONSTITUTION_DOC = loadAiDoc(AI_DOC_FILES.constitution)
 
@@ -13,6 +14,16 @@ const SUBJECTS = ['membership_plans', 'plan', 'workout', 'pt', 'membership', 'he
 const ACTIONS = ['list', 'view', 'count', 'detail', 'compare', 'recommend', 'advice', 'create', 'update', 'delete', 'search', 'analyze', 'info', 'check', 'explain', 'ask_general']
 const INTENTS = [
   'membership_list', 'membership_detail', 'membership_compare', 'membership_recommendation',
+  'membership_status', 'membership_renewal',
+  'fitness_goal_suggestion', 'fitness_goal_selection', 'fitness_goal_tracking',
+  'nutrition_meal_plan', 'nutrition_macro', 'nutrition_pre_workout', 'nutrition_product_related',
+  'workout_plan', 'workout_exercise_detail', 'workout_safety', 'workout_progress',
+  'pt_list', 'pt_recommendation', 'pt_booking',
+  'booking_status', 'booking_create', 'booking_cancel', 'booking_navigation',
+  'account_navigation', 'account_security', 'auth_forgot_password', 'profile_update',
+  'report_navigation', 'report_data', 'revenue_navigation', 'revenue_data',
+  'product_list', 'product_detail', 'product_recommendation', 'order_navigation', 'order_status',
+  'policy_answer', 'policy_navigation', 'general_chat',
   'checkin_summary', 'checkin_goal',
   'pt_advice', 'pt_availability', 'pt_detail', 'booking_info', 'booking_action',
   'workout_advice', 'workout_info', 'workout_analyze',
@@ -332,7 +343,7 @@ const classifySemanticIntent = ({ query, memory = {} }) => {
     nutrition: ['an gi', 'dinh duong', 'calo', 'protein', 'nutrition', 'diet'],
     health: ['suc khoe', 'bmi', 'can nang', 'mo co the', 'body fat', 'health'],
     booking: ['dat lich', 'lich hen', 'booking', 'appointment', 'schedule'],
-    checkin: ['checkin', 'diem danh', 'vao phong'],
+    checkin: ['checkin', 'check in', 'diem danh', 'vao phong'],
     products: ['san pham', 'shop', 'cua hang', 'whey', 'creatine', 'product'],
     policies: ['chinh sach', 'quy dinh', 'hoan tien', 'bao mat', 'policy', 'refund', 'privacy'],
     faq: ['hoi dap', 'faq'],
@@ -481,7 +492,9 @@ const semanticToReasonerResult = (semantic) => {
   if (semantic.subject === 'pt') needsTools.push('getAvailablePTs')
   if (semantic.subject === 'products') needsTools.push('getRecommendedProducts')
   if (semantic.subject === 'booking') needsTools.push('getUpcomingBookings')
-  if (semantic.subject === 'report') needsTools.push('getAvailablePTs', 'getMemberReport', 'getRevenueReport')
+  if (semantic.subject === 'report') {
+    // Report/member/revenue data must not be fabricated. No report tool exists in this agent layer yet.
+  }
   if (intent === 'membership_recommendation' && subject === 'plan') {
     if (!needsTools.includes('getAvailablePlans')) needsTools.push('getAvailablePlans')
     needsTools.push('getSmartRecommendations')
@@ -657,6 +670,13 @@ export const reasonQuery = async ({ query, userMessage, memory = {}, conversatio
     return { subject: null, action: null, intent: 'unknown', entityName: '', isFollowUp: false, needsDatabase: false, needsPermissionCheck: false, requiredTools: [], needsTools: [], forbiddenFallbacks: [], confidence: 0, source: 'empty', reason: '' }
   }
 
+  const domainRoute = routeGymQuery({ query: input, memory })
+  if (domainRoute.confidence >= 0.88 && domainRoute.intent !== 'general_chat') {
+    const result = toReasonerResult(domainRoute)
+    console.log('[QUERY_REASONER] domain analyzed:', 'subject=', result.subject, 'action=', result.action, 'intent=', result.intent, 'tools=', result.requiredTools.join(','), 'confidence=', result.confidence)
+    return result
+  }
+
   const semantic = classifySemanticIntent({ query: input, memory })
   if (semantic.confidence >= 0.78
     || semantic.subject === 'navigation'
@@ -713,10 +733,10 @@ export const reasonQuery = async ({ query, userMessage, memory = {}, conversatio
 
       if (!parsed.requiredTools || parsed.requiredTools.length === 0) {
         const toolMap = {
-          plan: ['getAvailablePlans'], workout: ['analyzeWorkout'], pt: ['getAvailablePTs'],
-          membership: ['getMembershipInfo'], health: [], nutrition: ['getRecommendedProducts'],
+          plan: ['getAvailablePlans'], workout: [], pt: ['getAvailablePTs'],
+          membership: ['getMembershipInfo'], health: [], nutrition: [],
           booking: ['getUpcomingBookings'], shop: ['getRecommendedProducts'], product: ['getRecommendedProducts'],
-          policy: [], faq: [], checkin: [], report: [],
+          policy: [], faq: [], checkin: ['getCheckinStats'], report: [],
           navigation: [], account: [],
         }
         parsed.requiredTools = toolMap[parsed.subject] || []
@@ -750,10 +770,10 @@ export const reasonQuery = async ({ query, userMessage, memory = {}, conversatio
   const cuSubject = cuResult.subject === 'plan' ? 'membership_plans' : cuResult.subject
 
   const toolMap = {
-    membership_plans: ['getAvailablePlans'], pt: ['getAvailablePTs'], workout: ['analyzeWorkout'],
-    membership: ['getMembershipInfo'], health: [], nutrition: ['getRecommendedProducts'],
+    membership_plans: ['getAvailablePlans'], pt: ['getAvailablePTs'], workout: [],
+    membership: ['getMembershipInfo'], health: [], nutrition: [],
     booking: ['getUpcomingBookings'], shop: ['getRecommendedProducts'], product: ['getRecommendedProducts'],
-    policy: [], faq: [], checkin: [], report: [],
+    policy: [], faq: [], checkin: ['getCheckinStats'], report: [],
   }
   const tools = toolMap[cuSubject] || []
   const forbiddenFallbacks = forbiddenFallbacksForIntent(cuIntent, null)

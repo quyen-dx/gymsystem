@@ -69,8 +69,103 @@ const buildReviewPrompt = ({ query, answer, subject, analysis, toolData }) => {
   return sections.join('\n\n')
 }
 
-export const constitutionalReview = async ({ query, answer, subject, analysis, toolData, lang }) => {
+const selectedToolsFrom = ({ selectedTools, analysis } = {}) => {
+  if (Array.isArray(selectedTools)) return selectedTools
+  if (Array.isArray(analysis?.requiredTools)) return analysis.requiredTools
+  if (Array.isArray(analysis?.needsTools)) return analysis.needsTools
+  return []
+}
+
+const hasTool = (tools, names) => names.some((name) => tools.includes(name))
+
+export const reviewGymProAnswerSync = ({
+  query,
+  intent,
+  selectedTools,
+  draftAnswer,
+  currentUserRole,
+  navigationPath,
+  analysis,
+} = {}) => {
+  const answer = String(draftAnswer || '')
+  const tools = selectedToolsFrom({ selectedTools, analysis })
+  const violations = []
+  const normalizedIntent = intent || analysis?.intent || ''
+  const role = String(currentUserRole || '').toLowerCase()
+
+  if (/\b(undefined|null|NaN|\[object Object\]|ObjectId\(|CastError|ValidationError)\b/.test(answer)) {
+    violations.push('debug_or_raw_value')
+  }
+
+  const hasPrice = /(\d[\d.,\s]*(?:đ|₫|vnd|vnđ)|\b\d+\s*(?:trieu|triệu|k|nghin|nghìn)\b)/i.test(answer)
+  const hasSpecificPlan = /\bGói\s+[A-ZÀ-Ỹ0-9][\wÀ-ỹ0-9\s-]{1,40}/.test(answer)
+  if ((hasPrice || hasSpecificPlan) && !hasTool(tools, ['getAvailablePlans', 'getMembershipInfo', 'getSmartRecommendations', 'getRecommendedProducts'])) {
+    violations.push('internal_price_or_plan_without_tool')
+  }
+
+  const hasPTContact = /\b(?:SĐT|SDT|Phone|Email)\s*:/i.test(answer)
+  const hasSpecificPT = /\bPT\s+[A-ZÀ-Ỹ0-9][\wÀ-ỹ0-9\s-]{1,40}/.test(answer)
+  if ((hasPTContact || hasSpecificPT) && !hasTool(tools, ['getAvailablePTs'])) {
+    violations.push('pt_data_without_tool')
+  }
+
+  const hasSystemCount = /\b(?:hội viên|hoi vien|doanh thu|revenue|member).*?\b\d{2,}\b/i.test(answer)
+  if (hasSystemCount && !hasTool(tools, ['getMemberReport', 'getRevenueReport'])) {
+    violations.push('report_data_without_tool')
+  }
+
+  const hasProductData = /\b(?:sản phẩm|san pham|whey|creatine|tồn kho|ton kho)\b/i.test(answer) && hasPrice
+  if (hasProductData && !hasTool(tools, ['getRecommendedProducts'])) {
+    violations.push('product_data_without_tool')
+  }
+
+  const exposesRoute = /\/(?:admin|staff|seller)\//i.test(answer) || /role=|currentUser|jwt|token/i.test(answer)
+  if (exposesRoute && !['admin', 'super_admin', 'staff', 'seller'].includes(role)) {
+    violations.push('role_route_without_permission')
+  }
+
+  if (violations.length === 0) {
+    return {
+      approved: true,
+      violations: [],
+      safeAnswer: answer,
+      requiresToolRetry: false,
+      requiredTools: [],
+    }
+  }
+
+  const needsDb = analysis?.needsDatabase || /_(data|detail|list|recommendation|answer)$/.test(normalizedIntent)
+  const safeAnswer = needsDb
+    ? 'Mình chưa có dữ liệu GymPro phù hợp từ hệ thống để trả lời chính xác câu này, nên mình không tự tạo tên, giá, số liệu hoặc thông tin nội bộ.'
+    : 'Mình chưa đủ dữ liệu đáng tin cậy để trả lời chính xác câu này.'
+
+  return {
+    approved: false,
+    violations,
+    safeAnswer,
+    requiresToolRetry: false,
+    requiredTools: [],
+  }
+}
+
+export const reviewGymProAnswer = async (input = {}) => reviewGymProAnswerSync(input)
+
+export const constitutionalReview = async ({ query, answer, subject, analysis, toolData, lang, currentUserRole }) => {
   if (!answer || answer.length < 10) return answer
+
+  const deterministicReview = reviewGymProAnswerSync({
+    query,
+    intent: analysis?.intent,
+    selectedTools: analysis?.requiredTools || analysis?.needsTools || [],
+    draftAnswer: answer,
+    currentUserRole: currentUserRole || analysis?.currentUserRole,
+    navigationPath: analysis?.navigationPath,
+    analysis,
+  })
+  if (!deterministicReview.approved) {
+    console.log('[CONSTITUTIONAL_REVIEWER] deterministic violations=', deterministicReview.violations.join(','))
+    return deterministicReview.safeAnswer
+  }
 
   const userPrompt = buildReviewPrompt({ query, answer, subject, analysis, toolData })
 

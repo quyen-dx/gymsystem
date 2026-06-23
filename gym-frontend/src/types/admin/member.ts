@@ -33,6 +33,7 @@ export interface MemberUser {
   updatedAt: string
   gender?: string
   memberCode?: string
+  memberNumber?: number
 }
 
 export interface MemberListItem extends MemberUser {

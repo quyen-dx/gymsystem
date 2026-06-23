@@ -229,10 +229,10 @@ for (const query of [
     assert.match(payload.answer, /^[A-ZÀ-Ỹ\s]+/)
     assert.match(payload.answer, /Nên ăn:/)
     if (/truoc|trước/i.test(query)) {
-      assert.match(payload.answer, /Trước buổi tập bạn nên ăn nhẹ/)
+      assert.match(payload.answer, /Trước buổi tập, bạn nên ăn nhẹ/)
     }
     if (/sau/i.test(query)) {
-      assert.match(payload.answer, /Sau buổi tập bạn nên ưu tiên protein/)
+      assert.match(payload.answer, /Sau buổi tập, bạn nên bổ sung protein/)
     }
   })
 }

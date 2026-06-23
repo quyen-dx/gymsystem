@@ -1,5 +1,6 @@
 import { entityResolver } from './entityResolver.js'
 import { inferFaqCategory, inferPolicyCategory, isPolicyQuery, isStrongPolicyQuery, isSupportFaqQuery } from '../services/faqPolicySearchService.js'
+import { routeGymQuery, toOptimizerResult } from './domainRouter.js'
 
 const normalizeQuery = (text = '') => String(text)
   .normalize('NFD')
@@ -135,6 +136,11 @@ export const optimizeQuery = ({ query, memory = {} } = {}) => {
 
   const memoryFollowUp = getLastEntityFollowUp({ query, memory })
   if (memoryFollowUp) return memoryFollowUp
+
+  const domainRoute = routeGymQuery({ query, memory })
+  if (domainRoute.confidence >= 0.88 && domainRoute.intent !== 'general_chat') {
+    return toOptimizerResult(domainRoute, { query })
+  }
 
   const supportFaqQuery = isSupportFaqQuery(query)
   const policyQuery = isPolicyQuery(query)

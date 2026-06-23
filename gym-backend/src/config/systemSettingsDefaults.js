@@ -41,6 +41,7 @@ export const SYSTEM_SETTINGS_DEFAULTS = {
   },
   billing: {
     allowPlanPurchase: true,
+    onlinePaymentEnabled: false,
     allowAssignPlanToMember: true,
     allowPlanRenewal: true,
     allowAutoRenewal: true,
@@ -94,8 +95,8 @@ export const SYSTEM_SETTINGS_DEFAULTS = {
     productDetailPageEnabled: true,
   },
   ai: {
-    floatingChatbotEnabled: true,
-    planConsultingAiEnabled: true,
+    systemAiEnabled: true,
+    memberAiEnabled: true,
     adminAiEnabled: true,
   },
   landing: {
