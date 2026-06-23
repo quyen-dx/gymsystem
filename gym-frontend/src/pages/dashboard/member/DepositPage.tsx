@@ -38,6 +38,7 @@ type PendingQrPayment = {
   status: string
   method?: string
   note?: string
+  qrLabel?: string
   expiresAt?: string
 }
 
@@ -132,7 +133,7 @@ export default function DepositPage() {
   }, [searchParams])
 
   useEffect(() => {
-    if (!pendingPayment?.txnRef || pendingPayment.type !== 'vnpay') return
+    if (!pendingPayment?.txnRef) return
 
     const intervalId = window.setInterval(() => {
       getDepositPayments()
@@ -143,7 +144,7 @@ export default function DepositPage() {
           const status = normalizeStatus(current?.status)
 
           if (status === 'PAID') {
-            message.success('Nạp tiền qua VNPAY thành công')
+            message.success(pendingPayment.type === 'vnpay' ? 'Thanh toán demo thành công' : 'Nạp tiền demo thành công')
             setPendingPayment(null)
             refreshWallet()
           }
@@ -189,12 +190,24 @@ export default function DepositPage() {
     if (amountError) return
     setLoading(true)
     try {
-      const res = await createVnpayDeposit({ amount })
-      const nextPayment = res.data?.data
-      if (!nextPayment?.paymentUrl || !nextPayment?.qrDataUrl) throw new Error('Missing VNPAY QR data')
-      setPendingPayment({ ...nextPayment, type: 'vnpay' })
+      const vnpayRes = await createVnpayDeposit({ amount })
+      const vnpayPayment = vnpayRes.data?.data
+      if (!vnpayPayment?.paymentUrl) throw new Error('Missing VNPAY payment URL')
+
+      const manualRes = await createManualQrDeposit({ amount })
+      const manualPayment = manualRes.data?.data
+      if (!manualPayment?.qrDataUrl || !manualPayment?.manualUrl) throw new Error('Missing manual QR data')
+
+      setPendingPayment({
+        ...manualPayment,
+        type: 'vnpay',
+        paymentUrl: vnpayPayment.paymentUrl,
+        method: 'VNPAY + MANUAL_QR',
+        note: 'QR đang hiển thị là QR demo ngân hàng để mở form chuyển khoản mô phỏng. Nút VNPAY bên dưới vẫn mở trang thanh toán Sandbox.',
+        qrLabel: 'QR demo ngân hàng',
+      })
       refreshPayments()
-      message.success('Đã tạo mã QR VNPAY')
+      message.success('Đã tạo QR demo và link VNPAY')
     } catch (error: any) {
       message.error(error?.response?.data?.message || 'Không thể tạo giao dịch VNPAY')
     } finally {
@@ -209,7 +222,7 @@ export default function DepositPage() {
       const res = await createManualQrDeposit({ amount })
       const nextPayment = res.data?.data
       if (!nextPayment?.qrDataUrl) throw new Error('Missing manual QR data')
-      setPendingPayment({ ...nextPayment, type: 'manual' })
+      setPendingPayment({ ...nextPayment, type: 'manual', qrLabel: 'QR demo ngân hàng' })
       refreshPayments()
       message.success('Đã tạo QR thủ công demo')
     } catch (error: any) {
@@ -223,6 +236,16 @@ export default function DepositPage() {
     const normalized = normalizeStatus(status)
     const color = normalized === 'PAID' ? 'success' : normalized === 'FAILED' ? 'error' : 'processing'
     return <Tag color={color}>{normalized}</Tag>
+  }
+
+  const handleDownloadQr = () => {
+    if (!pendingPayment?.qrDataUrl) return
+    const link = document.createElement('a')
+    link.href = pendingPayment.qrDataUrl
+    link.download = `${pendingPayment.txnRef || 'gympro-qr'}.png`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
   }
 
   return (
@@ -315,7 +338,7 @@ export default function DepositPage() {
                   onClick={paymentMethod === 'vnpay' ? handlePayWithVnpay : handleCreateManualQr}
                   className="!h-11 !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
                 >
-                  {paymentMethod === 'vnpay' ? 'Thanh toán qua VNPAY' : 'Tạo QR thủ công demo'}
+                  {paymentMethod === 'vnpay' ? 'Tạo QR demo + link VNPAY' : 'Tạo QR thủ công demo'}
                 </Button>
                 {paymentMethod === 'manual' && (
                   <p className="rounded-lg border border-[var(--theme-accent-border)] bg-[var(--theme-accent-muted)] px-3 py-2 text-xs text-[var(--theme-accent)]">
@@ -330,12 +353,12 @@ export default function DepositPage() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-base font-semibold text-[var(--theme-text)]">
-                      {pendingPayment.type === 'vnpay' ? 'Quét mã VNPAY' : 'Quét QR thủ công demo'}
+                      {pendingPayment.qrLabel || (pendingPayment.type === 'vnpay' ? 'QR demo ngân hàng' : 'Quét QR thủ công demo')}
                     </p>
                     <p className="mt-1 text-xs text-[var(--theme-muted)]">
                       {pendingPayment.type === 'vnpay'
-                        ? 'Quét bằng camera hoặc mở trang VNPAY để thanh toán sandbox.'
-                        : 'Quét bằng camera để mở trang nạp tiền GymPro và tự fill thông tin.'}
+                        ? 'Quét QR để mở form ngân hàng mô phỏng đã fill sẵn. Nút VNPAY bên dưới vẫn mở trang Sandbox.'
+                        : 'Quét bằng camera để mở form ngân hàng mô phỏng đã fill sẵn.'}
                     </p>
                   </div>
                   {pendingPayment.qrDataUrl && (
@@ -359,7 +382,7 @@ export default function DepositPage() {
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-sm text-[var(--theme-muted)]">Phương thức</span>
                       <span className="text-sm font-semibold text-[var(--theme-text)]">
-                        {pendingPayment.type === 'vnpay' ? 'VNPAY' : 'MANUAL_QR'}
+                        {pendingPayment.method || (pendingPayment.type === 'vnpay' ? 'VNPAY + MANUAL_QR' : 'MANUAL_QR')}
                       </span>
                     </div>
                   </div>
@@ -369,13 +392,15 @@ export default function DepositPage() {
                     </p>
                   )}
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {pendingPayment.type === 'vnpay' ? (
+                    <Button onClick={handleDownloadQr}>
+                      Tải mã QR
+                    </Button>
+                    <Button onClick={() => pendingPayment.manualUrl && window.open(pendingPayment.manualUrl, '_blank', 'noopener,noreferrer')}>
+                      Mở ngân hàng demo
+                    </Button>
+                    {pendingPayment.paymentUrl && (
                       <Button onClick={() => pendingPayment.paymentUrl && window.open(pendingPayment.paymentUrl, '_blank', 'noopener,noreferrer')}>
                         Mở trang VNPAY
-                      </Button>
-                    ) : (
-                      <Button onClick={() => pendingPayment.manualUrl && window.open(pendingPayment.manualUrl, '_blank', 'noopener,noreferrer')}>
-                        Mở link nội bộ
                       </Button>
                     )}
                     <Button onClick={() => setPendingPayment(null)}>
