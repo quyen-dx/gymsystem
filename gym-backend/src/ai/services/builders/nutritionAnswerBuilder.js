@@ -39,36 +39,36 @@ export const buildGenericNutritionAnswer = ({ query, classifierResult = {}, tool
   const isPostWorkout = goal === 'post_workout'
   const products = (toolData.products || []).filter(Boolean).slice(0, 3)
   const webSummary = toolData.webSearchNutrition?.context
-    ? (lang === 'en' ? 'I also checked general nutrition references for this answer.' : 'Mình cũng đã đối chiếu thêm nguồn dinh dưỡng tổng quát.')
+    ? (lang === 'en' ? 'Mình cũng đã tham khảo thêm nguồn dinh dưỡng để có câu trả lời chính xác hơn.' : 'Mình cũng đã tham khảo thêm nguồn dinh dưỡng để tư vấn chính xác hơn cho bạn.')
     : ''
   const productLine = products.length > 0
     ? (lang === 'en'
-      ? `GymPro shop has related options such as ${products.map((p) => p.name || p.nameVi || p.nameEn).filter(Boolean).join(', ')}.`
-      : `Trong shop GymPro có một số lựa chọn liên quan như ${products.map((p) => p.nameVi || p.name || p.nameEn).filter(Boolean).join(', ')}.`)
+      ? `GymPro shop also has related products like ${products.map((p) => p.name || p.nameVi || p.nameEn).filter(Boolean).join(', ')} — worth checking out!`
+      : `Trong shop GymPro cũng có một số sản phẩm liên quan như ${products.map((p) => p.nameVi || p.name || p.nameEn).filter(Boolean).join(', ')} — bạn có thể tham khảo thêm.`)
     : ''
 
   const defaultNutritionSummary = lang === 'en'
-    ? 'Build meals around lean protein, fiber-rich vegetables, and carbs that match your training goal.'
-    : 'Bạn nên xây bữa ăn quanh protein nạc, rau nhiều chất xơ và lượng tinh bột phù hợp với mục tiêu.'
+    ? 'A good approach is to build your meals around lean protein, fiber-rich vegetables, and quality carbs that match your training goal.'
+    : 'Nguyên tắc cơ bản là xây bữa ăn quanh protein nạc, rau giàu chất xơ và tinh bột chất lượng phù hợp với mục tiêu của bạn.'
   const summaryMap = {
     fat_loss: lang === 'en'
-      ? 'For fat loss, use a mild calorie deficit, prioritize protein, vegetables, and controlled carbs.'
-      : 'Để giảm cân/giảm mỡ, bạn nên ăn theo hướng thâm hụt calo nhẹ, ưu tiên protein, rau xanh và tinh bột vừa phải.',
+      ? 'For fat loss, aim for a mild calorie deficit with plenty of protein, vegetables, and controlled portions of quality carbs.'
+      : 'Để giảm cân/giảm mỡ, bạn nên ăn thâm hụt calo nhẹ, ưu tiên protein nạc, rau xanh và tinh bột vừa phải nhé.',
     muscle_gain: lang === 'en'
-      ? 'For muscle gain, prioritize enough protein, quality carbs around training, and consistent total calories.'
-      : 'Để tăng cơ, bạn nên ưu tiên đủ protein, tinh bột tốt quanh buổi tập và tổng năng lượng ổn định.',
+      ? 'For muscle gain, focus on getting enough protein, quality carbs around your workouts, and consistent total calories day to day.'
+      : 'Để tăng cơ, bạn cần đủ protein, tinh bột tốt quanh buổi tập và tổng năng lượng ổn định mỗi ngày.',
     weight_gain: lang === 'en'
-      ? 'For healthy weight gain, increase calories gradually with protein, complex carbs, and healthy fats.'
-      : 'Để tăng cân lành mạnh, hãy tăng calo từ từ bằng protein, tinh bột phức và chất béo tốt.',
+      ? 'For healthy weight gain, gradually increase your calorie intake with protein, complex carbs, and healthy fats.'
+      : 'Để tăng cân lành mạnh, bạn hãy tăng calo từ từ bằng protein, tinh bột phức và chất béo tốt.',
     pre_workout: lang === 'en'
-      ? 'Before training, eat something light and easy to digest, with moderate carbs and a little protein for workout energy.'
-      : 'Trước buổi tập bạn nên ăn nhẹ, dễ tiêu, ưu tiên carb vừa phải và một ít protein để có năng lượng khi tập.',
+      ? 'Before training, go for something light and easy to digest — moderate carbs with a bit of protein for steady energy.'
+      : 'Trước buổi tập, bạn nên ăn nhẹ, dễ tiêu — carb vừa phải và một ít protein để có năng lượng tập luyện tốt nhất.',
     post_workout: lang === 'en'
-      ? 'After training, prioritize protein plus carbs to support muscle repair and replenish energy.'
-      : 'Sau buổi tập bạn nên ưu tiên protein kèm tinh bột vừa phải để hỗ trợ phục hồi cơ và nạp lại năng lượng.',
+      ? 'After training, prioritize protein plus carbs to help your muscles recover and replenish your energy stores.'
+      : 'Sau buổi tập, bạn nên bổ sung protein kèm tinh bột để hỗ trợ phục hồi cơ và nạp lại năng lượng đã tiêu hao.',
     healthy: lang === 'en'
-      ? 'For a healthy diet, build meals around protein, fiber-rich vegetables, and minimally processed carbs.'
-      : 'Để ăn uống healthy, hãy xây bữa ăn quanh protein, rau nhiều chất xơ và tinh bột ít chế biến.',
+      ? 'For a healthy diet, focus on protein, fiber-rich vegetables, and minimally processed carbs in your daily meals.'
+      : 'Để ăn uống healthy, bạn hãy tập trung vào protein, rau giàu chất xơ và tinh bột ít qua chế biến trong các bữa ăn hằng ngày.',
   }
   const summary = String(classifierResult.summary || classifierResult.conclusion || '').trim()
     || summaryMap[goal]
@@ -108,7 +108,7 @@ export const buildGenericNutritionAnswer = ({ query, classifierResult = {}, tool
         '',
         ...meals.map((item) => `• ${item}`),
         '',
-        `Personalization note: ${productLine || 'Tell me your height, weight, schedule, and food preferences for a more precise meal plan.'}`,
+        `Personalization: ${productLine || 'Tell me your height, weight, schedule, and food preferences — I can tailor a more precise meal plan for you.'}`,
         webSummary ? `\n${webSummary}` : '',
       ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
     : [
@@ -128,7 +128,7 @@ export const buildGenericNutritionAnswer = ({ query, classifierResult = {}, tool
         '',
         ...meals.map((item) => `• ${item}`),
         '',
-        `Lưu ý cá nhân hóa: ${productLine || 'Bạn cho mình chiều cao, cân nặng, lịch tập và món không ăn được để mình gợi ý thực đơn sát hơn.'}`,
+        `Cá nhân hóa: ${productLine || 'Bạn cho mình biết chiều cao, cân nặng, lịch tập và món không ăn được — mình sẽ gợi ý thực đơn sát hơn cho bạn.'}`,
         webSummary ? `\n${webSummary}` : '',
       ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
 

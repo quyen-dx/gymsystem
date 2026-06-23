@@ -30,7 +30,7 @@ export const SYSTEM_SETTINGS_DEFAULTS = {
   reports: { revenueChartEnabled: true, checkinHeatmapEnabled: true, revenueForecastEnabled: true, churnRiskEnabled: true, excelExportEnabled: true, pdfExportEnabled: true, auditLogEnabled: true },
   notifications: { systemNotificationsEnabled: true, roleGroupNotificationsEnabled: true, emailNotificationsEnabled: true, readUnreadStatusEnabled: true },
   shop: { productStoreEnabled: true, cartEnabled: true, productReviewsEnabled: true, productDetailPageEnabled: true },
-  ai: { floatingChatbotEnabled: true, planConsultingAiEnabled: true, adminAiEnabled: true },
+  ai: { systemAiEnabled: true, memberAiEnabled: true, adminAiEnabled: true },
   landing: { statsSectionEnabled: true, servicesSectionEnabled: true, feedbackSectionEnabled: true, partnersSectionEnabled: true, startNowButtonEnabled: true, checkinNowButtonEnabled: true },
 }
 

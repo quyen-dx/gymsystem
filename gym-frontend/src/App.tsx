@@ -43,8 +43,12 @@ import MemberDashboard from './pages/dashboard/member/MemberDashboard'
 import MemberStorePage from './pages/dashboard/member/MemberStorePage'
 import MyActivityPage from './pages/dashboard/member/MyActivityPage'
 import MyFeedbackPage from './pages/dashboard/member/MyFeedbackPage'
+import MyMembershipPage from './pages/dashboard/member/MyMembershipPage'
+import CancelMembershipPage from './pages/dashboard/member/CancelMembershipPage'
+import RenewMembershipPage from './pages/dashboard/member/RenewMembershipPage'
 import OrderHistoryPage from './pages/dashboard/member/OrderHistoryPage'
 import OrderTrackingPage from './pages/dashboard/member/OrderTrackingPage'
+import PlansPage from './pages/dashboard/member/PlansPage'
 import ProductDetailPage from './pages/dashboard/member/ProductDetailPage'
 
 import WorkoutPage from './pages/dashboard/member/WorkoutPage'
@@ -61,6 +65,7 @@ import SellerShopPage from './pages/dashboard/seller/SellerShopPage'
 import StaffCheckinPage from './pages/dashboard/staff/StaffCheckinPage'
 import StaffMemberPage from './pages/dashboard/staff/StaffMemberPage'
 import StaffNotificationsPage from './pages/dashboard/staff/StaffNotificationsPage'
+import StaffOfflineRegisterPage from './pages/dashboard/staff/OfflineRegisterPage'
 import StaffPaymentsPage from './pages/dashboard/staff/StaffPaymentsPage'
 import AboutPage from './pages/public/AboutPage'
 import HelpCenterPage from './pages/public/HelpCenterPage'
@@ -280,6 +285,7 @@ function AppWithTheme() {
         <Route path="/staff/checkin" element={<PrivateRoute feature="checkin.qrCheckinEnabled"><StaffCheckinPage /></PrivateRoute>} />
         <Route path="/staff/members" element={<PrivateRoute><StaffMemberPage /></PrivateRoute>} />
         <Route path="/staff/payments" element={<PrivateRoute><StaffPaymentsPage /></PrivateRoute>} />
+        <Route path="/staff/payments/offline-register" element={<PrivateRoute><StaffOfflineRegisterPage /></PrivateRoute>} />
         <Route path="/staff/notifications" element={<PrivateRoute><StaffNotificationsPage /></PrivateRoute>} />
 
         {/* PT */}
@@ -296,12 +302,16 @@ function AppWithTheme() {
         {/* MEMBER */}
         <Route path="/" element={<HomeRoute />} />
         <Route path="/dashboard" element={<PrivateRoute><MemberDashboard /></PrivateRoute>} />
-        <Route path="/ai-chat" element={<PrivateRoute feature="ai.floatingChatbotEnabled"><AiChatPage /></PrivateRoute>} />
+        <Route path="/ai-chat" element={<PrivateRoute feature={["ai.systemAiEnabled", "ai.memberAiEnabled"]}><AiChatPage /></PrivateRoute>} />
         <Route path="/deposit" element={<PrivateRoute feature="billing.qrPaymentEnabled"><DepositPage /></PrivateRoute>} />
         <Route path="/checkout" element={<PrivateRoute feature="shop.cartEnabled"><CheckoutPage /></PrivateRoute>} />
         <Route path="/orders" element={<PrivateRoute><OrderHistoryPage /></PrivateRoute>} />
         <Route path="/track/:id" element={<PrivateRoute><OrderTrackingPage /></PrivateRoute>} />
         <Route path="/store" element={<PrivateRoute feature="shop.productStoreEnabled"><MemberStorePage /></PrivateRoute>} />
+        <Route path="/plans" element={<PrivateRoute feature="billing.allowPlanPurchase"><PlansPage /></PrivateRoute>} />
+        <Route path="/my-membership" element={<PrivateRoute feature="billing.allowPlanPurchase"><MyMembershipPage /></PrivateRoute>} />
+        <Route path="/my-membership/cancel-request" element={<PrivateRoute feature="billing.allowPlanPurchase"><CancelMembershipPage /></PrivateRoute>} />
+        <Route path="/my-membership/renew" element={<PrivateRoute feature="billing.allowPlanPurchase"><RenewMembershipPage /></PrivateRoute>} />
         <Route path="/store/:storeId" element={<PrivateRoute feature="shop.productStoreEnabled"><MemberStorePage /></PrivateRoute>} />
         <Route path="/cart" element={<PrivateRoute feature="shop.cartEnabled"><CartPage /></PrivateRoute>} />
         <Route path="/product/:id" element={<PrivateRoute feature={['shop.productStoreEnabled', 'shop.productDetailPageEnabled']}><ProductDetailPage /></PrivateRoute>} />

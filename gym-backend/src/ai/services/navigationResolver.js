@@ -59,6 +59,8 @@ export const NAVIGATION_ROUTES = [
   route({ label: 'Gửi phản hồi', path: '/feedback', subject: 'feedback', description: 'Gửi phản hồi cho GymPro', roles: ['member'], aliases: ['gui phan hoi', 'feedback'] }),
   route({ label: 'Phản hồi của tôi', path: '/my-feedback', subject: 'feedback', description: 'Xem phản hồi đã gửi', roles: ['member'], aliases: ['phan hoi cua toi', 'my feedback'] }),
   route({ label: 'Hoạt động của tôi', path: '/my-activity', subject: 'activity', description: 'Xem hoạt động gần đây', roles: ['member'], aliases: ['hoat dong', 'activity'] }),
+  route({ label: 'Gói tập', path: '/plans', subject: 'membership', description: 'Xem và đăng ký gói tập', roles: ['member'], aliases: ['goi tap', 'dang ky goi tap', 'mua goi tap', 'plans', 'membership plans', 'cac goi tap'] }),
+  route({ label: 'Gói tập của tôi', path: '/my-membership', subject: 'membership', description: 'Xem gói tập hiện tại', roles: ['member'], aliases: ['goi cua toi', 'goi tap cua toi', 'membership', 'my membership', 'current plan', 'goi hien tai'] }),
   route({ label: 'Hồ sơ cá nhân', path: '/account/profile', subject: 'account', description: 'Hồ sơ, tài khoản và bảo mật', roles: ['member', 'pt', 'staff', 'admin', 'seller'], aliases: ['tai khoan', 'ho so', 'profile', 'bao mat', 'doi mat khau', 'email', 'avatar'] }),
   route({ label: 'FAQ', path: '/help', subject: 'faq', description: 'Xem câu hỏi thường gặp', roles: ['member'], requiresAuth: false, aliases: ['faq', 'help', 'tro giup', 'huong dan'] }),
   route({ label: 'Chính sách', path: '/policies', subject: 'policy', description: 'Xem chính sách và điều khoản', roles: ['member'], requiresAuth: false, aliases: ['chinh sach', 'dieu khoan', 'hoan tien', 'bao mat', 'policy'] }),
@@ -177,6 +179,8 @@ const scoreRoute = ({ routeItem, query, subject, action, intent, userRole }) => 
   if (routeItem.path === '/forgot-password' && text.includes('quen mat khau')) score += 80
   if (routeItem.path === '/policies' && (text.includes('chinh sach') || text.includes('hoan tien') || text.includes('dieu khoan'))) score += 70
   if (routeItem.path === '/store' && (text.includes('mua') || text.includes('whey') || text.includes('cua hang'))) score += 70
+  if (routeItem.path === '/plans' && (text.includes('dang ky goi') || text.includes('mua goi') || text.includes('xem goi tap'))) score += 80
+  if (routeItem.path === '/my-membership' && ((text.includes('cua toi') && text.includes('goi')) || text.includes('goi hien tai'))) score += 80
 
   for (const token of tokens) {
     if (routeText.includes(token)) score += token.length >= 4 ? 8 : 3
@@ -196,6 +200,9 @@ const pickFallbackRoute = ({ query, subject, userRole }) => {
   }
   if (text.includes('faq') || text.includes('help') || text.includes('huong dan')) {
     return NAVIGATION_ROUTES.find((item) => item.path === '/help')
+  }
+  if (text.includes('goi tap') || text.includes('membership') || text.includes('plan')) {
+    return NAVIGATION_ROUTES.find((item) => item.path === '/login')
   }
   return NAVIGATION_ROUTES.find((item) => item.path === '/account/profile' && roleCanAccess(item, role))
 }

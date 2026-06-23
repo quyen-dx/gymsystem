@@ -25,6 +25,7 @@ export interface User {
   hasPassword?: boolean
   createdAt: string
   memberCode?: string
+  memberNumber?: number
   username?: string
   fullName?: string
   gender?: string

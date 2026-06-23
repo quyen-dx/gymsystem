@@ -1,12 +1,14 @@
 import mongoose from 'mongoose'
 import User from '../models/User.js'
 import Membership from '../models/Membership.js'
+import Payment from '../models/Payment.js'
 import Plan from '../models/Plan.js'
 import UserActivity from '../models/UserActivity.js'
 import { recordAuditLog } from '../services/auditLogService.js'
 import { recordUserActivity } from '../services/userActivityService.js'
 import AppError from '../utils/appError.js'
 import { isValidEmail, isValidPhone, normalizePhone } from '../utils/identifier.js'
+import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
 
 const calculateRemainingDays = (endDate) => {
   const now = new Date()
@@ -16,7 +18,7 @@ const calculateRemainingDays = (endDate) => {
 }
 
 const sanitizeMember = (user) => {
-  const obj = user.toObject ? user.toObject() : { ...user }
+  const obj = normalizeUserMemberIdentity(user)
   delete obj.password
   delete obj.refreshToken
   return obj
@@ -124,7 +126,7 @@ export const getMembers = async (req, res) => {
         if (checkinMax && checkinCount > Number(checkinMax)) matchFilter = false
 
         return {
-          ...user,
+          ...normalizeUserMemberIdentity(user),
           remainingDays,
           activeMembership,
           membershipHistory,
@@ -683,6 +685,186 @@ export const getMemberHealthScore = async (req, res) => {
         checkinCount,
         level,
         levelText,
+      },
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const searchMembers = async (req, res) => {
+  try {
+    const { q } = req.query
+    if (!q || String(q).trim().length < 1) {
+      return res.json({ members: [] })
+    }
+
+    const keyword = String(q).trim()
+    const isObjectId = mongoose.Types.ObjectId.isValid(keyword)
+    const conditions = [
+      { fullName: { $regex: keyword, $options: 'i' } },
+      { name: { $regex: keyword, $options: 'i' } },
+      { email: { $regex: keyword, $options: 'i' } },
+      { phone: { $regex: keyword, $options: 'i' } },
+      { memberCode: { $regex: keyword, $options: 'i' } },
+    ]
+    if (isObjectId) {
+      conditions.push({ _id: keyword })
+    }
+    if (/^\d+$/.test(keyword)) {
+      conditions.push({ memberNumber: Number(keyword) })
+    }
+
+    const members = await User.find({
+      role: 'member',
+      $or: conditions,
+    })
+      .select('name fullName email phone memberCode memberNumber isActive status')
+      .limit(20)
+      .lean()
+
+    const memberIds = members.map((m) => m._id)
+    const activeMemberships = await Membership.find({
+      memberId: { $in: memberIds },
+      status: 'active',
+    })
+      .populate('planId', 'nameVi nameEn price durationDays')
+      .sort({ endDate: -1 })
+      .lean()
+
+    const membershipByMemberId = {}
+    for (const m of activeMemberships) {
+      if (!membershipByMemberId[String(m.memberId)]) {
+        membershipByMemberId[String(m.memberId)] = m
+      }
+    }
+
+    const result = members.map((member) => ({
+      _id: member._id,
+      name: member.fullName || member.name,
+      email: member.email,
+      phone: member.phone,
+      memberCode: member.memberCode,
+      memberNumber: member.memberNumber,
+      isActive: member.isActive,
+      status: member.status,
+      currentPlan: membershipByMemberId[String(member._id)]
+        ? {
+            planName: membershipByMemberId[String(member._id)].planId?.nameVi || membershipByMemberId[String(member._id)].planId?.nameEn || '',
+            startDate: membershipByMemberId[String(member._id)].startDate,
+            endDate: membershipByMemberId[String(member._id)].endDate,
+            remainingDays: calculateRemainingDays(membershipByMemberId[String(member._id)].endDate),
+          }
+        : null,
+    }))
+
+    res.json({ members: result })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const offlineRegisterMembership = async (req, res) => {
+  try {
+    const { memberId, planId, paymentMethod, amountPaid, note } = req.body
+    if (!memberId) throw new AppError('memberId là bắt buộc', 400)
+    if (!planId) throw new AppError('planId là bắt buộc', 400)
+
+    const member = await User.findById(memberId)
+    if (!member || member.role !== 'member') {
+      throw new AppError('Không tìm thấy hội viên', 404)
+    }
+
+    const plan = await Plan.findOne({ _id: planId, isActive: true })
+    if (!plan) throw new AppError('Không tìm thấy gói tập hợp lệ', 404)
+
+    if (!amountPaid || Number(amountPaid) < Number(plan.price)) {
+      throw new AppError('Số tiền thu phải lớn hơn hoặc bằng giá gói tập', 400)
+    }
+
+    const validMethods = ['CASH', 'BANK_TRANSFER', 'POS']
+    const method = String(paymentMethod || '').toUpperCase().trim()
+    if (!validMethods.includes(method)) {
+      throw new AppError('Phương thức thanh toán không hợp lệ. Chấp nhận: CASH, BANK_TRANSFER, POS', 400)
+    }
+
+    const existingActive = await Membership.findOne({
+      memberId: member._id,
+      status: 'active',
+    }).sort({ endDate: -1 })
+
+    if (existingActive) {
+      throw new AppError('Hội viên đang có gói hoạt động. Vui lòng gia hạn trong mục Gói tập của tôi hoặc dùng chức năng gia hạn offline.', 400)
+    }
+
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    const startDate = new Date(now)
+    const endDate = new Date(startDate)
+    endDate.setDate(endDate.getDate() + Number(plan.durationDays) - 1)
+    endDate.setHours(23, 59, 59, 999)
+
+    const membership = await Membership.create({
+      memberId: member._id,
+      planId: plan._id,
+      startDate,
+      endDate,
+      status: 'active',
+    })
+
+    const payment = await Payment.create({
+      userId: member._id,
+      planId: plan._id,
+      membershipId: membership._id,
+      amount: Number(amountPaid),
+      currency: 'vnd',
+      status: 'PAID',
+      paymentMethod: method,
+      source: 'OFFLINE',
+      paidAt: new Date(),
+      metadata: {
+        staffId: req.user._id,
+        staffName: req.user.name || req.user.fullName || '',
+        note: String(note || '').trim(),
+        registrationType: 'offline',
+      },
+    })
+
+    membership.paymentId = payment._id
+    await membership.save()
+
+    await recordUserActivity({
+      userId: member._id,
+      type: 'membership',
+      title: 'Đăng ký gói tập offline',
+      description: `Nhân viên ${req.user.name || req.user.fullName || ''} đăng ký gói "${plan.nameVi || plan.nameEn}" - ${plan.durationDays} ngày | ${method} ${Number(amountPaid).toLocaleString('vi-VN')}đ`,
+      metadata: { membershipId: membership._id, planId: plan._id, paymentId: payment._id, paymentMethod: method, source: 'OFFLINE', staffId: req.user._id },
+    })
+
+    await recordAuditLog({
+      req,
+      module: 'membership',
+      action: 'create',
+      entity: membership,
+      details: `Đăng ký gói tập offline: "${plan.nameVi || plan.nameEn}" cho ${member.fullName || member.name || member.email} (${method} ${Number(amountPaid).toLocaleString('vi-VN')}đ)`,
+    })
+
+    res.status(201).json({
+      message: 'Đăng ký gói tập offline thành công',
+      membership: {
+        id: membership._id,
+        plan: { nameVi: plan.nameVi, nameEn: plan.nameEn, durationDays: plan.durationDays },
+        startDate: membership.startDate,
+        endDate: membership.endDate,
+        remainingDays: calculateRemainingDays(endDate),
+        status: membership.status,
+      },
+      payment: {
+        id: payment._id,
+        amount: payment.amount,
+        method: payment.paymentMethod,
+        source: payment.source,
+        status: payment.status,
       },
     })
   } catch (error) {

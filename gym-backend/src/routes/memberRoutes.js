@@ -9,8 +9,10 @@ import {
   getMemberStats,
   getMemberTimeline,
   getMembers,
+  offlineRegisterMembership,
   registerPlanForMember,
   renewPlanForMember,
+  searchMembers,
   toggleMemberStatus,
   updateMember,
 } from '../controllers/memberController.js'
@@ -21,6 +23,7 @@ const router = express.Router()
 router.use(protect)
 
 router.get('/', adminOrStaff, getMembers)
+router.get('/search', adminOrStaff, searchMembers)
 router.get('/stats', adminOrStaff, getMemberStats)
 router.get('/expiring', adminOrStaff, getExpiringMembers)
 
@@ -35,5 +38,6 @@ router.patch('/:id/toggle-status', adminOrStaff, toggleMemberStatus)
 router.post('/:id/register-plan', adminOrStaff, registerPlanForMember)
 router.post('/:id/renew-plan', adminOrStaff, renewPlanForMember)
 router.post('/batch-renew', adminOrStaff, batchRenewMembers)
+router.post('/offline-register', adminOrStaff, offlineRegisterMembership)
 
 export default router

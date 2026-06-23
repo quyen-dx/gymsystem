@@ -9,7 +9,7 @@ test('queryOptimizer routes simple plan count to direct tool', () => {
   assert.equal(result.directTool, 'getAvailablePlans')
   assert.equal(result.subject, 'plan')
   assert.equal(result.action, 'count')
-  assert.equal(result.reason, 'simple_database_query')
+  assert.equal(result.reason, 'membership_database_query')
 })
 
 test('queryOptimizer routes cheapest and most expensive plan to direct tool', () => {
@@ -44,9 +44,10 @@ test('queryOptimizer passes PT name to direct detail tool', () => {
 test('queryOptimizer keeps personalized recommendation for reasoning', () => {
   const result = optimizeQuery({ query: 'tôi muốn giảm cân với ngân sách 500k', memory: {} })
 
-  assert.equal(result.shouldUseAI, true)
+  assert.equal(result.shouldUseAI, false)
   assert.equal(result.directTool, null)
-  assert.equal(result.reason, 'complex_personalized_query')
+  assert.equal(result.intent, 'fitness_goal_selection')
+  assert.equal(result.subject, 'goal')
 })
 
 test('queryOptimizer resolves memory follow-up by entity id', () => {
@@ -74,12 +75,33 @@ test('queryOptimizer routes support/navigation questions to FAQ search', () => {
   const paymentHistory = optimizeQuery({ query: 'xem lịch sử thanh toán ở đâu', memory: {} })
 
   assert.equal(password.shouldUseAI, false)
-  assert.equal(password.directTool, 'searchFaqs')
+  assert.equal(password.directTool, null)
   assert.equal(password.subject, 'account')
-  assert.equal(password.intent, 'account_navigation')
-  assert.equal(forgot.directTool, 'searchFaqs')
-  assert.equal(profile.directTool, 'searchFaqs')
+  assert.equal(password.intent, 'account_security')
+  assert.equal(forgot.directTool, null)
+  assert.equal(forgot.intent, 'auth_forgot_password')
+  assert.equal(profile.directTool, null)
+  assert.equal(profile.intent, 'profile_update')
   assert.equal(paymentHistory.directTool, 'searchFaqs')
+})
+
+test('queryOptimizer routes checkin data queries to AI reasoner', () => {
+  const count = optimizeQuery({ query: 'tôi đã checkin bao nhiêu lần tháng này', memory: {} })
+  const history = optimizeQuery({ query: 'lịch sử checkin của tôi', memory: {} })
+  const streak = optimizeQuery({ query: 'chuỗi điểm danh hiện tại của tôi', memory: {} })
+
+  assert.equal(count.shouldUseAI, true)
+  assert.equal(history.shouldUseAI, true)
+  assert.equal(streak.shouldUseAI, true)
+})
+
+test('queryOptimizer routes checkin navigation to FAQ search', () => {
+  const nav = optimizeQuery({ query: 'điểm danh ở đâu', memory: {} })
+
+  assert.equal(nav.shouldUseAI, false)
+  assert.equal(nav.directTool, 'searchFaqs')
+  assert.equal(nav.subject, 'checkin')
+  assert.equal(nav.intent, 'checkin_navigation')
 })
 
 test('queryOptimizer routes policy questions to policy search', () => {

@@ -8,6 +8,7 @@ import connectDB from './src/config/db.js'
 import passport from './src/config/passport.js'
 import { getMyProducts } from './src/controllers/productController.js'
 import { handleStripeWebhook } from './src/controllers/walletController.js'
+import { stripeMembershipWebhook } from './src/controllers/membershipController.js'
 import { protect, sellerOnly } from './src/middlewares/authMiddleware.js'
 import { maintenanceModeGuard } from './src/middlewares/maintenanceMiddleware.js'
 import addressRoutes from './src/routes/addressRoutes.js'
@@ -41,6 +42,7 @@ app.use(
   }),
 )
 app.post('/api/wallet/stripe-webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
+app.post('/api/memberships/stripe-webhook', express.raw({ type: 'application/json' }), stripeMembershipWebhook)
 app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 app.use(cookieParser())
@@ -94,6 +96,18 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error(err.stack)
+
+  if (err.code === 11000 || err.code === 11001) {
+    const field = Object.keys(err.keyPattern || {}).join(', ')
+    return res.status(409).json({
+      success: false,
+      message: field === 'referenceId'
+        ? 'Dữ liệu bị trùng lặp. Vui lòng thử lại.'
+        : `Dữ liệu bị trùng lặp ở trường "${field}". Vui lòng kiểm tra lại.`,
+      code: 409,
+    })
+  }
+
   const status = err.statusCode || err.status || 500
   res.status(status).json({
     success: false,

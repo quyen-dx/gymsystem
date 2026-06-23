@@ -4,7 +4,10 @@ import { constitutionalReview } from '../services/constitutionalReviewer.js'
 import { chooseRecommendedPlan } from '../services/dbResponder.js'
 import { buildFaqPolicyAnswer } from '../services/faqPolicySearchService.js'
 import { buildNavigationAnswer, resolveNavigation } from '../services/navigationResolver.js'
-import { buildEmptyDataResponse, buildPlanListResponse, buildPlanRecommendResponse, buildPtListResponse, buildWorkoutAdviceResponse, makeIntroduction } from '../services/naturalResponseBuilder.js'
+import { buildCheckinSummaryResponse, buildEmptyDataResponse, buildPlanListResponse, buildPlanRecommendResponse, buildPtListResponse, buildWorkoutAdviceResponse, makeIntroduction } from '../services/naturalResponseBuilder.js'
+import { buildGoalAnswer, buildNutritionAnswer, buildWorkoutDomainAnswer, buildBookingAnswer } from '../services/domainAnswerBuilders.js'
+import { buildContextualSuggestions } from '../services/contextualSuggestions.js'
+import { naturalResponseRewrite } from '../services/naturalResponseRewrite.js'
 import { AI_DOC_FILES, loadAiDoc, getRelevantAiDocs, logAiDocsLoaded } from '../services/aiDocsService.js'
 import { runGymTool } from '../tools/gymTools.js'
 import { SEPARATOR, bulletList, formatDaysText, formatEmailText, formatPriceText, safeText, titleText } from '../services/render/renderTextUtils.js'
@@ -276,7 +279,18 @@ const withAudit = (response, audit) => {
   return { ...response, audit }
 }
 
-const NAVIGATION_SUBJECTS = ['account', 'faq', 'policy', 'navigation', 'booking', 'checkin', 'health', 'workout', 'order', 'forgot_password', 'product', 'payment', 'feedback']
+const makeSuggestions = ({ query, answer, intent, subject, responseType, payload, toolData, lang }) => buildContextualSuggestions({
+  query,
+  answer,
+  intent,
+  subject,
+  responseType,
+  payload,
+  toolData,
+  language: lang,
+})
+
+const NAVIGATION_SUBJECTS = ['account', 'faq', 'policy', 'navigation', 'booking', 'checkin', 'health', 'workout', 'order', 'forgot_password', 'product', 'payment', 'feedback', 'membership', 'plan']
 
 const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, lang, userRole }) => {
   const n = normalizeQuery(query)
@@ -286,7 +300,50 @@ const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, la
   const faqSearch = toolResults.searchFaqs || null
   const policySearch = toolResults.searchPolicies || null
 
-  if (NAVIGATION_SUBJECTS.includes(optimizer.subject)) {
+  if (optimizer.subject === 'goal') {
+    return {
+      answer: buildGoalAnswer({ intent: optimizer.intent, goal: optimizer.goal, lang }),
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+    }
+  }
+
+  if (optimizer.subject === 'nutrition') {
+    return {
+      answer: buildNutritionAnswer({ intent: optimizer.intent, goal: optimizer.goal, lang }),
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+    }
+  }
+
+  if (optimizer.subject === 'workout') {
+    return {
+      answer: buildWorkoutDomainAnswer({ intent: optimizer.intent, goal: optimizer.goal, lang }),
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+    }
+  }
+
+  if (optimizer.subject === 'report' && !optimizer.directTool) {
+    return {
+      answer: lang === 'en'
+        ? 'This question requires live GymPro report data. I cannot answer it without a report data source.'
+        : 'Câu hỏi này cần dữ liệu báo cáo trực tiếp từ GymPro. Hiện chưa có tool báo cáo phù hợp để lấy dữ liệu nên mình không thể tự tạo số liệu.',
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+    }
+  }
+
+  if (optimizer.subject === 'booking' && optimizer.action !== 'navigate' && optimizer.directTool !== 'searchFaqs') {
+    return {
+      answer: buildBookingAnswer({ intent: optimizer.intent, lang }),
+      responseType: 'text_advice',
+      payload: { type: 'text_advice', bookings: toolResults.getUpcomingBookings?.bookings || [] },
+    }
+  }
+
+  if (NAVIGATION_SUBJECTS.includes(optimizer.subject)
+    && (optimizer.action === 'navigate' || String(optimizer.intent || '').includes('navigation') || optimizer.directTool === 'searchFaqs' || optimizer.directTool === 'searchPolicies')) {
     const faqPolicyAnswer = buildFaqPolicyAnswer({ faqSearch, policySearch, query, language: lang })
     const hasDbMatch = Boolean(faqSearch?.matched || policySearch?.matched)
     const answer = faqPolicyAnswer
@@ -315,6 +372,42 @@ const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, la
   }
 
   if (optimizer.subject === 'plan') {
+    if (optimizer.action === 'status' || optimizer.action === 'renew') {
+      const membershipData = toolResults.getMembershipInfo
+      if (!membershipData?.found) {
+        const msg = membershipData?.message || (lang === 'en' ? 'You currently do not have an active membership. Let me show you the available plans.' : 'Bạn chưa có gói tập nào đang hoạt động. Để mình cho bạn xem các gói tập nhé.')
+        return {
+          answer: msg,
+          responseType: 'text_advice',
+          payload: { type: 'text_advice' },
+          links: [{ label: 'Mở Gói tập', path: '/plans', allowedRoles: ['member'] }],
+        }
+      }
+      const planName = membershipData.planName || ''
+      const remainingDays = membershipData.remainingDays ?? 0
+      const endDate = membershipData.endDate ? new Date(membershipData.endDate).toLocaleDateString('vi-VN') : ''
+      if (optimizer.action === 'renew') {
+        const answer = lang === 'en'
+          ? `You can renew your **${planName}** plan. It still has ${remainingDays} day(s) left and expires on ${endDate}. Head to My Membership to renew whenever you are ready.`
+          : `Bạn có thể gia hạn gói **${planName}** hiện tại. Gói của bạn còn ${remainingDays} ngày nữa và sẽ hết hạn vào ${endDate}. Vào Gói tập của tôi để gia hạn khi bạn sẵn sàng nhé.`
+        return {
+          answer,
+          responseType: 'text_advice',
+          payload: { type: 'text_advice', membershipData },
+          links: [{ label: 'Mở Gói tập của tôi', path: '/my-membership', allowedRoles: ['member'] }],
+        }
+      }
+      const statusLabel = membershipData.status === 'active' ? 'còn hạn' : membershipData.status === 'expired' ? 'đã hết hạn' : membershipData.status || ''
+      const startDate = membershipData.startDate ? new Date(membershipData.startDate).toLocaleDateString('vi-VN') : ''
+      const answer = lang === 'en'
+        ? `Your current plan is **${planName}** (${membershipData.status}). You have ${remainingDays} day(s) remaining.\nPeriod: ${startDate} → ${endDate}`
+        : `Gói tập hiện tại của bạn là **${planName}** (${statusLabel}). Bạn còn ${remainingDays} ngày sử dụng.\nNgày bắt đầu: ${startDate}\nNgày kết thúc: ${endDate}`
+      return {
+        answer,
+        responseType: 'text_advice',
+        payload: { type: 'text_advice', membershipData },
+      }
+    }
     if (plans.length === 0) return { answer: buildEmptyDataResponse({ subject: 'plan', lang }), responseType: 'text_advice', payload: { type: 'text_advice', plans: [] } }
     if (/\b(dat nhat|cao nhat|expensive|highest)\b/.test(n)) {
       const plan = pickMostExpensivePlan(plans)
@@ -433,6 +526,37 @@ const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, la
     }
   }
 
+  if (optimizer.subject === 'checkin') {
+    const stats = toolResults.getCheckinStats?.stats
+    if (!stats || stats.total === 0) {
+      const msg = lang === 'en'
+        ? 'You have not checked in yet. Time to start your gym journey — every session counts!'
+        : 'Bạn chưa điểm danh lần nào. Ghé phòng tập và điểm danh để mình theo dõi tiến độ giúp bạn nhé!'
+      return {
+        answer: msg,
+        responseType: 'text_advice',
+        payload: { type: 'text_advice' },
+      }
+    }
+    const isWeekQuery = /\b(tuan nay|tuan)\b/.test(n)
+    const isMonthQuery = /\b(thang nay|thang)\b/.test(n)
+    const isLastQuery = /\b(gan nhat|gan day|cuoi cung)\b/.test(n)
+    const isStreakQuery = /\b(chuoi|streak|lien tiep|hom nay)\b/.test(n)
+    let answer
+    if (isWeekQuery) answer = lang === 'en' ? `This week you have checked in **${stats.thisWeek} time(s)**. Keep it going!` : `Tuần này bạn đã điểm danh **${stats.thisWeek} lần**. Cố gắng duy trì đều đặn nhé!`
+    else if (isMonthQuery) answer = lang === 'en' ? `This month you have checked in **${stats.thisMonth} time(s)**. Consistency is paying off!` : `Tháng này bạn đã điểm danh **${stats.thisMonth} lần**. Duy trì tốt lắm!`
+    else if (isLastQuery && stats.lastCheckin) answer = lang === 'en' ? `Your last check-in was at **${new Date(stats.lastCheckin).toLocaleString('vi-VN')}**. Hope you had a great session!` : `Lần điểm danh gần nhất của bạn là lúc **${new Date(stats.lastCheckin).toLocaleString('vi-VN')}**. Chúc bạn có buổi tập tốt nhé!`
+    else if (isStreakQuery) {
+      const todayChecked = stats.todayCheckinTime ? (lang === 'en' ? 'You checked in today — awesome! ' : 'Bạn đã điểm danh hôm nay rồi — tuyệt! ') : ''
+      answer = lang === 'en' ? `${todayChecked}Your current streak is **${stats.streak} day(s)**. Keep the momentum going!` : `${todayChecked}Chuỗi điểm danh hiện tại của bạn là **${stats.streak} ngày**. Cố gắng giữ vững nhé!`
+    } else answer = buildCheckinSummaryResponse({ stats, lang })
+    return {
+      answer,
+      responseType: 'checkin_summary',
+      payload: { type: 'checkin_summary', checkinStats: stats },
+    }
+  }
+
   return null
 }
 
@@ -477,9 +601,7 @@ const buildAgentAnswer = async ({
     if (workoutData && !workoutData.error) {
       return buildWorkoutAdviceResponse({ stats: workoutData, lang })
     }
-    if (plans && plans.length > 0 && hasFrequency) {
-      return buildPlanListResponse({ plans, lang })
-    }
+    return buildWorkoutDomainAnswer({ intent: plan?.intent || 'workout_advice', goal, lang })
   }
 
   if (subject === 'pt') {
@@ -509,6 +631,7 @@ const roleCanAccess = (user, requiredRole) => {
 
 const checkPermission = ({ user, analysis, query }) => {
   const normalizedQuery = normalizeQuery(query)
+  const isReportIntent = ['report', 'report_data', 'revenue_data', 'report_navigation', 'revenue_navigation'].includes(analysis?.intent)
   const asksCredentialDisclosure = /\b(mat khau ma hoa|password hash|password|hash|token|jwt|secret|api key|cookie)\b/.test(normalizedQuery)
     && /\b(xem|liet ke|cho xem|dua|tra|doan|guess|list|show|reveal|admin)\b/.test(normalizedQuery)
   if (asksCredentialDisclosure) {
@@ -519,15 +642,15 @@ const checkPermission = ({ user, analysis, query }) => {
 
   const role = String(user?.role || 'member').toLowerCase()
 
-  if (analysis.intent === 'report' && isNavigationLocationIntent(query) && /\b(doanh thu|revenue)\b/.test(normalizedQuery) && !['admin', 'super_admin', 'seller'].includes(role)) {
+  if (isReportIntent && isNavigationLocationIntent(query) && /\b(doanh thu|revenue)\b/.test(normalizedQuery) && !['admin', 'super_admin', 'seller'].includes(role)) {
     return { allowed: false, message: 'Tài khoản hiện tại không có quyền xem doanh thu.' }
   }
 
-  if (analysis.intent === 'report' && !['admin', 'super_admin', 'seller'].includes(role)) {
+  if (isReportIntent && !['admin', 'super_admin', 'seller'].includes(role)) {
     return { allowed: false, message: 'Tài khoản hiện tại không có quyền xem dữ liệu này.' }
   }
 
-  if (analysis.intent === 'report' && /admin|super_admin/i.test(query) && !['admin', 'super_admin'].includes(role)) {
+  if (isReportIntent && /admin|super_admin/i.test(query) && !['admin', 'super_admin'].includes(role)) {
     return { allowed: false, message: 'Tài khoản hiện tại không có quyền xem dữ liệu này.' }
   }
 
@@ -604,7 +727,14 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       usedTools: [],
       responseType: 'text_advice',
       payload: { type: 'text_advice' },
-      suggestions: lang === 'en' ? ['Show plans', 'Find a PT', 'Check my progress'] : ['Xem gói tập', 'Tìm PT', 'Kiểm tra tiến độ'],
+      suggestions: makeSuggestions({
+        query: queryText,
+        answer: makeIntroduction(lang),
+        intent: 'general_chat',
+        subject: 'general',
+        responseType: 'text_advice',
+        lang,
+      }),
       memoryUpdate: { lastSubject: 'general', lastAction: 'introduce' },
       confidence: 1,
       shouldUseLegacyRouter: false,
@@ -614,6 +744,40 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   perfStart('gympro_optimizer')
   const optimizer = optimizeQuery({ query: queryText, memory })
   perfEnd('gympro_optimizer')
+  if (!optimizer.directTool && optimizer.shouldUseAI === false) {
+    const direct = await buildDirectToolAnswer({ query: queryText, optimizer, toolResults: {}, memory, lang, userRole: user?.role || 'member' })
+    if (direct?.answer) {
+      const memoryPatch = {
+        lastSubject: optimizer.subject,
+        lastAction: optimizer.action,
+        lastIntent: optimizer.intent,
+        lastQuery: queryText,
+        lastAnswer: direct.answer,
+        lastUsedTools: [],
+      }
+      agentMemory.update(userId, conversationId, memoryPatch)
+      const audit = buildAudit({ source: 'domain_router', optimizer, usedTools: [], aiUsed: false, startedAt })
+      return withAudit({
+        answer: direct.answer,
+        usedTools: [],
+        responseType: direct.responseType,
+        payload: direct.payload,
+        links: direct.links || direct.payload?.links || [],
+        suggestions: makeSuggestions({
+          query: queryText,
+          answer: direct.answer,
+          intent: optimizer.intent,
+          subject: optimizer.domainSubject || optimizer.subject,
+          responseType: direct.responseType,
+          payload: direct.payload,
+          lang,
+        }),
+        memoryUpdate: memoryPatch,
+        confidence: optimizer.confidence,
+        shouldUseLegacyRouter: false,
+      }, audit)
+    }
+  }
   if (optimizer.directTool && optimizer.shouldUseAI === false) {
     const toolResults = {}
     try {
@@ -636,6 +800,7 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
             needsPermissionCheck: false,
             requiredTools: [optimizer.directTool],
             forbiddenFallbacks: optimizer.intent === 'membership_detail' ? ['membership_recommendation', 'faq', 'navigation'] : [],
+            currentUserRole: user?.role || 'member',
           },
           toolData: {
             plansCount: toolResults.getAvailablePlans?.plans?.length,
@@ -665,6 +830,7 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
           lastListedProducts: optimizer.subject === 'product' ? (direct.listedProducts || []) : memory.lastListedProducts,
         }
         agentMemory.update(userId, conversationId, memoryPatch)
+        direct.answer = await naturalResponseRewrite({ answer: direct.answer, query: queryText, subject: optimizer.domainSubject || optimizer.subject, lang })
         const audit = buildAudit({ source: optimizer.reason === 'memory_entity_follow_up' ? 'memory' : 'tool', optimizer, usedTools: [optimizer.directTool], aiUsed: false, startedAt })
         return withAudit({
           answer: direct.answer,
@@ -672,7 +838,16 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
           responseType: direct.responseType,
           payload: direct.payload,
           links: direct.links || direct.payload?.links || [],
-          suggestions: lang === 'en' ? ['Show details', 'Compare options', 'Recommend for me'] : ['Xem chi tiết', 'So sánh lựa chọn', 'Gợi ý cho tôi'],
+          suggestions: makeSuggestions({
+            query: queryText,
+            answer: direct.answer,
+            intent: optimizer.intent,
+            subject: optimizer.domainSubject || optimizer.subject,
+            responseType: direct.responseType,
+            payload: direct.payload,
+            toolData: toolResults,
+            lang,
+          }),
           memoryUpdate: memoryPatch,
           confidence: optimizer.confidence,
           shouldUseLegacyRouter: false,
@@ -719,14 +894,22 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       usedTools: [],
       responseType: 'text_advice',
       payload: { type: 'text_advice' },
-      suggestions: [],
+      suggestions: makeSuggestions({
+        query: queryText,
+        answer,
+        intent: analysis.intent,
+        subject: analysis.subject,
+        responseType: 'text_advice',
+        payload: { type: 'text_advice', plans: [] },
+        lang,
+      }),
       memoryUpdate: null,
       confidence: 1,
       shouldUseLegacyRouter: false,
     }, audit)
   }
 
-  if (analysis.intent === 'report' && analysis.needsPermissionCheck && analysisTools.length === 0) {
+  if (['report', 'report_data', 'revenue_data'].includes(analysis.intent) && analysis.needsPermissionCheck && analysisTools.length === 0) {
     const answer = lang === 'en'
       ? 'This question requires live GymPro report data. I cannot skip the database, and the required report tools are not available here.'
       : 'Câu hỏi này cần dữ liệu báo cáo trực tiếp từ GymPro. Mình không thể bỏ qua database, và hiện chưa có tool báo cáo phù hợp để lấy dữ liệu.'
@@ -743,7 +926,7 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     }, audit)
   }
 
-  if (analysis.intent === 'report' && isNavigationLocationIntent(queryText)) {
+  if (['report', 'report_navigation', 'revenue_navigation'].includes(analysis.intent) && isNavigationLocationIntent(queryText)) {
     const navigation = await resolveNavigation({
       query: queryText,
       subject: 'report',
@@ -833,7 +1016,15 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       usedTools: analysis.needsTools,
       responseType: 'text_advice',
       payload: { type: 'text_advice', plans },
-      suggestions: lang === 'en' ? ['Show all plans', 'Recommend for me'] : ['Xem tất cả gói', 'Gợi ý cho tôi'],
+      suggestions: makeSuggestions({
+        query: queryText,
+        answer,
+        intent: analysis.intent,
+        subject: analysis.subject,
+        responseType: 'text_advice',
+        payload: { type: 'text_advice', plans },
+        lang,
+      }),
       memoryUpdate: { lastSubject: 'plan', lastAction: 'clarify', lastListedPlans: plans.slice(0, 12) },
       confidence: analysis.confidence,
       shouldUseLegacyRouter: false,
@@ -852,7 +1043,15 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       usedTools: analysis.needsTools,
       responseType: 'plan_compare',
       payload: { type: 'plan_compare_all', plans },
-      suggestions: lang === 'en' ? ['Which plan fits my budget?', 'Show all plans'] : ['Gói nào phù hợp ngân sách?', 'Xem tất cả gói'],
+      suggestions: makeSuggestions({
+        query: queryText,
+        answer: comparisonText,
+        intent: analysis.intent,
+        subject: analysis.subject,
+        responseType: 'plan_compare',
+        payload: { type: 'plan_compare_all', plans },
+        lang,
+      }),
       memoryUpdate: { lastSubject: 'plan', lastAction: 'compare', lastMentionedPlanId: targetPlan._id, lastMentionedPlanName: lang === 'en' ? (targetPlan.nameEn || targetPlan.nameVi) : (targetPlan.nameVi || targetPlan.nameEn) },
       confidence: 0.85,
       shouldUseLegacyRouter: false,
@@ -901,7 +1100,15 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
             usedTools: analysisTools,
             responseType: 'text_advice',
             payload: { type: 'text_advice', pts: [] },
-            suggestions: lang === 'en' ? ['Show available trainers'] : ['Xem danh sách PT hiện có'],
+            suggestions: makeSuggestions({
+              query: queryText,
+              answer,
+              intent: analysis.intent,
+              subject: analysis.subject,
+              responseType: 'text_advice',
+              payload: { type: 'text_advice', pts: [] },
+              lang,
+            }),
             memoryUpdate: null,
             confidence: analysis.confidence,
             shouldUseLegacyRouter: false,
@@ -931,8 +1138,60 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       usedTools: analysis.needsTools,
       responseType: selectedPT ? 'pt_detail' : 'pt_list',
       payload: { type: selectedPT ? 'pt_detail' : 'pt_list', pts: ptItems, cards: selectedPT ? [selectedPT] : [] },
-      suggestions: lang === 'en' ? ['Book a session', 'Compare plans', 'Check my progress'] : ['Đặt lịch PT', 'So sánh gói tập', 'Kiểm tra tiến độ'],
+      suggestions: makeSuggestions({
+        query: queryText,
+        answer,
+        intent: analysis.intent,
+        subject: analysis.subject,
+        responseType: selectedPT ? 'pt_detail' : 'pt_list',
+        payload: { type: selectedPT ? 'pt_detail' : 'pt_list', pts: ptItems, cards: selectedPT ? [selectedPT] : [] },
+        lang,
+      }),
       memoryUpdate: { lastSubject: 'pt', lastAction: analysis.action, lastMentionedPTName: selectedPT?.name || null },
+      confidence: analysis.confidence,
+      shouldUseLegacyRouter: false,
+    }, audit)
+  }
+
+  if (analysis.subject === 'checkin') {
+    const stats = toolResults.getCheckinStats?.stats
+    if (!stats || stats.total === 0) {
+      const msg = lang === 'en'
+        ? 'You have not checked in yet. Time to start your gym journey — every session counts!'
+        : 'Bạn chưa điểm danh lần nào. Ghé phòng tập và điểm danh để mình theo dõi tiến độ giúp bạn nhé!'
+      const audit = buildAudit({ source: 'tool', optimizer, usedTools: analysisTools, aiUsed: analysis.source === 'llm', startedAt })
+      return withAudit({
+        answer: msg,
+        usedTools: analysisTools,
+        responseType: 'text_advice',
+        payload: { type: 'text_advice' },
+        suggestions: makeSuggestions({ query: queryText, answer: msg, intent: analysis.intent, subject: analysis.subject, responseType: 'text_advice', payload: { type: 'text_advice' }, lang }),
+        memoryUpdate: { lastSubject: 'checkin', lastAction: analysis.action },
+        confidence: analysis.confidence,
+        shouldUseLegacyRouter: false,
+      }, audit)
+    }
+    const isWeekQuery = /\b(tuan nay|tuan)\b/.test(normalizeQuery(queryText))
+    const isMonthQuery = /\b(thang nay|thang)\b/.test(normalizeQuery(queryText))
+    const isLastQuery = /\b(gan nhat|gan day|cuoi cung)\b/.test(normalizeQuery(queryText))
+    const isStreakQuery = /\b(chuoi|streak|lien tiep|hom nay)\b/.test(normalizeQuery(queryText))
+    let answer
+    if (isWeekQuery) answer = lang === 'en' ? `This week you have checked in **${stats.thisWeek} time(s)**. Keep it going!` : `Tuần này bạn đã điểm danh **${stats.thisWeek} lần**. Cố gắng duy trì đều đặn nhé!`
+    else if (isMonthQuery) answer = lang === 'en' ? `This month you have checked in **${stats.thisMonth} time(s)**. Consistency is paying off!` : `Tháng này bạn đã điểm danh **${stats.thisMonth} lần**. Duy trì tốt lắm!`
+    else if (isLastQuery && stats.lastCheckin) answer = lang === 'en' ? `Your last check-in was at **${new Date(stats.lastCheckin).toLocaleString('vi-VN')}**. Hope you had a great session!` : `Lần điểm danh gần nhất của bạn là lúc **${new Date(stats.lastCheckin).toLocaleString('vi-VN')}**. Chúc bạn có buổi tập tốt nhé!`
+    else if (isStreakQuery) {
+      const todayChecked = stats.todayCheckinTime ? (lang === 'en' ? 'You checked in today — awesome! ' : 'Bạn đã điểm danh hôm nay rồi — tuyệt! ') : ''
+      answer = lang === 'en' ? `${todayChecked}Your current streak is **${stats.streak} day(s)**. Keep the momentum going!` : `${todayChecked}Chuỗi điểm danh hiện tại của bạn là **${stats.streak} ngày**. Cố gắng giữ vững nhé!`
+    } else answer = buildCheckinSummaryResponse({ stats, lang })
+    answer = await naturalResponseRewrite({ answer, query: queryText, subject: 'checkin', lang })
+    const audit = buildAudit({ source: 'tool', optimizer, usedTools: analysisTools, aiUsed: analysis.source === 'llm', startedAt })
+    return withAudit({
+      answer,
+      usedTools: analysisTools,
+      responseType: 'checkin_summary',
+      payload: { type: 'checkin_summary', checkinStats: stats },
+      suggestions: makeSuggestions({ query: queryText, answer, intent: analysis.intent, subject: analysis.subject, responseType: 'checkin_summary', payload: { type: 'checkin_summary', checkinStats: stats }, toolData: toolResults, lang }),
+      memoryUpdate: { lastSubject: 'checkin', lastAction: analysis.action },
       confidence: analysis.confidence,
       shouldUseLegacyRouter: false,
     }, audit)
@@ -941,12 +1200,22 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   const hasData = hasAnyToolData(Object.values(toolResults))
   if (!hasData && !hasError && analysis.needsDatabase) {
     const audit = buildAudit({ source: 'tool', optimizer, usedTools: analysisTools, aiUsed: analysis.source === 'llm', startedAt })
+    const emptyAnswer = buildEmptyDataResponse({ subject: analysis.subject, lang })
     return withAudit({
-      answer: buildEmptyDataResponse({ subject: analysis.subject, lang }),
+      answer: emptyAnswer,
       usedTools: analysisTools,
       responseType: 'text_advice',
       payload: { type: 'text_advice' },
-      suggestions: [],
+      suggestions: makeSuggestions({
+        query: queryText,
+        answer: emptyAnswer,
+        intent: analysis.intent,
+        subject: analysis.subject,
+        responseType: 'text_advice',
+        payload: { type: 'text_advice' },
+        toolData: toolResults,
+        lang,
+      }),
       memoryUpdate: null,
       confidence: analysis.confidence,
       shouldUseLegacyRouter: false,
@@ -998,9 +1267,11 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       answer,
       subject: analysis.subject,
       analysis,
+      currentUserRole: user?.role || 'member',
       toolData: toolDataForReview,
       lang,
     })
+    answer = await naturalResponseRewrite({ answer, query: queryText, subject: analysis.subject, lang })
   }
 
   if (!answer) {
@@ -1049,9 +1320,19 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     usedTools: analysis.needsTools,
     responseType: analysis.subject === 'plan' && analysis.action === 'list' ? 'plan_list' : 'text_advice',
     payload: { type: analysis.subject === 'plan' && analysis.action === 'list' ? 'plan_list' : 'text_advice', plans, data: toolResults },
-    suggestions: lang === 'en'
-      ? ['Compare plans', 'Find a PT', 'Check my progress']
-      : ['So sánh gói tập', 'Tìm PT', 'Kiểm tra tiến độ'],
+    suggestions: makeSuggestions({
+      query: queryText,
+      answer,
+      intent: analysis.intent,
+      subject: analysis.subject,
+      responseType: analysis.subject === 'plan' && analysis.action === 'list' ? 'plan_list' : 'text_advice',
+      payload: { type: analysis.subject === 'plan' && analysis.action === 'list' ? 'plan_list' : 'text_advice', plans, data: toolResults },
+      toolData: {
+        ...toolResults,
+        checkinStats: toolResults.getCheckinStats?.stats || toolResults.checkinStats || toolResults.checkin?.checkinStats,
+      },
+      lang,
+    }),
     memoryUpdate: {
       lastSubject: analysis.subject,
       lastAction: analysis.action,

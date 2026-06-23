@@ -7,21 +7,22 @@ async function backfillMemberCodes() {
 
   const users = await User.find({})
     .sort({ createdAt: 1 })
-    .select('_id memberCode name email createdAt')
+    .select('_id memberCode memberNumber name email createdAt')
     .lean()
 
   console.log(`Found ${users.length} users, sorted by createdAt ASC:\n`)
 
-  // Phase 1: clear all memberCodes to avoid unique index conflicts
+  // Phase 1: clear all member identifiers to avoid unique index conflicts
   const ids = users.map((u) => u._id)
-  await User.updateMany({ _id: { $in: ids } }, { $unset: { memberCode: '' } })
-  console.log('  Phase 1: cleared all memberCodes\n')
+  await User.updateMany({ _id: { $in: ids } }, { $unset: { memberCode: '', memberNumber: '' } })
+  console.log('  Phase 1: cleared all memberCodes and memberNumbers\n')
 
-  // Phase 2: assign GP000001, GP000002, … in createdAt order
+  // Phase 2: assign GP1, GP2, ... in createdAt order
   for (const [index, user] of users.entries()) {
-    const newCode = `GP${String(index + 1).padStart(6, '0')}`
-    await User.updateOne({ _id: user._id }, { $set: { memberCode: newCode } })
-    console.log(`  ${String(index + 1).padStart(2)}. ${newCode}  |  ${user.name || user.email}`)
+    const memberNumber = index + 1
+    const newCode = `GP${memberNumber}`
+    await User.updateOne({ _id: user._id }, { $set: { memberCode: newCode, memberNumber } })
+    console.log(`  ${String(memberNumber).padStart(2)}. ${newCode}  |  ${user.name || user.email}`)
   }
 
   console.log(`\n✅ Updated ${users.length} users successfully`)
