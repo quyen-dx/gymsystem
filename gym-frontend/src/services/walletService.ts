@@ -7,6 +7,7 @@ export const createDeposit = (data: { amount: number; provider: string }) => api
 export const createVnpayDeposit = (data: { amount: number; bankCode?: string }) => api.post('/wallet/vnpay-deposit', data)
 export const createManualQrDeposit = (data: { amount: number }) => api.post('/wallet/manual-qr-deposit', data)
 export const getManualQrDepositInfo = (txnRef: string) => api.get(`/wallet/manual-qr-info/${encodeURIComponent(txnRef)}`)
+export const simulateManualQrPayment = (txnRef: string) => api.post(`/wallet/manual-qr-demo-pay/${encodeURIComponent(txnRef)}`)
 export const createStripePaymentIntent = (data: { amount?: number; amountUsd?: number }) => api.post('/wallet/create-payment-intent', data)
 export const getStripeExchangeRate = () => api.get('/wallet/stripe-exchange-rate')
 export const fakeDeposit = (data: { userId: string; amount: number }) => api.post('/wallet/fake-deposit', data)

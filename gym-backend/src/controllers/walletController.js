@@ -233,7 +233,7 @@ export const handleManualQrScan = async (req, res, next) => {
         })
 
         if (!payment) {
-            return res.redirect(buildClientUrl('/deposit-scan', { error: 'not_found', txnRef }))
+            return res.redirect(buildClientUrl('/bank-transfer-demo', { error: 'not_found', txnRef }))
         }
 
         const scanCount = Number(payment.metadata?.scanCount || 0) + 1
@@ -246,9 +246,89 @@ export const handleManualQrScan = async (req, res, next) => {
         }
         await payment.save()
 
-        return res.redirect(buildClientUrl('/deposit-scan', { txnRef }))
+        return res.redirect(buildClientUrl('/bank-transfer-demo', { txnRef }))
     } catch (error) {
         next(error)
+    }
+}
+
+export const simulateManualQrPayment = async (req, res, next) => {
+    const session = await mongoose.startSession()
+    try {
+        const { txnRef } = req.params
+        session.startTransaction()
+
+        const payment = await Payment.findOne({
+            txnRef,
+            method: 'MANUAL_QR',
+            'metadata.purpose': 'WALLET_DEPOSIT',
+            'metadata.demoOnly': true,
+        }).session(session)
+
+        if (!payment) {
+            throw new AppError('Không tìm thấy giao dịch demo', 404)
+        }
+
+        if (payment.status === 'PAID') {
+            await session.commitTransaction()
+            return res.json({ success: true, data: { status: payment.status, txnRef: payment.txnRef, alreadyPaid: true } })
+        }
+
+        if (payment.status !== 'PENDING') {
+            throw new AppError('Giao dịch không còn ở trạng thái chờ', 400)
+        }
+
+        const depositCredit = calculateDepositCredit(payment.amount)
+        const { wallet, transaction } = await applyWalletTransaction({
+            userId: payment.userId,
+            amount: depositCredit.creditedAmount,
+            type: 'deposit',
+            provider: 'manual_qr_demo',
+            source: 'bank_demo',
+            description: 'Manual QR demo bank transfer',
+            referenceId: txnRef,
+            status: 'completed',
+            metadata: {
+                paymentId: payment._id,
+                txnRef,
+                demoOnly: true,
+                originalAmount: depositCredit.originalAmount,
+                bonusAmount: depositCredit.bonusAmount,
+                bonusRate: depositCredit.bonusRate,
+            },
+            idempotencyKey: txnRef,
+            session,
+        })
+
+        payment.status = 'PAID'
+        payment.paidAt = new Date()
+        payment.metadata = {
+            ...(payment.metadata || {}),
+            demoPaidAt: new Date(),
+            walletId: wallet._id,
+            walletTransactionId: transaction._id,
+            creditedAmount: depositCredit.creditedAmount,
+            bonusAmount: depositCredit.bonusAmount,
+            bonusRate: depositCredit.bonusRate,
+        }
+        await payment.save({ session })
+
+        await session.commitTransaction()
+        return res.json({
+            success: true,
+            data: {
+                status: payment.status,
+                txnRef: payment.txnRef,
+                amount: payment.amount,
+                creditedAmount: depositCredit.creditedAmount,
+                walletBalance: wallet.balance,
+            },
+        })
+    } catch (error) {
+        await session.abortTransaction()
+        next(error)
+    } finally {
+        session.endSession()
     }
 }
 

@@ -1,5 +1,5 @@
 import express from 'express'
-import { cancelDeposit, confirmDeposit, createDepositTransaction, createManualQrDepositPayment, createStripePaymentIntent, createVnpayDepositPayment, fakeDeposit, getManualQrDepositInfo, getMyDepositPayments, getMyWallet, getMyWalletTransactions, getStripeExchangeRate, handleManualQrScan, handleVnpayReturn, transferWallet } from '../controllers/walletController.js'
+import { cancelDeposit, confirmDeposit, createDepositTransaction, createManualQrDepositPayment, createStripePaymentIntent, createVnpayDepositPayment, fakeDeposit, getManualQrDepositInfo, getMyDepositPayments, getMyWallet, getMyWalletTransactions, getStripeExchangeRate, handleManualQrScan, handleVnpayReturn, simulateManualQrPayment, transferWallet } from '../controllers/walletController.js'
 import { protect } from '../middlewares/authMiddleware.js'
 import { requireFeature } from '../middlewares/systemSettingsMiddleware.js'
 
@@ -8,6 +8,7 @@ const router = express.Router()
 router.get('/vnpay-return', handleVnpayReturn)
 router.get('/manual-qr-scan/:txnRef', handleManualQrScan)
 router.get('/manual-qr-info/:txnRef', getManualQrDepositInfo)
+router.post('/manual-qr-demo-pay/:txnRef', simulateManualQrPayment)
 
 router.use(protect)
 router.get('/', getMyWallet)
