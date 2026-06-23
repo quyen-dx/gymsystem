@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Select, Table, Tag, Typography, message } from 'antd'
+import { CardElement, Elements, useElements, useStripe } from '@stripe/react-stripe-js'
+import { loadStripe } from '@stripe/stripe-js'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import i18n from '../../../i18n'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useWallet } from '../../../context/WalletProvider'
-import { createManualQrDeposit, createVnpayDeposit, getDepositPayments } from '../../../services/walletService'
+import { createManualQrDeposit, createStripePaymentIntent, createVnpayDeposit, getDepositPayments } from '../../../services/walletService'
 import { PRESET_AMOUNTS } from '../../../types/member/wallet'
 
 const { Text } = Typography
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || ''
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
 
 const DEPOSIT_BONUS_TIERS = [
   { threshold: 70000000, rate: 0.03 },
@@ -59,6 +63,83 @@ function normalizeStatus(status?: string) {
   return String(status || '').toUpperCase()
 }
 
+function StripeCardDepositForm({
+  amount,
+  amountError,
+  onPaid,
+}: {
+  amount: number
+  amountError: string | null
+  onPaid: () => void
+}) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [paying, setPaying] = useState(false)
+
+  const handlePay = async () => {
+    if (!stripe || !elements || amountError) return
+
+    const cardElement = elements.getElement(CardElement)
+    if (!cardElement) return
+
+    setPaying(true)
+    try {
+      const res = await createStripePaymentIntent({ amount })
+      const clientSecret = res.data.clientSecret
+      const result = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: { card: cardElement },
+      })
+
+      if (result.error) {
+        message.error(result.error.message || 'Thanh toán thẻ thất bại')
+        return
+      }
+
+      message.success('Thanh toán thẻ thành công. Ví sẽ được cập nhật sau giây lát.')
+      onPaid()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || 'Không thể xử lý thanh toán thẻ')
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {!stripePublishableKey && (
+        <p className="rounded-lg border border-[#ef444433] bg-[#ef44440f] px-3 py-2 text-xs text-[#ef4444]">
+          Chưa cấu hình VITE_STRIPE_PUBLISHABLE_KEY cho thanh toán thẻ.
+        </p>
+      )}
+      <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3">
+        <CardElement
+          options={{
+            style: {
+              base: {
+                color: '#ffffff',
+                fontSize: '14px',
+                '::placeholder': { color: '#8b949e' },
+              },
+              invalid: { color: '#ef4444' },
+            },
+          }}
+        />
+      </div>
+      <Button
+        type="primary"
+        size="large"
+        block
+        loading={paying}
+        disabled={!stripe || !!amountError}
+        onClick={handlePay}
+        className="!h-11 !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
+      >
+        Thanh toán thẻ quốc tế
+      </Button>
+    </div>
+  )
+}
+
 export default function DepositPage() {
   const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -67,7 +148,7 @@ export default function DepositPage() {
   const [customInput, setCustomInput] = useState('')
   const [payments, setPayments] = useState<DepositPayment[]>([])
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'PENDING' | 'PAID' | 'FAILED'>('all')
-  const [paymentMethod, setPaymentMethod] = useState<'vnpay' | 'manual'>('vnpay')
+  const [paymentMethod, setPaymentMethod] = useState<'vnpay' | 'card'>('vnpay')
   const [pendingPayment, setPendingPayment] = useState<PendingQrPayment | null>(null)
   const [loading, setLoading] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -107,7 +188,7 @@ export default function DepositPage() {
     const amountParam = Number(searchParams.get('amount') || 0)
     if (method !== 'manual' || !txnRef) return
 
-    setPaymentMethod('manual')
+    setPaymentMethod('vnpay')
     if (amountParam > 0) setAmount(amountParam)
 
     getDepositPayments()
@@ -144,7 +225,7 @@ export default function DepositPage() {
           const status = normalizeStatus(current?.status)
 
           if (status === 'PAID') {
-            message.success(pendingPayment.type === 'vnpay' ? 'Thanh toán demo thành công' : 'Nạp tiền demo thành công')
+            message.success('Thanh toán thành công')
             setPendingPayment(null)
             refreshWallet()
           }
@@ -190,10 +271,6 @@ export default function DepositPage() {
     if (amountError) return
     setLoading(true)
     try {
-      const vnpayRes = await createVnpayDeposit({ amount })
-      const vnpayPayment = vnpayRes.data?.data
-      if (!vnpayPayment?.paymentUrl) throw new Error('Missing VNPAY payment URL')
-
       const manualRes = await createManualQrDeposit({ amount })
       const manualPayment = manualRes.data?.data
       if (!manualPayment?.qrDataUrl || !manualPayment?.manualUrl) throw new Error('Missing manual QR data')
@@ -201,32 +278,13 @@ export default function DepositPage() {
       setPendingPayment({
         ...manualPayment,
         type: 'vnpay',
-        paymentUrl: vnpayPayment.paymentUrl,
-        method: 'VNPAY + MANUAL_QR',
-        note: 'QR đang hiển thị là QR demo ngân hàng để mở form chuyển khoản mô phỏng. Nút VNPAY bên dưới vẫn mở trang thanh toán Sandbox.',
-        qrLabel: 'QR demo ngân hàng',
+        method: 'VNPAY',
+        qrLabel: 'Mã QR thanh toán',
       })
       refreshPayments()
-      message.success('Đã tạo QR demo và link VNPAY')
+      message.success('Đã tạo mã QR')
     } catch (error: any) {
       message.error(error?.response?.data?.message || 'Không thể tạo giao dịch VNPAY')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleCreateManualQr = async () => {
-    if (amountError) return
-    setLoading(true)
-    try {
-      const res = await createManualQrDeposit({ amount })
-      const nextPayment = res.data?.data
-      if (!nextPayment?.qrDataUrl) throw new Error('Missing manual QR data')
-      setPendingPayment({ ...nextPayment, type: 'manual', qrLabel: 'QR demo ngân hàng' })
-      refreshPayments()
-      message.success('Đã tạo QR thủ công demo')
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Không thể tạo QR thủ công')
     } finally {
       setLoading(false)
     }
@@ -246,6 +304,23 @@ export default function DepositPage() {
     document.body.appendChild(link)
     link.click()
     link.remove()
+  }
+
+  const handleOpenVnpayPage = async () => {
+    const targetAmount = pendingPayment?.amount || amount
+    if (!targetAmount || amountError) return
+    setLoading(true)
+    try {
+      const res = await createVnpayDeposit({ amount: targetAmount })
+      const paymentUrl = res.data?.data?.paymentUrl
+      if (!paymentUrl) throw new Error('Missing VNPAY payment URL')
+      window.open(paymentUrl, '_blank', 'noopener,noreferrer')
+      refreshPayments()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || 'Không thể mở trang VNPAY')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -277,20 +352,20 @@ export default function DepositPage() {
                         : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
                     }`}
                   >
-                    VNPAY Sandbox
+                    Thanh toán VNPAY
                   </button>
                   <button
                     onClick={() => {
-                      setPaymentMethod('manual')
+                      setPaymentMethod('card')
                       setPendingPayment(null)
                     }}
                     className={`rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                      paymentMethod === 'manual'
+                      paymentMethod === 'card'
                         ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)]'
                         : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
                     }`}
                   >
-                    QR thủ công demo
+                    Visa / Mastercard
                   </button>
                 </div>
 
@@ -329,21 +404,33 @@ export default function DepositPage() {
                   {amountError && <p className="text-xs text-[#ef4444]">{amountError}</p>}
                 </div>
 
-                <Button
-                  type="primary"
-                  size="large"
-                  block
-                  loading={loading}
-                  disabled={!!amountError}
-                  onClick={paymentMethod === 'vnpay' ? handlePayWithVnpay : handleCreateManualQr}
-                  className="!h-11 !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
-                >
-                  {paymentMethod === 'vnpay' ? 'Tạo QR demo + link VNPAY' : 'Tạo QR thủ công demo'}
-                </Button>
-                {paymentMethod === 'manual' && (
-                  <p className="rounded-lg border border-[var(--theme-accent-border)] bg-[var(--theme-accent-muted)] px-3 py-2 text-xs text-[var(--theme-accent)]">
-                    QR thủ công là link nội bộ GymPro để tự fill thông tin nạp tiền, không phải QR ngân hàng và không trừ tiền thật.
-                  </p>
+                {paymentMethod === 'vnpay' ? (
+                  <Button
+                    type="primary"
+                    size="large"
+                    block
+                    loading={loading}
+                    disabled={!!amountError}
+                    onClick={handlePayWithVnpay}
+                    className="!h-11 !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
+                  >
+                    Tạo mã QR
+                  </Button>
+                ) : (
+                  <Elements stripe={stripePromise}>
+                    <StripeCardDepositForm
+                      amount={amount}
+                      amountError={amountError}
+                      onPaid={() => {
+                        refreshWallet()
+                        refreshPayments()
+                        window.setTimeout(() => {
+                          refreshWallet()
+                          refreshPayments()
+                        }, 3000)
+                      }}
+                    />
+                  </Elements>
                 )}
               </div>
             </Card>
@@ -357,7 +444,7 @@ export default function DepositPage() {
                     </p>
                     <p className="mt-1 text-xs text-[var(--theme-muted)]">
                       {pendingPayment.type === 'vnpay'
-                        ? 'Quét QR để mở form ngân hàng mô phỏng đã fill sẵn. Nút VNPAY bên dưới vẫn mở trang Sandbox.'
+                        ? 'Quét mã bằng điện thoại hoặc mở trang thanh toán VNPAY bên dưới.'
                         : 'Quét bằng camera để mở form ngân hàng mô phỏng đã fill sẵn.'}
                     </p>
                   </div>
@@ -382,7 +469,7 @@ export default function DepositPage() {
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-sm text-[var(--theme-muted)]">Phương thức</span>
                       <span className="text-sm font-semibold text-[var(--theme-text)]">
-                        {pendingPayment.method || (pendingPayment.type === 'vnpay' ? 'VNPAY + MANUAL_QR' : 'MANUAL_QR')}
+                        {pendingPayment.method || (pendingPayment.type === 'vnpay' ? 'VNPAY' : 'MANUAL_QR')}
                       </span>
                     </div>
                   </div>
@@ -396,13 +483,11 @@ export default function DepositPage() {
                       Tải mã QR
                     </Button>
                     <Button onClick={() => pendingPayment.manualUrl && window.open(pendingPayment.manualUrl, '_blank', 'noopener,noreferrer')}>
-                      Mở ngân hàng demo
+                      Mở ngân hàng
                     </Button>
-                    {pendingPayment.paymentUrl && (
-                      <Button onClick={() => pendingPayment.paymentUrl && window.open(pendingPayment.paymentUrl, '_blank', 'noopener,noreferrer')}>
-                        Mở trang VNPAY
-                      </Button>
-                    )}
+                    <Button loading={loading} onClick={handleOpenVnpayPage}>
+                      Mở trang VNPAY
+                    </Button>
                     <Button onClick={() => setPendingPayment(null)}>
                       Tạo mã khác
                     </Button>
@@ -462,7 +547,10 @@ export default function DepositPage() {
                   {
                     title: 'Phương thức',
                     key: 'method',
-                    render: (_: unknown, record: DepositPayment) => record.method || record.paymentMethod || 'VNPAY',
+                    render: (_: unknown, record: DepositPayment) => {
+                      const method = record.method || record.paymentMethod || 'VNPAY'
+                      return method === 'MANUAL_QR' ? 'VNPAY' : method
+                    },
                   },
                   { title: t('deposit.table_status'), dataIndex: 'status', key: 'status', render: renderStatus },
                 ]}
