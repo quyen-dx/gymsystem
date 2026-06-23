@@ -99,13 +99,13 @@ export default function BankTransferDemoPage() {
           </div>
         </div>
 
-        <Card className="!rounded-2xl !border-0 shadow-md">
+        <Card className="!rounded-2xl !border-0 !bg-white !text-[#10251f] shadow-md">
           <div className="space-y-5">
             <div className="rounded-xl border border-[#d7e6df] bg-[#f8fbfa] p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#587067]">Tài khoản nguồn</p>
               <div className="mt-3 flex items-center justify-between">
                 <div>
-                  <p className="font-semibold">NGUYEN VAN A</p>
+                  <p className="font-semibold text-[#10251f]">NGUYEN VAN A</p>
                   <p className="text-sm text-[#6b7f77]">**** 2486</p>
                 </div>
                 <Tag color="green">DEMO</Tag>
@@ -115,15 +115,15 @@ export default function BankTransferDemoPage() {
             <div className="space-y-3">
               <div>
                 <p className="text-xs font-medium text-[#6b7f77]">Ngân hàng nhận</p>
-                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold">Vietcombank - Demo</div>
+                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold text-[#10251f]">NCB</div>
               </div>
               <div>
-                <p className="text-xs font-medium text-[#6b7f77]">Số tài khoản nhận</p>
-                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold">1234567890</div>
+                <p className="text-xs font-medium text-[#6b7f77]">Số thẻ</p>
+                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold text-[#10251f]">9704198526191432198</div>
               </div>
               <div>
-                <p className="text-xs font-medium text-[#6b7f77]">Tên người nhận</p>
-                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold">GYMPRO DEMO WALLET</div>
+                <p className="text-xs font-medium text-[#6b7f77]">Tên chủ thẻ</p>
+                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold text-[#10251f]">NGUYEN VAN A</div>
               </div>
               <div>
                 <p className="text-xs font-medium text-[#6b7f77]">Số tiền</p>
@@ -131,7 +131,7 @@ export default function BankTransferDemoPage() {
               </div>
               <div>
                 <p className="text-xs font-medium text-[#6b7f77]">Nội dung chuyển khoản</p>
-                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold">{info.txnRef}</div>
+                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold text-[#10251f]">{info.txnRef}</div>
               </div>
             </div>
 
