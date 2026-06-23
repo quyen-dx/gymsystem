@@ -140,12 +140,7 @@ export default function BankTransferDemoPage() {
             </div>
 
             {paid || info.status === 'PAID' ? (
-              <div className="space-y-3">
-                <Result status="success" title="Thanh toán thành công" subTitle="GymPro đã cập nhật số dư ví." />
-                <Button type="primary" block size="large" onClick={() => navigate(`/deposit?payment=success&txnRef=${encodeURIComponent(info.txnRef)}`)}>
-                  Quay về ví GymPro
-                </Button>
-              </div>
+              <Result status="success" title="Thanh toán thành công" subTitle="GymPro đã cập nhật số dư ví." />
             ) : (
               <Button type="primary" block size="large" loading={paying} onClick={handleDemoPay} className="!h-12 !bg-[#007a3d]">
                 Xác nhận chuyển khoản
