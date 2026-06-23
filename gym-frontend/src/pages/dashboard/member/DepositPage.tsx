@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Select, Table, Tag, Typography, message } from 'antd'
-import { CardElement, Elements, useElements, useStripe } from '@stripe/react-stripe-js'
+import { CardCvcElement, CardExpiryElement, CardNumberElement, Elements, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -79,7 +79,7 @@ function StripeCardDepositForm({
   const handlePay = async () => {
     if (!stripe || !elements || amountError) return
 
-    const cardElement = elements.getElement(CardElement)
+    const cardElement = elements.getElement(CardNumberElement)
     if (!cardElement) return
 
     setPaying(true)
@@ -111,19 +111,72 @@ function StripeCardDepositForm({
           Chưa cấu hình VITE_STRIPE_PUBLISHABLE_KEY cho thanh toán thẻ.
         </p>
       )}
-      <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3">
-        <CardElement
-          options={{
-            style: {
-              base: {
-                color: '#ffffff',
-                fontSize: '14px',
-                '::placeholder': { color: '#8b949e' },
-              },
-              invalid: { color: '#ef4444' },
-            },
-          }}
-        />
+      <div className="space-y-3">
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">Số thẻ</span>
+          <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3">
+            <CardNumberElement
+              options={{
+                showIcon: true,
+                placeholder: '4242 4242 4242 4242',
+                style: {
+                  base: {
+                    color: '#ffffff',
+                    fontSize: '14px',
+                    '::placeholder': { color: '#8b949e' },
+                  },
+                  invalid: { color: '#ef4444' },
+                },
+              }}
+            />
+          </div>
+        </label>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">Ngày hết hạn</span>
+            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3">
+              <CardExpiryElement
+                options={{
+                  placeholder: '12/34',
+                  style: {
+                    base: {
+                      color: '#ffffff',
+                      fontSize: '14px',
+                      '::placeholder': { color: '#8b949e' },
+                    },
+                    invalid: { color: '#ef4444' },
+                  },
+                }}
+              />
+            </div>
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">CVC</span>
+            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3">
+              <CardCvcElement
+                options={{
+                  placeholder: '123',
+                  style: {
+                    base: {
+                      color: '#ffffff',
+                      fontSize: '14px',
+                      '::placeholder': { color: '#8b949e' },
+                    },
+                    invalid: { color: '#ef4444' },
+                  },
+                }}
+              />
+            </div>
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">Mã bưu chính</span>
+            <input
+              value="10000"
+              readOnly
+              className="h-[46px] w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 text-sm text-[var(--theme-text)] outline-none"
+            />
+          </label>
+        </div>
       </div>
       <Button
         type="primary"
