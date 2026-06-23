@@ -42,7 +42,7 @@ export default function BankTransferDemoPage() {
         setInfo(res.data.data)
         setPaid(res.data.data?.status === 'PAID')
       })
-      .catch((err) => setLoadError(err?.response?.data?.message || 'Không tìm thấy giao dịch demo'))
+      .catch((err) => setLoadError(err?.response?.data?.message || 'Không tìm thấy giao dịch'))
       .finally(() => setLoading(false))
   }, [txnRef, error])
 
@@ -53,9 +53,9 @@ export default function BankTransferDemoPage() {
       const res = await simulateManualQrPayment(info.txnRef)
       setPaid(true)
       setInfo((current) => current ? { ...current, status: 'PAID' } : current)
-      message.success(`Thanh toán demo thành công. Ví nhận ${formatVND(res.data?.data?.creditedAmount || info.amount)}.`)
+      message.success(`Thanh toán thành công. Ví nhận ${formatVND(res.data?.data?.creditedAmount || info.amount)}.`)
     } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Không thể xác nhận thanh toán demo')
+      message.error(err?.response?.data?.message || 'Không thể xác nhận thanh toán')
     } finally {
       setPaying(false)
     }
@@ -77,7 +77,7 @@ export default function BankTransferDemoPage() {
         <div className="mx-auto max-w-md">
           <Result
             status="warning"
-            title="Không mở được giao dịch demo"
+            title="Không mở được giao dịch"
             subTitle={loadError || 'Mã giao dịch không tồn tại.'}
             extra={<Button type="primary" onClick={() => navigate('/')}>Về GymPro</Button>}
           />
@@ -92,10 +92,10 @@ export default function BankTransferDemoPage() {
         <div className="mb-4 rounded-2xl bg-[#007a3d] px-5 py-4 text-white shadow-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">DEMO BANK</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">NCB</p>
               <h1 className="mt-1 text-xl font-bold">Chuyển khoản</h1>
             </div>
-            <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">MÔ PHỎNG</span>
+            <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">QR PAY</span>
           </div>
         </div>
 
@@ -106,9 +106,9 @@ export default function BankTransferDemoPage() {
               <div className="mt-3 flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-[#10251f]">NGUYEN VAN A</p>
-                  <p className="text-sm text-[#6b7f77]">**** 2486</p>
+                  <p className="text-sm text-[#6b7f77]">**** 2198</p>
                 </div>
-                <Tag color="green">DEMO</Tag>
+                <Tag color="green">ĐANG HOẠT ĐỘNG</Tag>
               </div>
             </div>
 
@@ -136,19 +136,19 @@ export default function BankTransferDemoPage() {
             </div>
 
             <div className="rounded-xl border border-[#f1d18a] bg-[#fff8e6] px-4 py-3 text-xs text-[#7a5a10]">
-              Đây là giao diện mô phỏng để demo luồng QR. Không kết nối ngân hàng thật và không tạo giao dịch tiền thật.
+              Đây là trang xác nhận thanh toán nội bộ của GymPro, không phải ứng dụng ngân hàng NCB.
             </div>
 
             {paid || info.status === 'PAID' ? (
               <div className="space-y-3">
-                <Result status="success" title="Thanh toán demo thành công" subTitle="GymPro đã cộng tiền vào ví demo." />
+                <Result status="success" title="Thanh toán thành công" subTitle="GymPro đã cập nhật số dư ví." />
                 <Button type="primary" block size="large" onClick={() => navigate(`/deposit?payment=success&txnRef=${encodeURIComponent(info.txnRef)}`)}>
                   Quay về ví GymPro
                 </Button>
               </div>
             ) : (
               <Button type="primary" block size="large" loading={paying} onClick={handleDemoPay} className="!h-12 !bg-[#007a3d]">
-                Xác nhận chuyển khoản demo
+                Xác nhận chuyển khoản
               </Button>
             )}
           </div>
