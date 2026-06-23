@@ -276,12 +276,15 @@ export const createMember = async (req, res) => {
       throw new AppError('Email hoặc số điện thoại đã tồn tại', 400)
     }
 
+    const pwd = password || 'member123'
+    if (pwd.length < 6) throw new AppError('Mật khẩu phải có ít nhất 6 ký tự', 400)
+
     const userData = {
       name: name.trim(),
       role: 'member',
       provider: email ? 'email' : 'phone',
       isVerified: true,
-      password: password || 'member123',
+      password: pwd,
     }
 
     if (email) userData.email = email.toLowerCase().trim()
@@ -390,6 +393,7 @@ export const registerPlanForMember = async (req, res) => {
     const existingActive = await Membership.findOne({
       memberId: member._id,
       status: 'active',
+      endDate: { $gte: new Date() },
     }).sort({ endDate: -1 })
 
     if (existingActive) {
@@ -692,6 +696,129 @@ export const getMemberHealthScore = async (req, res) => {
   }
 }
 
+export const createMemberAndRegister = async (req, res) => {
+  try {
+    const { name, email, phone, dateOfBirth, gender, password, planId, paymentMethod, amountPaid, memo } = req.body
+
+    if (!name?.trim()) throw new AppError('Họ tên là bắt buộc', 400)
+    if (!planId) throw new AppError('planId là bắt buộc', 400)
+    if (!paymentMethod) throw new AppError('Phương thức thanh toán là bắt buộc', 400)
+
+    const existingUser = email
+      ? await User.findOne({ email: email.toLowerCase() })
+      : phone
+        ? await User.findOne({ phone: normalizePhone(phone) })
+        : null
+
+    if (existingUser) {
+      throw new AppError('Email hoặc số điện thoại đã tồn tại', 400)
+    }
+
+    const plan = await Plan.findOne({ _id: planId, isActive: true })
+    if (!plan) throw new AppError('Không tìm thấy gói tập hợp lệ', 404)
+
+    if (!amountPaid || Number(amountPaid) < Number(plan.price)) {
+      throw new AppError('Số tiền thu phải lớn hơn hoặc bằng giá gói tập', 400)
+    }
+
+    const validMethods = ['CASH', 'BANK_TRANSFER', 'POS']
+    const method = String(paymentMethod || '').toUpperCase().trim()
+    if (!validMethods.includes(method)) {
+      throw new AppError('Phương thức thanh toán không hợp lệ. Chấp nhận: CASH, BANK_TRANSFER, POS', 400)
+    }
+
+    const pwd = password || 'member123'
+    if (pwd.length < 6) throw new AppError('Mật khẩu phải có ít nhất 6 ký tự', 400)
+
+    const userData = {
+      name: name.trim(),
+      role: 'member',
+      provider: email ? 'email' : 'phone',
+      isVerified: true,
+      password: pwd,
+    }
+    if (email) userData.email = email.toLowerCase().trim()
+    if (phone) userData.phone = normalizePhone(phone)
+    if (dateOfBirth) userData.dateOfBirth = new Date(dateOfBirth)
+    if (gender) userData.gender = gender
+
+    const user = await User.create(userData)
+
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    const startDate = new Date(now)
+    const endDate = new Date(startDate)
+    endDate.setDate(endDate.getDate() + Number(plan.durationDays) - 1)
+    endDate.setHours(23, 59, 59, 999)
+
+    const membership = await Membership.create({
+      memberId: user._id,
+      planId: plan._id,
+      startDate,
+      endDate,
+      status: 'active',
+    })
+
+    const payment = await Payment.create({
+      userId: user._id,
+      planId: plan._id,
+      membershipId: membership._id,
+      amount: Number(amountPaid),
+      currency: 'vnd',
+      status: 'PAID',
+      paymentMethod: method,
+      source: 'OFFLINE',
+      paidAt: new Date(),
+      metadata: {
+        staffId: req.user._id,
+        staffName: req.user.name || req.user.fullName || '',
+        memo: String(memo || '').trim(),
+        registrationType: 'create_and_register',
+      },
+    })
+
+    membership.paymentId = payment._id
+    await membership.save()
+
+    await recordUserActivity({
+      userId: user._id,
+      type: 'membership',
+      title: 'Đăng ký gói tập',
+      description: `Nhân viên ${req.user.name || ''} tạo tài khoản và đăng ký gói "${plan.nameVi || plan.nameEn}" - ${plan.durationDays} ngày | ${method} ${Number(amountPaid).toLocaleString('vi-VN')}đ`,
+      metadata: { membershipId: membership._id, planId: plan._id, paymentId: payment._id, paymentMethod: method, source: 'OFFLINE', staffId: req.user._id },
+    })
+
+    await recordAuditLog({
+      req,
+      module: 'users',
+      action: 'create',
+      entity: user,
+      details: `Nhân viên ${req.user.name || ''} tạo member + đăng ký gói "${plan.nameVi || plan.nameEn}" (${method} ${Number(amountPaid).toLocaleString('vi-VN')}đ)`,
+    })
+
+    res.status(201).json({
+      message: 'Tạo member và đăng ký gói tập thành công',
+      member: sanitizeMember(user),
+      membership: {
+        id: membership._id,
+        plan: { nameVi: plan.nameVi, nameEn: plan.nameEn, durationDays: plan.durationDays },
+        startDate: membership.startDate,
+        endDate: membership.endDate,
+        remainingDays: calculateRemainingDays(endDate),
+        status: membership.status,
+      },
+      payment: {
+        id: payment._id,
+        amount: payment.amount,
+        method: payment.paymentMethod,
+        status: payment.status,
+      },
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
 export const searchMembers = async (req, res) => {
   try {
     const { q } = req.query
@@ -791,6 +918,7 @@ export const offlineRegisterMembership = async (req, res) => {
     const existingActive = await Membership.findOne({
       memberId: member._id,
       status: 'active',
+      endDate: { $gte: new Date() },
     }).sort({ endDate: -1 })
 
     if (existingActive) {
@@ -843,7 +971,7 @@ export const offlineRegisterMembership = async (req, res) => {
 
     await recordAuditLog({
       req,
-      module: 'membership',
+      module: 'users',
       action: 'create',
       entity: membership,
       details: `Đăng ký gói tập offline: "${plan.nameVi || plan.nameEn}" cho ${member.fullName || member.name || member.email} (${method} ${Number(amountPaid).toLocaleString('vi-VN')}đ)`,

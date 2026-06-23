@@ -228,7 +228,10 @@
   "common": {
     "loading": "Đang tải",
     "server_unavailable": "Không thể kết nối máy chủ. Vui lòng thử lại.",
-    "retry": "Thử lại"
+    "retry": "Thử lại",
+    "confirm": "Xác nhận",
+    "cancel": "Hủy",
+    "reload": "Tải lại"
   },
   "lang": {
     "vi": "VI",
@@ -1526,7 +1529,82 @@
     "members": {
       "overline": "Staff",
       "title": "Quản lý Members",
-      "under_development": "Chức năng đang phát triển"
+      "search_placeholder": "Tìm kiếm member...",
+      "add_member": "Thêm member mới",
+      "create_title": "Tạo tài khoản Member mới",
+      "create_with_plan": "Tạo member & đăng ký gói tập",
+      "register_plan": "Đăng ký gói tập",
+      "renew_plan": "Gia hạn gói tập",
+      "form": {
+        "name": "Họ tên",
+        "name_required": "Họ tên là bắt buộc",
+        "phone": "Số điện thoại",
+        "email": "Email",
+        "optional": "Không bắt buộc",
+        "dateOfBirth": "Ngày sinh",
+        "gender": "Giới tính",
+        "male": "Nam",
+        "female": "Nữ",
+        "other": "Khác",
+        "password": "Mật khẩu",
+        "password_default": "Mặc định: member123"
+      },
+      "plan": {
+        "select_plan": "Chọn gói tập",
+        "select_plan_required": "Vui lòng chọn gói tập",
+        "payment_method": "Phương thức thanh toán",
+        "payment_method_required": "Vui lòng chọn phương thức thanh toán",
+        "amount": "Số tiền thu",
+        "amount_placeholder": "Nhập số tiền",
+        "memo": "Ghi chú",
+        "cash": "Tiền mặt",
+        "bank_transfer": "Chuyển khoản",
+        "pos": "POS",
+        "summary": "Tổng kết",
+        "plan": "Gói tập",
+        "price": "Giá",
+        "duration": "Thời hạn",
+        "days": "ngày",
+        "from": "Nối tiếp từ ngày hết hạn cũ",
+        "today": "Tính từ hôm nay",
+        "renew_from": "Gia hạn từ"
+      },
+      "table": {
+        "no": "STT",
+        "name": "Họ tên",
+        "code": "Mã số",
+        "phone": "SĐT",
+        "email": "Email",
+        "plan": "Gói tập",
+        "remaining": "Còn lại",
+        "status": "Trạng thái",
+        "actions": "Thao tác"
+      },
+      "actions": {
+        "register": "Đăng ký gói",
+        "renew": "Gia hạn",
+        "view": "Xem",
+        "lock": "Khóa",
+        "unlock": "Mở khóa"
+      },
+      "status": {
+        "active": "Hoạt động",
+        "locked": "Đã khóa",
+        "no_plan": "Chưa có gói",
+        "expiring_soon": "Sắp hết hạn"
+      },
+      "success": {
+        "created": "Tạo member thành công",
+        "registered": "Đăng ký gói tập thành công",
+        "renewed": "Gia hạn gói tập thành công",
+        "created_with_plan": "Tạo member và đăng ký gói tập thành công"
+      },
+      "error": {
+        "fetch_failed": "Không thể tải danh sách member",
+        "create_failed": "Tạo member thất bại",
+        "register_failed": "Đăng ký gói thất bại",
+        "renew_failed": "Gia hạn thất bại"
+      }
     }
   },
   "pt": {

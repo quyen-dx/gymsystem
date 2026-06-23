@@ -3,6 +3,7 @@ import { upload } from '../config/cloudinary.js'
 import {
   batchRenewMembers,
   createMember,
+  createMemberAndRegister,
   getExpiringMembers,
   getMemberById,
   getMemberHealthScore,
@@ -38,6 +39,7 @@ router.patch('/:id/toggle-status', adminOrStaff, toggleMemberStatus)
 router.post('/:id/register-plan', adminOrStaff, registerPlanForMember)
 router.post('/:id/renew-plan', adminOrStaff, renewPlanForMember)
 router.post('/batch-renew', adminOrStaff, batchRenewMembers)
+router.post('/create-and-register', adminOrStaff, createMemberAndRegister)
 router.post('/offline-register', adminOrStaff, offlineRegisterMembership)
 
 export default router

@@ -1748,7 +1748,7 @@ html[data-theme="light"] .member-shell-content .ant-btn-default {
   }
 
   .ant-radio-wrapper {
-    align-items: flex-start;
+    align-items: center;
     white-space: normal;
   }
 

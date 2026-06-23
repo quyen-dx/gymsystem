@@ -46,4 +46,13 @@ export const memberService = {
 
   batchRenew: (memberIds: string[], planId: string, renewFrom?: 'today' | 'endDate') =>
     api.post('/members/batch-renew', { memberIds, planId, renewFrom }),
+
+  createAndRegister: (data: {
+    name: string; email?: string; phone?: string; dateOfBirth?: string; gender?: string; password?: string;
+    planId: string; paymentMethod: string; amountPaid: number; memo?: string;
+  }) => api.post('/members/create-and-register', data),
+
+  offlineRegister: (data: {
+    memberId: string; planId: string; paymentMethod: string; amountPaid: number; note?: string;
+  }) => api.post('/members/offline-register', data),
 }
