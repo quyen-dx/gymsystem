@@ -6,7 +6,6 @@ import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { membershipService, type MembershipPlan } from '../../../services/membershipService'
 
 const formatMoney = (value: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
-const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString('vi-VN') : '-'
 
 export default function OfflineRegisterPage() {
   const navigate = useNavigate()

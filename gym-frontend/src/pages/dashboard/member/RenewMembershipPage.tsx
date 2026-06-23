@@ -10,8 +10,6 @@ import { membershipService, type MyMembership } from '../../../services/membersh
 const formatMoney = (value: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 const formatDate = (value?: string) => (value ? new Date(value).toLocaleDateString('vi-VN') : '-')
 
-const durationMap = { 1: 1, 2: 2, 3: 3 }
-
 export default function RenewMembershipPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()

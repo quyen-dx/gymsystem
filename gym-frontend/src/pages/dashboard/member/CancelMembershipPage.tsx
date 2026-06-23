@@ -12,7 +12,7 @@ const formatDate = (value?: string) => (value ? new Date(value).toLocaleDateStri
 export default function CancelMembershipPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [membership, setMembership] = useState<MyMembership | null>(null)
+  const [, setMembership] = useState<MyMembership | null>(null)
   const [loading, setLoading] = useState(true)
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)

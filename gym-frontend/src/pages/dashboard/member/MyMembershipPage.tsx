@@ -1,8 +1,8 @@
-import { CalendarOutlined, CheckCircleFilled, CloseCircleOutlined, CreditCardOutlined, ExclamationCircleOutlined, InfoCircleOutlined, SettingOutlined } from '@ant-design/icons'
+import { CalendarOutlined, CheckCircleFilled, CloseCircleOutlined, ExclamationCircleOutlined, InfoCircleOutlined, SettingOutlined } from '@ant-design/icons'
 import { Button, Card, Descriptions, Empty, Progress, Spin, Switch, Tag, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { membershipService, type CancellationRequest, type MyMembership } from '../../../services/membershipService'
 
@@ -16,7 +16,6 @@ export default function MyMembershipPage() {
     expiring_soon: { color: 'warning', label: t('member_membership.status_expiring_soon') },
     expired: { color: 'error', label: t('member_membership.status_expired') },
   }
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [membership, setMembership] = useState<MyMembership | null>(null)
   const [loading, setLoading] = useState(true)
@@ -61,7 +60,7 @@ export default function MyMembershipPage() {
     return Math.max(0, Math.min(100, Math.round((membership.remainingDays / duration) * 100)))
   }, [membership, isCancelled])
 
-  const handleToggleAutoRenew = (checked: boolean) => {
+  const handleToggleAutoRenew = (_checked: boolean) => {
     setTogglingAutoRenew(true)
     membershipService.toggleAutoRenew()
       .then((res) => {

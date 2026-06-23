@@ -864,7 +864,7 @@ export default function StaffPaymentsPage() {
                 value={approveRefund}
                 onChange={(v) => setApproveRefund(v || 0)}
                 formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
-                parser={(value) => value?.replace(/[^0-9]/g, '') || '0'}
+                parser={(value) => Number(value?.replace(/[^0-9]/g, '') || '0')}
                 addonAfter={t('staff_payments.currency_suffix')}
                 size="large"
               />
