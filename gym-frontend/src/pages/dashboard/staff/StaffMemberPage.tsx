@@ -32,25 +32,11 @@ interface PlanOption {
   isActive?: boolean
 }
 
-interface MemberRow {
-  _id: string
-  name: string
-  memberCode: string
-  phone?: string
-  email?: string
-  isActive: boolean
-  remainingDays: number
-  activeMembership?: {
-    planId?: { nameVi?: string; nameEn?: string }
-    endDate?: string
-  } | null
-}
-
 export default function StaffMemberPage() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
 
-  const [members, setMembers] = useState<MemberRow[]>([])
+  const [members, setMembers] = useState<MemberListItem[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -113,8 +99,6 @@ export default function StaffMemberPage() {
 
   const selectedPlanForCreate = plans.find((p) => p._id === createForm.getFieldValue('planId'))
   const selectedPlanForRegister = plans.find((p) => p._id === registerForm.getFieldValue('planId'))
-  const selectedPlanForRenew = plans.find((p) => p._id === renewForm.getFieldValue('planId'))
-
   const handleCreateMember = async () => {
     try {
       const values = await createForm.validateFields()
@@ -200,13 +184,13 @@ export default function StaffMemberPage() {
       title: t('staff.members.table.no'),
       width: 60,
       align: 'center' as const,
-      render: (_: any, __: MemberRow, index: number) => (page - 1) * 15 + index + 1,
+      render: (_: any, __: MemberListItem, index: number) => (page - 1) * 15 + index + 1,
     },
     {
       title: t('staff.members.table.name'),
       dataIndex: 'name',
       ellipsis: true,
-      render: (name: string, record: MemberRow) => (
+      render: (name: string, record: MemberListItem) => (
         <span style={{ fontWeight: 500 }}>{name || record.memberCode || '—'}</span>
       ),
     },
@@ -225,7 +209,7 @@ export default function StaffMemberPage() {
     {
       title: t('staff.members.table.plan'),
       width: 140,
-      render: (_: any, record: MemberRow) => {
+      render: (_: any, record: MemberListItem) => {
         const plan = record.activeMembership?.planId
         return plan ? (
           <span>{lang.startsWith('vi') ? plan.nameVi : plan.nameEn || '—'}</span>
@@ -238,7 +222,7 @@ export default function StaffMemberPage() {
       title: t('staff.members.table.remaining'),
       width: 90,
       align: 'center' as const,
-      render: (_: any, record: MemberRow) => {
+      render: (_: any, record: MemberListItem) => {
         if (!record.activeMembership) return <span style={{ color: 'var(--gs-text-muted)' }}>—</span>
         const days = record.remainingDays
         const color = days <= 7 ? 'red' : days <= 30 ? 'orange' : 'green'
@@ -249,7 +233,7 @@ export default function StaffMemberPage() {
       title: t('staff.members.table.status'),
       width: 90,
       align: 'center' as const,
-      render: (_: any, record: MemberRow) => {
+      render: (_: any, record: MemberListItem) => {
         if (!record.isActive) return <Tag color="error">{t('staff.members.status.locked')}</Tag>
         const days = record.remainingDays
         if (days <= 0) return <Tag color="default">{t('staff.members.status.no_plan')}</Tag>
@@ -260,7 +244,7 @@ export default function StaffMemberPage() {
     {
       title: t('staff.members.table.actions'),
       width: 220,
-      render: (_: any, record: MemberRow) => (
+      render: (_: any, record: MemberListItem) => (
         <Space size={4}>
           {record.isActive && !record.activeMembership && (
             <Tooltip title={t('staff.members.actions.register')}>

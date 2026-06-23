@@ -1,8 +1,12 @@
 import mongoose from 'mongoose'
+import QRCode from 'qrcode'
 import Stripe from 'stripe'
+import { buildClientUrl } from '../config/appUrls.js'
+import Payment from '../models/Payment.js'
 import Transaction from '../models/Transaction.js'
 import Wallet from '../models/Wallet.js'
 import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, transferWalletBalance } from '../services/walletService.js'
+import { createVnpayPaymentUrl, verifyVnpayReturn } from '../services/vnpayService.js'
 import AppError from '../utils/appError.js'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
@@ -52,6 +56,17 @@ const getUsdToVndRate = async () => {
             source: exchangeRateCache.rate ? exchangeRateCache.source : 'fallback',
         }
     }
+}
+
+const getClientIp = (req) => {
+    const forwardedFor = req.headers['x-forwarded-for']
+    if (forwardedFor) return String(forwardedFor).split(',')[0].trim()
+    return req.ip || req.socket?.remoteAddress || '127.0.0.1'
+}
+
+const generateTxnRef = (userId) => {
+    const random = Math.random().toString(36).slice(2, 8).toUpperCase()
+    return `WALLET${Date.now()}${userId.toString().slice(-6).toUpperCase()}${random}`
 }
 
 export const getMyWallet = async (req, res, next) => {
@@ -157,6 +172,230 @@ export const createDepositTransaction = async (req, res, next) => {
                 expiredAt: expiredAt.toISOString(),
             },
         })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const getMyDepositPayments = async (req, res, next) => {
+    try {
+        const payments = await Payment.find({
+            userId: req.user._id,
+            'metadata.purpose': 'WALLET_DEPOSIT',
+        })
+            .sort({ createdAt: -1 })
+            .limit(100)
+
+        return res.json({ success: true, data: payments })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const createManualQrDepositPayment = async (req, res, next) => {
+    try {
+        const amount = Number(req.body.amount)
+        if (!amount || Number.isNaN(amount) || amount < 10000 || amount > 100000000) {
+            throw new AppError('Số tiền không hợp lệ (10.000đ - 100.000.000đ)', 400)
+        }
+
+        await getOrCreateWallet(req.user._id)
+        const txnRef = generateTxnRef(req.user._id).replace(/^WALLET/, 'MANUAL')
+        const manualUrl = buildClientUrl('/deposit', {
+            method: 'manual',
+            txnRef,
+            amount,
+        })
+        const qrDataUrl = await QRCode.toDataURL(manualUrl, {
+            errorCorrectionLevel: 'M',
+            margin: 1,
+            width: 320,
+        })
+
+        const payment = await Payment.create({
+            userId: req.user._id,
+            amount,
+            currency: 'vnd',
+            status: 'PENDING',
+            paymentMethod: 'MANUAL_QR',
+            method: 'MANUAL_QR',
+            source: 'OFFLINE',
+            txnRef,
+            metadata: {
+                purpose: 'WALLET_DEPOSIT',
+                provider: 'MANUAL_QR',
+                manualUrl,
+                qrDataUrl,
+                demoOnly: true,
+            },
+        })
+
+        return res.status(201).json({
+            success: true,
+            data: {
+                paymentId: payment._id,
+                txnRef,
+                qrDataUrl,
+                manualUrl,
+                status: payment.status,
+                amount: payment.amount,
+                method: payment.method,
+                note: 'QR nội bộ demo, không thực hiện giao dịch ngân hàng thật.',
+            },
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const createVnpayDepositPayment = async (req, res, next) => {
+    try {
+        const amount = Number(req.body.amount)
+        if (!amount || Number.isNaN(amount) || amount < 10000 || amount > 100000000) {
+            throw new AppError('Số tiền không hợp lệ (10.000đ - 100.000.000đ)', 400)
+        }
+
+        await getOrCreateWallet(req.user._id)
+        const txnRef = generateTxnRef(req.user._id)
+        const payment = await Payment.create({
+            userId: req.user._id,
+            amount,
+            currency: 'vnd',
+            status: 'PENDING',
+            paymentMethod: 'VNPAY',
+            method: 'VNPAY',
+            source: 'ONLINE',
+            txnRef,
+            metadata: {
+                purpose: 'WALLET_DEPOSIT',
+                provider: 'VNPAY',
+            },
+        })
+
+        const paymentUrl = createVnpayPaymentUrl({
+            amount,
+            txnRef,
+            orderInfo: `Nap tien vi GymPro ${txnRef}`,
+            ipAddr: getClientIp(req),
+            locale: req.body.locale || 'vn',
+            bankCode: req.body.bankCode,
+        })
+        const qrDataUrl = await QRCode.toDataURL(paymentUrl, {
+            errorCorrectionLevel: 'M',
+            margin: 1,
+            width: 320,
+        })
+
+        return res.status(201).json({
+            success: true,
+            data: {
+                paymentId: payment._id,
+                txnRef,
+                paymentUrl,
+                qrDataUrl,
+                status: payment.status,
+                amount: payment.amount,
+                expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+            },
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const handleVnpayReturn = async (req, res, next) => {
+    const redirectWithStatus = (status, txnRef) => res.redirect(buildClientUrl('/deposit', {
+        payment: status,
+        txnRef,
+    }))
+
+    try {
+        const txnRef = req.query.vnp_TxnRef
+        if (!txnRef) return redirectWithStatus('failed')
+
+        const isValidSignature = verifyVnpayReturn(req.query)
+        const responseCode = req.query.vnp_ResponseCode
+        const transactionStatus = req.query.vnp_TransactionStatus
+        const isPaid = isValidSignature && responseCode === '00' && transactionStatus === '00'
+
+        const session = await mongoose.startSession()
+        try {
+            session.startTransaction()
+
+            const payment = await Payment.findOne({ txnRef }).session(session)
+            if (!payment) {
+                await session.abortTransaction()
+                return redirectWithStatus('failed', txnRef)
+            }
+
+            if (payment.status === 'PAID') {
+                await session.commitTransaction()
+                return redirectWithStatus('success', txnRef)
+            }
+
+            if (payment.status !== 'PENDING') {
+                await session.commitTransaction()
+                return redirectWithStatus('failed', txnRef)
+            }
+
+            payment.metadata = {
+                ...(payment.metadata || {}),
+                vnpayReturn: req.query,
+                verified: isValidSignature,
+            }
+
+            if (!isPaid) {
+                payment.status = 'FAILED'
+                await payment.save({ session })
+                await session.commitTransaction()
+                return redirectWithStatus('failed', txnRef)
+            }
+
+            const depositCredit = calculateDepositCredit(payment.amount)
+            const { wallet, transaction } = await applyWalletTransaction({
+                userId: payment.userId,
+                amount: depositCredit.creditedAmount,
+                type: 'deposit',
+                provider: 'vnpay',
+                source: 'online',
+                description: 'VNPAY wallet deposit',
+                referenceId: txnRef,
+                status: 'completed',
+                metadata: {
+                    paymentId: payment._id,
+                    txnRef,
+                    vnpTransactionNo: req.query.vnp_TransactionNo,
+                    bankCode: req.query.vnp_BankCode,
+                    bankTranNo: req.query.vnp_BankTranNo,
+                    payDate: req.query.vnp_PayDate,
+                    originalAmount: depositCredit.originalAmount,
+                    bonusAmount: depositCredit.bonusAmount,
+                    bonusRate: depositCredit.bonusRate,
+                },
+                idempotencyKey: txnRef,
+                session,
+            })
+
+            payment.status = 'PAID'
+            payment.paidAt = new Date()
+            payment.metadata = {
+                ...(payment.metadata || {}),
+                walletId: wallet._id,
+                walletTransactionId: transaction._id,
+                creditedAmount: depositCredit.creditedAmount,
+                bonusAmount: depositCredit.bonusAmount,
+                bonusRate: depositCredit.bonusRate,
+            }
+            await payment.save({ session })
+
+            await session.commitTransaction()
+            return redirectWithStatus('success', txnRef)
+        } catch (error) {
+            await session.abortTransaction()
+            throw error
+        } finally {
+            session.endSession()
+        }
     } catch (error) {
         next(error)
     }

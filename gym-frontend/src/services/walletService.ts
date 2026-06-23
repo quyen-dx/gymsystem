@@ -2,7 +2,10 @@ import api from './api';
 
 export const getWallet = () => api.get('/wallet')
 export const getWalletTransactions = () => api.get('/wallet/transactions')
+export const getDepositPayments = () => api.get('/wallet/deposit-payments')
 export const createDeposit = (data: { amount: number; provider: string }) => api.post('/wallet/deposit', data)
+export const createVnpayDeposit = (data: { amount: number; bankCode?: string }) => api.post('/wallet/vnpay-deposit', data)
+export const createManualQrDeposit = (data: { amount: number }) => api.post('/wallet/manual-qr-deposit', data)
 export const createStripePaymentIntent = (data: { amount?: number; amountUsd?: number }) => api.post('/wallet/create-payment-intent', data)
 export const getStripeExchangeRate = () => api.get('/wallet/stripe-exchange-rate')
 export const fakeDeposit = (data: { userId: string; amount: number }) => api.post('/wallet/fake-deposit', data)
