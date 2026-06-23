@@ -1,12 +1,20 @@
+import { invalidateAiPTCache } from '../ai/services/context/contextDataService.js'
+import { buildClientUrl } from '../config/appUrls.js'
+import Address from '../models/Address.js'
+import Booking from '../models/Booking.js'
+import Membership from '../models/Membership.js'
+import Order from '../models/Order.js'
 import Shop from '../models/Shop.js'
 import User from '../models/User.js'
 import { recordAuditLog } from '../services/auditLogService.js'
+import { invalidateContextCache } from '../services/conversationContextCache.js'
 import {
   consumeOtp,
   hashPendingPassword,
   sendOtp,
   verifyOtp,
 } from '../services/otpService.js'
+import { assertFeatureEnabled, getSystemSettingsValue } from '../services/systemSettingsService.js'
 import AppError from '../utils/appError.js'
 import {
   generateAccessToken,
@@ -22,7 +30,7 @@ import {
   normalizeIdentifier,
   normalizePhone,
 } from '../utils/identifier.js'
-import { buildClientUrl } from '../config/appUrls.js'
+import { normalizeUserArrayMemberIdentity, normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
 
 const sendError = (res, error) => {
   console.error(error)
@@ -37,8 +45,30 @@ const sendError = (res, error) => {
   }
 
   return res.status(error.statusCode || 500).json({
+    ...(error.code ? { code: error.code } : {}),
     message: error.message || 'Lỗi máy chủ',
   })
+}
+
+export const isAccountLocked = (user) =>
+  user?.status === 'locked' || user?.isLocked === true || user?.isActive === false
+
+const accountLockedError = () => new AppError('Account is locked', 403, 'ACCOUNT_LOCKED')
+
+const getMaintenancePayload = (settings) => ({
+  code: 'MAINTENANCE_MODE',
+  message: {
+    vi: 'Hệ thống đang bảo trì. Vui lòng quay lại sau.',
+    en: 'The system is currently under maintenance. Please come back later.',
+  },
+  maintenanceMessage: settings.general.maintenanceMessage,
+})
+
+const isAdminUser = (user) => ['super_admin', 'admin'].includes(String(user?.role || '').toLowerCase())
+
+const isMaintenanceBlocked = async (user) => {
+  const settings = await getSystemSettingsValue()
+  return settings.general.maintenanceMode && !isAdminUser(user) ? settings : null
 }
 
 const validateMockOAuthToken = (provider, token) => {
@@ -55,7 +85,6 @@ const getRefreshCookieOptions = () => {
     secure: isProduction,
     sameSite: isProduction ? 'none' : 'lax',
     path: '/api/auth',
-    maxAge: 30 * 24 * 60 * 60 * 1000,
   }
 }
 
@@ -64,18 +93,18 @@ const setRefreshCookie = (res, token) => {
 }
 
 const clearRefreshCookie = (res) => {
-  res.clearCookie(refreshCookieName, {
-    ...getRefreshCookieOptions(),
-    maxAge: undefined,
-  })
+  res.clearCookie(refreshCookieName, getRefreshCookieOptions())
 }
 
 const sanitizeUser = (user) => {
-  const responseUser = user.toObject ? user.toObject() : { ...user }
+  const responseUser = normalizeUserMemberIdentity(user)
   delete responseUser.password
   delete responseUser.refreshToken
   return responseUser
 }
+
+const getUserDisplayName = (user, fallback = '') =>
+  String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
 
 const buildAuthResponse = async (user, res) => {
   const accessToken = generateAccessToken(user._id, user.role)
@@ -93,15 +122,18 @@ const buildAuthResponse = async (user, res) => {
 }
 
 const createVerifiedUser = async (payload) => {
-  const user = new User({
+  const userPayload = {
     name: payload.name,
-    email: payload.email || null,
-    phone: payload.phone || null,
     provider: payload.provider,
     isVerified: true,
     password: payload.passwordHash || null,
     role: 'member',
-  })
+  }
+
+  if (payload.email) userPayload.email = payload.email
+  if (payload.phone) userPayload.phone = payload.phone
+
+  const user = new User(userPayload)
 
   if (payload.passwordHash) {
     user.$locals.skipPasswordHashing = true
@@ -112,6 +144,11 @@ const createVerifiedUser = async (payload) => {
 }
 
 export const buildGoogleOauthRedirect = async (user, res) => {
+  const maintenanceSettings = await isMaintenanceBlocked(user)
+  if (maintenanceSettings) {
+    return buildClientUrl('/oauth-success', { error: 'MAINTENANCE_MODE' })
+  }
+
   const accessToken = generateAccessToken(user._id, user.role)
   const refreshToken = generateRefreshToken(user._id)
 
@@ -122,6 +159,11 @@ export const buildGoogleOauthRedirect = async (user, res) => {
   return buildClientUrl('/oauth-success', { token: accessToken })
 }
 export const buildFacebookOauthRedirect = async (user, res) => {
+  const maintenanceSettings = await isMaintenanceBlocked(user)
+  if (maintenanceSettings) {
+    return buildClientUrl('/oauth-success', { error: 'MAINTENANCE_MODE' })
+  }
+
   const accessToken = generateAccessToken(user._id, user.role)
   const refreshToken = generateRefreshToken(user._id)
 
@@ -133,47 +175,71 @@ export const buildFacebookOauthRedirect = async (user, res) => {
 }
 export const sendRegisterOtp = async (req, res) => {
   try {
+    const settings = await getSystemSettingsValue()
+    await assertFeatureEnabled('auth.allowRegistration')
     const { provider, name, phone, password } = req.body
 
-    if (provider !== 'phone') {
-      throw new AppError('Chỉ đăng ký bằng số điện thoại mới cần OTP', 400)
+    if (provider !== 'phone' && provider !== 'email') {
+      throw new AppError('Chỉ đăng ký bằng số điện thoại hoặc email mới cần OTP', 400)
+    }
+    if (provider === 'phone' && !settings.auth.allowPhoneLogin) {
+      await assertFeatureEnabled('auth.allowPhoneLogin')
+    }
+    if (provider === 'email' && !settings.auth.allowEmailUsernameLogin) {
+      await assertFeatureEnabled('auth.allowEmailUsernameLogin')
     }
 
     if (!name?.trim()) {
       throw new AppError('Họ tên là bắt buộc', 400)
     }
 
-    const normalizedPhone = normalizePhone(phone)
-
-    if (!isValidPhone(normalizedPhone)) {
-      throw new AppError('Số điện thoại không hợp lệ', 400)
-    }
-
     if (!password || password.length < 6) {
       throw new AppError('Mật khẩu phải có ít nhất 6 ký tự', 400)
     }
 
-    const existingUser = await User.findOne({ phone: normalizedPhone })
+    if (!phone?.trim()) {
+      throw new AppError('Email hoặc số điện thoại là bắt buộc', 400)
+    }
+
+    const isEmail = provider === 'email'
+    let normalizedIdentifier
+    if (isEmail) {
+      normalizedIdentifier = phone.trim().toLowerCase()
+      if (!isValidEmail(normalizedIdentifier)) {
+        throw new AppError('Email không hợp lệ', 400)
+      }
+    } else {
+      normalizedIdentifier = normalizePhone(phone)
+      if (!normalizedIdentifier) {
+        throw new AppError('Số điện thoại là bắt buộc', 400)
+      }
+    }
+
+    const existingUser = isEmail
+      ? await User.findOne({ email: normalizedIdentifier })
+      : await User.findOne({ phone: normalizedIdentifier })
     if (existingUser) {
-      throw new AppError('Số điện thoại đã được sử dụng', 400)
+      throw new AppError(isEmail ? 'Email đã được sử dụng' : 'Số điện thoại đã được sử dụng', 400)
     }
 
     const passwordHash = await hashPendingPassword(password)
     const otpResult = await sendOtp({
-      identifier: normalizedPhone,
+      identifier: normalizedIdentifier,
       purpose: 'register',
-      channel: 'sms',
-      provider: 'phone',
+      channel: isEmail ? 'email' : 'sms',
+      provider: isEmail ? 'email' : 'phone',
+      ttlSeconds: settings.auth.otpExpiresInSeconds,
+      exposePreview: settings.auth.demoOtpEnabled,
       payload: {
         name: name.trim(),
-        phone: normalizedPhone,
+        ...(isEmail ? { email: normalizedIdentifier } : { phone: normalizedIdentifier }),
         passwordHash,
-        provider: 'phone',
+        provider: isEmail ? 'email' : 'phone',
       },
     })
 
     return res.json({
-      message: 'Mã OTP đã được gửi qua SMS',
+      message: isEmail ? 'Mã OTP đã được gửi qua email' : 'Mã OTP đã được gửi qua SMS',
       expiresIn: otpResult.expiresIn,
       resendAfter: otpResult.resendAfter,
       otpPreview: otpResult.otpPreview,
@@ -185,6 +251,7 @@ export const sendRegisterOtp = async (req, res) => {
 
 export const verifyRegisterOtp = async (req, res) => {
   try {
+    await assertFeatureEnabled('auth.allowRegistration')
     const { identifier, otp } = req.body
     const normalizedIdentifier = normalizeIdentifier(identifier)
 
@@ -204,7 +271,13 @@ export const verifyRegisterOtp = async (req, res) => {
 
     if (existingUser) {
       await consumeOtp(otpRecord._id)
-      throw new AppError('Tài khoản đã tồn tại', 400)
+      const duplicatedField = otpRecord.payload.email ? 'email' : 'phone'
+      throw new AppError(
+        duplicatedField === 'email'
+          ? 'Email đã được sử dụng'
+          : 'Số điện thoại đã được sử dụng',
+        400,
+      )
     }
 
     const user = await createVerifiedUser(otpRecord.payload)
@@ -223,6 +296,8 @@ export const verifyRegisterOtp = async (req, res) => {
 
 export const registerFacebook = async (req, res) => {
   try {
+    await assertFeatureEnabled('auth.allowRegistration')
+    await assertFeatureEnabled('auth.facebookOAuthEnabled')
     const { name, email, password, oauthToken } = req.body
     const normalizedEmail = email?.trim().toLowerCase()
 
@@ -267,6 +342,7 @@ export const registerFacebook = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
+    const settings = await getSystemSettingsValue()
     const { identifier, password, oauthToken, provider } = req.body
 
     if (!identifier) {
@@ -274,13 +350,23 @@ export const login = async (req, res) => {
     }
 
     const trimmed = identifier.trim()
+    const isPhoneLogin = /^(0|\+84)\d{9}$/.test(trimmed.replace(/\s/g, ''))
+    if (isPhoneLogin && !settings.auth.allowPhoneLogin) {
+      await assertFeatureEnabled('auth.allowPhoneLogin')
+    }
+    if (!isPhoneLogin && !settings.auth.allowEmailUsernameLogin) {
+      await assertFeatureEnabled('auth.allowEmailUsernameLogin')
+    }
+    if (oauthToken) {
+      await assertFeatureEnabled(provider === 'facebook' ? 'auth.facebookOAuthEnabled' : 'auth.googleOAuthEnabled')
+    }
 
     // Tự detect loại identifier
     let query
     if (trimmed.includes('@')) {
       // Email đầy đủ hoặc username dạng xxx@gmail.com
       query = { email: trimmed.toLowerCase() }
-    } else if (/^(0|\+84)\d{9}$/.test(trimmed.replace(/\s/g, ''))) {
+    } else if (isPhoneLogin) {
       // Số điện thoại
       query = { phone: normalizePhone(trimmed) }
     } else {
@@ -295,13 +381,17 @@ export const login = async (req, res) => {
       throw new AppError('Tài khoản không tồn tại', 401)
     }
 
-    if (!user.isActive) {
-      throw new AppError('Tài khoản đã bị khóa', 403)
+    if (isAccountLocked(user)) {
+      throw accountLockedError()
     }
 
     if (oauthToken) {
       if (!validateMockOAuthToken(provider, oauthToken)) {
         throw new AppError('OAuth token không hợp lệ', 401)
+      }
+      const maintenanceSettings = await isMaintenanceBlocked(user)
+      if (maintenanceSettings) {
+        return res.status(503).json(getMaintenancePayload(maintenanceSettings))
       }
       return res.json(await buildAuthResponse(user, res))
     }
@@ -317,6 +407,11 @@ export const login = async (req, res) => {
     const isMatch = await user.comparePassword(password)
     if (!isMatch) {
       throw new AppError('Mật khẩu không đúng', 401)
+    }
+
+    const maintenanceSettings = await isMaintenanceBlocked(user)
+    if (maintenanceSettings) {
+      return res.status(503).json(getMaintenancePayload(maintenanceSettings))
     }
 
     return res.json(await buildAuthResponse(user, res))
@@ -343,11 +438,11 @@ export const refreshToken = async (req, res) => {
       throw new AppError('Refresh token không hợp lệ hoặc đã hết hạn', 401)
     }
 
-    if (!user.isActive) {
+    if (isAccountLocked(user)) {
       user.refreshToken = null
       await user.save({ validateBeforeSave: false })
       clearRefreshCookie(res)
-      throw new AppError('Tài khoản đã bị khóa', 403)
+      throw accountLockedError()
     }
 
     const accessToken = generateAccessToken(user._id, user.role)
@@ -402,9 +497,21 @@ const validatePasswordStrength = (password) => {
 export const getMe = async (req, res) => {
   const user = await User.findById(req.user._id).select('+password')
   const hasPassword = !!user?.password
-  const responseUser = user ? user.toObject() : req.user.toObject()
+  const responseUser = normalizeUserMemberIdentity(user || req.user)
   delete responseUser.password
   delete responseUser.refreshToken
+
+  // Privacy: only admin/super_admin can see full identity numbers; others see masked
+  if (!['super_admin', 'admin'].includes(req.user.role) && responseUser.identityNumber) {
+    const num = responseUser.identityNumber
+    responseUser.identityNumber = num.length > 4 ? '*'.repeat(num.length - 4) + num.slice(-4) : '****'
+  }
+  // Strip sensitive identity fields for non-admin/super_admin
+  if (!['super_admin', 'admin'].includes(req.user.role)) {
+    delete responseUser.identityFrontImage
+    delete responseUser.identityBackImage
+  }
+
   return res.json({ user: { ...responseUser, hasPassword } })
 }
 
@@ -415,10 +522,55 @@ export const hasPassword = async (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const { name, phone, email, dateOfBirth } = req.body
+    await assertFeatureEnabled('members.allowProfileUpdate')
+    const {
+      name, phone, email, dateOfBirth, themePreference, accentColor,
+      fullName, gender, nationality, language, timezone,
+      country, province, detailedAddress,
+      emergencyName, emergencyPhone,
+      height, weight, goals, activityLevel, healthNotes,
+      documentType, documentNumber,
+      identityType, identityNumber, identityCountry,
+      emergencyRelationship,
+    } = req.body
     const updateData = {}
 
     if (name) updateData.name = name.trim()
+    if (fullName !== undefined) updateData.fullName = fullName.trim()
+    if (gender !== undefined) updateData.gender = gender
+    if (nationality !== undefined) updateData.nationality = nationality.trim()
+    if (language !== undefined) updateData.language = language
+    if (timezone !== undefined) updateData.timezone = timezone.trim()
+    if (country !== undefined) updateData.country = country.trim()
+    if (province !== undefined) updateData.province = province.trim()
+    if (detailedAddress !== undefined) updateData.detailedAddress = detailedAddress.trim()
+
+    if (emergencyName !== undefined || emergencyPhone !== undefined || emergencyRelationship !== undefined) {
+      updateData['emergencyContact.name'] = (emergencyName || '').trim()
+      updateData['emergencyContact.phone'] = (emergencyPhone || '').trim()
+      updateData['emergencyContact.relationship'] = (emergencyRelationship || '').trim()
+    }
+
+    if (height !== undefined) updateData['healthInfo.height'] = height === '' ? null : Number(height)
+    if (weight !== undefined) updateData['healthInfo.weight'] = weight === '' ? null : Number(weight)
+    if (goals !== undefined) {
+      updateData['healthInfo.goals'] = Array.isArray(goals) ? goals : goals ? [goals] : []
+    }
+    if (activityLevel !== undefined) updateData['healthInfo.activityLevel'] = activityLevel
+    if (healthNotes !== undefined) updateData['healthInfo.notes'] = healthNotes.trim()
+
+    if (documentType !== undefined) updateData.identityType = documentType
+    if (documentNumber !== undefined) updateData.identityNumber = documentNumber.trim()
+    if (identityType !== undefined) updateData.identityType = identityType
+    if (identityNumber !== undefined) updateData.identityNumber = identityNumber.trim()
+    if (identityCountry !== undefined) updateData.identityCountry = identityCountry.trim()
+
+    if (req.files?.identityFrontImage?.[0]) {
+      updateData.identityFrontImage = req.files.identityFrontImage[0].path
+    }
+    if (req.files?.identityBackImage?.[0]) {
+      updateData.identityBackImage = req.files.identityBackImage[0].path
+    }
 
     if (email !== undefined) {
       const normalizedEmail = email?.trim().toLowerCase()
@@ -457,9 +609,29 @@ export const updateProfile = async (req, res) => {
       updateData.dateOfBirth = parsedDate
     }
 
+    if (themePreference !== undefined) {
+      if (!['system', 'light', 'dark'].includes(themePreference)) {
+        throw new AppError('Tuỳ chọn giao diện không hợp lệ', 400)
+      }
+      updateData.themePreference = themePreference
+    }
+
+    if (accentColor !== undefined) {
+      const normalizedAccent = String(accentColor).trim()
+      if (normalizedAccent === '') {
+        updateData.accentColor = ''
+      } else if (!/^#[0-9A-Fa-f]{6}$/.test(normalizedAccent)) {
+        throw new AppError('Màu chủ đạo không hợp lệ', 400)
+      } else {
+        updateData.accentColor = normalizedAccent.toUpperCase()
+      }
+    }
+
     if (req.files?.avatar?.[0]) {
+      await assertFeatureEnabled('members.allowAvatarUpload')
       updateData.avatar = req.files.avatar[0].path
     } else if (req.file) {
+      await assertFeatureEnabled('members.allowAvatarUpload')
       updateData.avatar = req.file.path
     }
 
@@ -475,7 +647,14 @@ export const updateProfile = async (req, res) => {
       new: true,
       runValidators: true,
     })
-
+    if (!user) {
+      throw new AppError('Không tìm thấy người dùng để cập nhật', 404)
+    }
+    // Invalidate AI cache if user is PT and profile was updated
+    if (user.role === 'pt') {
+      invalidateAiPTCache()
+      invalidateContextCache('ptAvailability', { userId: String(user._id) })
+    }
     return res.json({ message: 'Cập nhật thông tin thành công', user })
   } catch (error) {
     return sendError(res, error)
@@ -543,6 +722,7 @@ export const changePassword = async (req, res) => {
 
 export const sendForgotPasswordOtp = async (req, res) => {
   try {
+    const settings = await getSystemSettingsValue()
     const { identifier } = req.body
     const type = detectIdentifierType(identifier)
     const normalizedIdentifier = normalizeIdentifier(identifier)
@@ -550,9 +730,15 @@ export const sendForgotPasswordOtp = async (req, res) => {
     if (type === 'email' && !isValidEmail(normalizedIdentifier)) {
       throw new AppError('Email không hợp lệ', 400)
     }
+    if (type === 'email' && !settings.auth.forgotPasswordEmailEnabled) {
+      await assertFeatureEnabled('auth.forgotPasswordEmailEnabled')
+    }
 
     if (type === 'phone' && !isValidPhone(normalizedIdentifier)) {
       throw new AppError('Số điện thoại không hợp lệ', 400)
+    }
+    if (type === 'phone' && !settings.auth.forgotPasswordSmsOtpEnabled) {
+      await assertFeatureEnabled('auth.forgotPasswordSmsOtpEnabled')
     }
 
     const user = await User.findOne(
@@ -572,6 +758,8 @@ export const sendForgotPasswordOtp = async (req, res) => {
       purpose: 'forgot_password',
       channel: type === 'email' ? 'email' : 'sms',
       provider: user.provider,
+      ttlSeconds: settings.auth.otpExpiresInSeconds,
+      exposePreview: settings.auth.demoOtpEnabled,
       payload: {
         userId: user._id.toString(),
       },
@@ -642,10 +830,196 @@ export const resetPassword = async (req, res) => {
   }
 }
 
+export const requestPasswordResetOtp = async (req, res) => {
+  try {
+    const settings = await getSystemSettingsValue()
+    const { method } = req.body
+
+    if (!method || !['email', 'phone'].includes(method)) {
+      throw new AppError('Phương thức không hợp lệ', 400)
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      throw new AppError('Không tìm thấy tài khoản', 404)
+    }
+
+    const identifier = method === 'email' ? user.email : user.phone
+    if (!identifier) {
+      throw new AppError(
+        method === 'email' ? 'Tài khoản chưa có email' : 'Tài khoản chưa có số điện thoại',
+        400,
+      )
+    }
+
+    const channel = method === 'email' ? 'email' : 'sms'
+
+    const otpResult = await sendOtp({
+      identifier,
+      purpose: 'password_reset',
+      channel,
+      provider: user.provider,
+      ttlSeconds: settings.auth.otpExpiresInSeconds,
+      exposePreview: settings.auth.demoOtpEnabled,
+      payload: {
+        userId: user._id.toString(),
+      },
+    })
+
+    return res.json({
+      message: method === 'email' ? 'Mã OTP đã được gửi về email' : 'Mã OTP đã được gửi qua SMS',
+      expiresIn: otpResult.expiresIn,
+      resendAfter: otpResult.resendAfter,
+      otpPreview: otpResult.otpPreview,
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const resetPasswordWithOtp = async (req, res) => {
+  try {
+    const { method, otp, newPassword } = req.body
+
+    if (!method || !['email', 'phone'].includes(method)) {
+      throw new AppError('Phương thức không hợp lệ', 400)
+    }
+    if (!otp) {
+      throw new AppError('Mã OTP là bắt buộc', 400)
+    }
+    if (!newPassword || newPassword.length < 6) {
+      throw new AppError('Mật khẩu mới phải có ít nhất 6 ký tự', 400)
+    }
+
+    validatePasswordStrength(newPassword)
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      throw new AppError('Không tìm thấy tài khoản', 404)
+    }
+
+    const identifier = method === 'email' ? user.email : user.phone
+    if (!identifier) {
+      throw new AppError(
+        method === 'email' ? 'Tài khoản chưa có email' : 'Tài khoản chưa có số điện thoại',
+        400,
+      )
+    }
+
+    const otpRecord = await verifyOtp({
+      identifier,
+      purpose: 'password_reset',
+      otp,
+    })
+
+    await consumeOtp(otpRecord._id)
+
+    user.password = newPassword
+    await user.save()
+
+    return res.json({ message: 'Đặt lại mật khẩu thành công' })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const requestEmailChangeOtp = async (req, res) => {
+  try {
+    const settings = await getSystemSettingsValue()
+    const { newEmail } = req.body
+
+    if (!newEmail || !isValidEmail(newEmail)) {
+      throw new AppError('Email mới không hợp lệ', 400)
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      throw new AppError('Không tìm thấy tài khoản', 404)
+    }
+
+    if (newEmail.toLowerCase() === user.email?.toLowerCase()) {
+      throw new AppError('Email mới trùng với email hiện tại', 400)
+    }
+
+    const existingUser = await User.findOne({ email: newEmail.toLowerCase() })
+    if (existingUser) {
+      throw new AppError('Email đã được sử dụng bởi tài khoản khác', 400)
+    }
+
+    if (!user.email) {
+      throw new AppError('Tài khoản chưa có email để nhận OTP', 400)
+    }
+
+    const otpResult = await sendOtp({
+      identifier: user.email,
+      purpose: 'email_change',
+      channel: 'email',
+      provider: user.provider,
+      ttlSeconds: settings.auth.otpExpiresInSeconds,
+      exposePreview: settings.auth.demoOtpEnabled,
+      payload: {
+        userId: user._id.toString(),
+        newEmail: newEmail.toLowerCase(),
+      },
+    })
+
+    return res.json({
+      message: 'Mã OTP đã được gửi về email hiện tại',
+      expiresIn: otpResult.expiresIn,
+      resendAfter: otpResult.resendAfter,
+      otpPreview: otpResult.otpPreview,
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const confirmEmailChange = async (req, res) => {
+  try {
+    const { newEmail, otp } = req.body
+
+    if (!newEmail || !isValidEmail(newEmail)) {
+      throw new AppError('Email mới không hợp lệ', 400)
+    }
+    if (!otp) {
+      throw new AppError('Mã OTP là bắt buộc', 400)
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      throw new AppError('Không tìm thấy tài khoản', 404)
+    }
+
+    if (!user.email) {
+      throw new AppError('Tài khoản chưa có email', 400)
+    }
+
+    const otpRecord = await verifyOtp({
+      identifier: user.email,
+      purpose: 'email_change',
+      otp,
+    })
+
+    const storedNewEmail = otpRecord.payload?.newEmail
+    if (!storedNewEmail || storedNewEmail.toLowerCase() !== newEmail.toLowerCase()) {
+      throw new AppError('Email không khớp với yêu cầu đổi email', 400)
+    }
+
+    await consumeOtp(otpRecord._id)
+
+    user.email = newEmail.toLowerCase()
+    await user.save()
+
+    return res.json({ message: 'Đổi email thành công', email: user.email })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
-    return res.json({ users })
+    return res.json({ users: normalizeUserArrayMemberIdentity(users) })
   } catch (error) {
     return sendError(res, error)
   }
@@ -674,7 +1048,7 @@ export const enableSellerMode = async (req, res) => {
     if (!shop) {
       shop = await Shop.create({
         user_id: req.user._id,
-        name: req.body?.shopName?.trim() || `${req.user.name || 'Seller'} Shop`,
+        name: req.body?.shopName?.trim() || `${getUserDisplayName(req.user, 'Seller')} Shop`,
         description: req.body?.description || '',
       })
     }
@@ -704,8 +1078,9 @@ const findEditableUserById = async (id) => {
     throw new AppError('Không tìm thấy người dùng', 404)
   }
 
-  if (user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL) {
-    throw new AppError('Tài khoản admin này được bảo vệ và không thể chỉnh sửa', 403)
+  const settings = await getSystemSettingsValue()
+  if (settings.members.protectPrimaryAdmin && user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL) {
+    throw new AppError('Tài khoản Super Admin này được bảo vệ và không thể chỉnh sửa', 403)
   }
 
   return user
@@ -720,19 +1095,28 @@ export const updateUserRole = async (req, res) => {
     const { role } = req.body
 
     const normalizedRole = role === 'user' ? 'member' : role
-    if (!['admin', 'pt', 'staff', 'member', 'seller'].includes(normalizedRole)) {
+    if (!['super_admin', 'admin', 'pt', 'staff', 'member', 'seller'].includes(normalizedRole)) {
       throw new AppError('Role không hợp lệ', 400)
     }
 
     const user = await findEditableUserById(req.params.id)
     const previousRole = user.role
 
+    // Only super_admin can modify admin or super_admin users
+    if (['super_admin', 'admin'].includes(user.role) && req.user.role !== 'super_admin') {
+      throw new AppError('Chỉ Super Admin mới có quyền thao tác với Admin khác', 403)
+    }
+    // Only super_admin can set role to admin or super_admin
+    if (['super_admin', 'admin'].includes(normalizedRole) && req.user.role !== 'super_admin') {
+      throw new AppError('Chỉ Super Admin mới có quyền cấp quyền Admin hoặc Super Admin', 403)
+    }
+
     if (normalizedRole === 'seller') {
       let shop = await Shop.findOne({ user_id: user._id })
       if (!shop) {
         shop = await Shop.create({
           user_id: user._id,
-          name: `${user.name || 'Seller'} Shop`,
+          name: `${getUserDisplayName(user, 'Seller')} Shop`,
           description: '',
         })
       }
@@ -755,6 +1139,12 @@ export const updateUserRole = async (req, res) => {
       details: `Đổi role từ ${previousRole} sang ${normalizedRole}`,
     })
 
+    // Invalidate AI PT cache if role changed to/from PT
+    if (previousRole === 'pt' || normalizedRole === 'pt') {
+      invalidateAiPTCache()
+      invalidateContextCache('ptAvailability', { userId: String(user._id) })
+    }
+
     return res.json({ message: 'Cập nhật role thành công', user })
   } catch (error) {
     return sendError(res, error)
@@ -763,12 +1153,21 @@ export const updateUserRole = async (req, res) => {
 
 export const toggleUserStatus = async (req, res) => {
   try {
+    await assertFeatureEnabled('members.allowAccountLockToggle')
     if (isCurrentUser(req)) {
       throw new AppError('Bạn không thể khóa hoặc mở khóa chính tài khoản của mình', 403)
     }
 
     const user = await findEditableUserById(req.params.id)
+
+    // Only super_admin can lock/unlock admin or super_admin users
+    if (['super_admin', 'admin'].includes(user.role) && req.user.role !== 'super_admin') {
+      throw new AppError('Chỉ Super Admin mới có quyền thao tác với Admin khác', 403)
+    }
+
     user.isActive = !user.isActive
+    user.isLocked = !user.isActive
+    user.status = user.isActive ? 'active' : 'locked'
     await user.save()
     await recordAuditLog({
       req,
@@ -777,6 +1176,12 @@ export const toggleUserStatus = async (req, res) => {
       entity: user,
       details: user.isActive ? 'Mở khóa tài khoản' : 'Khóa tài khoản',
     })
+
+    // Invalidate AI cache if PT is locked/unlocked (changes visibility in AI response)
+    if (user.role === 'pt') {
+      invalidateAiPTCache()
+      invalidateContextCache('ptAvailability', { userId: String(user._id) })
+    }
 
     return res.json({
       message: `Tài khoản đã được ${user.isActive ? 'mở khóa' : 'khóa'}`,
@@ -794,6 +1199,12 @@ export const deleteUser = async (req, res) => {
     }
 
     const user = await findEditableUserById(req.params.id)
+
+    // Only super_admin can delete admin or super_admin users
+    if (['super_admin', 'admin'].includes(user.role) && req.user.role !== 'super_admin') {
+      throw new AppError('Chỉ Super Admin mới có quyền thao tác với Admin khác', 403)
+    }
+
     await user.deleteOne()
     await recordAuditLog({
       req,
@@ -804,6 +1215,148 @@ export const deleteUser = async (req, res) => {
     })
 
     return res.json({ message: 'Xóa người dùng thành công' })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const getPendingVerifications = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search = '' } = req.query
+    const query = {
+      identityType: { $ne: '' },
+      identityStatus: { $in: ['', 'pending'] },
+    }
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { identityNumber: { $regex: search, $options: 'i' } },
+      ]
+    }
+    const skip = (Number(page) - 1) * Number(limit)
+    const [users, total] = await Promise.all([
+      User.find(query)
+        .select('name fullName displayName email avatar identityType identityNumber identityCountry identityFrontImage identityBackImage identityStatus identityRejectReason createdAt')
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+      User.countDocuments(query),
+    ])
+    return res.json({
+      data: users,
+      total,
+      page: Number(page),
+      totalPages: Math.ceil(total / Number(limit)),
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const approveVerification = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+    if (!user) throw new AppError('Không tìm thấy người dùng', 404)
+    if (!user.identityType) throw new AppError('Người dùng chưa gửi giấy tờ xác minh', 400)
+
+    user.identityStatus = 'approved'
+    user.identityReviewedBy = req.user._id
+    user.identityReviewedAt = new Date()
+    await user.save()
+
+    await recordAuditLog({
+      req,
+      module: 'users',
+      action: 'update',
+      entity: user,
+      details: `Duyệt xác minh giấy tờ: ${user.identityType} - ${user.identityNumber ? '***' + user.identityNumber.slice(-4) : ''}`,
+    })
+
+    return res.json({ message: 'Xác minh giấy tờ đã được duyệt', user })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const rejectVerification = async (req, res) => {
+  try {
+    const { reason } = req.body
+    if (!reason) throw new AppError('Vui lòng nhập lý do từ chối', 400)
+
+    const user = await User.findById(req.params.id)
+    if (!user) throw new AppError('Không tìm thấy người dùng', 404)
+    if (!user.identityType) throw new AppError('Người dùng chưa gửi giấy tờ xác minh', 400)
+
+    user.identityStatus = 'rejected'
+    user.identityRejectReason = reason.trim()
+    user.identityReviewedBy = req.user._id
+    user.identityReviewedAt = new Date()
+    await user.save()
+
+    await recordAuditLog({
+      req,
+      module: 'users',
+      action: 'update',
+      entity: user,
+      details: `Từ chối xác minh giấy tờ: ${reason}`,
+    })
+
+    return res.json({ message: 'Đã từ chối xác minh giấy tờ', user })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+    if (!user) {
+      throw new AppError('Không tìm thấy người dùng', 404)
+    }
+
+    // Permission check: Admin cannot view details of other Admins or Super Admins
+    if (req.user.role === 'admin') {
+      if (user.role === 'admin' || user.role === 'super_admin') {
+        if (req.user._id.toString() !== user._id.toString()) {
+          throw new AppError('Bạn không có quyền xem chi tiết quản trị viên khác', 403)
+        }
+      }
+    }
+
+    // Fetch related data
+    const addresses = await Address.find({ userId: user._id })
+    const activeMembership = await Membership.findOne({
+      memberId: user._id,
+      status: 'active',
+    }).populate('planId')
+
+    const membershipHistory = await Membership.find({
+      memberId: user._id,
+    }).populate('planId').sort({ createdAt: -1 })
+
+    const recentBookings = await Booking.find({
+      memberId: user._id,
+    }).populate('ptId', 'name fullName displayName email avatar phone').sort({ date: -1 }).limit(10)
+
+    const orderHistory = await Order.find({
+      userId: user._id,
+    }).sort({ createdAt: -1 }).limit(10)
+
+    const totalWorkouts = await Booking.countDocuments({
+      memberId: user._id,
+      status: 'completed',
+    })
+
+    return res.json({
+      user: normalizeUserMemberIdentity(user),
+      addresses,
+      activeMembership,
+      membershipHistory,
+      recentBookings,
+      orderHistory,
+      totalWorkouts,
+    })
   } catch (error) {
     return sendError(res, error)
   }

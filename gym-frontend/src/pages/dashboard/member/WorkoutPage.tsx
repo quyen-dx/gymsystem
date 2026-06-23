@@ -1,16 +1,13 @@
-
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 
 export default function WorkoutPage() {
-    return (
-        <MemberLayout>
-            <div className="member-page mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8 max-[640px]:p-5">
-                <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Module 6</p>
-                <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)]">Lộ trình tập luyện</h1>
-                <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
-                    Chức năng đang phát triển — Phụ trách: Thành viên 6
-                </p>
-            </div>
-        </MemberLayout>
-    )
+  return (
+    <MemberLayout>
+      <div className="member-page" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', opacity: 0.5, textAlign: 'center' }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🏋️</div>
+        <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Chức năng đang phát triển</h2>
+        <p style={{ fontSize: 14 }}>Workout sẽ sớm được ra mắt. Theo dõi để cập nhật!</p>
+      </div>
+    </MemberLayout>
+  )
 }

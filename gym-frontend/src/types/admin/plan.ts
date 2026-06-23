@@ -1,9 +1,13 @@
 export interface AdminPlan {
   _id: string
-  name: string
+  nameVi: string
+  nameEn: string
   price: number
   durationDays: number
-  description: string
+  descriptionVi?: string
+  descriptionEn?: string
+  featuresVi: string[]
+  featuresEn: string[]
   color: string
   isActive: boolean
   memberCount: number

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { clearAuthSession, refreshAccessToken } from '../services/api'
+import { clearAuthSession, clearLegacyAuthStorage, getAuthToken, setAuthToken } from '../services/api'
 import { authService } from '../services/authService'
 import { AuthContext, type LoginPayload, type User } from './auth.context'
 
@@ -7,15 +7,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const refreshUser = async () => {
+    const { data } = await authService.getProfile()
+    setUser(data.user)
+    return data.user
+  }
+
   useEffect(() => {
     let cancelled = false
 
     const bootstrapAuth = async () => {
       try {
-        let token = localStorage.getItem('token')
-        if (!token) {
-          token = await refreshAccessToken()
-        }
+        clearLegacyAuthStorage()
+        const token = getAuthToken()
 
         if (!token) {
           if (!cancelled) setUser(null)
@@ -40,9 +44,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = async (payload: LoginPayload) => {
     const { data } = await authService.login(payload)
-    localStorage.setItem('token', data.accessToken)
-    setUser(data.user)
-    return data.user
+    setAuthToken(data.accessToken)
+    try {
+      const freshUser = await refreshUser()
+      return freshUser || data.user
+    } catch {
+      setUser(data.user)
+      return data.user
+    }
   }
 
   const logout = async () => {
@@ -58,7 +67,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, updateUser: setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, updateUser: setUser, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

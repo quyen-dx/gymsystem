@@ -1,8 +1,8 @@
 import bcrypt from 'bcrypt'
 import mongoose from 'mongoose'
+import { extractMemberNumber, formatMemberCode, normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
 
 const emailRegex = /^\S+@\S+\.\S+$/
-const phoneRegex = /^(0|\+84)\d{9}$/
 
 const userSchema = new mongoose.Schema(
   {
@@ -22,6 +22,15 @@ const userSchema = new mongoose.Schema(
         message: 'Email không hợp lệ',
       },
     },
+    contactEmail: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      validate: {
+        validator: (value) => value == null || value === '' || emailRegex.test(value),
+        message: 'Email lien he khong hop le',
+      },
+    },
     facebookId: {
       type: String,
       unique: true,
@@ -37,13 +46,19 @@ const userSchema = new mongoose.Schema(
       sparse: true,
       trim: true,
       validate: {
-        validator: (value) => value == null || value === '' || phoneRegex.test(value),
+        validator: (value) => value == null || value === '' || value.trim().length > 0,
         message: 'Số điện thoại không hợp lệ',
       },
     },
     dateOfBirth: {
       type: Date,
       default: null,
+    },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other', ''],
+      default: '',
+      trim: true,
     },
     password: {
       type: String,
@@ -53,7 +68,7 @@ const userSchema = new mongoose.Schema(
     },
     provider: {
       type: String,
-      enum: ['google', 'facebook', 'phone'],
+      enum: ['google', 'facebook', 'phone', 'email'],
       required: true,
     },
     isVerified: {
@@ -62,7 +77,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'pt', 'staff', 'member', 'seller'],
+      enum: ['super_admin', 'admin', 'pt', 'staff', 'member', 'seller'],
       default: 'member',
     },
     isSeller: {
@@ -104,14 +119,106 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    themePreference: {
+      type: String,
+      enum: ['system', 'light', 'dark'],
+      default: 'system',
+    },
+    accentColor: {
+      type: String,
+      default: '#7C3AED',
+    },
     isActive: {
       type: Boolean,
       default: true,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'locked'],
+      default: 'active',
+    },
+    isLocked: {
+      type: Boolean,
+      default: false,
     },
     refreshToken: {
       type: String,
       select: false,
     },
+    memberCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
+    memberNumber: {
+      type: Number,
+      unique: true,
+      sparse: true,
+      min: 1,
+      index: true,
+    },
+    // Extended profile fields
+    fullName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    nationality: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    language: {
+      type: String,
+      default: 'vi',
+      trim: true,
+    },
+    timezone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    country: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    province: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    detailedAddress: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    emergencyContact: {
+      name: { type: String, default: '', trim: true },
+      phone: { type: String, default: '', trim: true },
+      relationship: { type: String, default: '', trim: true },
+    },
+    healthInfo: {
+      height: { type: Number, default: null },
+      weight: { type: Number, default: null },
+      goals: [{ type: String, trim: true }],
+      activityLevel: { type: String, default: '', trim: true },
+      notes: { type: String, default: '', trim: true },
+    },
+    identityType: { type: String, default: '', trim: true },
+    identityNumber: { type: String, default: '', trim: true },
+    identityCountry: { type: String, default: '', trim: true },
+    identityFrontImage: { type: String, default: '' },
+    identityBackImage: { type: String, default: '' },
+    identityStatus: {
+      type: String,
+      enum: ['', 'pending', 'approved', 'rejected'],
+      default: '',
+    },
+    identityRejectReason: { type: String, default: '', trim: true },
+    identityReviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    identityReviewedAt: { type: Date, default: null },
   },
   { timestamps: true },
 )
@@ -124,6 +231,10 @@ userSchema.pre('validate', function () {
   if (this.provider === 'phone' && !this.phone) {
     this.invalidate('phone', 'Tài khoản số điện thoại cần có số điện thoại')
   }
+
+  if (this.provider === 'email' && !this.email) {
+    this.invalidate('email', 'Tài khoản email cần có email')
+  }
 })
 
 userSchema.pre('save', async function () {
@@ -132,13 +243,43 @@ userSchema.pre('save', async function () {
   this.password = await bcrypt.hash(this.password, 12)
 })
 
+const getNextMemberNumber = async (UserModel) => {
+  const [maxNumber] = await UserModel.aggregate([
+    { $match: { memberNumber: { $type: 'number' } } },
+    { $group: { _id: null, max: { $max: '$memberNumber' } } },
+  ])
+
+  const codedUsers = await UserModel.find({ memberCode: /^GP\d+$/i })
+    .select('memberCode')
+    .lean()
+
+  const legacyNumber = codedUsers.reduce((max, user) => (
+    Math.max(max, extractMemberNumber(user.memberCode) || 0)
+  ), 0)
+  return Math.max(Number(maxNumber?.max || 0), legacyNumber) + 1
+}
+
+userSchema.pre('save', async function () {
+  const UserModel = mongoose.model('User')
+
+  if (!this.memberNumber && this.memberCode) {
+    this.memberNumber = extractMemberNumber(this.memberCode)
+  }
+
+  if (!this.memberNumber) {
+    this.memberNumber = await getNextMemberNumber(UserModel)
+  }
+
+  this.memberCode = formatMemberCode(this.memberNumber)
+})
+
 userSchema.methods.comparePassword = async function (candidatePassword) {
   if (!this.password || !candidatePassword) return false
   return bcrypt.compare(candidatePassword, this.password)
 }
 
 userSchema.methods.toJSON = function () {
-  const obj = this.toObject()
+  const obj = normalizeUserMemberIdentity(this.toObject())
   delete obj.password
   delete obj.refreshToken
   return obj

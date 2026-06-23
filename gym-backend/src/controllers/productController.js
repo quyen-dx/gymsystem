@@ -1,7 +1,12 @@
 import Product from '../models/Product.js'
 import Shop from '../models/Shop.js'
 import { recordAuditLog } from '../services/auditLogService.js'
+import { invalidateContextCache } from '../services/conversationContextCache.js'
+import { invalidateAiDomainCache } from '../ai/services/aiService.js'
 import AppError from '../utils/appError.js'
+
+const getUserDisplayName = (user, fallback = '') =>
+  String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
 
 const normalizeWeightVariants = (variants, fallbackWeights) => {
   if (Array.isArray(variants) && variants.length > 0) {
@@ -70,7 +75,7 @@ const hydrateProductReviews = (product) => {
     return {
       ...review,
       userId: reviewer?._id || review.userId,
-      name: reviewer?.name || review.name,
+      name: getUserDisplayName(reviewer, review.name),
       avatar: reviewer?.avatar || review.avatar || '',
     }
   })
@@ -99,7 +104,7 @@ export const getAllProducts = async (req, res, next) => {
       query = query.populate({
         path: 'shop_id',
         select: 'name avatar description address rating reviewCount user_id',
-        populate: { path: 'user_id', select: 'name avatar' },
+        populate: { path: 'user_id', select: 'name fullName displayName avatar' },
       })
     }
     const sort = sortPrice === 'asc'
@@ -147,9 +152,9 @@ export const getProductById = async (req, res, next) => {
       .populate({
         path: 'shop_id',
         select: 'name avatar description address rating reviewCount user_id',
-        populate: { path: 'user_id', select: 'name avatar' },
+        populate: { path: 'user_id', select: 'name fullName displayName avatar' },
       })
-      .populate('reviews.userId', 'name avatar')
+      .populate('reviews.userId', 'name fullName displayName avatar')
     if (!product) return next(new AppError('Không tìm thấy sản phẩm', 404))
 
     // Sản phẩm liên quan cùng category
@@ -165,7 +170,7 @@ export const getProductById = async (req, res, next) => {
 
 export const createProduct = async (req, res, next) => {
   try {
-    const { name, description, descriptionImages, price, image, images, weights, weightVariants, category, stock, partner } = req.body
+    const { name, description, descriptionHtml, descriptionImages, price, image, images, weights, weightVariants, category, stock, partner } = req.body
     const normalizedVariants = normalizeWeightVariants(weightVariants, weights)
     const normalizedStock = normalizedVariants.length > 0
       ? normalizedVariants.reduce((sum, item) => sum + Number(item.stock || 0), 0)
@@ -175,6 +180,7 @@ export const createProduct = async (req, res, next) => {
       shop_id: shopId,
       name,
       description,
+      descriptionHtml,
       descriptionImages,
       price,
       image,
@@ -192,6 +198,8 @@ export const createProduct = async (req, res, next) => {
       entity: product,
       details: 'Thêm sản phẩm',
     })
+    invalidateContextCache('products')
+    invalidateAiDomainCache('products')
     res.status(201).json(product)
   } catch (err) { next(err) }
 }
@@ -235,7 +243,7 @@ export const getMyProducts = async (req, res, next) => {
 
 export const updateProduct = async (req, res, next) => {
   try {
-    const { name, description, descriptionImages, price, image, images, weights, weightVariants, category, stock, partner } = req.body
+    const { name, description, descriptionHtml, descriptionImages, price, image, images, weights, weightVariants, category, stock, partner } = req.body
     const normalizedVariants = normalizeWeightVariants(weightVariants, weights)
     const normalizedStock = normalizedVariants.length > 0
       ? normalizedVariants.reduce((sum, item) => sum + Number(item.stock || 0), 0)
@@ -245,6 +253,7 @@ export const updateProduct = async (req, res, next) => {
 
     product.name = name
     product.description = description
+    product.descriptionHtml = descriptionHtml
     product.descriptionImages = descriptionImages
     product.price = price
     product.image = image
@@ -262,6 +271,8 @@ export const updateProduct = async (req, res, next) => {
       entity: product,
       details: 'Cập nhật thông tin sản phẩm',
     })
+    invalidateContextCache('products')
+    invalidateAiDomainCache('products')
     res.json(product)
   } catch (err) { next(err) }
 }
@@ -278,7 +289,16 @@ export const deleteProduct = async (req, res, next) => {
       entity: product,
       details: 'Xóa sản phẩm',
     })
+    invalidateContextCache('products')
+    invalidateAiDomainCache('products')
     res.json({ message: 'Đã xoá sản phẩm' })
+  } catch (err) { next(err) }
+}
+
+export const uploadProductImage = async (req, res, next) => {
+  try {
+    if (!req.file) return next(new AppError('Không có file ảnh', 400))
+    res.json({ url: req.file.path })
   } catch (err) { next(err) }
 }
 
@@ -294,7 +314,7 @@ export const addReview = async (req, res, next) => {
 
     product.reviews.push({
       userId: req.user._id,
-      name: req.user.name,
+      name: getUserDisplayName(req.user),
       avatar: req.user.avatar || '',
       rating,
       comment,
@@ -309,9 +329,9 @@ export const addReview = async (req, res, next) => {
       {
         path: 'shop_id',
         select: 'name avatar description address rating reviewCount user_id',
-        populate: { path: 'user_id', select: 'name avatar' },
+        populate: { path: 'user_id', select: 'name fullName displayName avatar' },
       },
-      { path: 'reviews.userId', select: 'name avatar' },
+      { path: 'reviews.userId', select: 'name fullName displayName avatar' },
     ])
     res.status(201).json({ message: 'Đánh giá thành công', product: hydrateProductReviews(product) })
   } catch (err) { next(err) }

@@ -25,6 +25,38 @@ const membershipSchema = new mongoose.Schema(
       enum: ['active', 'expired', 'cancelled'],
       default: 'active',
     },
+    source: {
+      type: String,
+      enum: ['manual', 'stripe', 'staff', 'wallet'],
+      default: 'manual',
+    },
+    paymentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Payment',
+      default: null,
+    },
+    autoRenew: {
+      type: Boolean,
+      default: false,
+    },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+    cancelReason: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    cancelHandledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    cancelHandledAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

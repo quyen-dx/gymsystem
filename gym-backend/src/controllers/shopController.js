@@ -5,6 +5,9 @@ import { recordAuditLog } from '../services/auditLogService.js'
 import { sendShopDeletionEmail } from '../services/emailService.js'
 import AppError from '../utils/appError.js'
 
+const getUserDisplayName = (user, fallback = '') =>
+  String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
+
 const hydrateShopReviews = (shop) => {
   const shopObject = shop.toObject ? shop.toObject() : shop
   shopObject.reviews = (shopObject.reviews || []).map((review) => {
@@ -12,7 +15,7 @@ const hydrateShopReviews = (shop) => {
     return {
       ...review,
       userId: reviewer?._id || review.userId,
-      name: reviewer?.name || review.name,
+      name: getUserDisplayName(reviewer, review.name),
       avatar: reviewer?.avatar || review.avatar || '',
     }
   })
@@ -21,8 +24,19 @@ const hydrateShopReviews = (shop) => {
 
 export const getAdminShops = async (req, res, next) => {
   try {
-    const shops = await Shop.find().populate('user_id', 'name email phone role isSeller')
+    const shops = await Shop.find().populate('user_id', 'name fullName displayName email phone role isSeller')
     res.json(shops)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const getShops = async (req, res, next) => {
+  try {
+    const shops = await Shop.find({ isActive: true })
+      .populate('user_id', 'name fullName displayName avatar')
+      .sort({ createdAt: -1 })
+    res.json({ shops })
   } catch (err) {
     next(err)
   }
@@ -31,8 +45,8 @@ export const getAdminShops = async (req, res, next) => {
 export const getShopById = async (req, res, next) => {
   try {
     const shop = await Shop.findById(req.params.id)
-      .populate('user_id', 'name email phone role isSeller avatar')
-      .populate('reviews.userId', 'name avatar')
+      .populate('user_id', 'name fullName displayName email phone role isSeller avatar')
+      .populate('reviews.userId', 'name fullName displayName avatar')
     if (!shop) return next(new AppError('Không tìm thấy shop', 404))
     res.json({ shop: hydrateShopReviews(shop) })
   } catch (err) {
@@ -43,7 +57,7 @@ export const getShopById = async (req, res, next) => {
 export const getMyShop = async (req, res, next) => {
   try {
     const shop = await Shop.findOne({ user_id: req.user._id })
-      .populate('user_id', 'name email phone role isSeller avatar')
+      .populate('user_id', 'name fullName displayName email phone role isSeller avatar')
     if (!shop) return next(new AppError('Không tìm thấy shop', 404))
     res.json({ shop })
   } catch (err) {
@@ -94,12 +108,12 @@ export const addShopReview = async (req, res, next) => {
     if (existing) {
       existing.rating = numericRating
       existing.comment = comment || ''
-      existing.name = req.user.name
+      existing.name = getUserDisplayName(req.user)
       existing.avatar = req.user.avatar || ''
     } else {
       shop.reviews.push({
         userId: req.user._id,
-        name: req.user.name,
+        name: getUserDisplayName(req.user),
         avatar: req.user.avatar || '',
         rating: numericRating,
         comment: comment || '',
@@ -110,8 +124,8 @@ export const addShopReview = async (req, res, next) => {
     shop.rating = shop.reviews.reduce((sum, review) => sum + review.rating, 0) / shop.reviewCount
     await shop.save()
     await shop.populate([
-      { path: 'user_id', select: 'name email phone role isSeller avatar' },
-      { path: 'reviews.userId', select: 'name avatar' },
+      { path: 'user_id', select: 'name fullName displayName email phone role isSeller avatar' },
+      { path: 'reviews.userId', select: 'name fullName displayName avatar' },
     ])
 
     res.status(201).json({ message: 'Đánh giá shop thành công', shop: hydrateShopReviews(shop) })

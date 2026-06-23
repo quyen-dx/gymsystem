@@ -1,0 +1,31 @@
+services:
+  backend:
+    build:
+      context: ./gym-backend
+      dockerfile: Dockerfile
+
+    ports:
+      - "5000:5000"
+
+    volumes:
+      - ./gym-backend:/app
+      - /app/node_modules
+
+    command: npm run dev
+
+  frontend:
+    build:
+      context: ./gym-frontend
+      dockerfile: Dockerfile
+
+    ports:
+      - "5173:5173"
+
+    volumes:
+      - ./gym-frontend:/app
+      - /app/node_modules
+
+    depends_on:
+      - backend
+
+    command: npm run dev -- --host

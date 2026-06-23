@@ -50,8 +50,14 @@ const transactionSchema = new mongoose.Schema(
         },
         status: {
             type: String,
-            enum: ['pending', 'completed', 'failed'],
+            enum: ['pending', 'completed', 'failed', 'cancelled'],
             default: 'pending',
+        },
+        expiredAt: {
+            type: Date,
+        },
+        completedAt: {
+            type: Date,
         },
         metadata: {
             type: mongoose.Schema.Types.Mixed,

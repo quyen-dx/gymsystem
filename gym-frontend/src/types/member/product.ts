@@ -44,6 +44,7 @@ export interface MemberProduct {
   _id: string
   name: string
   description: string
+  descriptionHtml?: string
   price: number
   image?: string
   images?: string[]

@@ -3,6 +3,7 @@ import Order from '../models/Order.js'
 import Product from '../models/Product.js'
 import Shop from '../models/Shop.js'
 import Shipping from '../models/Shipping.js'
+import DiscountCode from '../models/DiscountCode.js'
 import AppError from '../utils/appError.js'
 import { applyWalletTransaction, getOrCreateWallet } from './walletService.js'
 
@@ -81,7 +82,24 @@ export const calculateOrderShipping = async ({ items = [], address, totalWeight 
     }
 }
 
-export const createOrder = async ({ userId, items, address, paymentReference }) => {
+export const calculateCheckoutDiscount = async ({ code, subtotal, shippingFee }) => {
+    const normalizedCode = String(code || '').trim().toUpperCase()
+    if (!normalizedCode) return { code: '', amount: 0, type: 'none' }
+
+    const discountCode = await DiscountCode.findOne({ code: normalizedCode, isActive: true }).lean()
+    if (!discountCode) throw new AppError('Mã giảm giá không hợp lệ', 400)
+
+    if (discountCode.type === 'free_shipping') {
+        return { code: normalizedCode, type: discountCode.type, amount: Math.max(0, Number(shippingFee || 0)) }
+    }
+    if (discountCode.type === 'shipping_discount') {
+        return { code: normalizedCode, type: discountCode.type, amount: Math.min(Number(discountCode.amount || 0), Number(shippingFee || 0)) }
+    }
+
+    return { code: normalizedCode, type: discountCode.type, amount: Math.min(Number(discountCode.amount || 0), Number(subtotal || 0)) }
+}
+
+export const createOrder = async ({ userId, items, address, paymentReference, discountCode }) => {
     if (!userId || !Array.isArray(items) || items.length === 0) {
         throw new AppError('Order must include at least one item', 400)
     }
@@ -177,7 +195,10 @@ export const createOrder = async ({ userId, items, address, paymentReference }) 
         }
     }))
 
-    const grandTotal = orderGroups.reduce((sum, group) => sum + group.grandTotal, 0)
+    const subtotal = orderGroups.reduce((sum, group) => sum + group.subtotal, 0)
+    const shippingFee = orderGroups.reduce((sum, group) => sum + group.shippingInfo.shippingFee, 0)
+    const discount = await calculateCheckoutDiscount({ code: discountCode, subtotal, shippingFee })
+    const grandTotal = Math.max(0, subtotal + shippingFee - discount.amount)
 
     const session = await mongoose.startSession()
     try {
@@ -191,25 +212,37 @@ export const createOrder = async ({ userId, items, address, paymentReference }) 
             status: 'completed',
             metadata: {
                 items: orderItems,
-                shippingFee: orderGroups.reduce((sum, group) => sum + group.shippingInfo.shippingFee, 0),
+                shippingFee,
+                discountCode: discount.code,
+                discountAmount: discount.amount,
             },
             session,
         })
 
         const createdOrders = []
+        let allocatedDiscount = 0
         for (const group of orderGroups) {
+            const isLastGroup = group === orderGroups[orderGroups.length - 1]
+            const groupBaseTotal = subtotal + shippingFee
+            const groupShare = groupBaseTotal > 0 ? (group.subtotal + group.shippingInfo.shippingFee) / groupBaseTotal : 0
+            const groupDiscount = isLastGroup ? discount.amount - allocatedDiscount : Math.round(discount.amount * groupShare)
+            allocatedDiscount += groupDiscount
+            const groupTotal = Math.max(0, group.subtotal + group.shippingInfo.shippingFee - groupDiscount)
+
             const order = await Order.create(
                 [{
                     userId,
                     shopId: group.shopId,
                     items: group.items,
-                    totalAmount: group.subtotal,
-                    totalPrice: group.subtotal,
+                    totalAmount: groupTotal,
+                    totalPrice: Math.max(0, group.subtotal - Math.min(group.subtotal, groupDiscount)),
                     shippingFee: group.shippingInfo.shippingFee,
                     address: buildShippingAddress(address),
                     status: 'CHỜ XÁC NHẬN',
                     paymentStatus: 'paid',
                     paymentReference,
+                    discountCode: discount.code,
+                    discountAmount: groupDiscount,
                 }],
                 { session },
             )
@@ -230,7 +263,9 @@ export const createOrder = async ({ userId, items, address, paymentReference }) 
             await order[0].save({ session })
             createdOrders.push(order[0])
 
-            const payoutAmount = Math.max(0, group.subtotal * (1 - PLATFORM_FEE_RATE))
+            const groupSubtotalDiscount = Math.min(group.subtotal, groupDiscount)
+            const payoutBase = Math.max(0, group.subtotal - groupSubtotalDiscount)
+            const payoutAmount = Math.max(0, payoutBase * (1 - PLATFORM_FEE_RATE))
             await getOrCreateWallet(group.sellerId, session)
             await applyWalletTransaction({
                 userId: group.sellerId,
@@ -262,7 +297,7 @@ export const getOrderById = async (orderId, userId) => {
     const filter = userId ? { _id: orderId, userId } : { _id: orderId }
     return Order.findOne(filter)
         .populate('items.productId', 'name image images')
-        .populate('userId', 'name phone email')
+        .populate('userId', 'name fullName phone email')
         .populate('shopId', 'name avatar user_id')
 }
 
@@ -291,7 +326,7 @@ export const getOrdersBySeller = async (sellerId) => {
 
     return Order.find({ shopId: shop._id })
         .populate('items.productId', 'name image images')
-        .populate('userId', 'name phone email')
+        .populate('userId', 'name fullName phone email')
         .populate('shopId', 'name avatar')
         .sort({ createdAt: -1 })
 }
@@ -302,7 +337,7 @@ export const getSellerOrderById = async (orderId, sellerId) => {
 
     return Order.findOne({ _id: orderId, shopId: shop._id })
         .populate('items.productId', 'name image images')
-        .populate('userId', 'name phone email')
+        .populate('userId', 'name fullName phone email')
         .populate('shopId', 'name avatar')
 }
 
@@ -385,6 +420,6 @@ export const updateSellerOrderStatus = async ({ orderId, sellerId, status }) => 
 
     return Order.findById(orderId)
         .populate('items.productId', 'name image images')
-        .populate('userId', 'name phone email')
+        .populate('userId', 'name fullName phone email')
         .populate('shopId', 'name avatar')
 }

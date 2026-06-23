@@ -14,7 +14,31 @@ export const aiController = async (req, res, next) => {
       conversationContext,
     })
 
-    return res.json(payload)
+    let output = payload
+    if (typeof output === 'string') {
+      try {
+        output = JSON.parse(output)
+      } catch {
+        output = { answer: output }
+      }
+    }
+
+    if (typeof output?.answer === 'string') {
+      const maybeNested = output.answer.trim()
+      if (maybeNested.startsWith('{')) {
+        try {
+          const nested = JSON.parse(maybeNested)
+          if (nested?.answer) output = { ...output, ...nested }
+        } catch { }
+      }
+    }
+
+    return res.json({
+      ...output,
+      intent: output.intent || 'gym',
+      type: output.type || 'text',
+      answer: output.answer || (typeof output === 'string' ? output : String(output.text || output.message || output))
+    })
   } catch (error) {
     return next(error)
   }

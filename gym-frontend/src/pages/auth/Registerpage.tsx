@@ -1,51 +1,68 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { authService } from '../../services/authService'
-import { Button, Form, Input, Typography, message, Divider } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
-import { useTheme } from '../../context/ThemeProvider'
+import { Button, Divider, Form, Input, Typography, message } from 'antd'
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Link, useNavigate } from 'react-router-dom'
+import LanguageSelect from '../../components/common/LanguageSelect'
+import FeatureDisabled from '../../components/system/FeatureDisabled'
+import TypewriterSlogans from '../../components/system/TypewriterSlogans'
+import { useSystemSettings } from '../../context/SystemSettingsContext'
+import { useAuth } from '../../hooks/useAuth'
+import { setAuthToken } from '../../services/api'
+import { authService } from '../../services/authService'
+import { getErrorMessage } from '../../utils/errorMessages'
+import { getLocalizedText } from '../../utils/localization'
 const { Title, Text } = Typography
 
-const getDashboardPath = (role: string) => {
-  if (role === 'admin') return '/dashboard/admin'
-  if (role === 'seller') return '/dashboard/seller/products'
-  if (role === 'staff') return '/dashboard/staff'
-  if (role === 'pt') return '/dashboard/pt'
-  return '/dashboard/member'
+const registerOtpMessageKey = 'register-send-otp'
+const registerVerifyMessageKey = 'register-verify-otp'
+
+const pickLocalizedSlogans = (slogans: Array<{ vi?: string; en?: string }> = [], language: string) => {
+  return slogans
+    .map((item) => getLocalizedText(item, language, ''))
+    .filter(Boolean)
 }
 
 export default function RegisterPage() {
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { dark } = useTheme()
+  const { updateUser } = useAuth()
+  const { settings } = useSystemSettings()
 
   const [step, setStep] = useState<'form' | 'otp'>('form')
   const [loading, setLoading] = useState(false)
 
   const [form] = Form.useForm()
   const [otpPreview, setOtpPreview] = useState('')
+  const slogans = pickLocalizedSlogans(settings.general.slogans, i18n.language)
+
+  if (!settings.auth.allowRegistration) return <FeatureDisabled />
 
   const handleSendOtp = async (values: any) => {
+    if (loading) return
     setLoading(true)
     try {
+      const identifier = String(values.phone || '').trim()
       const { data } = await authService.sendRegisterOtp({
-        provider: 'phone',
+        provider: identifier.includes('@') ? 'email' : 'phone',
         name: values.name,
-        phone: values.phone,
+        phone: identifier,
         password: values.password,
       })
 
       setOtpPreview(data.otpPreview || '')
       setStep('otp')
 
-      message.success(data.message || 'OTP đã được gửi')
+      message.success({ key: registerOtpMessageKey, content: data.message || t('register.otp_sent') })
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Gửi OTP thất bại')
+      message.error({ key: registerOtpMessageKey, content: getErrorMessage(t, err.response?.data?.message, 'register.otp_failed') })
     } finally {
       setLoading(false)
     }
   }
 
   const handleVerifyOtp = async (values: any) => {
+    if (loading) return
     setLoading(true)
     try {
       const phone = form.getFieldValue('phone')
@@ -55,19 +72,25 @@ export default function RegisterPage() {
         otp: values.otp,
       })
 
-      message.success('Đăng ký thành công')
+      message.success({ key: registerVerifyMessageKey, content: t('register.success') })
 
-      localStorage.setItem('token', data.accessToken)
-      navigate(getDashboardPath(data.user.role))
+      if (data?.accessToken && data?.user) {
+        setAuthToken(data.accessToken)
+        updateUser(data.user)
+        navigate('/dashboard', { replace: true })
+        return
+      }
+
+      navigate('/login', { replace: true })
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'OTP không hợp lệ')
+      message.error({ key: registerVerifyMessageKey, content: getErrorMessage(t, err.response?.data?.message, 'register.otp_invalid') })
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
+    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-y-auto overflow-x-hidden px-4 py-8 sm:overflow-hidden sm:p-0">
 
       {/* BACKGROUND */}
       <div
@@ -84,23 +107,52 @@ export default function RegisterPage() {
 
       <div className="absolute inset-0 bg-black/65" />
 
+      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6">
+        <LanguageSelect />
+      </div>
+
       {/* CARD */}
       <div
-        className={`relative z-10 w-full max-w-md rounded-2xl p-7 shadow-2xl transition-all
-          ${dark ? 'bg-[#141414] text-white' : 'bg-[#484848] text-[#edebe6]'}
-        `}
-        style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #5a5a5a' }}
+        className="relative z-10 my-auto w-full max-w-sm rounded-2xl p-7 shadow-2xl transition-all"
+        style={{
+          background: 'var(--gs-card)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: '1px solid var(--gs-border-strong)',
+        }}
       >
+        <div className="mb-5 text-center">
+          <div
+            className="mx-auto mb-3 grid h-12 w-12 place-items-center overflow-hidden rounded-xl bg-[var(--theme-button-bg)] font-black text-[var(--theme-button-text)]"
+            style={{ border: '1px solid var(--theme-button-border)' }}
+          >
+            {settings.general.logoUrl
+              ? <img src={settings.general.logoUrl} alt={settings.general.siteName} className="h-full w-full object-cover" />
+              : <span className="text-base font-black">GP</span>
+            }
+          </div>
+          {slogans.length > 0 && (
+            <div style={{ color: 'var(--gs-text)' }}>
+              <TypewriterSlogans
+                slogans={slogans}
+                language={i18n.language}
+                className="mt-1 text-xs font-semibold uppercase tracking-[0.18em]"
+              />
+            </div>
+          )}
+        </div>
 
         {/* HEADER */}
-        <div className="flex items-center gap-2 mb-4">
+        <div className="mb-4 flex items-center justify-center gap-2">
 
           {step === 'otp' && (
             <Button
               type="text"
               icon={<ArrowLeftOutlined />}
               onClick={() => setStep('form')}
-              style={{ color: dark ? '#fff' : '#edebe6' }}
+              disabled={loading}
+              className="!absolute !left-5"
+              style={{ color: 'var(--gs-text)' }}
             />
           )}
 
@@ -108,10 +160,11 @@ export default function RegisterPage() {
             level={3}
             style={{
               margin: 0,
-              color: dark ? '#fff' : '#edebe6',
+              textAlign: 'center',
+              color: 'var(--gs-text)',
             }}
           >
-            Đăng ký
+            {t('register.title')}
           </Title>
         </div>
         {/* FORM STEP 1 */}
@@ -119,27 +172,27 @@ export default function RegisterPage() {
           <Form layout="vertical" form={form} onFinish={handleSendOtp}>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Họ và tên</span>}
+              label={<span style={{ color: 'var(--gs-text)' }}>{t('register.fullname')}</span>}
               name="name"
-              rules={[{ required: true, message: 'Nhập họ tên' }]}
+              rules={[{ required: true, message: t('register.fullname_required') }]}
             >
-              <Input size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
+              <Input size="large" style={{ background: 'var(--gs-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }} />
             </Form.Item>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Số điện thoại</span>}
+              label={<span style={{ color: 'var(--gs-text)' }}>{t('register.phone')}</span>}
               name="phone"
-              rules={[{ required: true, message: 'Nhập số điện thoại' }]}
+              rules={[{ required: true, message: t('register.phone_required') }]}
             >
-              <Input size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
+              <Input size="large" style={{ background: 'var(--gs-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }} />
             </Form.Item>
 
             <Form.Item
-              label={<span style={{ color: dark ? '#fff' : '#edebe6' }}>Mật khẩu</span>}
+              label={<span style={{ color: 'var(--gs-text)' }}>{t('register.password')}</span>}
               name="password"
-              rules={[{ required: true, message: 'Nhập mật khẩu' }]}
+              rules={[{ required: true, message: t('register.password_required') }]}
             >
-              <Input.Password size="large" style={!dark ? { background: '#525252', borderColor: '#5a5a5a', color: '#edebe6' } : undefined} />
+              <Input.Password size="large" style={{ background: 'var(--gs-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }} />
             </Form.Item>
 
             <Button
@@ -148,19 +201,20 @@ export default function RegisterPage() {
               block
               size="large"
               loading={loading}
+              disabled={loading}
             >
-              Gửi OTP
+              {t('register.send_otp')}
             </Button>
 
-            <Divider />
+            <Divider style={{ borderColor: 'var(--gs-border)' }} />
 
             <div
               className="text-center text-sm"
-              style={{ color: dark ? '#ccc' : 'rgba(237,235,230,0.65)' }}
+              style={{ color: 'var(--gs-muted)' }}
             >
-              Đã có tài khoản?{' '}
-              <Link to="/login" className="font-semibold" style={{ color: 'var(--theme-accent)' }}>
-                Đăng nhập
+              {t('register.has_account')}{' '}
+              <Link to="/login" className="auth-link-action ml-2">
+                {t('register.login')}
               </Link>
             </div>
 
@@ -171,21 +225,21 @@ export default function RegisterPage() {
         {step === 'otp' && (
           <Form layout="vertical" onFinish={handleVerifyOtp}>
 
-            {otpPreview && (
+            {settings.auth.demoOtpEnabled && otpPreview && (
               <div className="mb-3 text-center text-orange-500">
                 OTP demo: <b>{otpPreview}</b>
               </div>
             )}
 
-            <Text style={{ color: dark ? '#fff' : '#edebe6' }}>
-              Nhập OTP
+            <Text style={{ color: 'var(--gs-text)' }}>
+              {t('register.otp_label')}
             </Text>
 
             <Form.Item
               name="otp"
-              rules={[{ required: true, message: 'Nhập OTP' }]}
+              rules={[{ required: true, message: t('register.otp_required') }]}
             >
-              <Input.OTP length={6} />
+              <Input.OTP length={6} style={{ color: 'var(--gs-text)' }} />
             </Form.Item>
 
             <Button
@@ -194,8 +248,9 @@ export default function RegisterPage() {
               block
               size="large"
               loading={loading}
+              disabled={loading}
             >
-              Xác minh
+              {t('register.otp_verify')}
             </Button>
 
           </Form>

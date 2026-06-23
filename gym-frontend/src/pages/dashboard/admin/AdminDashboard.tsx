@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import api from '../../../services/api'
 
 export default function AdminDashboard() {
+  const { t } = useTranslation()
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalMembers: 0,
@@ -31,7 +33,7 @@ export default function AdminDashboard() {
           activePlans: plansRes.data.plans.filter((p: any) => p.isActive).length,
         })
       } catch {
-        // giữ nguyên 0 nếu lỗi
+        // keep default 0 on error
       } finally {
         setLoading(false)
       }
@@ -41,29 +43,29 @@ export default function AdminDashboard() {
   }, [])
 
   const statCards = [
-    { label: 'Tổng người dùng', value: stats.totalUsers, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
-    { label: 'Members', value: stats.totalMembers, tone: 'bg-[rgba(116,140,84,0.16)] text-[var(--gs-text)]' },
-    { label: 'PT', value: stats.totalPT, tone: 'bg-white/[0.04] text-[var(--gs-text)]' },
-    { label: 'Staff', value: stats.totalStaff, tone: 'bg-white/[0.04] text-[var(--gs-text)]' },
-    { label: 'Tổng gói tập', value: stats.totalPlans, tone: 'bg-white/[0.04] text-[var(--gs-text)]' },
-    { label: 'Gói đang hoạt động', value: stats.activePlans, tone: 'bg-[rgba(116,140,84,0.16)] text-[var(--gs-text)]' },
+    { label: t('admin.dashboard.stats.total_users'), value: stats.totalUsers, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: t('admin.dashboard.stats.members'), value: stats.totalMembers, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: t('admin.dashboard.stats.pt'), value: stats.totalPT, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: t('admin.dashboard.stats.staff'), value: stats.totalStaff, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: t('admin.dashboard.stats.total_plans'), value: stats.totalPlans, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: t('admin.dashboard.stats.active_plans'), value: stats.activePlans, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
   ]
 
   return (
     <DashboardLayout>
-      <section className="mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))] p-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Admin overview</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)]">Daily operations</h1>
+      <section className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('admin.dashboard.overline')}</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.dashboard.title')}</h1>
         <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--gs-text-muted)]">
-          Tổng quan người dùng và gói tập trong hệ thống.
+          {t('admin.dashboard.description')}
         </p>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {statCards.map((stat) => (
           <article
             key={stat.label}
-            className="rounded-[24px] border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6"
+            className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6"
           >
             <div className={`inline-flex rounded-full px-3 py-1 text-xs uppercase tracking-[0.18em] ${stat.tone}`}>
               {stat.label}

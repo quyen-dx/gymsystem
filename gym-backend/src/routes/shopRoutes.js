@@ -4,6 +4,7 @@ import {
   deleteShop,
   getAdminShops,
   getMyShop,
+  getShops,
   getShopById,
   updateMyShop,
 } from '../controllers/shopController.js'
@@ -14,6 +15,7 @@ const router = express.Router()
 router.get('/admin/all', protect, adminOnly, getAdminShops)
 router.get('/me', protect, sellerOnly, getMyShop)
 router.put('/me', protect, sellerOnly, updateMyShop)
+router.get('/', getShops)
 router.get('/:id', getShopById)
 router.post('/:id/reviews', protect, addShopReview)
 router.delete('/:id', protect, adminOnly, deleteShop)

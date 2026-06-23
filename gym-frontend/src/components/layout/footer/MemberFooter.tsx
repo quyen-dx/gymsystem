@@ -15,9 +15,9 @@ import {
   UserRound,
   UsersRound,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { useTheme } from '../../../context/ThemeProvider'
-import { useAuth } from '../../../hook/useAuth'
+import { useAuth } from '../../../hooks/useAuth'
 
 type FooterLink = {
   label: string
@@ -26,19 +26,6 @@ type FooterLink = {
   match?: string[]
   end?: boolean
 }
-
-const serviceLinks: FooterLink[] = [
-  { label: 'Gói tập', to: '/dashboard/member/health', icon: Dumbbell },
-  { label: 'Danh sách PT', to: '/dashboard/member/booking', icon: UsersRound },
-  { label: 'Lớp tập nhóm', to: '/dashboard/member/workout', icon: CalendarDays },
-  { label: 'Cửa hàng', to: '/dashboard/member/store', icon: Store },
-]
-
-const accountLinks: FooterLink[] = [
-  { label: 'Thông tin cá nhân', to: '/dashboard/member/profile', icon: UserRound },
-  { label: 'Lịch sử gói tập', to: '/dashboard/member/orders', icon: ShoppingBag },
-  { label: 'Thông báo', to: '/dashboard/member/notifications', icon: Bell },
-]
 
 const socialLogos = {
   facebook: '/facebook.png',
@@ -53,10 +40,23 @@ const isRouteActive = (pathname: string, item: FooterLink, isActive: boolean) =>
 }
 
 function MemberFooter() {
+  const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
   const { logout } = useAuth()
-  const { dark } = useTheme()
+
+  const serviceLinks: FooterLink[] = [
+    { label: t('footer.member.services.packages'), to: '/health', icon: Dumbbell },
+    { label: t('footer.member.services.pt_list'), to: '/booking', icon: UsersRound },
+    { label: t('footer.member.services.group_classes'), to: '/workout', icon: CalendarDays },
+    { label: t('footer.member.services.store'), to: '/store', icon: Store },
+  ]
+
+  const accountLinks: FooterLink[] = [
+    { label: t('footer.member.account.profile'), to: '/profile', icon: UserRound },
+    { label: t('footer.member.account.orders'), to: '/cart?tab=orders', icon: ShoppingBag, match: ['/cart'] },
+    { label: t('footer.member.account.notifications'), to: '/notifications', icon: Bell },
+  ]
 
   const handleLogout = () => {
     logout()
@@ -70,21 +70,11 @@ function MemberFooter() {
         key={item.label}
         to={item.to}
         className={({ isActive }) =>
-          [
-            'group flex items-center gap-2 text-sm transition-colors',
-            isRouteActive(location.pathname, item, isActive)
-              ? dark
-                ? 'text-white'
-                : 'text-[#edebe6]'
-              : dark
-                ? 'text-zinc-300 hover:text-white'
-                : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]',
-          ].join(' ')
+          `member-footer-link${isRouteActive(location.pathname, item, isActive) ? ' is-active' : ''}`
         }
-        style={{ color: 'var(--theme-text)' }}
       >
         {Icon ? (
-          <Icon className={['h-4 w-4 shrink-0 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-[rgba(237,235,230,0.5)] group-hover:text-[#edebe6]'].join(' ')} style={{ color: 'var(--theme-muted)' }} />
+          <Icon className="h-4 w-4 shrink-0" />
         ) : null}
         <span>{item.label}</span>
       </NavLink>
@@ -93,95 +83,86 @@ function MemberFooter() {
 
   return (
     <>
-      {/* Desktop footer */}
       <footer
-        className={[
-          'border-t',
-          dark
-            ? 'border-zinc-800 bg-zinc-950 text-white'
-            : 'border-[#5a5a5a] bg-[#3e3e3e] text-[#edebe6]',
-        ].join(' ')}
+        className="border-t"
         style={{ background: 'var(--theme-card)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
       >
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-4 py-8 sm:px-6 sm:gap-8 md:px-8 md:py-10 lg:grid-cols-4 lg:gap-10 lg:py-12">
-          {/* Cột 1 - Logo */}
           <div className="col-span-2 lg:col-span-1">
             <button
               type="button"
-              onClick={() => navigate('/dashboard/member')}
+              onClick={() => navigate('/')}
               className="flex items-center gap-3 text-left"
             >
               <span
                 className="flex h-11 w-11 items-center justify-center rounded-lg text-sm font-black"
-                style={{ background: 'var(--theme-accent)', color: 'var(--theme-button-text)' }}
+                style={{ background: 'var(--theme-button-bg)', color: 'var(--theme-button-text)' }}
               >
                 GP
               </span>
               <span>
                 <span className="block text-lg font-bold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymPro</span>
-                <span className={['block text-sm', dark ? 'text-zinc-400' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-                  Train smarter every day
+                <span className="block text-sm" style={{ color: 'var(--gs-muted)' }}>
+                  {t('footer.member.tagline')}
                 </span>
               </span>
             </button>
-            <p className={['mt-5 max-w-full text-sm leading-6 lg:max-w-xs', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-              Không gian luyện tập hiện đại, lịch trình rõ ràng và lộ trình cá nhân hóa cho hội viên.
+            <p className="mt-5 max-w-full text-sm leading-6 lg:max-w-xs" style={{ color: 'var(--gs-muted)' }}>
+              {t('footer.member.description')}
             </p>
-            <div className={['mt-5 flex items-start gap-2 text-sm', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-              <Clock3 className={['mt-0.5 h-4 w-4 shrink-0', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
+            <div className="mt-5 flex items-start gap-2 text-sm" style={{ color: 'var(--gs-muted)' }}>
+              <Clock3 className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--gs-muted)' }} />
               <span>
-                Giờ mở cửa
-                <span className={['block font-medium', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
-                  05:30 - 22:00 hằng ngày
+                {t('footer.member.hours_label')}
+                <span className="block font-medium" style={{ color: 'var(--gs-text)' }}>
+                  {t('footer.member.hours_value')}
                 </span>
               </span>
             </div>
           </div>
 
-          {/* Cột 2 - Dịch vụ */}
           <div>
-            <h2 className={['text-sm font-semibold uppercase tracking-wide', dark ? 'text-zinc-100' : 'text-[#edebe6]'].join(' ')}>
-              Dịch vụ
+            <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--gs-text)' }}>
+              {t('footer.member.section.services')}
             </h2>
             <div className="mt-5 space-y-3">{serviceLinks.map(renderDesktopLink)}</div>
           </div>
 
-          {/* Cột 3 - Tài khoản */}
           <div>
-            <h2 className={['text-sm font-semibold uppercase tracking-wide', dark ? 'text-zinc-100' : 'text-[#edebe6]'].join(' ')}>
-              Tài khoản
+            <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--gs-text)' }}>
+              {t('footer.member.section.account')}
             </h2>
             <div className="mt-5 space-y-3">
               {accountLinks.map(renderDesktopLink)}
               <button
                 type="button"
                 onClick={handleLogout}
-                className={['group flex items-center gap-2 text-sm transition-colors', dark ? 'text-zinc-300 hover:text-white' : 'text-[rgba(237,235,230,0.65)] hover:text-[#edebe6]'].join(' ')}
+                className="group flex items-center gap-2 text-sm transition-colors hover:text-[var(--gs-text)]"
+                style={{ color: 'var(--gs-muted)' }}
               >
-                <LogOut className={['h-4 w-4 transition-colors', dark ? 'text-zinc-500 group-hover:text-white' : 'text-[rgba(237,235,230,0.5)] group-hover:text-[#edebe6]'].join(' ')} />
-                <span>Đăng xuất</span>
+                <LogOut className="h-4 w-4 transition-colors group-hover:text-[var(--gs-text)]" style={{ color: 'var(--gs-muted)' }} />
+                <span>{t('footer.member.logout')}</span>
               </button>
             </div>
           </div>
 
-          {/* Cột 4 - Liên hệ */}
           <div className="col-span-2 lg:col-span-1">
-            <h2 className={['text-sm font-semibold uppercase tracking-wide', dark ? 'text-zinc-100' : 'text-[#edebe6]'].join(' ')}>
-              Liên hệ
+            <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--gs-text)' }}>
+              {t('footer.member.section.contact')}
             </h2>
-            <div className={['mt-5 space-y-3 text-sm', dark ? 'text-zinc-300' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
+            <div className="mt-5 space-y-3 text-sm" style={{ color: 'var(--gs-muted)' }}>
               <a
                 href="tel:19006868"
-                className={['flex items-center gap-2 transition-colors', dark ? 'hover:text-white' : 'hover:text-[#edebe6]'].join(' ')}
+                className="flex items-center gap-2 transition-colors hover:text-[var(--gs-text)]"
               >
-                <Phone className={['h-4 w-4', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
+                <Phone className="h-4 w-4" style={{ color: 'var(--gs-muted)' }} />
                 <span>1900 6868</span>
               </a>
               <a
                 href="mailto:support@gympro.vn"
-                className={['flex items-center gap-2 transition-colors', dark ? 'hover:text-white' : 'hover:text-[#edebe6]'].join(' ')}
+                className="flex items-center gap-2 transition-colors hover:text-[var(--gs-text)]"
               >
-                <Mail className={['h-4 w-4', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
+                <Mail className="h-4 w-4" style={{ color: 'var(--gs-muted)' }} />
                 <span>support@gympro.vn</span>
               </a>
               <div className="flex items-center gap-3 pt-2">
@@ -225,27 +206,27 @@ function MemberFooter() {
               <div className="mt-4 space-y-2 lg:hidden">
                 <a
                   href="#"
-                  className={['flex items-center gap-3 rounded-lg px-3 py-2 transition-colors', dark ? 'bg-zinc-900 hover:bg-zinc-800' : 'bg-[#484848] hover:bg-[#525252]'].join(' ')}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors"
                   style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
                 >
-                  <Smartphone className={['h-5 w-5', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
+                  <Smartphone className="h-5 w-5" style={{ color: 'var(--gs-muted)' }} />
                   <span>
-                    <span className="block text-[10px] text-zinc-400">Tải trên</span>
-                    <span className={['block text-sm font-semibold', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
-                      App Store
+                    <span className="block text-[10px]" style={{ color: 'var(--gs-muted)' }}>{t('footer.member.download.download_on')}</span>
+                    <span className="block text-sm font-semibold" style={{ color: 'var(--gs-text)' }}>
+                      {t('footer.member.download.app_store')}
                     </span>
                   </span>
                 </a>
                 <a
                   href="#"
-                  className={['flex items-center gap-3 rounded-lg px-3 py-2 transition-colors', dark ? 'bg-zinc-900 hover:bg-zinc-800' : 'bg-[#484848] hover:bg-[#525252]'].join(' ')}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors"
                   style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
                 >
-                  <PlayCircle className={['h-5 w-5', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')} />
+                  <PlayCircle className="h-5 w-5" style={{ color: 'var(--gs-muted)' }} />
                   <span>
-                    <span className="block text-[10px] text-zinc-400">Tải trên</span>
-                    <span className={['block text-sm font-semibold', dark ? 'text-white' : 'text-[#edebe6]'].join(' ')}>
-                      CH Play
+                    <span className="block text-[10px]" style={{ color: 'var(--gs-muted)' }}>{t('footer.member.download.download_on')}</span>
+                    <span className="block text-sm font-semibold" style={{ color: 'var(--gs-text)' }}>
+                      {t('footer.member.download.ch_play')}
                     </span>
                   </span>
                 </a>
@@ -257,17 +238,17 @@ function MemberFooter() {
                   rel="noopener noreferrer"
                   download
                   className={[
-                    'group flex w-fit min-w-[170px] items-center gap-3 rounded-xl px-3 py-2 no-underline shadow-sm transition-opacity duration-200 hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e05a30]',
-                    'bg-[#e05a30] text-white shadow-[0_10px_24px_rgba(224,90,48,0.22)] hover:bg-[#c94d26]',
+                    'group flex w-fit min-w-[170px] items-center gap-3 rounded-xl px-3 py-2 no-underline shadow-sm transition-opacity duration-200 hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]',
+                    'bg-[var(--theme-button-bg)] text-[var(--theme-button-text)] shadow-[0_10px_24px_rgba(0,0,0,0.18)] hover:bg-[var(--theme-accent-hover)]',
                   ].join(' ')}
                   style={{
-                    background: 'var(--theme-accent)',
-                    borderColor: 'var(--theme-accent)',
+                    background: 'var(--theme-button-bg)',
+                    borderColor: 'var(--theme-button-border)',
                     color: 'var(--theme-button-text)',
                   }}
                 >
                   <MonitorDown className="h-5 w-5 shrink-0" />
-                  <span className="text-sm font-semibold leading-5">Tải xuống Windows</span>
+                  <span className="text-sm font-semibold leading-5">{t('footer.member.download.desktop')}</span>
                 </a>
               </div>
             </div>
@@ -275,11 +256,11 @@ function MemberFooter() {
         </div>
 
         <div
-          className={['border-t px-4 py-4 sm:px-6 md:px-8', dark ? 'border-zinc-800' : 'border-[#5a5a5a]'].join(' ')}
+          className="border-t px-4 py-4 sm:px-6 md:px-8"
           style={{ borderColor: 'var(--theme-border)' }}
         >
-          <p className={['mx-auto max-w-7xl text-sm', dark ? 'text-zinc-500' : 'text-[rgba(237,235,230,0.65)]'].join(' ')}>
-            Copyright © {new Date().getFullYear()} GymPro. All rights reserved.
+          <p className="mx-auto max-w-7xl text-sm" style={{ color: 'var(--gs-muted)' }}>
+            {t('footer.member.copyright', { year: new Date().getFullYear() })}
           </p>
         </div>
       </footer>

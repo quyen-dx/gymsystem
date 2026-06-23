@@ -18,6 +18,7 @@ const productSchema = new mongoose.Schema({
   shop_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Shop', required: true, index: true },
   name: { type: String, required: true, trim: true },
   description: { type: String, default: '' },
+  descriptionHtml: { type: String, default: '' },
   price: { type: Number, required: true, min: 0 },
   weights: [{ type: String }],
   weightVariants: [weightVariantSchema],

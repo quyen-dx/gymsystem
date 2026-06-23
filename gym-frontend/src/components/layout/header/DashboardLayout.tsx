@@ -1,10 +1,15 @@
 import {
   BarChartOutlined,
-  BulbOutlined,
   CalendarOutlined,
+  CommentOutlined,
+  CreditCardOutlined,
   DashboardOutlined,
+  FileTextOutlined,
+  HomeOutlined,
   LogoutOutlined,
-  PlaySquareOutlined,
+  MenuOutlined,
+  QuestionCircleOutlined,
+  SettingOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
   TeamOutlined,
@@ -14,151 +19,296 @@ import {
   Avatar,
   Button,
   Divider,
-  Layout,
-  Menu,
+  Drawer,
   Typography,
 } from 'antd'
-import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { useTheme } from '../../../context/ThemeProvider'
-import { useAuth } from '../../../hook/useAuth'
-import AccountProfileModal from '../../../pages/auth/AccountProfileModal'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useSystemSettings } from '../../../context/SystemSettingsContext'
+import { useAuth } from '../../../hooks/useAuth'
+import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
+import LanguageSelect from '../../common/LanguageSelect'
+import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
+import { getUserDisplayName, getUserInitialName } from '../../../utils/userDisplay'
 
-const { Sider, Content } = Layout
 const { Text } = Typography
 
-const roleMenus: Record<string, any[]> = {
-  admin: [
-    { key: '/dashboard/admin', label: 'Overview', icon: <DashboardOutlined /> },
-    { key: '/dashboard/admin/users', label: 'Users', icon: <UserOutlined /> },
-    { key: '/dashboard/admin/plans', label: 'Plans', icon: <CalendarOutlined /> },
-    { key: '/dashboard/admin/shop', label: 'Shop', icon: <BulbOutlined /> },
-    { key: '/dashboard/admin/members', label: 'Members', icon: <TeamOutlined /> },
-    { key: '/dashboard/admin/pts', label: 'Trainers (PT)', icon: <UserOutlined /> },
-    { key: '/dashboard/admin/shorts', label: 'Shorts', icon: <PlaySquareOutlined /> },
-    { key: '/dashboard/admin/reports', label: 'Reports', icon: <BarChartOutlined /> },
-  ],
-  staff: [
-    { key: '/dashboard/staff/checkin', label: 'Check-in', icon: <DashboardOutlined /> },
-    { key: '/dashboard/staff/members', label: 'Members', icon: <TeamOutlined /> },
-  ],
-  pt: [
-    { key: '/dashboard/pt/schedule', label: 'Schedule', icon: <CalendarOutlined /> },
-    { key: '/dashboard/pt/student', label: 'Students', icon: <TeamOutlined /> },
-  ],
-  seller: [
-    { key: '/dashboard/seller/products', label: 'My Products', icon: <ShopOutlined /> },
-    { key: '/dashboard/seller/orders', label: 'Đơn hàng', icon: <ShoppingCartOutlined /> },
-  ],
-  member: []
+const getViewRoleFromPath = (pathname: string, actualRole?: string) => {
+  if (pathname.startsWith('/staff')) return 'staff'
+  if (pathname.startsWith('/pt')) return 'pt'
+  if (pathname.startsWith('/seller')) return 'seller'
+  if (pathname.startsWith('/member') || pathname.startsWith('/user')) return 'member'
+  if (pathname.startsWith('/admin')) return 'admin'
+  if (actualRole === 'super_admin') return 'admin'
+  return actualRole || 'member'
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
-  const [accountOpen, setAccountOpen] = useState(false)
+  const { t } = useTranslation()
+  const { settings, isEnabled } = useSystemSettings()
   const navigate = useNavigate()
+  const [pendingCount, setPendingCount] = useState(0)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   const location = useLocation()
 
-  const { dark } = useTheme()
+  const actualRole = user?.role
+  const viewRole = getViewRoleFromPath(location.pathname, actualRole)
+  const displayName = getUserDisplayName(user, t('profile.account_name'))
+  const avatarName = getUserInitialName(user, 'U')
 
-  const items = roleMenus[user?.role as string] || []
+  useEffect(() => {
+    if (user?.role === 'super_admin' || user?.role === 'admin') {
+      getPendingPartnershipRequestCount()
+        .then((res) => setPendingCount(res.data.count || 0))
+        .catch(() => { })
+    }
+  }, [user?.role])
 
-  return (
-    <Layout style={{ minHeight: '100vh' }}>
+  const roleMenus: Record<string, any[]> = {
+    admin: [
+      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
+      { key: '/admin', label: t('nav.overview'), icon: <DashboardOutlined /> },
+      { key: '/admin/users', label: t('nav.users'), icon: <UserOutlined /> },
+      ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/admin/plans', label: t('nav.plans'), icon: <CalendarOutlined /> }] : []),
+      {
+        key: '/admin/partnerships',
+        label: (
+          <span style={{ position: 'relative', display: 'inline-block', paddingRight: 22 }}>
+            <span>{t('nav.partnerships')}</span>
+            {pendingCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  right: 0,
+                  transform: 'translateY(-50%)',
+                  minWidth: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  backgroundColor: 'var(--gs-danger)',
+                  color: 'var(--gs-text)',
+                  fontSize: 10,
+                  lineHeight: '18px',
+                  textAlign: 'center',
+                  padding: '0 4px',
+                  fontWeight: 600,
+                }}
+              >
+                {pendingCount > 99 ? '99+' : pendingCount}
+              </span>
+            )}
+          </span>
+        ),
+        icon: <TeamOutlined />,
+      },
 
-      {/* SIDEBAR */}
-      <Sider
-        width={260}
-        theme={dark ? 'dark' : 'light'}
-        style={{ background: 'var(--theme-card)', color: 'var(--theme-text)' }}
-      >
+      { key: '/admin/members', label: t('nav.members'), icon: <TeamOutlined /> },
+      ...(isEnabled('pt.moduleEnabled') ? [{ key: '/admin/trainers', label: `${t('nav.trainers')} (PT)`, icon: <UserOutlined /> }] : []),
+      ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: t('nav.reports'), icon: <BarChartOutlined /> }] : []),
+      { key: '/admin/faqs', label: t('nav.faq_manager'), icon: <QuestionCircleOutlined /> },
+      { key: '/admin/feedback', label: t('nav.feedback_manager'), icon: <CommentOutlined /> },
+      { key: '/admin/policies', label: t('nav.policies'), icon: <FileTextOutlined /> },
+      { key: '/admin/system-settings', label: t('nav.system_settings'), icon: <SettingOutlined /> },
+    ],
+    staff: [
+      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
+      ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/staff/checkin', label: t('nav.checkin'), icon: <DashboardOutlined /> }] : []),
+      { key: '/staff/members', label: t('nav.members'), icon: <TeamOutlined /> },
+      { key: '/staff/payments', label: t('nav.payments'), icon: <CreditCardOutlined /> },
+      { key: '/staff/notifications', label: t('nav.notifications'), icon: <CommentOutlined /> },
+    ],
+    pt: [
+      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
+      ...(isEnabled('pt.scheduleEnabled') ? [{ key: '/pt/schedule', label: t('nav.schedule'), icon: <CalendarOutlined /> }] : []),
+      ...(isEnabled('pt.moduleEnabled') ? [
+        { key: '/pt/clients', label: t('nav.clients'), icon: <TeamOutlined /> },
+        { key: '/pt/workouts', label: t('nav.workout'), icon: <FileTextOutlined /> },
+      ] : []),
+    ],
+    seller: [
+      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
+      ...(isEnabled('shop.productStoreEnabled') ? [
+        { key: '/seller/products', label: t('nav.my_products'), icon: <ShopOutlined /> },
+        { key: '/seller/orders', label: t('nav.orders'), icon: <ShoppingCartOutlined /> },
+        { key: '/seller/shop', label: t('nav.shop'), icon: <ShopOutlined /> },
+        { key: '/seller/revenue', label: t('nav.revenue'), icon: <BarChartOutlined /> },
+      ] : []),
+    ],
+    member: []
+  }
 
-        {/* LOGO */}
+  const items = roleMenus[viewRole] || []
+
+  const closeSidebar = () => setSidebarOpen(false)
+
+  const sidebarBranding = (
+    <div
+      style={{
+        padding: 20,
+        fontWeight: 700,
+        fontSize: 16,
+        letterSpacing: 2,
+        color: 'var(--theme-text)',
+      }}
+    >
+      {settings.general.logoUrl ? <img src={settings.general.logoUrl} alt={settings.general.siteName} style={{ maxHeight: 30 }} /> : `${t(`role.${viewRole}`)} Dashboard`}
+    </div>
+  )
+
+  const sidebarMenu = (
+    <>
+      <nav className="dashboard-sidebar-menu" aria-label="Dashboard navigation">
+        {items.map((item) => (
+          <NavLink
+            key={item.key}
+            to={item.key}
+            end={item.key === '/' || item.key === '/admin'}
+            className={({ isActive }) => `dashboard-sidebar-item${isActive ? ' is-active' : ''}`}
+            onClick={closeSidebar}
+          >
+            <span className="dashboard-sidebar-icon">{item.icon}</span>
+            <span className="dashboard-sidebar-label">{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
+
+      {(actualRole === 'super_admin' || actualRole === 'admin') && viewRole !== 'admin' && (
+        <NavLink
+          to="/admin"
+          className="dashboard-sidebar-item"
+          onClick={closeSidebar}
+          style={{ margin: '4px 0' }}
+        >
+          <span className="dashboard-sidebar-icon"><DashboardOutlined /></span>
+          <span className="dashboard-sidebar-label">{t('admin.backToAdmin')}</span>
+        </NavLink>
+      )}
+
+      <Divider />
+
+      <div style={{ padding: '0 16px 12px' }}>
+        <LanguageSelect />
+      </div>
+
+      <div style={{ padding: 16 }}>
         <div
           style={{
-            padding: 20,
-            fontWeight: 700,
-            fontSize: 16,
-            letterSpacing: 2,
-            color: 'var(--theme-text)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 12,
+            cursor: 'pointer',
           }}
+          onClick={() => { navigate('/account/profile'); closeSidebar() }}
         >
-          GP DASHBOARD
-        </div>
+          <Avatar
+            size={44}
+            src={
+              user?.avatar ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarName)}`
+            }
+          />
 
-        <Menu
-          theme={dark ? 'dark' : 'light'}
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          items={items.map((i) => ({
-            key: i.key,
-            icon: i.icon,
-            label: i.label,
-            onClick: () => navigate(i.key),
-          }))}
-        />
-
-        <Divider />
-
-        {/* USER CARD */}
-        <div style={{ padding: 16 }}>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              marginBottom: 12,
-              cursor: 'pointer',
-            }}
-            onClick={() => setAccountOpen(true)}
-          >
-            <Avatar
-              size={44}
-              src={
-                user?.avatar ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}`
-              }
-            />
-
-            <div>
-              <div style={{ fontWeight: 600, color: 'var(--theme-text)' }}>
-                {user?.name}
-              </div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {user?.role}
-              </Text>
+          <div>
+            <div style={{ fontWeight: 600, color: 'var(--theme-text)' }}>
+              {displayName}
             </div>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {user?.role}
+            </Text>
           </div>
-
-          <Button
-            icon={<LogoutOutlined />}
-            danger
-            block
-            onClick={logout}
-          >
-            Đăng xuất
-          </Button>
-
         </div>
 
-      </Sider>
+        <Button icon={<LogoutOutlined />} danger block onClick={logout}>
+          {t('nav.logout')}
+        </Button>
+      </div>
+    </>
+  )
 
-      {/* CONTENT */}
-      <Layout>
-        <Content
+  return (
+    <div className="dashboard-layout-root">
+
+      {/* DESKTOP SIDEBAR */}
+      <div className="dashboard-desktop-sider" style={{ background: 'var(--theme-card)', color: 'var(--theme-text)' }}>
+        {sidebarBranding}
+        {sidebarMenu}
+      </div>
+
+      {/* MAIN: mobile header + content */}
+      <div className="dashboard-inner">
+        {/* MOBILE HEADER + DRAWER */}
+        <div className="dashboard-mobile-header">
+          <Button
+            type="text"
+            icon={<MenuOutlined style={{ fontSize: 20, color: 'var(--theme-text)' }} />}
+            onClick={() => setSidebarOpen(true)}
+          />
+          <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: 2, color: 'var(--theme-text)' }}>
+            {settings.general.siteName}
+          </div>
+          <Avatar
+            size={32}
+            src={
+              user?.avatar ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarName)}`
+            }
+            style={{ cursor: 'pointer' }}
+            onClick={() => navigate('/account/profile')}
+          />
+        </div>
+
+        <Drawer
+          className="dashboard-mobile-drawer"
+          title={null}
+          placement="left"
+          open={sidebarOpen}
+          onClose={closeSidebar}
+          size={280}
+          closable={false}
+          mask={{ closable: true }}
+          styles={{ body: { padding: 0, background: 'var(--theme-card)' } }}
+        >
+          <div className="dashboard-drawer-close">
+            <span className="drawer-brand">{settings.general.siteName}</span>
+            <button
+              type="button"
+              onClick={closeSidebar}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 18,
+                color: 'var(--theme-text)',
+                padding: '4px 8px',
+                lineHeight: 1,
+              }}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="dashboard-drawer-scroll">
+            {sidebarMenu}
+          </div>
+        </Drawer>
+
+        {/* CONTENT */}
+        <div
+          className="dashboard-content"
           style={{
-            padding: 24,
             background: 'var(--theme-bg)',
             color: 'var(--theme-text)',
           }}
         >
           {children}
-        </Content>
-      </Layout>
+        </div>
+      </div>
 
-      <AccountProfileModal open={accountOpen} onClose={() => setAccountOpen(false)} />
-
-    </Layout>
+      {settings.ai.systemAiEnabled && settings.ai.adminAiEnabled && <AdminAIChatWidget />}
+    </div>
   )
 }

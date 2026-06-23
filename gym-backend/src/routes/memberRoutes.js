@@ -1,0 +1,43 @@
+import express from 'express'
+import { upload } from '../config/cloudinary.js'
+import {
+  batchRenewMembers,
+  createMember,
+  getExpiringMembers,
+  getMemberById,
+  getMemberHealthScore,
+  getMemberStats,
+  getMemberTimeline,
+  getMembers,
+  offlineRegisterMembership,
+  registerPlanForMember,
+  renewPlanForMember,
+  searchMembers,
+  toggleMemberStatus,
+  updateMember,
+} from '../controllers/memberController.js'
+import { adminOrStaff, protect } from '../middlewares/authMiddleware.js'
+
+const router = express.Router()
+
+router.use(protect)
+
+router.get('/', adminOrStaff, getMembers)
+router.get('/search', adminOrStaff, searchMembers)
+router.get('/stats', adminOrStaff, getMemberStats)
+router.get('/expiring', adminOrStaff, getExpiringMembers)
+
+router.get('/:id', adminOrStaff, getMemberById)
+router.get('/:id/timeline', adminOrStaff, getMemberTimeline)
+router.get('/:id/health-score', adminOrStaff, getMemberHealthScore)
+
+router.post('/', adminOrStaff, createMember)
+router.patch('/:id', adminOrStaff, upload.fields([{ name: 'avatar', maxCount: 1 }]), updateMember)
+router.patch('/:id/toggle-status', adminOrStaff, toggleMemberStatus)
+
+router.post('/:id/register-plan', adminOrStaff, registerPlanForMember)
+router.post('/:id/renew-plan', adminOrStaff, renewPlanForMember)
+router.post('/batch-renew', adminOrStaff, batchRenewMembers)
+router.post('/offline-register', adminOrStaff, offlineRegisterMembership)
+
+export default router
