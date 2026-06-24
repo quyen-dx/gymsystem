@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Select, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Checkbox, Select, Table, Tag, Typography, message } from 'antd'
 import { CardCvcElement, CardExpiryElement, CardNumberElement, Elements, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import i18n from '../../../i18n'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
@@ -20,6 +20,8 @@ const DEPOSIT_BONUS_TIERS = [
 ]
 const USD_PRESET_AMOUNTS = [5, 10, 20, 50]
 const FALLBACK_USD_TO_VND_RATE = 25000
+const DEPOSIT_POLICY_DISMISSED_UNTIL_KEY = 'gympro.depositPolicy.dismissedUntil'
+const DEPOSIT_POLICY_REMIND_MINUTES = 10
 
 type DepositPayment = {
   _id: string
@@ -72,16 +74,24 @@ function normalizeStatus(status?: string) {
   return String(status || '').toUpperCase()
 }
 
+function getEndOfTodayTimestamp() {
+  const endOfToday = new Date()
+  endOfToday.setHours(23, 59, 59, 999)
+  return endOfToday.getTime()
+}
+
 function StripeCardDepositForm({
   amount,
   amountError,
   displayAmount,
+  disabled = false,
   exchangeRate,
   onPaid,
 }: {
   amount: number
   amountError: string | null
   displayAmount: string
+  disabled?: boolean
   exchangeRate?: number | null
   onPaid: () => void
 }) {
@@ -91,7 +101,7 @@ function StripeCardDepositForm({
   const [paying, setPaying] = useState(false)
 
   const handlePay = async () => {
-    if (!stripe || !elements || amountError) return
+    if (!stripe || !elements || amountError || disabled) return
 
     const cardElement = elements.getElement(CardNumberElement)
     if (!cardElement) return
@@ -202,7 +212,7 @@ function StripeCardDepositForm({
         size="large"
         block
         loading={paying}
-        disabled={!stripe || !!amountError}
+        disabled={!stripe || !!amountError || disabled}
         onClick={handlePay}
         className="!h-11 !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
       >
@@ -214,6 +224,7 @@ function StripeCardDepositForm({
 
 export default function DepositPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { wallet, refreshWallet } = useWallet()
   const isEnglish = i18n.language.startsWith('en')
@@ -228,6 +239,9 @@ export default function DepositPage() {
   const [pendingPayment, setPendingPayment] = useState<PendingQrPayment | null>(null)
   const [loading, setLoading] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [policyModalOpen, setPolicyModalOpen] = useState(false)
+  const [policyAccepted, setPolicyAccepted] = useState(false)
+  const depositLocked = policyModalOpen
 
   const cardUsesUsd = paymentMethod === 'card' && isEnglish
   const effectiveAmount = useMemo(() => {
@@ -260,6 +274,14 @@ export default function DepositPage() {
       .catch(() => message.error(t('deposit.msg_load_history_failed')))
       .finally(() => setHistoryLoading(false))
   }
+
+  useEffect(() => {
+    const dismissedUntil = Number(window.localStorage.getItem(DEPOSIT_POLICY_DISMISSED_UNTIL_KEY) || 0)
+    if (!dismissedUntil || dismissedUntil <= Date.now()) {
+      setPolicyAccepted(false)
+      setPolicyModalOpen(true)
+    }
+  }, [])
 
   useEffect(() => {
     refreshPayments()
@@ -369,7 +391,7 @@ export default function DepositPage() {
   }
 
   const handlePayWithVnpay = async () => {
-    if (amountError) return
+    if (depositLocked || amountError) return
     setLoading(true)
     try {
       const manualRes = await createManualQrDeposit({ amount: effectiveAmount })
@@ -409,7 +431,7 @@ export default function DepositPage() {
 
   const handleOpenVnpayPage = async () => {
     const targetAmount = pendingPayment?.amount || effectiveAmount
-    if (!targetAmount || amountError) return
+    if (depositLocked || !targetAmount || amountError) return
     setLoading(true)
     try {
       const res = await createVnpayDeposit({ amount: targetAmount })
@@ -424,10 +446,76 @@ export default function DepositPage() {
     }
   }
 
+  const closePolicyModal = (dismissUntil?: number) => {
+    if (!policyAccepted) return
+    if (dismissUntil) {
+      window.localStorage.setItem(DEPOSIT_POLICY_DISMISSED_UNTIL_KEY, String(dismissUntil))
+    } else {
+      window.localStorage.removeItem(DEPOSIT_POLICY_DISMISSED_UNTIL_KEY)
+    }
+    setPolicyModalOpen(false)
+  }
+
   return (
     <MemberLayout>
       <div className="member-page">
-        <div className="mx-auto max-w-5xl">
+        {policyModalOpen && (
+          <div className="pointer-events-none fixed inset-0 z-30 grid place-items-center bg-black/35 px-4 py-6 backdrop-blur-sm">
+            <Card className="pointer-events-auto w-full max-w-2xl shadow-2xl">
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-lg font-bold text-[var(--theme-text)]">{t('deposit.policy.title')}</h2>
+                  <p className="mt-2 text-sm leading-6 text-[var(--theme-muted)]">{t('deposit.policy.description')}</p>
+                </div>
+                <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4">
+                  <ul className="m-0 space-y-2 pl-5 text-sm leading-6 text-[var(--theme-text)]">
+                    <li>{t('deposit.policy.item_correct_amount')}</li>
+                    <li>{t('deposit.policy.item_correct_content')}</li>
+                    <li>{t('deposit.policy.item_processing_time')}</li>
+                    <li>
+                      {t('deposit.policy.item_refund')}{' '}
+                      <button
+                        type="button"
+                        className="font-medium text-[var(--theme-accent)] transition-colors hover:text-[var(--theme-accent-hover)]"
+                        onClick={() => navigate('/policies')}
+                      >
+                        {t('deposit.policy.view_policy')}
+                      </button>
+                    </li>
+                    <li>
+                      {t('deposit.policy.item_support')}{' '}
+                      <button
+                        type="button"
+                        className="font-medium text-[var(--theme-accent)] transition-colors hover:text-[var(--theme-accent-hover)]"
+                        onClick={() => navigate('/help')}
+                      >
+                        {t('deposit.policy.view_help')}
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+                <Checkbox checked={policyAccepted} onChange={(event) => setPolicyAccepted(event.target.checked)}>
+                  <span className="text-sm text-[var(--theme-text)]">{t('deposit.policy.accept')}</span>
+                </Checkbox>
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    disabled={!policyAccepted}
+                    onClick={() => closePolicyModal(Date.now() + DEPOSIT_POLICY_REMIND_MINUTES * 60 * 1000)}
+                  >
+                    {t('deposit.policy.remind_later')}
+                  </Button>
+                  <Button disabled={!policyAccepted} onClick={() => closePolicyModal(getEndOfTodayTimestamp())}>
+                    {t('deposit.policy.hide_today')}
+                  </Button>
+                  <Button type="primary" disabled={!policyAccepted} onClick={() => closePolicyModal()}>
+                    {t('deposit.policy.confirm')}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+        <div className={`mx-auto max-w-5xl ${depositLocked ? 'pointer-events-none select-none opacity-60' : ''}`}>
           <div className="mb-6">
             <h1 className="text-xl font-bold text-[var(--theme-text)]">{t('deposit.title')}</h1>
             {wallet && (
@@ -559,7 +647,7 @@ export default function DepositPage() {
                     size="large"
                     block
                     loading={loading}
-                    disabled={!!amountError}
+                    disabled={depositLocked || !!amountError}
                     onClick={handlePayWithVnpay}
                     className="!h-11 !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
                   >
@@ -570,6 +658,7 @@ export default function DepositPage() {
                     <StripeCardDepositForm
                       amount={effectiveAmount}
                       amountError={amountError}
+                      disabled={depositLocked}
                       displayAmount={cardUsesUsd ? formatUSD(cardUsdAmount) : formatVND(effectiveAmount)}
                       exchangeRate={cardUsesUsd ? exchangeRate : null}
                       onPaid={() => {
