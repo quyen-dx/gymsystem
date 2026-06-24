@@ -433,7 +433,7 @@ export default function MemberLayout({
         placement="right"
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
-        width={320}
+        size={320}
       >
         <div className="flex items-center gap-3 p-4">
           <img className="h-10 w-10 rounded-full object-cover" src={avatarUrl} alt={displayName} />
