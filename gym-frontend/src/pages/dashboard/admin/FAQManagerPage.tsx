@@ -88,35 +88,7 @@ export default function FAQManagerPage() {
   }
 
   const openEditModal = (row: any) => {
-    setEditing(row)
-    form.setFieldsValue(row)
-    const vi = row.categoryVi
-    const en = row.categoryEn
-    if (vi || en) {
-      const nvi = vi ? normalizeCategory(vi) : ''
-      const nen = en ? normalizeCategory(en) : ''
-      const match = existingCategoryPairs.find(
-        (p) => (
-          nvi && normalizeCategory(p.vi).toLowerCase() === nvi.toLowerCase()
-        ) || (
-          nen && normalizeCategory(p.en).toLowerCase() === nen.toLowerCase()
-        ),
-      )
-      if (match) {
-        setSelectedCategoryVi(match.vi)
-        setSelectedCategoryEn(match.en)
-        setNewCategoryVi('')
-        setNewCategoryEn('')
-      } else {
-        setSelectedCategoryVi(undefined)
-        setSelectedCategoryEn(undefined)
-        setNewCategoryVi(nvi)
-        setNewCategoryEn(nen)
-      }
-    } else {
-      resetCategoryFields()
-    }
-    setOpen(true)
+    navigate(`/admin/faqs/${row._id}/edit`)
   }
 
   const closeModal = () => {

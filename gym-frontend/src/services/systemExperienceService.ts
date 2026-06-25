@@ -6,6 +6,7 @@ export const systemExperienceService = {
   getCmsLanding: () => api.get('/cms/page/home'),
   saveCmsLanding: (payload: any) => api.post('/cms/page/home', payload),
   getFaqs: (params?: any) => api.get('/system-experience/faqs', { params }),
+  getFaq: (id: string) => api.get(`/system-experience/faqs/${id}`),
   createFaq: (payload: any) => api.post('/system-experience/faqs', payload),
   updateFaq: (id: string, payload: any) => api.put(`/system-experience/faqs/${id}`, payload),
   deleteFaq: (id: string) => api.delete(`/system-experience/faqs/${id}`),

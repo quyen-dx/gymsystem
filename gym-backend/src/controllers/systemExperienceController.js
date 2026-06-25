@@ -213,6 +213,14 @@ export const getFaqs = async (req, res) => {
   res.json({ faqs })
 }
 
+export const getFaqById = async (req, res) => {
+  const filter = { _id: req.params.id }
+  if (!['admin', 'super_admin'].includes(req.user?.role)) filter.isPublished = true
+  const faq = await Faq.findOne(filter)
+  if (!faq) return res.status(404).json({ message: 'Không tìm thấy FAQ' })
+  res.json({ faq })
+}
+
 export const createFaq = async (req, res) => {
   const faq = await Faq.create(req.body)
   invalidateContextCache('faqs')
