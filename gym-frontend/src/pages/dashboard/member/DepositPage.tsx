@@ -75,6 +75,7 @@ function normalizeStatus(status?: string) {
 
 function StripeCardDepositForm({
   amount,
+  amountUsd,
   amountError,
   displayAmount,
   disabled = false,
@@ -83,6 +84,7 @@ function StripeCardDepositForm({
   onBeforePay,
 }: {
   amount: number
+  amountUsd?: number
   amountError: string | null
   displayAmount: string
   disabled?: boolean
@@ -104,7 +106,7 @@ function StripeCardDepositForm({
     setPaying(true)
     try {
       if (onBeforePay) await onBeforePay()
-      const res = await createStripePaymentIntent({ amount })
+      const res = await createStripePaymentIntent(amountUsd ? { amountUsd } : { amount })
       const clientSecret = res.data.clientSecret
       const result = await stripe.confirmCardPayment(clientSecret, {
         payment_method: { card: cardElement },
@@ -222,7 +224,6 @@ export default function DepositPage() {
   const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const { wallet, refreshWallet } = useWallet()
-  const isEnglish = i18n.language.startsWith('en')
   const [amount, setAmount] = useState(PRESET_AMOUNTS[1])
   const [customInput, setCustomInput] = useState('')
   const [cardUsdAmount, setCardUsdAmount] = useState(10)
@@ -238,7 +239,7 @@ export default function DepositPage() {
   const [consentSubmitted, setConsentSubmitted] = useState(false)
   const consentReady = tickedPolicies !== null && Object.keys(tickedPolicies).length > 0
 
-  const cardUsesUsd = paymentMethod === 'card' && isEnglish
+  const cardUsesUsd = paymentMethod === 'card'
   const effectiveAmount = useMemo(() => {
     if (!cardUsesUsd) return amount
     return Math.round(cardUsdAmount * (exchangeRate || FALLBACK_USD_TO_VND_RATE))
@@ -615,6 +616,7 @@ export default function DepositPage() {
                   <Elements stripe={stripePromise}>
                     <StripeCardDepositForm
                       amount={effectiveAmount}
+                      amountUsd={cardUsdAmount}
                       amountError={amountError}
                       disabled={!consentReady}
                       displayAmount={cardUsesUsd ? formatUSD(cardUsdAmount) : formatVND(effectiveAmount)}
