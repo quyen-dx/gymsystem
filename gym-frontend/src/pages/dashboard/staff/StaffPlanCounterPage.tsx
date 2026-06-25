@@ -259,7 +259,6 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
                     {payment?.paymentUrl && (
                       <>
                         <QRCodeCanvas value={payment.paymentUrl} size={240} includeMargin />
-                        <div className="break-all text-xs text-[var(--gs-text-muted)]">{payment.paymentUrl}</div>
                         <Tag color={payment.status === 'PAID' ? 'success' : 'processing'}>{payment.status}</Tag>
                       </>
                     )}
