@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Select, Table, Tag, Tooltip, Typography, message } from 'antd'
+import { Button, Card, Grid, Select, Table, Tag, Tooltip, Typography, message } from 'antd'
 import { CardCvcElement, CardExpiryElement, CardNumberElement, Elements, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import { useSearchParams } from 'react-router-dom'
@@ -13,6 +13,7 @@ import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 import { PRESET_AMOUNTS } from '../../../types/member/wallet'
 
 const { Text } = Typography
+const { useBreakpoint } = Grid
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || ''
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
 
@@ -222,6 +223,7 @@ function StripeCardDepositForm({
 
 export default function DepositPage() {
   const { t } = useTranslation()
+  const screens = useBreakpoint()
   const [searchParams, setSearchParams] = useSearchParams()
   const { wallet, refreshWallet } = useWallet()
   const [amount, setAmount] = useState(PRESET_AMOUNTS[1])
@@ -238,6 +240,7 @@ export default function DepositPage() {
   const [tickedPolicies, setTickedPolicies] = useState<Record<string, { type: string; version: string }> | null>(null)
   const [consentSubmitted, setConsentSubmitted] = useState(false)
   const consentReady = tickedPolicies !== null && Object.keys(tickedPolicies).length > 0
+  const showMobileQrActions = !screens.md
 
   const cardUsesUsd = paymentMethod === 'card'
   const effectiveAmount = useMemo(() => {
@@ -691,15 +694,19 @@ export default function DepositPage() {
                     </p>
                   )}
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <Button className="md:hidden" onClick={handleDownloadQr}>
-                      {t('deposit.download_qr')}
-                    </Button>
-                    <Button className="md:hidden" onClick={() => pendingPayment.manualUrl && window.open(pendingPayment.manualUrl, '_blank', 'noopener,noreferrer')}>
-                      {t('deposit.open_bank')}
-                    </Button>
-                    <Button className="md:hidden" loading={loading} onClick={handleOpenVnpayPage}>
-                      {t('deposit.open_vnpay')}
-                    </Button>
+                    {showMobileQrActions && (
+                      <>
+                        <Button onClick={handleDownloadQr}>
+                          {t('deposit.download_qr')}
+                        </Button>
+                        <Button onClick={() => pendingPayment.manualUrl && window.open(pendingPayment.manualUrl, '_blank', 'noopener,noreferrer')}>
+                          {t('deposit.open_bank')}
+                        </Button>
+                        <Button loading={loading} onClick={handleOpenVnpayPage}>
+                          {t('deposit.open_vnpay')}
+                        </Button>
+                      </>
+                    )}
                     <Button loading={loading} onClick={handlePayWithVnpay}>
                       {t('deposit.create_another')}
                     </Button>
