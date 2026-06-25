@@ -278,6 +278,7 @@ function AppWithTheme() {
         <Route path="/admin/faqs" element={<PrivateRoute><FAQManagerPage /></PrivateRoute>} />
         <Route path="/admin/feedback" element={<PrivateRoute><FeedbackManagerPage /></PrivateRoute>} />
         <Route path="/admin/policies/create" element={<PrivateRoute><PolicyCreatePage /></PrivateRoute>} />
+        <Route path="/admin/policies/:policyId/edit" element={<PrivateRoute><PolicyCreatePage /></PrivateRoute>} />
         <Route path="/admin/policies" element={<PrivateRoute><PolicyManagerPage /></PrivateRoute>} />
         {/* SELLER */}
         <Route path="/seller" element={<Navigate to="/seller/products" />} />

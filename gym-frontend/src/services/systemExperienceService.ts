@@ -10,6 +10,7 @@ export const systemExperienceService = {
   updateFaq: (id: string, payload: any) => api.put(`/system-experience/faqs/${id}`, payload),
   deleteFaq: (id: string) => api.delete(`/system-experience/faqs/${id}`),
   getPolicies: (params?: any) => api.get('/system-experience/policies', { params }),
+  getPolicy: (idOrSlug: string) => api.get(`/system-experience/policies/${idOrSlug}`),
   createPolicy: (payload: any) => api.post('/system-experience/policies', payload),
   updatePolicy: (id: string, payload: any) => api.put(`/system-experience/policies/${id}`, payload),
   deletePolicy: (id: string) => api.delete(`/system-experience/policies/${id}`),

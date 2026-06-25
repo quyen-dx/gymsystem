@@ -86,29 +86,7 @@ export default function PolicyManagerPage() {
   }
 
   const openEditModal = (row: any) => {
-    setEditing(row)
-    form.setFieldsValue(row)
-    const vi = row.categoryVi || row.category
-    const en = row.categoryEn || row.category
-    if (vi || en) {
-      const nvi = vi ? normalizeCategory(vi) : ''
-      const nen = en ? normalizeCategory(en) : ''
-      const match = findExistingPair(nvi, nen)
-      if (match) {
-        setSelectedCategoryVi(match.vi)
-        setSelectedCategoryEn(match.en)
-        setNewCategoryVi('')
-        setNewCategoryEn('')
-      } else {
-        setSelectedCategoryVi(undefined)
-        setSelectedCategoryEn(undefined)
-        setNewCategoryVi(nvi)
-        setNewCategoryEn(nen)
-      }
-    } else {
-      resetCategoryFields()
-    }
-    setOpen(true)
+    navigate(`/admin/policies/${row._id}/edit`)
   }
 
   const closeModal = () => {

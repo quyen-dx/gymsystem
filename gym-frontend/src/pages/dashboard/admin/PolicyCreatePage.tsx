@@ -2,7 +2,7 @@ import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Button, Form, Input, Select, Switch, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { systemExperienceService } from '../../../services/systemExperienceService'
 
@@ -16,8 +16,11 @@ interface CategoryPair {
 export default function PolicyCreatePage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { policyId } = useParams()
+  const isEdit = Boolean(policyId)
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(false)
   const [allPolicies, setAllPolicies] = useState<any[]>([])
   const [selectedCategoryVi, setSelectedCategoryVi] = useState<string | undefined>(undefined)
   const [selectedCategoryEn, setSelectedCategoryEn] = useState<string | undefined>(undefined)
@@ -29,6 +32,27 @@ export default function PolicyCreatePage() {
       .then((res) => setAllPolicies(res.data.policies || []))
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!policyId) return
+    setInitialLoading(true)
+    systemExperienceService.getPolicy(policyId)
+      .then((res) => {
+        const policy = res.data.policy
+        form.setFieldsValue(policy)
+        const vi = policy.categoryVi || policy.category
+        const en = policy.categoryEn || policy.category
+        if (vi || en) {
+          setNewCategoryVi(normalizeCategory(vi || ''))
+          setNewCategoryEn(normalizeCategory(en || ''))
+        }
+      })
+      .catch((error) => {
+        message.error(error.response?.data?.message || t('system_experience.admin.save_failed'))
+        navigate('/admin/policies', { replace: true })
+      })
+      .finally(() => setInitialLoading(false))
+  }, [policyId, form, navigate, t])
 
   const existingCategoryPairs = useMemo(() => {
     const map = new Map<string, CategoryPair>()
@@ -120,7 +144,8 @@ export default function PolicyCreatePage() {
 
     setLoading(true)
     try {
-      await systemExperienceService.createPolicy(values)
+      if (policyId) await systemExperienceService.updatePolicy(policyId, values)
+      else await systemExperienceService.createPolicy(values)
       message.success(t('system_experience.admin.save_success'))
       navigate('/admin/policies')
     } catch (error: any) {
@@ -154,13 +179,13 @@ export default function PolicyCreatePage() {
         style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--theme-accent, #b6462f) 14%, transparent), transparent)' }}
       >
         <h1 className="text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">
-          {t('system_experience.admin.add_policy')}
+          {isEdit ? t('system_experience.admin.edit_policy') : t('system_experience.admin.add_policy')}
         </h1>
-        <p className="mt-1 text-sm text-[var(--gs-text-muted)]">Tạo chính sách mới</p>
+        <p className="mt-1 text-sm text-[var(--gs-text-muted)]">{isEdit ? 'Cập nhật nội dung chính sách' : 'Tạo chính sách mới'}</p>
       </div>
 
       <div style={cardStyle} className="p-6 max-[640px]:p-4">
-        <Form form={form} layout="vertical" initialValues={{ isPublished: true }}>
+        <Form form={form} layout="vertical" initialValues={{ isPublished: true }} disabled={initialLoading}>
           <Form.Item name="titleVi" label={t('system_experience.admin.title_vi')} rules={[{ required: true }]}>
             <Input size="large" />
           </Form.Item>
@@ -225,7 +250,7 @@ export default function PolicyCreatePage() {
           Hủy
         </Button>
         <Button type="primary" size="large" loading={loading} onClick={handleSave}>
-          Lưu chính sách
+          {isEdit ? 'Cập nhật chính sách' : 'Lưu chính sách'}
         </Button>
       </div>
 

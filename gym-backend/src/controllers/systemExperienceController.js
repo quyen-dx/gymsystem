@@ -2,6 +2,7 @@ import Faq from '../models/Faq.js'
 import Feedback from '../models/Feedback.js'
 import LandingContent from '../models/LandingContent.js'
 import Policy from '../models/Policy.js'
+import mongoose from 'mongoose'
 import UserActivity from '../models/UserActivity.js'
 import { invalidateContextCache } from '../services/conversationContextCache.js'
 import { invalidateAiDomainCache } from '../ai/services/aiService.js'
@@ -261,8 +262,9 @@ export const getPolicies = async (req, res) => {
 }
 
 export const getPolicyBySlug = async (req, res) => {
-  const filter = { slug: req.params.slug }
-  if (req.user?.role !== 'admin') filter.isPublished = true
+  const key = req.params.slug
+  const filter = mongoose.Types.ObjectId.isValid(key) ? { _id: key } : { slug: key }
+  if (!['admin', 'super_admin'].includes(req.user?.role)) filter.isPublished = true
   const policy = await Policy.findOne(filter)
   if (!policy) return res.status(404).json({ message: 'Không tìm thấy chính sách' })
   res.json({ policy })
