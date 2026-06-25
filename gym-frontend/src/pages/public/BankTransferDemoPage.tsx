@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import i18n from '../../i18n'
 import { getManualQrDepositInfo, simulateManualQrPayment } from '../../services/walletService'
-import BankTransferSimulator from './BankTransferSimulator'
+import BankTransferSimulator, { SIMULATED_BANK_ACCOUNT } from './BankTransferSimulator'
 
 type ManualQrInfo = {
   txnRef: string
@@ -93,9 +93,9 @@ export default function BankTransferDemoPage() {
       transferContent={info.txnRef}
       status={paid ? 'PAID' : info.status}
       confirming={paying}
-      recipientBankName="NCB"
-      recipientAccountName="NGUYEN VAN A"
-      recipientAccountNumber="9704198526191432198"
+      recipientBankName={SIMULATED_BANK_ACCOUNT.bankName}
+      recipientAccountName={SIMULATED_BANK_ACCOUNT.accountName}
+      recipientAccountNumber={SIMULATED_BANK_ACCOUNT.accountNumber}
       warningText="Đây là trang xác nhận thanh toán nội bộ của GymPro, không phải ứng dụng ngân hàng NCB."
       successTitle="Thanh toán thành công"
       successSubtitle="GymPro đã cập nhật số dư ví."

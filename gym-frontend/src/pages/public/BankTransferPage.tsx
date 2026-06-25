@@ -2,7 +2,7 @@ import { Button, Card, Result, Skeleton, Tag, message } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { memberService } from '../../services/memberService'
-import BankTransferSimulator from './BankTransferSimulator'
+import BankTransferSimulator, { SIMULATED_BANK_ACCOUNT } from './BankTransferSimulator'
 
 type PaymentInfo = {
   paymentId: string
@@ -69,9 +69,9 @@ export default function BankTransferPage() {
       transferContent={info.transferContent}
       status={info.status}
       confirming={confirming}
-      recipientBankName={info.bankInfo.bankName}
-      recipientAccountName={info.bankInfo.accountName}
-      recipientAccountNumber={info.bankInfo.accountNumber}
+      recipientBankName={SIMULATED_BANK_ACCOUNT.bankName}
+      recipientAccountName={SIMULATED_BANK_ACCOUNT.accountName}
+      recipientAccountNumber={SIMULATED_BANK_ACCOUNT.accountNumber}
       warningText="Sau khi đã chuyển khoản, bấm xác nhận để nhân viên kích hoạt hoặc gia hạn gói tại quầy."
       successTitle="Đã xác nhận chuyển khoản"
       successSubtitle={<Tag color="success">PAID</Tag>}

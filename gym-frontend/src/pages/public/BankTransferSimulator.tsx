@@ -2,6 +2,12 @@ import { Button, Card, Result, Tag } from 'antd'
 import type { ReactNode } from 'react'
 import i18n from '../../i18n'
 
+export const SIMULATED_BANK_ACCOUNT = {
+  bankName: 'NCB',
+  accountName: 'NGUYEN VAN A',
+  accountNumber: '9704198526191432198',
+}
+
 type BankTransferSimulatorProps = {
   amount: number
   transferContent: string
