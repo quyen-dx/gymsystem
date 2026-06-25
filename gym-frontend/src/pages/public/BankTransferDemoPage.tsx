@@ -1,8 +1,9 @@
-import { Button, Card, Result, Skeleton, Tag, message } from 'antd'
+import { Button, Card, Result, Skeleton, message } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import i18n from '../../i18n'
 import { getManualQrDepositInfo, simulateManualQrPayment } from '../../services/walletService'
+import BankTransferSimulator from './BankTransferSimulator'
 
 type ManualQrInfo = {
   txnRef: string
@@ -87,68 +88,18 @@ export default function BankTransferDemoPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#eef5f2] px-4 py-6 text-[#10251f]">
-      <div className="mx-auto max-w-md">
-        <div className="mb-4 rounded-2xl bg-[#007a3d] px-5 py-4 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">NCB</p>
-              <h1 className="mt-1 text-xl font-bold">Chuyển khoản</h1>
-            </div>
-            <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">QR PAY</span>
-          </div>
-        </div>
-
-        <Card className="!rounded-2xl !border-0 !bg-white !text-[#10251f] shadow-md">
-          <div className="space-y-5">
-            <div className="rounded-xl border border-[#d7e6df] bg-[#f8fbfa] p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#587067]">Tài khoản nguồn</p>
-              <div className="mt-3 flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-[#10251f]">NGUYEN VAN A</p>
-                  <p className="text-sm text-[#6b7f77]">**** 2198</p>
-                </div>
-                <Tag color="green">ĐANG HOẠT ĐỘNG</Tag>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs font-medium text-[#6b7f77]">Ngân hàng nhận</p>
-                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold text-[#10251f]">NCB</div>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-[#6b7f77]">Số thẻ</p>
-                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold text-[#10251f]">9704198526191432198</div>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-[#6b7f77]">Tên chủ thẻ</p>
-                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold text-[#10251f]">NGUYEN VAN A</div>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-[#6b7f77]">Số tiền</p>
-                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 text-xl font-bold text-[#007a3d]">{formatVND(info.amount)}</div>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-[#6b7f77]">Nội dung chuyển khoản</p>
-                <div className="mt-1 rounded-xl border border-[#d7e6df] bg-white px-4 py-3 font-semibold text-[#10251f]">{info.txnRef}</div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-[#f1d18a] bg-[#fff8e6] px-4 py-3 text-xs text-[#7a5a10]">
-              Đây là trang xác nhận thanh toán nội bộ của GymPro, không phải ứng dụng ngân hàng NCB.
-            </div>
-
-            {paid || info.status === 'PAID' ? (
-              <Result status="success" title="Thanh toán thành công" subTitle="GymPro đã cập nhật số dư ví." />
-            ) : (
-              <Button type="primary" block size="large" loading={paying} onClick={handleDemoPay} className="!h-12 !bg-[#007a3d]">
-                Xác nhận chuyển khoản
-              </Button>
-            )}
-          </div>
-        </Card>
-      </div>
-    </div>
+    <BankTransferSimulator
+      amount={info.amount}
+      transferContent={info.txnRef}
+      status={paid ? 'PAID' : info.status}
+      confirming={paying}
+      recipientBankName="NCB"
+      recipientAccountName="NGUYEN VAN A"
+      recipientAccountNumber="9704198526191432198"
+      warningText="Đây là trang xác nhận thanh toán nội bộ của GymPro, không phải ứng dụng ngân hàng NCB."
+      successTitle="Thanh toán thành công"
+      successSubtitle="GymPro đã cập nhật số dư ví."
+      onConfirm={handleDemoPay}
+    />
   )
 }
