@@ -7,7 +7,6 @@ import { Button, Divider, Form, Input, Typography, message } from 'antd'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import LanguageSelect from '../../components/common/LanguageSelect'
 import TypewriterSlogans from '../../components/system/TypewriterSlogans'
 import { API_URL } from '../../config/env'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
@@ -104,10 +103,6 @@ export default function LoginPage() {
       />
 
       <div className="absolute inset-0 bg-black/65" />
-
-      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6">
-        <LanguageSelect />
-      </div>
 
       {/* CARD */}
       <div
