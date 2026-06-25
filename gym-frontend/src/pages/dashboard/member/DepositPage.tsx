@@ -691,16 +691,16 @@ export default function DepositPage() {
                     </p>
                   )}
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <Button onClick={handleDownloadQr}>
+                    <Button className="md:hidden" onClick={handleDownloadQr}>
                       {t('deposit.download_qr')}
                     </Button>
-                    <Button onClick={() => pendingPayment.manualUrl && window.open(pendingPayment.manualUrl, '_blank', 'noopener,noreferrer')}>
+                    <Button className="md:hidden" onClick={() => pendingPayment.manualUrl && window.open(pendingPayment.manualUrl, '_blank', 'noopener,noreferrer')}>
                       {t('deposit.open_bank')}
                     </Button>
-                    <Button loading={loading} onClick={handleOpenVnpayPage}>
+                    <Button className="md:hidden" loading={loading} onClick={handleOpenVnpayPage}>
                       {t('deposit.open_vnpay')}
                     </Button>
-                    <Button onClick={() => setPendingPayment(null)}>
+                    <Button loading={loading} onClick={handlePayWithVnpay}>
                       {t('deposit.create_another')}
                     </Button>
                   </div>
