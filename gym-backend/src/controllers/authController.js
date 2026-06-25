@@ -104,7 +104,7 @@ const sanitizeUser = (user) => {
 }
 
 const getUserDisplayName = (user, fallback = '') =>
-  String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
+  String(user?.fullName || user?.displayName || user?.name || user?.username || user?.email || fallback || '').trim()
 
 const buildAuthResponse = async (user, res) => {
   const accessToken = generateAccessToken(user._id, user.role)
@@ -122,8 +122,10 @@ const buildAuthResponse = async (user, res) => {
 }
 
 const createVerifiedUser = async (payload) => {
+  const fullName = String(payload.fullName || payload.name || '').trim()
   const userPayload = {
-    name: payload.name,
+    name: fullName,
+    fullName,
     provider: payload.provider,
     isVerified: true,
     password: payload.passwordHash || null,
@@ -177,7 +179,8 @@ export const sendRegisterOtp = async (req, res) => {
   try {
     const settings = await getSystemSettingsValue()
     await assertFeatureEnabled('auth.allowRegistration')
-    const { provider, name, phone, password } = req.body
+    const { provider, name, fullName, phone, password } = req.body
+    const displayName = String(fullName || name || '').trim()
 
     if (provider !== 'phone' && provider !== 'email') {
       throw new AppError('Chỉ đăng ký bằng số điện thoại hoặc email mới cần OTP', 400)
@@ -189,7 +192,7 @@ export const sendRegisterOtp = async (req, res) => {
       await assertFeatureEnabled('auth.allowEmailUsernameLogin')
     }
 
-    if (!name?.trim()) {
+    if (!displayName) {
       throw new AppError('Họ tên là bắt buộc', 400)
     }
 
@@ -231,7 +234,8 @@ export const sendRegisterOtp = async (req, res) => {
       ttlSeconds: settings.auth.otpExpiresInSeconds,
       exposePreview: settings.auth.demoOtpEnabled,
       payload: {
-        name: name.trim(),
+        name: displayName,
+        fullName: displayName,
         ...(isEmail ? { email: normalizedIdentifier } : { phone: normalizedIdentifier }),
         passwordHash,
         provider: isEmail ? 'email' : 'phone',
@@ -298,10 +302,11 @@ export const registerFacebook = async (req, res) => {
   try {
     await assertFeatureEnabled('auth.allowRegistration')
     await assertFeatureEnabled('auth.facebookOAuthEnabled')
-    const { name, email, password, oauthToken } = req.body
+    const { name, fullName, email, password, oauthToken } = req.body
     const normalizedEmail = email?.trim().toLowerCase()
+    const displayName = String(fullName || name || '').trim()
 
-    if (!name?.trim()) {
+    if (!displayName) {
       throw new AppError('Họ tên là bắt buộc', 400)
     }
 
@@ -319,7 +324,8 @@ export const registerFacebook = async (req, res) => {
     }
 
     const user = new User({
-      name: name.trim(),
+      name: displayName,
+      fullName: displayName,
       email: normalizedEmail,
       password: password || null,
       provider: 'facebook',
@@ -535,8 +541,12 @@ export const updateProfile = async (req, res) => {
     } = req.body
     const updateData = {}
 
+    const normalizedFullName = fullName !== undefined ? fullName.trim() : undefined
     if (name) updateData.name = name.trim()
-    if (fullName !== undefined) updateData.fullName = fullName.trim()
+    if (normalizedFullName !== undefined) {
+      updateData.fullName = normalizedFullName
+      if (!name && normalizedFullName) updateData.name = normalizedFullName
+    }
     if (gender !== undefined) updateData.gender = gender
     if (nationality !== undefined) updateData.nationality = nationality.trim()
     if (language !== undefined) updateData.language = language

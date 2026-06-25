@@ -42,9 +42,11 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       const identifier = String(values.phone || '').trim()
+      const fullName = String(values.fullName || '').trim()
       const { data } = await authService.sendRegisterOtp({
         provider: identifier.includes('@') ? 'email' : 'phone',
-        name: values.name,
+        fullName,
+        name: fullName,
         phone: identifier,
         password: values.password,
       })
@@ -168,7 +170,7 @@ export default function RegisterPage() {
 
             <Form.Item
               label={<span style={{ color: 'var(--gs-text)' }}>{t('register.fullname')}</span>}
-              name="name"
+              name="fullName"
               rules={[{ required: true, message: t('register.fullname_required') }]}
             >
               <Input size="large" style={{ background: 'var(--gs-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }} />

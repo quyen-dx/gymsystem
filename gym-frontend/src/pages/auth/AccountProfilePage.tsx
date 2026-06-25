@@ -535,12 +535,13 @@ function ProfileContent() {
 
   useEffect(() => {
     if (!user) return
+    const profileFullName = user.fullName || user.name || ''
     form.setFieldsValue({
-      name: user.name,
+      name: user.name || profileFullName,
       email: user.email || '',
       phone: user.phone || '',
       dateOfBirth: user.dateOfBirth ? user.dateOfBirth.slice(0, 10) : '',
-      fullName: user.fullName || '',
+      fullName: profileFullName,
       gender: user.gender || '',
       nationality: user.nationality || '',
       language: user.language || 'vi',
@@ -593,7 +594,7 @@ function ProfileContent() {
   const calcProfileCompletion = (u: typeof user) => {
     if (!u) return 0
     let score = 0
-    if (u.fullName) score += 10
+    if (u.fullName || u.name) score += 10
     if (u.phone) score += 10
     if (u.dateOfBirth) score += 10
     if (u.gender) score += 5
@@ -608,11 +609,12 @@ function ProfileContent() {
     setLoading(true)
     try {
       const payload: Record<string, any> = {}
-      payload.name = values.name || ''
+      const submittedFullName = values.fullName || values.name || ''
+      payload.name = values.name || submittedFullName
       if (values.email) payload.email = values.email
       if (values.phone) payload.phone = values.phone
       if (values.dateOfBirth) payload.dateOfBirth = values.dateOfBirth
-      payload.fullName = values.fullName || ''
+      payload.fullName = submittedFullName
       if (values.gender) payload.gender = values.gender
       if (values.nationality) payload.nationality = values.nationality
       if (values.language) payload.language = values.language
