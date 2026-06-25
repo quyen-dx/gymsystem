@@ -702,11 +702,11 @@ export default function DepositPage() {
                         <Button onClick={() => pendingPayment.manualUrl && window.open(pendingPayment.manualUrl, '_blank', 'noopener,noreferrer')}>
                           {t('deposit.open_bank')}
                         </Button>
-                        <Button loading={loading} onClick={handleOpenVnpayPage}>
-                          {t('deposit.open_vnpay')}
-                        </Button>
                       </>
                     )}
+                    <Button loading={loading} onClick={handleOpenVnpayPage}>
+                      {t('deposit.open_vnpay')}
+                    </Button>
                     <Button loading={loading} onClick={handlePayWithVnpay}>
                       {t('deposit.create_another')}
                     </Button>
