@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { bookingService } from '../../../services/bookingService'
 import type { Booking } from '../../../services/bookingService'
+import { membershipService } from '../../../services/membershipService'
 import { trainerService } from '../../../services/trainerService'
 import type { PT } from '../../../types/admin/trainer'
 
@@ -21,6 +23,7 @@ const SLOTS = [
 
 export default function BookingPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
 
   const [pts, setPts] = useState<PT[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
@@ -45,6 +48,8 @@ export default function BookingPage() {
   const [comment, setComment] = useState('')
 
   const [loading, setLoading] = useState(false)
+  const [membershipLoading, setMembershipLoading] = useState(true)
+  const [canBook, setCanBook] = useState(false)
   const [message, setMessage] = useState('')
   const [conflictMessage, setConflictMessage] = useState('')
   const [activeTab, setActiveTab] = useState<'create' | 'list'>('create')
@@ -241,8 +246,22 @@ export default function BookingPage() {
   }
 
   useEffect(() => {
-    loadPTs()
-    loadMyBookings()
+    setMembershipLoading(true)
+    membershipService.getMyMembership()
+      .then((res) => {
+        const membership = res.data.membership
+        const allowed = membership?.status === 'active' && Number(membership.remainingDays || 0) > 0
+        setCanBook(allowed)
+        if (allowed) {
+          loadPTs()
+          loadMyBookings()
+        }
+      })
+      .catch(() => {
+        setCanBook(false)
+        setMessage(t('booking.error_load_membership'))
+      })
+      .finally(() => setMembershipLoading(false))
   }, [])
 
   useEffect(() => {
@@ -258,6 +277,44 @@ export default function BookingPage() {
   return (
     <MemberLayout>
       <div className="member-page space-y-6">
+        {membershipLoading && (
+          <div className="rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-6 text-sm text-[var(--gs-text-muted)]">
+            {t('booking.checking_membership')}
+          </div>
+        )}
+
+        {!membershipLoading && !canBook && (
+          <div className="mx-auto max-w-2xl rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-8 text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-400">
+              {t('booking.membership_required_kicker')}
+            </p>
+            <h1 className="mt-3 text-2xl font-bold text-[var(--gs-text)]">
+              {t('booking.membership_required_title')}
+            </h1>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[var(--gs-text-muted)]">
+              {t('booking.membership_required_desc')}
+            </p>
+            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => navigate('/plans')}
+                className="rounded-xl bg-orange-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-orange-700"
+              >
+                {t('booking.view_plans')}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/my-membership')}
+                className="rounded-xl border border-[var(--gs-border)] px-5 py-3 text-sm font-semibold text-[var(--gs-text)] transition hover:bg-white/10"
+              >
+                {t('booking.view_my_membership')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!membershipLoading && canBook && (
+          <>
 
         {message && (
           <div className="rounded-2xl border border-[var(--gs-border)] bg-white/5 p-4 text-sm text-[var(--gs-text)]">
@@ -708,6 +765,8 @@ export default function BookingPage() {
               ))}
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
     </MemberLayout>

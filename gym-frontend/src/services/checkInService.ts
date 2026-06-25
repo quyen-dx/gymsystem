@@ -5,6 +5,8 @@ import type {
   HeatmapResponse,
   MemberStreakResponse,
   QRTokenResponse,
+  StaffCheckinHistoryResponse,
+  StaffVerifyCheckinResponse,
   TodayCheckinsResponse,
   VerifyQRResponse,
 } from '../types/admin/checkin'
@@ -18,6 +20,9 @@ export const checkInService = {
 
   confirmCheckin: (token: string) =>
     api.post<ConfirmCheckinResponse>('/checkin/confirm', { token }),
+
+  verifyStaffCheckin: (data: { token?: string; memberId?: string }) =>
+    api.post<StaffVerifyCheckinResponse>('/staff/checkin/verify', data),
 
   uploadSelfie: (checkinId: string, file: File) => {
     const formData = new FormData()
@@ -33,6 +38,16 @@ export const checkInService = {
 
   getTodayCheckins: () =>
     api.get<TodayCheckinsResponse>('/checkin/today'),
+
+  getStaffHistory: (params?: {
+    mode?: 'today' | 'yesterday' | 'last7days' | 'last30days' | 'all' | 'custom'
+    date?: string
+    startTime?: string
+    endTime?: string
+    keyword?: string
+    page?: number
+    limit?: number
+  }) => api.get<StaffCheckinHistoryResponse>('/staff/checkin/history', { params }),
 
   getStats: (period?: 'day' | 'week' | 'month') =>
     api.get<{ stats: CheckinStats }>('/checkin/stats', {

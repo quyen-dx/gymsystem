@@ -38,11 +38,26 @@ export const memberService = {
   toggleMemberStatus: (id: string) =>
     api.patch(`/members/${id}/toggle-status`),
 
-  registerPlan: (id: string, planId: string) =>
-    api.post(`/members/${id}/register-plan`, { planId }),
+  createOfflinePlanPayment: (id: string, data: { planId: string; method: 'CASH' | 'POS' | 'BANK_TRANSFER'; confirmed?: boolean; flow?: 'register' | 'renew' }) =>
+    api.post(`/members/${id}/offline-plan-payment`, data),
 
-  renewPlan: (id: string, planId: string, renewFrom?: 'today' | 'endDate') =>
-    api.post(`/members/${id}/renew-plan`, { planId, renewFrom }),
+  getOfflinePlanPayment: (paymentId: string) =>
+    api.get(`/members/plan-payments/${paymentId}`),
+
+  confirmOfflinePlanPayment: (paymentId: string) =>
+    api.post(`/members/plan-payments/${paymentId}/confirm`),
+
+  registerPlan: (id: string, planId: string, paymentId?: string) =>
+    api.post(`/members/${id}/register-plan`, { planId, paymentId }),
+
+  renewPlan: (id: string, planId: string, paymentIdOrRenewFrom?: string, renewFrom?: 'today' | 'endDate') => {
+    const legacyRenewFrom = paymentIdOrRenewFrom === 'today' || paymentIdOrRenewFrom === 'endDate'
+    return api.post(`/members/${id}/renew-plan`, {
+      planId,
+      paymentId: legacyRenewFrom ? undefined : paymentIdOrRenewFrom,
+      renewFrom: legacyRenewFrom ? paymentIdOrRenewFrom : renewFrom,
+    })
+  },
 
   batchRenew: (memberIds: string[], planId: string, renewFrom?: 'today' | 'endDate') =>
     api.post('/members/batch-renew', { memberIds, planId, renewFrom }),

@@ -65,7 +65,8 @@ import SellerShopPage from './pages/dashboard/seller/SellerShopPage'
 import StaffCheckinPage from './pages/dashboard/staff/StaffCheckinPage'
 import StaffMemberPage from './pages/dashboard/staff/StaffMemberPage'
 import StaffNotificationsPage from './pages/dashboard/staff/StaffNotificationsPage'
-import StaffOfflineRegisterPage from './pages/dashboard/staff/OfflineRegisterPage'
+import StaffMemberNewPage from './pages/dashboard/staff/StaffMemberNewPage'
+import StaffPlanCounterPage from './pages/dashboard/staff/StaffPlanCounterPage'
 import StaffPaymentsPage from './pages/dashboard/staff/StaffPaymentsPage'
 import AboutPage from './pages/public/AboutPage'
 import HelpCenterPage from './pages/public/HelpCenterPage'
@@ -74,6 +75,7 @@ import PartnershipPage from './pages/public/PartnershipPage'
 import PolicyPage from './pages/public/PolicyPage'
 import DepositScanPage from './pages/public/DepositScanPage'
 import BankTransferDemoPage from './pages/public/BankTransferDemoPage'
+import BankTransferPage from './pages/public/BankTransferPage'
 import AccountProfilePage from './pages/auth/AccountProfilePage'
 
 
@@ -247,6 +249,7 @@ function AppWithTheme() {
         <Route path="/maintenance" element={<MaintenanceRoute />} />
         <Route path="/deposit-scan" element={<DepositScanPage />} />
         <Route path="/bank-transfer-demo" element={<BankTransferDemoPage />} />
+        <Route path="/bank-transfer/:paymentId" element={<BankTransferPage />} />
         <Route path="/hop-tac" element={<PartnershipPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/help" element={<PrivateRoute><HelpCenterPage /></PrivateRoute>} />
@@ -288,8 +291,10 @@ function AppWithTheme() {
         <Route path="/staff" element={<Navigate to="/staff/checkin" replace />} />
         <Route path="/staff/checkin" element={<PrivateRoute feature="checkin.qrCheckinEnabled"><StaffCheckinPage /></PrivateRoute>} />
         <Route path="/staff/members" element={<PrivateRoute><StaffMemberPage /></PrivateRoute>} />
+        <Route path="/staff/members/new" element={<PrivateRoute><StaffMemberNewPage /></PrivateRoute>} />
+        <Route path="/staff/members/:memberId/register-plan" element={<PrivateRoute><StaffPlanCounterPage mode="register" /></PrivateRoute>} />
+        <Route path="/staff/members/:memberId/renew-plan" element={<PrivateRoute><StaffPlanCounterPage mode="renew" /></PrivateRoute>} />
         <Route path="/staff/payments" element={<PrivateRoute><StaffPaymentsPage /></PrivateRoute>} />
-        <Route path="/staff/payments/offline-register" element={<PrivateRoute><StaffOfflineRegisterPage /></PrivateRoute>} />
         <Route path="/staff/notifications" element={<PrivateRoute><StaffNotificationsPage /></PrivateRoute>} />
 
         {/* PT */}

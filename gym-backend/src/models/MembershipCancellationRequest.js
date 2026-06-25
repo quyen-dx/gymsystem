@@ -34,11 +34,48 @@ const cancellationRequestSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    totalDays: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
     usedPercent: {
       type: Number,
       required: true,
       min: 0,
       max: 100,
+    },
+    policyCode: {
+      type: String,
+      enum: ['REFUND_100', 'REFUND_50', 'NO_REFUND'],
+      required: true,
+    },
+    policyLabel: {
+      type: String,
+      trim: true,
+      required: true,
+    },
+    refundRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 1,
+    },
+    registeredAt: {
+      type: Date,
+      required: true,
+    },
+    requestedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    policyAccepted: {
+      type: Boolean,
+      default: false,
+    },
+    policyAcceptedAt: {
+      type: Date,
+      default: null,
     },
     refundEligible: {
       type: Boolean,
@@ -67,7 +104,7 @@ const cancellationRequestSchema = new mongoose.Schema(
     },
     refundMethod: {
       type: String,
-      enum: ['WALLET', 'BANK_TRANSFER', 'CASH_COUNTER', 'NONE'],
+      enum: ['WALLET', 'NONE'],
       default: 'NONE',
     },
     refundStatus: {
@@ -78,26 +115,6 @@ const cancellationRequestSchema = new mongoose.Schema(
     refundCompletedAt: {
       type: Date,
       default: null,
-    },
-    bankName: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-    bankAccountNumber: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-    bankAccountName: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-    bankNote: {
-      type: String,
-      trim: true,
-      default: '',
     },
     staffNote: {
       type: String,

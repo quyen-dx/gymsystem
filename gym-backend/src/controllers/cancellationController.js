@@ -9,6 +9,7 @@ import Transaction from '../models/Transaction.js';
 import { recordUserActivity } from '../services/userActivityService.js';
 import { invalidatePersonalContextCache } from '../services/conversationContextCache.js';
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js';
+import { assertPolicyConsent } from '../utils/policyConsent.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -23,31 +24,55 @@ const calculateUsedDays = (startDate, endDate) => {
   const start = new Date(startDate).getTime();
   const end = endOfDay(endDate).getTime();
   const totalDays = Math.max(1, Math.round((end - start) / MS_PER_DAY));
-  const usedDays = Math.max(0, Math.min(totalDays, Math.round((now - start) / MS_PER_DAY)));
+  const usedDays = Math.max(1, Math.min(totalDays, Math.ceil((now - start) / MS_PER_DAY)));
   const remainingDays = Math.max(0, Math.round((end - now) / MS_PER_DAY));
   const usedPercent = Math.round((usedDays / totalDays) * 100);
   return { usedDays, remainingDays, totalDays, usedPercent };
 };
 
-const calculateRefund = ({ price, usedPercent, remainingDays, totalDays }) => {
-  if (usedPercent >= 30) {
-    return { refundEligible: false, estimatedRefundAmount: 0 };
+const getRefundPolicy = ({ price, usedDays, usedPercent }) => {
+  if (usedPercent > 50) {
+    return {
+      refundEligible: false,
+      estimatedRefundAmount: 0,
+      policyCode: 'NO_REFUND',
+      policyLabel: 'Không hoàn',
+      refundRate: 0,
+    };
   }
-  const refundAmount = Math.floor((price * remainingDays) / totalDays);
-  return { refundEligible: true, estimatedRefundAmount: refundAmount };
+
+  if (usedDays <= 7) {
+    return {
+      refundEligible: true,
+      estimatedRefundAmount: Number(price || 0),
+      policyCode: 'REFUND_100',
+      policyLabel: 'Hoàn tối đa 100%',
+      refundRate: 1,
+    };
+  }
+
+  return {
+    refundEligible: true,
+    estimatedRefundAmount: Math.floor(Number(price || 0) * 0.5),
+    policyCode: 'REFUND_50',
+    policyLabel: 'Hoàn tối đa 50%',
+    refundRate: 0.5,
+  };
 };
 
 export const createCancellationRequest = async (req, res, next) => {
   try {
+    await assertPolicyConsent(req.user._id, ['refund', 'membership'])
+
     const memberId = req.user._id;
     const {
       reason,
-      refundMethod,
-      bankName,
-      bankAccountNumber,
-      bankAccountName,
-      bankNote,
+      policyAccepted,
     } = req.body;
+
+    if (!policyAccepted) {
+      return res.status(400).json({ message: 'Vui lòng xác nhận đã đọc chính sách hoàn tiền.' });
+    }
 
     const membership = await Membership.findOne({
       memberId,
@@ -78,59 +103,74 @@ export const createCancellationRequest = async (req, res, next) => {
       membership.endDate,
     );
 
-    const { refundEligible, estimatedRefundAmount } = calculateRefund({
+    const refundPolicy = getRefundPolicy({
       price: plan.price,
+      usedDays,
       usedPercent,
-      remainingDays,
-      totalDays,
     });
+    const { refundEligible, estimatedRefundAmount, policyCode, policyLabel, refundRate } = refundPolicy;
 
     let determinedRefundMethod = 'NONE';
     let determinedRefundStatus = 'NOT_APPLICABLE';
 
     if (refundEligible && estimatedRefundAmount > 0) {
-      if (refundMethod === 'WALLET') {
-        determinedRefundMethod = 'WALLET';
-        determinedRefundStatus = 'PENDING';
-      } else if (refundMethod === 'BANK_TRANSFER') {
-        determinedRefundMethod = 'BANK_TRANSFER';
-        determinedRefundStatus = 'PENDING';
-      } else {
-        determinedRefundMethod = 'CASH_COUNTER';
-        determinedRefundStatus = 'PENDING';
-      }
+      determinedRefundMethod = 'WALLET';
+      determinedRefundStatus = 'PENDING';
     }
 
-    const cancellationRequest = await MembershipCancellationRequest.create({
+    const session = await mongoose.startSession();
+    let cancellationRequest;
+
+    try {
+      session.startTransaction();
+
+      membership.status = 'pending_cancel';
+      await membership.save({ session });
+
+      [cancellationRequest] = await MembershipCancellationRequest.create([{
       memberId,
       membershipId: membership._id,
       planId: plan._id,
       reason: String(reason || '').trim(),
       usedDays,
       remainingDays,
+      totalDays,
       usedPercent,
+      policyCode,
+      policyLabel,
+      refundRate,
+      registeredAt: membership.startDate,
+      requestedAt: new Date(),
+      policyAccepted: true,
+      policyAcceptedAt: new Date(),
       refundEligible,
       estimatedRefundAmount,
       finalRefundAmount: 0,
       status: 'pending',
       refundMethod: determinedRefundMethod,
       refundStatus: determinedRefundStatus,
-      bankName: String(bankName || '').trim(),
-      bankAccountNumber: String(bankAccountNumber || '').trim(),
-      bankAccountName: String(bankAccountName || '').trim(),
-      bankNote: String(bankNote || '').trim(),
-    });
+      }], { session });
+
+      await session.commitTransaction();
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
 
     try {
       await recordUserActivity({
         userId: memberId,
         type: 'membership',
         title: 'Yêu cầu hủy gói tập',
-        description: `Yêu cầu hủy gói "${plan.nameVi || plan.nameEn}" - Đã sử dụng ${usedPercent}%`,
+        description: `Yêu cầu hủy gói "${plan.nameVi || plan.nameEn}" - ${policyLabel}`,
         metadata: {
           cancellationRequestId: cancellationRequest._id,
           membershipId: membership._id,
           planId: plan._id,
+          policyCode,
+          estimatedRefundAmount,
         },
       });
       invalidatePersonalContextCache(memberId);
@@ -269,12 +309,12 @@ export const approveCancellationRequest = async (req, res, next) => {
       return res.status(404).json({ message: 'Không tìm thấy gói tập.' });
     }
 
-    if (membership.status !== 'active') {
-      return res.status(400).json({ message: 'Gói tập không còn hoạt động.' });
+    if (membership.status !== 'pending_cancel') {
+      return res.status(400).json({ message: 'Gói tập không ở trạng thái chờ hủy.' });
     }
 
     const refundAmount = Number(finalRefundAmount) || 0;
-    const refundMethod = cancellationRequest.refundMethod;
+    const refundMethod = cancellationRequest.refundEligible && refundAmount > 0 ? 'WALLET' : 'NONE';
 
     const session = await mongoose.startSession();
     try {
@@ -294,9 +334,9 @@ export const approveCancellationRequest = async (req, res, next) => {
       cancellationRequest.handledAt = new Date();
 
       if (refundMethod === 'WALLET' && refundAmount > 0) {
-        const wallet = await Wallet.findOne({ userId: cancellationRequest.memberId });
+        let wallet = await Wallet.findOne({ userId: cancellationRequest.memberId }).session(session);
         if (!wallet) {
-          throw Object.assign(new Error('Hội viên chưa có ví GymPro.'), { statusCode: 400 });
+          [wallet] = await Wallet.create([{ userId: cancellationRequest.memberId, balance: 0 }], { session });
         }
 
         const balanceBefore = Number(wallet.balance || 0);
@@ -307,7 +347,7 @@ export const approveCancellationRequest = async (req, res, next) => {
           [{
             userId: cancellationRequest.memberId,
             walletId: wallet._id,
-            type: 'refund',
+            type: 'REFUND_TO_WALLET',
             provider: 'wallet',
             source: 'membership',
             description: `Hoàn tiền hủy gói "${cancellationRequest.planId?.nameVi || cancellationRequest.planId?.nameEn}"`,
@@ -317,11 +357,14 @@ export const approveCancellationRequest = async (req, res, next) => {
             referenceId: cancellationRequest._id.toString(),
             status: 'completed',
             completedAt: new Date(),
-            metadata: {
-              cancellationRequestId: cancellationRequest._id,
-              membershipId: membership._id,
-              planId: cancellationRequest.planId,
-            },
+        metadata: {
+          cancellationRequestId: cancellationRequest._id,
+          membershipId: membership._id,
+          planId: cancellationRequest.planId,
+          policyCode: cancellationRequest.policyCode,
+          estimatedRefundAmount: cancellationRequest.estimatedRefundAmount,
+          finalRefundAmount: refundAmount,
+        },
             idempotencyKey: `cancel_refund_${cancellationRequest._id}`,
           }],
           { session },
@@ -329,8 +372,6 @@ export const approveCancellationRequest = async (req, res, next) => {
 
         cancellationRequest.refundStatus = 'COMPLETED';
         cancellationRequest.refundCompletedAt = new Date();
-      } else if (refundMethod === 'BANK_TRANSFER' || refundMethod === 'CASH_COUNTER') {
-        cancellationRequest.refundStatus = 'PENDING';
       } else {
         cancellationRequest.refundStatus = 'NOT_APPLICABLE';
       }
@@ -346,15 +387,17 @@ export const approveCancellationRequest = async (req, res, next) => {
             amount: refundAmount,
             currency: 'vnd',
             status: 'REFUNDED',
-            paymentMethod: refundMethod === 'WALLET' ? 'WALLET' : 'REFUND',
+            paymentMethod: refundMethod,
             source: 'OFFLINE',
             paidAt: new Date(),
             metadata: {
               cancellationRequestId: cancellationRequest._id,
-              refundNote: staffNote,
-              refundType: 'membership_cancellation',
-              refundMethod,
-            },
+          refundNote: staffNote,
+          refundType: 'membership_cancellation',
+          refundMethod,
+          policyCode: cancellationRequest.policyCode,
+          estimatedRefundAmount: cancellationRequest.estimatedRefundAmount,
+        },
           }],
           { session },
         );
@@ -379,6 +422,7 @@ export const approveCancellationRequest = async (req, res, next) => {
           membershipId: membership._id,
           handledBy: staffId,
           finalRefundAmount: refundAmount,
+          policyCode: cancellationRequest.policyCode,
         },
       });
       invalidatePersonalContextCache(cancellationRequest.memberId);
@@ -421,6 +465,12 @@ export const rejectCancellationRequest = async (req, res, next) => {
     cancellationRequest.handledAt = new Date();
     await cancellationRequest.save();
 
+    const membership = await Membership.findById(cancellationRequest.membershipId);
+    if (membership?.status === 'pending_cancel') {
+      membership.status = new Date(membership.endDate) >= new Date() ? 'active' : 'expired';
+      await membership.save();
+    }
+
     try {
       await recordUserActivity({
         userId: cancellationRequest.memberId,
@@ -441,64 +491,6 @@ export const rejectCancellationRequest = async (req, res, next) => {
 
     return res.json({
       message: 'Đã từ chối yêu cầu hủy gói. Gói tập của hội viên vẫn hoạt động.',
-      cancellationRequest,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const markRefundCompleted = async (req, res, next) => {
-  try {
-    const cancellationId = req.params.id;
-    const staffId = req.user._id;
-    const { staffNote } = req.body;
-
-    const cancellationRequest = await MembershipCancellationRequest.findById(cancellationId);
-
-    if (!cancellationRequest) {
-      return res.status(404).json({ message: 'Không tìm thấy yêu cầu hủy.' });
-    }
-
-    if (cancellationRequest.status !== 'approved') {
-      return res.status(400).json({ message: 'Yêu cầu hủy chưa được duyệt.' });
-    }
-
-    if (cancellationRequest.refundStatus === 'COMPLETED') {
-      return res.status(400).json({ message: 'Hoàn tiền đã được hoàn tất trước đó.' });
-    }
-
-    if (cancellationRequest.refundMethod !== 'BANK_TRANSFER' && cancellationRequest.refundMethod !== 'CASH_COUNTER') {
-      return res.status(400).json({ message: 'Phương thức hoàn tiền không hợp lệ cho thao tác này.' });
-    }
-
-    cancellationRequest.refundStatus = 'COMPLETED';
-    cancellationRequest.refundCompletedAt = new Date();
-    if (staffNote) {
-      cancellationRequest.staffNote = String(staffNote || '').trim();
-    }
-    await cancellationRequest.save();
-
-    try {
-      await recordUserActivity({
-        userId: cancellationRequest.memberId,
-        type: 'membership',
-        title: 'Hoàn tiền hủy gói tập',
-        description: `Đã hoàn tất hoàn tiền cho yêu cầu hủy gói tập.`,
-        metadata: {
-          cancellationRequestId: cancellationRequest._id,
-          membershipId: cancellationRequest.membershipId,
-          handledBy: staffId,
-          refundMethod: cancellationRequest.refundMethod,
-        },
-      });
-      invalidatePersonalContextCache(cancellationRequest.memberId);
-    } catch (activityError) {
-      console.error('Không thể ghi hoạt động hoàn tiền:', activityError.message);
-    }
-
-    return res.json({
-      message: 'Đã đánh dấu hoàn tiền thành công.',
       cancellationRequest,
     });
   } catch (error) {

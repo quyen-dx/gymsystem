@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Checkbox, Select, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Select, Table, Tag, Tooltip, Typography, message } from 'antd'
 import { CardCvcElement, CardExpiryElement, CardNumberElement, Elements, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import i18n from '../../../i18n'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useWallet } from '../../../context/WalletProvider'
 import { createManualQrDeposit, createStripePaymentIntent, createVnpayDeposit, getDepositPayments, getStripeExchangeRate } from '../../../services/walletService'
+import PolicyConsentCard from '../../../components/wallet/PolicyConsentCard'
+import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 import { PRESET_AMOUNTS } from '../../../types/member/wallet'
 
 const { Text } = Typography
@@ -20,9 +22,6 @@ const DEPOSIT_BONUS_TIERS = [
 ]
 const USD_PRESET_AMOUNTS = [5, 10, 20, 50]
 const FALLBACK_USD_TO_VND_RATE = 25000
-const DEPOSIT_POLICY_DISMISSED_UNTIL_KEY = 'gympro.depositPolicy.dismissedUntil'
-const DEPOSIT_POLICY_REMIND_MINUTES = 10
-
 type DepositPayment = {
   _id: string
   txnRef?: string
@@ -74,12 +73,6 @@ function normalizeStatus(status?: string) {
   return String(status || '').toUpperCase()
 }
 
-function getEndOfTodayTimestamp() {
-  const endOfToday = new Date()
-  endOfToday.setHours(23, 59, 59, 999)
-  return endOfToday.getTime()
-}
-
 function StripeCardDepositForm({
   amount,
   amountError,
@@ -87,6 +80,7 @@ function StripeCardDepositForm({
   disabled = false,
   exchangeRate,
   onPaid,
+  onBeforePay,
 }: {
   amount: number
   amountError: string | null
@@ -94,6 +88,7 @@ function StripeCardDepositForm({
   disabled?: boolean
   exchangeRate?: number | null
   onPaid: () => void
+  onBeforePay?: () => Promise<void>
 }) {
   const { t } = useTranslation()
   const stripe = useStripe()
@@ -108,6 +103,7 @@ function StripeCardDepositForm({
 
     setPaying(true)
     try {
+      if (onBeforePay) await onBeforePay()
       const res = await createStripePaymentIntent({ amount })
       const clientSecret = res.data.clientSecret
       const result = await stripe.confirmCardPayment(clientSecret, {
@@ -224,7 +220,6 @@ function StripeCardDepositForm({
 
 export default function DepositPage() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { wallet, refreshWallet } = useWallet()
   const isEnglish = i18n.language.startsWith('en')
@@ -239,9 +234,9 @@ export default function DepositPage() {
   const [pendingPayment, setPendingPayment] = useState<PendingQrPayment | null>(null)
   const [loading, setLoading] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [policyModalOpen, setPolicyModalOpen] = useState(false)
-  const [policyAccepted, setPolicyAccepted] = useState(false)
-  const depositLocked = policyModalOpen
+  const [tickedPolicies, setTickedPolicies] = useState<Record<string, { type: string; version: string }> | null>(null)
+  const [consentSubmitted, setConsentSubmitted] = useState(false)
+  const consentReady = tickedPolicies !== null && Object.keys(tickedPolicies).length > 0
 
   const cardUsesUsd = paymentMethod === 'card' && isEnglish
   const effectiveAmount = useMemo(() => {
@@ -274,14 +269,6 @@ export default function DepositPage() {
       .catch(() => message.error(t('deposit.msg_load_history_failed')))
       .finally(() => setHistoryLoading(false))
   }
-
-  useEffect(() => {
-    const dismissedUntil = Number(window.localStorage.getItem(DEPOSIT_POLICY_DISMISSED_UNTIL_KEY) || 0)
-    if (!dismissedUntil || dismissedUntil <= Date.now()) {
-      setPolicyAccepted(false)
-      setPolicyModalOpen(true)
-    }
-  }, [])
 
   useEffect(() => {
     refreshPayments()
@@ -391,9 +378,19 @@ export default function DepositPage() {
   }
 
   const handlePayWithVnpay = async () => {
-    if (depositLocked || amountError) return
+    if (!consentReady || amountError) return
     setLoading(true)
     try {
+      if (!consentSubmitted) {
+        await acceptMultiplePolicyConsent(
+          Object.values(tickedPolicies!).map((p) => ({
+            policyType: p.type,
+            policyVersion: p.version,
+            context: 'deposit',
+          })),
+        )
+        setConsentSubmitted(true)
+      }
       const manualRes = await createManualQrDeposit({ amount: effectiveAmount })
       const manualPayment = manualRes.data?.data
       if (!manualPayment?.qrDataUrl || !manualPayment?.manualUrl) throw new Error('Missing manual QR data')
@@ -431,9 +428,19 @@ export default function DepositPage() {
 
   const handleOpenVnpayPage = async () => {
     const targetAmount = pendingPayment?.amount || effectiveAmount
-    if (depositLocked || !targetAmount || amountError) return
+    if (!consentReady || !targetAmount || amountError) return
     setLoading(true)
     try {
+      if (!consentSubmitted) {
+        await acceptMultiplePolicyConsent(
+          Object.values(tickedPolicies!).map((p) => ({
+            policyType: p.type,
+            policyVersion: p.version,
+            context: 'deposit',
+          })),
+        )
+        setConsentSubmitted(true)
+      }
       const res = await createVnpayDeposit({ amount: targetAmount })
       const paymentUrl = res.data?.data?.paymentUrl
       if (!paymentUrl) throw new Error('Missing VNPAY payment URL')
@@ -446,76 +453,10 @@ export default function DepositPage() {
     }
   }
 
-  const closePolicyModal = (dismissUntil?: number) => {
-    if (!policyAccepted) return
-    if (dismissUntil) {
-      window.localStorage.setItem(DEPOSIT_POLICY_DISMISSED_UNTIL_KEY, String(dismissUntil))
-    } else {
-      window.localStorage.removeItem(DEPOSIT_POLICY_DISMISSED_UNTIL_KEY)
-    }
-    setPolicyModalOpen(false)
-  }
-
   return (
     <MemberLayout>
       <div className="member-page">
-        {policyModalOpen && (
-          <div className="pointer-events-none fixed inset-0 z-30 grid place-items-center bg-black/35 px-4 py-6 backdrop-blur-sm">
-            <Card className="pointer-events-auto w-full max-w-2xl shadow-2xl">
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-lg font-bold text-[var(--theme-text)]">{t('deposit.policy.title')}</h2>
-                  <p className="mt-2 text-sm leading-6 text-[var(--theme-muted)]">{t('deposit.policy.description')}</p>
-                </div>
-                <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4">
-                  <ul className="m-0 space-y-2 pl-5 text-sm leading-6 text-[var(--theme-text)]">
-                    <li>{t('deposit.policy.item_correct_amount')}</li>
-                    <li>{t('deposit.policy.item_correct_content')}</li>
-                    <li>{t('deposit.policy.item_processing_time')}</li>
-                    <li>
-                      {t('deposit.policy.item_refund')}{' '}
-                      <button
-                        type="button"
-                        className="font-medium text-[var(--theme-accent)] transition-colors hover:text-[var(--theme-accent-hover)]"
-                        onClick={() => navigate('/policies')}
-                      >
-                        {t('deposit.policy.view_policy')}
-                      </button>
-                    </li>
-                    <li>
-                      {t('deposit.policy.item_support')}{' '}
-                      <button
-                        type="button"
-                        className="font-medium text-[var(--theme-accent)] transition-colors hover:text-[var(--theme-accent-hover)]"
-                        onClick={() => navigate('/help')}
-                      >
-                        {t('deposit.policy.view_help')}
-                      </button>
-                    </li>
-                  </ul>
-                </div>
-                <Checkbox checked={policyAccepted} onChange={(event) => setPolicyAccepted(event.target.checked)}>
-                  <span className="text-sm text-[var(--theme-text)]">{t('deposit.policy.accept')}</span>
-                </Checkbox>
-                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                  <Button
-                    disabled={!policyAccepted}
-                    onClick={() => closePolicyModal(Date.now() + DEPOSIT_POLICY_REMIND_MINUTES * 60 * 1000)}
-                  >
-                    {t('deposit.policy.remind_later')}
-                  </Button>
-                  <Button disabled={!policyAccepted} onClick={() => closePolicyModal(getEndOfTodayTimestamp())}>
-                    {t('deposit.policy.hide_today')}
-                  </Button>
-                  <Button type="primary" disabled={!policyAccepted} onClick={() => closePolicyModal()}>
-                    {t('deposit.policy.confirm')}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          </div>
-        )}
-        <div className={`mx-auto max-w-5xl ${depositLocked ? 'pointer-events-none select-none opacity-60' : ''}`}>
+        <div className="mx-auto max-w-5xl">
           <div className="mb-6">
             <h1 className="text-xl font-bold text-[var(--theme-text)]">{t('deposit.title')}</h1>
             {wallet && (
@@ -534,6 +475,8 @@ export default function DepositPage() {
                     onClick={() => {
                       setPaymentMethod('vnpay')
                       setPendingPayment(null)
+                      setConsentSubmitted(false)
+                      setTickedPolicies(null)
                     }}
                     className={`rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                       paymentMethod === 'vnpay'
@@ -547,6 +490,8 @@ export default function DepositPage() {
                     onClick={() => {
                       setPaymentMethod('card')
                       setPendingPayment(null)
+                      setConsentSubmitted(false)
+                      setTickedPolicies(null)
                     }}
                     className={`rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                       paymentMethod === 'card'
@@ -641,26 +586,51 @@ export default function DepositPage() {
                   {amountError && <p className="text-xs text-[#ef4444]">{amountError}</p>}
                 </div>
 
+                <PolicyConsentCard
+                  policies={[
+                    { type: 'payment', label: t('deposit.policy.link_payment') || 'Chính sách thanh toán' },
+                    { type: 'refund', label: t('deposit.policy.link_refund') || 'Chính sách hoàn tiền' },
+                  ]}
+                  context="deposit"
+                  onTickedChange={(ticked) => {
+                    setTickedPolicies(Object.keys(ticked).length > 0 ? ticked : null)
+                  }}
+                />
+
                 {paymentMethod === 'vnpay' ? (
-                  <Button
-                    type="primary"
-                    size="large"
-                    block
-                    loading={loading}
-                    disabled={depositLocked || !!amountError}
-                    onClick={handlePayWithVnpay}
-                    className="!h-11 !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
-                  >
-                    {t('deposit.create_qr')}
-                  </Button>
+                  <Tooltip title={!consentReady ? (t('deposit.policy.tooltip_accept_required')) : undefined}>
+                    <Button
+                      type="primary"
+                      size="large"
+                      block
+                      loading={loading}
+                      disabled={!consentReady || !!amountError}
+                      onClick={handlePayWithVnpay}
+                      className="h-11 bg-[var(--theme-button-bg)] text-[var(--theme-button-text)] font-semibold shadow-none hover:bg-[var(--theme-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {t('deposit.create_qr')}
+                    </Button>
+                  </Tooltip>
                 ) : (
                   <Elements stripe={stripePromise}>
                     <StripeCardDepositForm
                       amount={effectiveAmount}
                       amountError={amountError}
-                      disabled={depositLocked}
+                      disabled={!consentReady}
                       displayAmount={cardUsesUsd ? formatUSD(cardUsdAmount) : formatVND(effectiveAmount)}
                       exchangeRate={cardUsesUsd ? exchangeRate : null}
+                      onBeforePay={async () => {
+                        if (!consentSubmitted) {
+                          await acceptMultiplePolicyConsent(
+                            Object.values(tickedPolicies!).map((p) => ({
+                              policyType: p.type,
+                              policyVersion: p.version,
+                              context: 'deposit',
+                            })),
+                          )
+                          setConsentSubmitted(true)
+                        }
+                      }}
                       onPaid={() => {
                         refreshWallet()
                         refreshPayments()

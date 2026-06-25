@@ -1,5 +1,5 @@
 import { CalendarOutlined, CheckCircleFilled, CloseCircleOutlined, ExclamationCircleOutlined, InfoCircleOutlined, SettingOutlined } from '@ant-design/icons'
-import { Button, Card, Descriptions, Empty, Progress, Spin, Switch, Tag, message } from 'antd'
+import { Button, Card, Checkbox, Descriptions, Empty, Modal, Progress, Spin, Switch, Tag, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -20,6 +20,8 @@ export default function MyMembershipPage() {
   const [membership, setMembership] = useState<MyMembership | null>(null)
   const [loading, setLoading] = useState(true)
   const [togglingAutoRenew, setTogglingAutoRenew] = useState(false)
+  const [autoRenewModalOpen, setAutoRenewModalOpen] = useState(false)
+  const [autoRenewConsent, setAutoRenewConsent] = useState(false)
   const [pendingCancel, setPendingCancel] = useState<CancellationRequest | null>(null)
   const [lastCancelRequest, setLastCancelRequest] = useState<CancellationRequest | null>(null)
 
@@ -60,15 +62,45 @@ export default function MyMembershipPage() {
     return Math.max(0, Math.min(100, Math.round((membership.remainingDays / duration) * 100)))
   }, [membership, isCancelled])
 
-  const handleToggleAutoRenew = (_checked: boolean) => {
+  const submitToggleAutoRenew = () => {
     setTogglingAutoRenew(true)
-    membershipService.toggleAutoRenew()
+    return membershipService.toggleAutoRenew()
       .then((res) => {
-        message.success(res.data.message)
+        message.success(res.data.autoRenew
+          ? t('member_membership.toast_auto_renew_enabled')
+          : t('member_membership.toast_auto_renew_disabled'))
         setMembership((prev) => prev ? { ...prev, autoRenew: res.data.autoRenew } : prev)
+        return true
       })
-      .catch(() => message.error(t('member_membership.toast_toggle_auto_renew_error')))
+      .catch(() => {
+        message.error(t('member_membership.toast_toggle_auto_renew_error'))
+        return false
+      })
       .finally(() => setTogglingAutoRenew(false))
+  }
+
+  const handleToggleAutoRenew = (checked: boolean) => {
+    if (checked) {
+      setAutoRenewConsent(false)
+      setAutoRenewModalOpen(true)
+      return
+    }
+
+    Modal.confirm({
+      title: t('member_membership.auto_renew_disable_confirm_title'),
+      okText: t('member_membership.auto_renew_disable_confirm_ok'),
+      cancelText: t('member_membership.auto_renew_disable_confirm_cancel'),
+      okButtonProps: { danger: true },
+      onOk: submitToggleAutoRenew,
+    })
+  }
+
+  const handleEnableAutoRenew = async () => {
+    const success = await submitToggleAutoRenew()
+    if (success) {
+      setAutoRenewModalOpen(false)
+      setAutoRenewConsent(false)
+    }
   }
 
   if (loading) {
@@ -82,7 +114,7 @@ export default function MyMembershipPage() {
   if (!membership) {
     return (
       <MemberLayout>
-        <div className="mx-auto w-full max-w-5xl px-4 py-8">
+        <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">{t('member_membership.page_subtitle')}</p>
@@ -102,7 +134,7 @@ export default function MyMembershipPage() {
 
   return (
     <MemberLayout>
-      <div className="mx-auto w-full max-w-5xl px-4 py-8">
+      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">{t('member_membership.page_subtitle')}</p>
@@ -131,7 +163,7 @@ export default function MyMembershipPage() {
               </div>
             )}
 
-            <Descriptions bordered column={{ xs: 1, sm: 2 }}>
+            <Descriptions bordered column={{ xs: 1, sm: 2, lg: 3 }}>
               <Descriptions.Item label={t('member_membership.label_plan_name')}>{planName}</Descriptions.Item>
               <Descriptions.Item label={t('member_membership.label_price')}>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
               <Descriptions.Item label={t('member_membership.label_start_date')}>{formatDate(membership.startDate)}</Descriptions.Item>
@@ -172,8 +204,6 @@ export default function MyMembershipPage() {
                     <div className="mt-0.5 text-base font-semibold text-[var(--gs-text)]">
                       {pendingCancel.refundEligible ? ({
                         WALLET: t('member_membership.refund_method_wallet'),
-                        BANK_TRANSFER: t('member_membership.refund_method_bank'),
-                        CASH_COUNTER: t('member_membership.refund_method_cash'),
                         NONE: t('member_membership.refund_method_none'),
                       }[pendingCancel.refundMethod] || pendingCancel.refundMethod) : t('member_membership.cancel_not_eligible')}
                     </div>
@@ -211,7 +241,7 @@ export default function MyMembershipPage() {
               </div>
             </div>
 
-            <Descriptions bordered column={{ xs: 1, sm: 2 }}>
+            <Descriptions bordered column={{ xs: 1, sm: 2, lg: 3 }}>
               <Descriptions.Item label={t('member_membership.label_plan_name')}>{planName}</Descriptions.Item>
               <Descriptions.Item label={t('member_membership.label_price')}>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
               <Descriptions.Item label={t('member_membership.label_start_date')}>{formatDate(membership.startDate)}</Descriptions.Item>
@@ -247,12 +277,12 @@ export default function MyMembershipPage() {
 
             {membership?.status === 'active' && membership.remainingDays > 0 && (
               <div className="mb-5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <SettingOutlined className="text-lg text-[var(--gs-text-soft)]" />
-                    <div>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <SettingOutlined className="shrink-0 text-lg text-[var(--gs-text-soft)]" />
+                    <div className="min-w-0">
                       <div className="text-sm font-medium text-[var(--gs-text)]">{t('member_membership.auto_renew_label')}</div>
-                      <div className="text-xs text-[var(--gs-text-muted)]">{t(membership.autoRenew ? 'member_membership.auto_renew_enabled_desc' : 'member_membership.auto_renew_disabled_desc', { price: formatMoney(membership.price || membership.plan?.price) })}</div>
+                      <div className="text-xs text-[var(--gs-text-muted)]">{t('member_membership.auto_renew_short_desc')}</div>
                     </div>
                   </div>
                   <Switch
@@ -266,7 +296,7 @@ export default function MyMembershipPage() {
 
             <Progress percent={progressPercent} status={membership.displayStatus === 'expired' ? 'exception' : 'active'} />
 
-            <Descriptions bordered column={{ xs: 1, sm: 2 }} className="mt-6">
+            <Descriptions bordered column={{ xs: 1, sm: 2, lg: 3 }} className="mt-6">
               <Descriptions.Item label={t('member_membership.label_plan_name')}>{planName}</Descriptions.Item>
               <Descriptions.Item label={t('member_membership.label_price')}>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
               <Descriptions.Item label={t('member_membership.label_start_date')}>{formatDate(membership.startDate)}</Descriptions.Item>
@@ -277,6 +307,53 @@ export default function MyMembershipPage() {
           </Card>
         )}
       </div>
+
+      <Modal
+        title={
+          <span className="inline-flex items-center gap-2">
+            <SettingOutlined />
+            {t('member_membership.auto_renew_label')}
+          </span>
+        }
+        open={autoRenewModalOpen}
+        onCancel={() => {
+          setAutoRenewModalOpen(false)
+          setAutoRenewConsent(false)
+        }}
+        footer={[
+          <Button
+            key="cancel"
+            onClick={() => {
+              setAutoRenewModalOpen(false)
+              setAutoRenewConsent(false)
+            }}
+          >
+            {t('common.cancel')}
+          </Button>,
+          <Button
+            key="enable"
+            type="primary"
+            disabled={!autoRenewConsent}
+            loading={togglingAutoRenew}
+            onClick={handleEnableAutoRenew}
+            className={!autoRenewConsent ? '!opacity-45 !brightness-75 !cursor-not-allowed' : undefined}
+          >
+            {t('member_membership.auto_renew_enable_button')}
+          </Button>,
+        ]}
+      >
+        <div className="space-y-4">
+          <div className="whitespace-pre-line text-sm leading-6 text-[var(--gs-text)]">
+            {t('member_membership.auto_renew_policy_text')}
+          </div>
+          <Checkbox checked={autoRenewConsent} onChange={(event) => setAutoRenewConsent(event.target.checked)}>
+            <span>{t('member_membership.auto_renew_consent')}</span>
+            <Button type="link" href="/policies" className="!h-auto !p-0 !pl-1 !text-[var(--theme-accent)] hover:!text-[var(--theme-accent-hover)]">
+              {t('member_membership.auto_renew_policy_view')}
+            </Button>
+          </Checkbox>
+        </div>
+      </Modal>
     </MemberLayout>
   )
 }

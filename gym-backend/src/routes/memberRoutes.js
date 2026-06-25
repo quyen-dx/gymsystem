@@ -2,9 +2,12 @@ import express from 'express'
 import { upload } from '../config/cloudinary.js'
 import {
   batchRenewMembers,
+  confirmOfflinePlanPayment,
   createMember,
   createMemberAndRegister,
+  createOfflinePlanPayment,
   getExpiringMembers,
+  getOfflinePlanPayment,
   getMemberById,
   getMemberHealthScore,
   getMemberStats,
@@ -21,6 +24,9 @@ import { adminOrStaff, protect } from '../middlewares/authMiddleware.js'
 
 const router = express.Router()
 
+router.get('/plan-payments/:paymentId', getOfflinePlanPayment)
+router.post('/plan-payments/:paymentId/confirm', confirmOfflinePlanPayment)
+
 router.use(protect)
 
 router.get('/', adminOrStaff, getMembers)
@@ -36,6 +42,7 @@ router.post('/', adminOrStaff, createMember)
 router.patch('/:id', adminOrStaff, upload.fields([{ name: 'avatar', maxCount: 1 }]), updateMember)
 router.patch('/:id/toggle-status', adminOrStaff, toggleMemberStatus)
 
+router.post('/:id/offline-plan-payment', adminOrStaff, createOfflinePlanPayment)
 router.post('/:id/register-plan', adminOrStaff, registerPlanForMember)
 router.post('/:id/renew-plan', adminOrStaff, renewPlanForMember)
 router.post('/batch-renew', adminOrStaff, batchRenewMembers)

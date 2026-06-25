@@ -4,10 +4,12 @@ import Stripe from 'stripe'
 import { buildClientUrl, getBackendUrl } from '../config/appUrls.js'
 import Payment from '../models/Payment.js'
 import Transaction from '../models/Transaction.js'
+import User from '../models/User.js'
 import Wallet from '../models/Wallet.js'
 import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, transferWalletBalance } from '../services/walletService.js'
 import { createVnpayPaymentUrl, verifyVnpayReturn } from '../services/vnpayService.js'
 import AppError from '../utils/appError.js'
+import { assertPolicyConsent } from '../utils/policyConsent.js'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
 const FALLBACK_USD_TO_VND_RATE = 25000
@@ -334,6 +336,8 @@ export const simulateManualQrPayment = async (req, res, next) => {
 
 export const createManualQrDepositPayment = async (req, res, next) => {
     try {
+        await assertPolicyConsent(req.user._id, ['payment', 'refund'])
+
         const amount = Number(req.body.amount)
         if (!amount || Number.isNaN(amount) || amount < 10000 || amount > 100000000) {
             throw new AppError('Số tiền không hợp lệ (10.000đ - 100.000.000đ)', 400)
@@ -386,6 +390,8 @@ export const createManualQrDepositPayment = async (req, res, next) => {
 
 export const createVnpayDepositPayment = async (req, res, next) => {
     try {
+        await assertPolicyConsent(req.user._id, ['payment', 'refund'])
+
         const amount = Number(req.body.amount)
         if (!amount || Number.isNaN(amount) || amount < 10000 || amount > 100000000) {
             throw new AppError('Số tiền không hợp lệ (10.000đ - 100.000.000đ)', 400)
@@ -729,6 +735,92 @@ export const cancelDeposit = async (req, res, next) => {
         await transaction.save()
 
         return res.json({ success: true })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const staffListAllTransactions = async (req, res, next) => {
+    try {
+        const { page = 1, limit = 50, status, type, search } = req.query
+        const filter = {}
+
+        if (status) filter.status = status
+        if (type) filter.type = type
+        if (search) {
+            const users = await User.find({
+                $or: [
+                    { memberCode: { $regex: search, $options: 'i' } },
+                    { fullName: { $regex: search, $options: 'i' } },
+                    { name: { $regex: search, $options: 'i' } },
+                ],
+            }).select('_id').lean()
+            filter.userId = { $in: users.map((u) => u._id) }
+        }
+
+        const total = await Transaction.countDocuments(filter)
+        const transactions = await Transaction.find(filter)
+            .sort({ createdAt: -1 })
+            .skip((Number(page) - 1) * Number(limit))
+            .limit(Number(limit))
+            .lean()
+
+        const userIds = [...new Set(transactions.map((t) => t.userId?.toString()))]
+        const users = await User.find({ _id: { $in: userIds } })
+            .select('name fullName memberCode memberNumber email phone')
+            .lean()
+        const userMap = {}
+        for (const u of users) {
+            userMap[u._id.toString()] = { name: u.fullName || u.name, memberCode: u.memberCode, email: u.email, phone: u.phone }
+        }
+
+        const enriched = transactions.map((t) => ({
+            ...t,
+            userInfo: userMap[t.userId?.toString()] || null,
+        }))
+
+        return res.json({
+            success: true,
+            data: {
+                transactions: enriched,
+                pagination: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) },
+            },
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const staffListAllPayments = async (req, res, next) => {
+    try {
+        const { page = 1, limit = 50, status, search } = req.query
+        const filter = {}
+
+        if (status) filter.status = status
+        if (search) {
+            const users = await User.find({
+                $or: [
+                    { memberCode: { $regex: search, $options: 'i' } },
+                    { fullName: { $regex: search, $options: 'i' } },
+                    { name: { $regex: search, $options: 'i' } },
+                ],
+            }).select('_id').lean()
+            filter.userId = { $in: users.map((u) => u._id) }
+        }
+
+        const total = await Payment.countDocuments(filter)
+        const payments = await Payment.find(filter)
+            .sort({ createdAt: -1 })
+            .skip((Number(page) - 1) * Number(limit))
+            .limit(Number(limit))
+            .populate('userId', 'name fullName email phone memberCode memberNumber')
+            .populate('planId', 'nameVi nameEn price')
+            .lean()
+
+        return res.json({
+            success: true,
+            data: { payments, pagination: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) } },
+        })
     } catch (error) {
         next(error)
     }

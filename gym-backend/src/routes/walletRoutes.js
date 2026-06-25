@@ -1,6 +1,6 @@
 import express from 'express'
-import { cancelDeposit, confirmDeposit, createDepositTransaction, createManualQrDepositPayment, createStripePaymentIntent, createVnpayDepositPayment, fakeDeposit, getManualQrDepositInfo, getMyDepositPayments, getMyWallet, getMyWalletTransactions, getStripeExchangeRate, handleManualQrScan, handleVnpayReturn, simulateManualQrPayment, transferWallet } from '../controllers/walletController.js'
-import { protect } from '../middlewares/authMiddleware.js'
+import { cancelDeposit, confirmDeposit, createDepositTransaction, createManualQrDepositPayment, createStripePaymentIntent, createVnpayDepositPayment, fakeDeposit, getManualQrDepositInfo, getMyDepositPayments, getMyWallet, getMyWalletTransactions, getStripeExchangeRate, handleManualQrScan, handleVnpayReturn, simulateManualQrPayment, staffListAllPayments, staffListAllTransactions, transferWallet } from '../controllers/walletController.js'
+import { protect, adminOrStaff } from '../middlewares/authMiddleware.js'
 import { requireFeature } from '../middlewares/systemSettingsMiddleware.js'
 
 const router = express.Router()
@@ -23,5 +23,8 @@ router.post('/deposit/confirm', requireFeature('billing.qrPaymentEnabled'), conf
 router.patch('/deposit/:transactionId/cancel', requireFeature('billing.qrPaymentEnabled'), cancelDeposit)
 router.post('/fake-deposit', requireFeature('billing.qrPaymentEnabled'), fakeDeposit)
 router.post('/transfer', transferWallet)
+
+router.get('/staff/transactions', adminOrStaff, staffListAllTransactions)
+router.get('/staff/payments', adminOrStaff, staffListAllPayments)
 
 export default router

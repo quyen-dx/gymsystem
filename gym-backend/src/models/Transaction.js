@@ -16,7 +16,7 @@ const transactionSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ['deposit', 'payment', 'transfer', 'refund', 'payout'],
+            enum: ['deposit', 'payment', 'transfer', 'refund', 'payout', 'REFUND_TO_WALLET'],
             required: true,
         },
         provider: {

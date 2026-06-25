@@ -22,7 +22,7 @@ const membershipSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'expired', 'cancelled'],
+      enum: ['active', 'pending_cancel', 'expired', 'cancelled'],
       default: 'active',
     },
     source: {

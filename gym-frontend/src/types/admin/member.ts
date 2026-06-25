@@ -13,7 +13,7 @@ export interface MemberMembership {
   planId: MemberPlan
   startDate: string
   endDate: string
-  status: 'active' | 'expired' | 'cancelled'
+  status: 'active' | 'pending_cancel' | 'expired' | 'cancelled'
   createdAt: string
 }
 

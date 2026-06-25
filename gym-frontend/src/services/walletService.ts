@@ -23,3 +23,9 @@ export const confirmDeposit = (data: { transactionId: string }) =>
 
 export const cancelDepositTransaction = (transactionId: string) =>
   api.patch(`/wallet/deposit/${transactionId}/cancel`)
+
+export const staffListAllTransactions = (params?: Record<string, any>) =>
+  api.get('/wallet/staff/transactions', { params })
+
+export const staffListAllPayments = (params?: Record<string, any>) =>
+  api.get('/wallet/staff/payments', { params })

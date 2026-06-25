@@ -18,4 +18,7 @@ export const systemExperienceService = {
   getAllFeedback: (params?: any) => api.get('/system-experience/feedback', { params }),
   updateFeedback: (id: string, payload: any) => api.patch(`/system-experience/feedback/${id}`, payload),
   getMyActivity: () => api.get('/system-experience/activity/my'),
+  getConsentStatus: (types: string, context?: string) => api.get(`/policy-consents/status?types=${types}${context ? `&context=${context}` : ''}`),
+  acceptConsent: (payload: { policyType: string; policyVersion: string; policyId?: string }) => api.post('/policy-consents/accept', payload),
+  acceptMultipleConsent: (payload: { policies: Array<{ policyType: string; policyVersion: string; policyId?: string }> }) => api.post('/policy-consents/accept-multiple', payload),
 }

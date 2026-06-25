@@ -276,11 +276,29 @@ export const createPolicy = async (req, res) => {
   res.status(201).json({ message: 'Tạo chính sách thành công', policy })
 }
 
+const bumpVersion = (currentVersion) => {
+  const parts = String(currentVersion || '1.0').split('.')
+  const major = parseInt(parts[0], 10) || 1
+  const minor = parseInt(parts[1], 10) || 0
+  return `${major}.${minor + 1}`
+}
+
 export const updatePolicy = async (req, res) => {
   const payload = { ...req.body }
   if ((payload.titleVi || payload.titleEn) && !payload.slug) payload.slug = slugify(payload.titleVi || payload.titleEn)
+
+  const existingPolicy = await Policy.findById(req.params.id)
+  if (!existingPolicy) return res.status(404).json({ message: 'Không tìm thấy chính sách' })
+
+  const contentChanged =
+    (payload.contentVi !== undefined && payload.contentVi !== existingPolicy.contentVi) ||
+    (payload.contentEn !== undefined && payload.contentEn !== existingPolicy.contentEn)
+
+  if (contentChanged && !payload.version) {
+    payload.version = bumpVersion(existingPolicy.version)
+  }
+
   const policy = await Policy.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true })
-  if (!policy) return res.status(404).json({ message: 'Không tìm thấy chính sách' })
   invalidateContextCache('policies')
   invalidateAiDomainCache('policies')
   res.json({ message: 'Cập nhật chính sách thành công', policy })

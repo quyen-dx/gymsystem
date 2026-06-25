@@ -138,13 +138,13 @@ export default function AdminMembersPage() {
 
   const openRegisterPlan = (member: MemberListItem) => {
     setRegisterMemberId(member._id)
-    setRegisterMemberName(member.name)
+    setRegisterMemberName(getUserDisplayName(member, member.memberCode))
     setRegisterModalOpen(true)
   }
 
   const openRenewPlan = (member: MemberListItem) => {
     setRenewMemberId(member._id)
-    setRenewMemberName(member.name)
+    setRenewMemberName(getUserDisplayName(member, member.memberCode))
     setRenewEndDate(member.activeMembership?.endDate || '')
     setRenewModalOpen(true)
   }

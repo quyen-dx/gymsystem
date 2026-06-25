@@ -341,7 +341,7 @@ export default function MemberDetailPage() {
       <MemberRegisterPlanModal
         open={registerModalOpen}
         memberId={member._id}
-        memberName={member.name}
+        memberName={getUserDisplayName(member, member.memberCode)}
         onClose={() => setRegisterModalOpen(false)}
         onSuccess={() => { setRegisterModalOpen(false); fetchMember() }}
       />
@@ -349,7 +349,7 @@ export default function MemberDetailPage() {
       <MemberRenewPlanModal
         open={renewModalOpen}
         memberId={member._id}
-        memberName={member.name}
+        memberName={getUserDisplayName(member, member.memberCode)}
         currentEndDate={activeMembership?.endDate || ''}
         onClose={() => setRenewModalOpen(false)}
         onSuccess={() => { setRenewModalOpen(false); fetchMember() }}

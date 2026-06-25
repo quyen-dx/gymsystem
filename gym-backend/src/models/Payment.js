@@ -44,6 +44,12 @@ const paymentSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    type: {
+      type: String,
+      trim: true,
+      default: 'payment',
+      index: true,
+    },
     currency: {
       type: String,
       trim: true,

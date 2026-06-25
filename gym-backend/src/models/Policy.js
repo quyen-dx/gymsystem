@@ -10,6 +10,8 @@ const policySchema = new mongoose.Schema(
     contentVi: { type: String, required: true, trim: true },
     contentEn: { type: String, required: true, trim: true },
     isPublished: { type: Boolean, default: true, index: true },
+    type: { type: String, enum: ['payment', 'refund', 'membership', 'wallet', 'terms', ''], default: '', index: true },
+    version: { type: String, default: '1.0', trim: true },
   },
   { timestamps: true },
 )

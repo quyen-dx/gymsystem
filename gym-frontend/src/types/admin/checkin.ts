@@ -63,6 +63,45 @@ export interface TodayCheckinsResponse {
   total: number
 }
 
+export interface StaffCheckinHistoryItem {
+  checkinId: string
+  _id: string
+  checkinTime: string
+  memberId: string
+  memberCode: string
+  memberName: string
+  email: string
+  phone: string
+  planName: string
+  staffId: string
+  staffName: string
+  status: 'success' | 'failed' | 'expired' | 'blocked'
+  errorNote?: string
+  streakDay?: number
+}
+
+export interface StaffCheckinHistoryResponse {
+  checkins: StaffCheckinHistoryItem[]
+  pagination: {
+    total: number
+    page: number
+    limit: number
+    totalPages: number
+  }
+  filters: {
+    mode: string
+    date: string
+    startTime: string
+    endTime: string
+    keyword: string
+  }
+}
+
+export interface StaffVerifyCheckinResponse {
+  message: string
+  checkin: StaffCheckinHistoryItem
+}
+
 export interface CheckinStats {
   totalCheckins: number
   uniqueMembers: number

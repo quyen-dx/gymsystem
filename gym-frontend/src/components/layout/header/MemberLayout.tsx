@@ -149,6 +149,10 @@ export default function MemberLayout({
   }, [lockMemberInteractions])
 
   useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [location.pathname])
+
+  useEffect(() => {
     if (!moreDropdownOpen) return
 
     const onPointerDown = (event: MouseEvent | TouchEvent) => {
