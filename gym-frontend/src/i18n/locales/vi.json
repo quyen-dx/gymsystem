@@ -1749,7 +1749,10 @@
     "error_plan_expired_renew": "Gói tập đã hết hạn. Vui lòng gia hạn để tiếp tục.",
     "error_load_membership": "Không thể kiểm tra gói tập của bạn",
     "error_qr_expired": "Mã QR không hợp lệ hoặc đã hết hạn",
-    "copy_success": "Đã copy token"
+    "copy_success": "Đã copy token",
+    "checked_in_title": "Đã điểm danh hôm nay",
+    "checked_in_desc": "Bạn đã check-in thành công ngày hôm nay. QR sẽ được tạo lại vào ngày mai.",
+    "next_day_hint": "QR sẽ được tạo lại khi bạn quay lại vào ngày hôm sau"
   },
   "booking": {
     "module": "Đặt lịch",

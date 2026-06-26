@@ -6,7 +6,6 @@ import {
   ReloadOutlined,
   SearchOutlined,
   StopOutlined,
-  UserOutlined,
 } from '@ant-design/icons'
 import { BrowserQRCodeReader } from '@zxing/browser'
 import { Button, Card, Col, DatePicker, Input, Row, Select, Space, Table, Tag, TimePicker, Typography, message } from 'antd'
@@ -20,7 +19,7 @@ import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const { Text, Title } = Typography
 
-type Step = 'scan' | 'verify' | 'confirm' | 'selfie' | 'success' | 'error' | 'already_checked'
+type Step = 'scan' | 'success' | 'error' | 'already_checked'
 type TimeMode = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'all' | 'custom'
 
 export default function StaffCheckinPage() {
@@ -31,7 +30,6 @@ export default function StaffCheckinPage() {
   const [step, setStep] = useState<Step>('scan')
   const [cameraActive, setCameraActive] = useState(false)
   const [manualToken, setManualToken] = useState('')
-  const [scannedToken, setScannedToken] = useState('')
   const [member, setMember] = useState<VerifiedMember | null>(null)
   const [membership, setMembership] = useState<VerifiedMembership | null>(null)
   const [confirmedId, setConfirmedId] = useState('')
@@ -82,7 +80,6 @@ export default function StaffCheckinPage() {
   const processQR = async (token: string) => {
     if (!token) return
     stopCamera()
-    setScannedToken(token)
     try {
       const res = await checkInService.verifyStaffCheckin({ token })
       setMember({
@@ -151,49 +148,9 @@ export default function StaffCheckinPage() {
       })
   }
 
-  const handleConfirm = async () => {
-    if (!scannedToken) return
-    try {
-      const res = await checkInService.confirmCheckin(scannedToken)
-      setConfirmedId(res.data.checkin._id)
-      setStreakDay(res.data.checkin.streakDay)
-      setStep('selfie')
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Xác nhận thất bại')
-    }
-  }
-
-  const handleSelfieDone = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-      const video = document.createElement('video')
-      video.srcObject = stream
-      await video.play()
-
-      const canvas = document.createElement('canvas')
-      canvas.width = 320
-      canvas.height = 240
-      const ctx = canvas.getContext('2d')
-      ctx?.drawImage(video, 0, 0, 320, 240)
-      stream.getTracks().forEach((t) => t.stop())
-
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg'))
-      if (blob) {
-        const file = new File([blob], `selfie_${Date.now()}.jpg`, { type: 'image/jpeg' })
-        await checkInService.uploadSelfie(confirmedId, file)
-      }
-    } catch {}
-    setStep('success')
-  }
-
-  const handleSkipSelfie = () => {
-    setStep('success')
-  }
-
   const resetAll = () => {
     stopCamera()
     setManualToken('')
-    setScannedToken('')
     setMember(null)
     setMembership(null)
     setConfirmedId('')
@@ -410,51 +367,6 @@ export default function StaffCheckinPage() {
     </div>
   )
 
-  const renderVerify = () => (
-    <div style={{ maxWidth: 500, margin: '0 auto' }}>
-      <Card className="rounded-[24px]" style={{ textAlign: 'center' }}>
-        <div style={{ width: 100, height: 100, borderRadius: '50%', margin: '0 auto 16px', background: member?.avatar ? `url(${member.avatar}) center/cover` : 'var(--gs-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {!member?.avatar && <UserOutlined style={{ fontSize: 40, color: 'var(--gs-text-muted)' }} />}
-        </div>
-        <Title level={3}>{getUserDisplayName(member, 'Thành viên')}</Title>
-        <Text type="secondary">{member?.phone || member?.email}</Text>
-
-        {membership && (
-          <div style={{ marginTop: 16, padding: 16, background: 'var(--gs-elevated)', borderRadius: 12 }}>
-            <div style={{ fontWeight: 600, fontSize: 16 }}>{membership.planName}</div>
-            <div style={{ marginTop: 4, fontSize: 13, color: 'var(--gs-text-muted)' }}>
-              {new Date(membership.startDate).toLocaleDateString('vi-VN')} → {new Date(membership.endDate).toLocaleDateString('vi-VN')}
-            </div>
-          </div>
-        )}
-
-        <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center', gap: 12 }}>
-          <Button icon={<CloseCircleOutlined />} onClick={resetAll}>
-            {t('staff.checkin.cancel')}
-          </Button>
-          <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleConfirm} size="large">
-            {t('staff.checkin.confirm')}
-          </Button>
-        </div>
-      </Card>
-    </div>
-  )
-
-  const renderSelfie = () => (
-    <div style={{ maxWidth: 500, margin: '0 auto', textAlign: 'center' }}>
-      <Card className="rounded-[24px]">
-        <Title level={4}>{t('staff.checkin.selfie_title')}</Title>
-        <Text type="secondary">{t('staff.checkin.selfie_hint')}</Text>
-        <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center', gap: 12 }}>
-          <Button onClick={handleSkipSelfie}>{t('staff.checkin.skip')}</Button>
-          <Button type="primary" icon={<CameraOutlined />} onClick={handleSelfieDone}>
-            {t('staff.checkin.take_selfie')}
-          </Button>
-        </div>
-      </Card>
-    </div>
-  )
-
   const renderSuccess = () => (
     <div style={{ maxWidth: 500, margin: '0 auto', textAlign: 'center' }}>
       <Card className="rounded-[24px]" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.1), rgba(59,130,246,0.05))' }}>
@@ -508,8 +420,6 @@ export default function StaffCheckinPage() {
   return (
     <DashboardLayout>
       {step === 'scan' && renderScan()}
-      {step === 'verify' && renderVerify()}
-      {step === 'selfie' && renderSelfie()}
       {step === 'success' && renderSuccess()}
       {step === 'already_checked' && renderAlreadyChecked()}
       {step === 'error' && renderError()}

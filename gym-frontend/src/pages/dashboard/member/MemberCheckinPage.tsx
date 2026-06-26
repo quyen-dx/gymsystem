@@ -1,4 +1,5 @@
 import {
+  CheckCircleOutlined,
   CloseCircleOutlined,
   CopyOutlined,
   ReloadOutlined,
@@ -34,6 +35,7 @@ export default function MemberCheckinPage() {
   const [loading, setLoading] = useState(true)
   const [membershipLoading, setMembershipLoading] = useState(true)
   const [canCheckin, setCanCheckin] = useState(false)
+  const [checkedInToday, setCheckedInToday] = useState(false)
   const timerRef = useRef<number | null>(null)
 
   const fetchQR = useCallback(async () => {
@@ -41,8 +43,16 @@ export default function MemberCheckinPage() {
     setError('')
     try {
       const res = await checkInService.generateQR()
-      setQrData(res.data)
-      setCountdown(res.data.ttl)
+      const data = res.data
+      if (data.checkedInToday) {
+        setCheckedInToday(true)
+        setStreak(data.streak || 0)
+        setQrData(null)
+        setLoading(false)
+        return
+      }
+      setQrData(data)
+      setCountdown(data.ttl || 30)
       setLoading(false)
     } catch (err: any) {
       setError(translateCheckinError(err?.response?.data?.message, t))
@@ -72,7 +82,7 @@ export default function MemberCheckinPage() {
   }, [fetchQR, t])
 
   useEffect(() => {
-    if (canCheckin && qrData && countdown > 0) {
+    if (canCheckin && !checkedInToday && qrData && countdown > 0) {
       timerRef.current = window.setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
@@ -86,15 +96,15 @@ export default function MemberCheckinPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [canCheckin, qrData, countdown, fetchQR])
+  }, [canCheckin, checkedInToday, qrData, countdown, fetchQR])
 
   useEffect(() => {
-    if (qrData) {
+    if (qrData && !checkedInToday) {
       checkInService.getStreak(qrData.memberId).then((res) => {
         setStreak(res.data.streak)
       }).catch(() => {})
     }
-  }, [qrData])
+  }, [qrData, checkedInToday])
 
   const qrValue = qrData?.token || ''
 
@@ -152,6 +162,37 @@ export default function MemberCheckinPage() {
               <Button type="primary" icon={<ReloadOutlined />} onClick={fetchQR}>
                 {t('checkin_page.retry')}
               </Button>
+            </div>
+          </Card>
+        </div>
+      </MemberLayout>
+    )
+  }
+
+  if (checkedInToday) {
+    return (
+      <MemberLayout>
+        <div className="member-page" style={{ maxWidth: 500, margin: '0 auto' }}>
+          <Card className="rounded-[24px]" style={{ textAlign: 'center' }}>
+            <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(16,185,129,0.12),rgba(59,130,246,0.06))] p-5">
+              <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('checkin_page.overline')}</p>
+              <h1 className="mt-2 text-2xl font-semibold text-[var(--gs-text)]">{t('checkin_page.title')}</h1>
+            </div>
+
+            <CheckCircleOutlined style={{ fontSize: 72, color: '#10B981' }} />
+            <Title level={3} style={{ marginTop: 16 }}>{t('checkin_page.checked_in_title')}</Title>
+            <Text type="secondary">{t('checkin_page.checked_in_desc')}</Text>
+
+            {streak > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <Tag color="orange" style={{ fontSize: 16, padding: '4px 12px' }}>
+                  🔥 {t('checkin_page.streak', { count: streak })}
+                </Tag>
+              </div>
+            )}
+
+            <div style={{ marginTop: 24, fontSize: 13, color: 'var(--gs-text-muted)' }}>
+              {t('checkin_page.next_day_hint')}
             </div>
           </Card>
         </div>

@@ -1746,7 +1746,10 @@
     "error_plan_expired_renew": "Your plan has expired. Please renew to continue.",
     "error_load_membership": "Unable to check your membership",
     "error_qr_expired": "QR code is invalid or has expired.",
-    "copy_success": "Token copied"
+    "copy_success": "Token copied",
+    "checked_in_title": "Checked in today",
+    "checked_in_desc": "You have successfully checked in today. A new QR will be available tomorrow.",
+    "next_day_hint": "QR will be regenerated when you return tomorrow"
   },
   "booking": {
     "module": "Schedule",

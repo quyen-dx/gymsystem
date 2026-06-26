@@ -1,8 +1,10 @@
 export interface QRTokenResponse {
-  token: string
-  expiredAt: string
-  ttl: number
+  token?: string
+  expiredAt?: string
+  ttl?: number
   memberId: string
+  checkedInToday?: boolean
+  streak?: number
 }
 
 export interface VerifiedMember {
@@ -18,20 +20,6 @@ export interface VerifiedMembership {
   planColor: string
   startDate: string
   endDate: string
-}
-
-export interface VerifyQRResponse {
-  member: VerifiedMember
-  membership: VerifiedMembership
-}
-
-export interface ConfirmCheckinResponse {
-  message: string
-  checkin: {
-    _id: string
-    checkinTime: string
-    streakDay: number
-  }
 }
 
 export interface MemberStreakResponse {
