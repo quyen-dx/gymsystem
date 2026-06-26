@@ -6,6 +6,10 @@
   box-sizing: border-box;
 }
 
+:root {
+  --header-height: 64px;
+}
+
 * {
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Arial, sans-serif !important;
 }
@@ -162,8 +166,10 @@ input[type="date"] {
 }
 
 .member-shell-header {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 100;
   display: flex;
   align-items: center;
@@ -545,15 +551,47 @@ html[data-theme="dark"] .member-footer-link:not(.is-active):hover {
 }
 
 .member-shell-content {
-  min-height: calc(100dvh - 64px);
-  padding: 24px;
+  min-height: 100dvh;
+  padding: 88px 24px 24px;
   overflow-x: clip;
   color: var(--gs-text);
 }
 
-body.member-interaction-lock,
-body.member-interaction-lock * {
+body.member-interaction-lock {
   font-weight: 400 !important;
+}
+
+body.member-interaction-lock .member-shell-content,
+body.member-interaction-lock .member-shell-content * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+body.member-interaction-lock :where(
+  button,
+  [role="button"],
+  .ant-btn,
+  .ant-menu,
+  .ant-menu *,
+  .ant-dropdown,
+  .ant-dropdown *,
+  .ant-drawer,
+  .ant-drawer *,
+  .ant-select,
+  .ant-select *,
+  .ant-picker,
+  .ant-picker *,
+  .ant-checkbox,
+  .ant-checkbox *,
+  .ant-radio,
+  .ant-radio *,
+  .ant-switch,
+  .ant-switch *,
+  .ant-tabs-nav,
+  .ant-tabs-nav *,
+  .member-shell-header,
+  .member-shell-header *
+) {
   user-select: none !important;
   -webkit-user-select: none !important;
 }
@@ -877,6 +915,240 @@ html[data-theme="light"] .member-shell-drawer-wallet {
 .member-scroll-x .ant-table-wrapper,
 .member-scroll-x table {
   min-width: 680px;
+}
+
+.policy-confirm-checkbox {
+  align-items: flex-start;
+  border: 1px solid var(--theme-border, var(--gs-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--theme-elevated, var(--gs-elevated)) 88%, #000 12%);
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.policy-confirm-checkbox .ant-checkbox {
+  top: 2px;
+}
+
+.policy-confirm-checkbox .ant-checkbox-inner {
+  background: color-mix(in srgb, var(--theme-card, var(--gs-card)) 78%, #000 22%) !important;
+  border-color: var(--theme-border-strong, var(--gs-border-strong)) !important;
+}
+
+.policy-confirm-checkbox:hover .ant-checkbox-inner,
+.policy-confirm-checkbox .ant-checkbox-input:focus-visible+.ant-checkbox-inner {
+  border-color: var(--theme-accent, var(--gs-accent)) !important;
+}
+
+.policy-confirm-checkbox .ant-checkbox-checked .ant-checkbox-inner {
+  background: var(--theme-accent, var(--gs-accent)) !important;
+  border-color: var(--theme-accent, var(--gs-accent)) !important;
+}
+
+.policy-confirm-checkbox .ant-checkbox-checked .ant-checkbox-inner::after {
+  border-color: var(--theme-button-text, #fff) !important;
+}
+
+.policy-confirm-checkbox .ant-checkbox+span {
+  color: var(--theme-text, var(--gs-text)) !important;
+  line-height: 1.55;
+  padding-inline-start: 10px;
+}
+
+body.policy-modal-open {
+  overflow: hidden !important;
+}
+
+body.policy-modal-open .ai-gympro-floating-chat {
+  display: none !important;
+}
+
+.policy-modal-overlay {
+  align-items: center;
+  justify-items: center;
+  overflow: hidden;
+}
+
+.policy-modal-card,
+.policy-modal-shell {
+  display: flex;
+  flex-direction: column;
+  max-height: min(90vh, calc(100dvh - 24px));
+  overflow: hidden;
+}
+
+.policy-modal-card {
+  width: min(640px, calc(100vw - 24px));
+  margin: 12px;
+  border-radius: 14px;
+}
+
+.policy-modal-card .ant-card-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.policy-modal-header,
+.policy-modal-footer {
+  flex-shrink: 0;
+}
+
+.policy-modal-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.policy-modal-footer {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+  padding-bottom: env(safe-area-inset-bottom);
+  border-top: 1px solid var(--theme-border, var(--gs-border));
+  background: var(--theme-card, var(--gs-card));
+}
+
+.policy-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.policy-ant-modal {
+  max-width: calc(100vw - 24px);
+}
+
+.policy-ant-modal .ant-modal-content {
+  display: flex;
+  max-height: calc(100dvh - 24px);
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.policy-ant-modal .ant-modal-header {
+  flex-shrink: 0;
+}
+
+.policy-ant-modal .ant-modal-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden !important;
+}
+
+.policy-ant-modal .policy-modal-shell {
+  width: 100%;
+  max-height: 100%;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --header-height: 58px;
+  }
+
+  .policy-modal-overlay {
+    align-items: start;
+    padding:
+      calc(var(--header-height, 64px) + env(safe-area-inset-top) + 8px)
+      12px
+      calc(env(safe-area-inset-bottom) + 12px);
+  }
+
+  .policy-modal-card,
+  .policy-modal-shell {
+    max-height: calc(100dvh - var(--header-height, 64px) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px);
+  }
+
+  .policy-modal-card {
+    width: calc(100vw - 24px);
+    max-width: 420px;
+    margin: 0;
+  }
+
+  .policy-modal-card .ant-card-body {
+    padding: 14px;
+  }
+
+  .policy-modal-header h2 {
+    font-size: 18px;
+    line-height: 1.4;
+  }
+
+  .policy-modal-header p {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .policy-content-box {
+    padding: 14px;
+    max-height: 40vh;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .policy-content-box h3 {
+    font-size: 13px;
+  }
+
+  .policy-content-box li,
+  .policy-content-box p {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .policy-confirm-checkbox {
+    padding: 10px 12px;
+  }
+
+  .policy-confirm-checkbox .ant-checkbox+span {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .policy-confirm-action.ant-btn {
+    height: 38px;
+    font-size: 13px;
+    padding: 0 12px;
+    border-radius: 8px;
+  }
+
+  .policy-modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .policy-modal-actions .ant-btn,
+  .policy-modal-footer .ant-btn {
+    width: 100%;
+  }
+
+  .policy-modal-footer {
+    padding-top: 10px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .policy-ant-modal {
+    top: calc(var(--header-height, 64px) + env(safe-area-inset-top) + 8px);
+    max-width: calc(100vw - 24px);
+    margin: 0 auto;
+  }
+
+  .policy-ant-modal .ant-modal-content {
+    max-height: calc(100dvh - var(--header-height, 64px) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px);
+  }
+}
+
+.policy-confirm-action.ant-btn:disabled,
+.policy-confirm-action.ant-btn[disabled] {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
 }
 
 html[data-theme="light"] .member-shell-content .ant-card,
@@ -1717,7 +1989,7 @@ html[data-theme="light"] .member-shell-content .ant-btn-default {
   }
 
   .member-shell-content {
-    padding: 14px;
+    padding: 72px 14px 14px;
   }
 
   .member-page {
@@ -1748,7 +2020,7 @@ html[data-theme="light"] .member-shell-content .ant-btn-default {
   }
 
   .ant-radio-wrapper {
-    align-items: flex-start;
+    align-items: center;
     white-space: normal;
   }
 
@@ -1770,7 +2042,7 @@ html[data-theme="light"] .member-shell-content .ant-btn-default {
   }
 
   .member-shell-content {
-    padding: 10px;
+    padding: 68px 10px 10px;
   }
 
   .ant-drawer-content-wrapper {

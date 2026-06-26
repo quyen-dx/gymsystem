@@ -17,7 +17,6 @@ import {
   createCancellationRequest,
   getMyCancellationRequest,
   listCancellationRequests,
-  markRefundCompleted,
   rejectCancellationRequest,
 } from '../controllers/cancellationController.js'
 import { adminOrStaff, protect } from '../middlewares/authMiddleware.js'
@@ -45,6 +44,5 @@ router.get('/my-cancel-request', getMyCancellationRequest)
 router.get('/staff/cancellations', adminOrStaff, listCancellationRequests)
 router.post('/staff/cancellations/:id/approve', adminOrStaff, approveCancellationRequest)
 router.post('/staff/cancellations/:id/reject', adminOrStaff, rejectCancellationRequest)
-router.post('/staff/cancellations/:id/mark-refund', adminOrStaff, markRefundCompleted)
 
 export default router

@@ -35,7 +35,13 @@ export default function MemberRenewPlanModal({ open, memberId, memberName, curre
     if (!selectedPlanId) return
     setLoading(true)
     try {
-      await memberService.renewPlan(memberId, selectedPlanId, renewFrom)
+      const paymentRes = await memberService.createOfflinePlanPayment(memberId, {
+        planId: selectedPlanId,
+        method: 'CASH',
+        confirmed: true,
+        flow: 'renew',
+      })
+      await memberService.renewPlan(memberId, selectedPlanId, paymentRes.data?.data?.paymentId, renewFrom)
       message.success('Gia hạn gói tập thành công')
       onSuccess()
     } catch (err: unknown) {

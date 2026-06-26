@@ -5,6 +5,50 @@ import { getBackendUrl } from './appUrls.js'
 import User from '../models/User.js'
 import { normalizeEmail } from '../utils/identifier.js'
 
+const firstProfilePhoto = (profile) =>
+  profile.photos?.find((photo) => photo?.value)?.value || ''
+
+const backfillSocialProfile = async (user, { provider, fullName, email, avatar, facebookId, facebookProfileUrl }) => {
+  let changed = false
+  const displayName = String(fullName || '').trim()
+
+  if (provider && user.provider !== provider) {
+    user.provider = provider
+    changed = true
+  }
+  if (!user.isVerified) {
+    user.isVerified = true
+    changed = true
+  }
+  if (displayName && !String(user.fullName || '').trim()) {
+    user.fullName = displayName
+    changed = true
+  }
+  if (displayName && !String(user.name || '').trim()) {
+    user.name = displayName
+    changed = true
+  }
+  if (email && !user.email) {
+    user.email = email
+    changed = true
+  }
+  if (avatar && !String(user.avatar || '').trim()) {
+    user.avatar = avatar
+    changed = true
+  }
+  if (facebookId && user.facebookId !== facebookId) {
+    user.facebookId = facebookId
+    changed = true
+  }
+  if (facebookProfileUrl && user.facebookProfileUrl !== facebookProfileUrl) {
+    user.facebookProfileUrl = facebookProfileUrl
+    changed = true
+  }
+
+  if (changed) await user.save({ validateBeforeSave: false })
+  return user
+}
+
 export const isGoogleOAuthConfigured = Boolean(
   process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
 )
@@ -37,7 +81,8 @@ if (isGoogleOAuthConfigured) {
       async (_accessToken, _refreshToken, profile, done) => {
         try {
           const email = normalizeEmail(profile.emails?.[0]?.value || '')
-          const name = profile.displayName?.trim() || 'Người dùng Google'
+          const name = profile.displayName?.trim() || profile.name?.givenName || 'Người dùng Google'
+          const avatar = firstProfilePhoto(profile)
 
           if (!email) {
             return done(new Error('Không lấy được email từ Google'), null)
@@ -48,15 +93,20 @@ if (isGoogleOAuthConfigured) {
           if (!user) {
             user = await User.create({
               name,
+              fullName: name,
               email,
+              avatar,
               provider: 'google',
               isVerified: true,
               role: 'member',
             })
-          } else if (user.provider !== 'google') {
-            user.provider = 'google'
-            user.isVerified = true
-            await user.save({ validateBeforeSave: false })
+          } else {
+            user = await backfillSocialProfile(user, {
+              provider: 'google',
+              fullName: name,
+              email,
+              avatar,
+            })
           }
 
           return done(null, user)
@@ -75,23 +125,32 @@ if (isFacebookOAuthConfigured) {
         clientID: process.env.FACEBOOK_APP_ID,
         clientSecret: process.env.FACEBOOK_APP_SECRET,
         callbackURL: `${getBackendUrl()}/api/auth/facebook/callback`,
-        profileFields: ['id', 'displayName', 'name', 'profileUrl'],
+        profileFields: ['id', 'displayName', 'name', 'emails', 'photos', 'profileUrl'],
       },
       async (_accessToken, _refreshToken, profile, done) => {
         try {
           const name = profile.displayName?.trim() ||
             `${profile.name?.givenName || ''} ${profile.name?.familyName || ''}`.trim() ||
             'Người dùng Facebook'
+          const email = normalizeEmail(profile.emails?.[0]?.value || '')
+          const avatar = firstProfilePhoto(profile)
 
           const facebookId = profile.id
           const facebookProfileUrl = profile.profileUrl
 
-          // Tìm theo facebookId thay vì email
-          let user = await User.findOne({ facebookId })
+          let user = await User.findOne({
+            $or: [
+              { facebookId },
+              ...(email ? [{ email }] : []),
+            ],
+          })
 
           if (!user) {
             user = await User.create({
               name,
+              fullName: name,
+              ...(email ? { email } : {}),
+              avatar,
               facebookId,
               facebookProfileUrl,
               provider: 'facebook',
@@ -99,11 +158,14 @@ if (isFacebookOAuthConfigured) {
               role: 'member',
             })
           } else {
-            // Cập nhật link profile nếu nó thay đổi hoặc chưa có
-            if (user.facebookProfileUrl !== facebookProfileUrl) {
-              user.facebookProfileUrl = facebookProfileUrl
-              await user.save({ validateBeforeSave: false })
-            }
+            user = await backfillSocialProfile(user, {
+              provider: 'facebook',
+              fullName: name,
+              email,
+              avatar,
+              facebookId,
+              facebookProfileUrl,
+            })
           }
 
           return done(null, user)

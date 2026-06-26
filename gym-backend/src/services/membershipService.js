@@ -13,6 +13,7 @@ import { getSystemSettingsValue } from './systemSettingsService.js'
 import { invalidatePersonalContextCache } from './conversationContextCache.js'
 import { recordUserActivity } from './userActivityService.js'
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
+import { assertPolicyConsent } from '../utils/policyConsent.js'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -149,6 +150,8 @@ const calculateWalletMembershipEndDate = ({ baseDate, durationDays }) => {
 }
 
 const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
+  await assertPolicyConsent(userId, ['membership', 'terms'])
+
   const { user, plan, memberId, planObjectId } = await ensureMemberAndPlan({ userId, planId })
   const amount = Number(plan.price || 0)
 
@@ -871,7 +874,7 @@ const processAutoRenewal = async ({ userId }) => {
 
 const toggleAutoRenew = async ({ userId }) => {
   const memberId = toObjectId(userId, 'userId')
-  const membership = await Membership.findOne({ memberId, status: 'active' })
+  const membership = await Membership.findOne({ memberId, status: { $in: ['active', 'pending_cancel'] } })
     .sort({ endDate: -1 })
     .populate('planId')
 

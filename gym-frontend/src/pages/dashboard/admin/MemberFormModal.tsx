@@ -15,6 +15,8 @@ import { memberService } from '../../../services/memberService'
 import type { MemberFormData, MemberListItem } from '../../../types/admin/member'
 import { UploadOutlined } from '@ant-design/icons'
 
+const PHONE_REGEX = /^0\d{9,10}$/
+
 interface Props {
   open: boolean
   member: MemberListItem | null
@@ -108,11 +110,23 @@ export default function MemberFormModal({ open, member, onClose, onSuccess }: Pr
           <Input placeholder={t('admin.members.form.name_placeholder')} />
         </Form.Item>
 
-        <Form.Item label={t('admin.members.form.email')} name="email">
+        <Form.Item
+          label={t('admin.members.form.email')}
+          name="email"
+          rules={[
+            { type: 'email', message: 'Email không hợp lệ' },
+          ]}
+        >
           <Input placeholder={t('admin.members.form.email_placeholder')} type="email" />
         </Form.Item>
 
-        <Form.Item label={t('admin.members.form.phone')} name="phone">
+        <Form.Item
+          label={t('admin.members.form.phone')}
+          name="phone"
+          rules={[
+            { pattern: PHONE_REGEX, message: 'Số điện thoại không hợp lệ (VD: 0912345678)' },
+          ]}
+        >
           <Input placeholder={t('admin.members.form.phone_placeholder')} />
         </Form.Item>
 
@@ -133,7 +147,13 @@ export default function MemberFormModal({ open, member, onClose, onSuccess }: Pr
         </Form.Item>
 
         {!isEdit && (
-          <Form.Item label={t('admin.members.form.password')} name="password">
+          <Form.Item
+            label={t('admin.members.form.password')}
+            name="password"
+            rules={[
+              { min: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự' },
+            ]}
+          >
             <Input.Password placeholder={t('admin.members.form.password_placeholder')} />
           </Form.Item>
         )}

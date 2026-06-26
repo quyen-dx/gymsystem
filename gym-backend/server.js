@@ -31,6 +31,9 @@ import systemExperienceRoutes from './src/routes/systemExperienceRoutes.js'
 import systemSettingsRoutes from './src/routes/systemSettingsRoutes.js'
 import walletRoutes from './src/routes/walletRoutes.js'
 import bookingRoutes from './src/routes/bookingRoutes.js'
+import policyConsentRoutes from './src/routes/policyConsentRoutes.js'
+import healthRoutes from './src/routes/healthRoutes.js'
+import workoutRoutes from './src/routes/workoutRoutes.js'
 
 
 const app = express()
@@ -66,7 +69,9 @@ app.use(maintenanceModeGuard)
 app.use('/api/auth', authRoutes)
 app.use('/api/cms', cmsRoutes)
 app.use('/api/members', memberRoutes)
+app.use('/api/staff/members', memberRoutes)
 app.use('/api/checkin', checkInRoutes)
+app.use('/api/staff/checkin', checkInRoutes)
 app.use('/api/audit-logs', auditLogRoutes)
 app.get('/api/my-products', protect, sellerOnly, getMyProducts)
 app.use('/api/plans', planRoutes)
@@ -84,11 +89,9 @@ app.use('/api/admin/ai', adminAiRoutes)
 app.use('/api/system-experience', systemExperienceRoutes)
 app.use('/api/system-settings', systemSettingsRoutes)
 app.use('/api/bookings', bookingRoutes)
-
-
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'OK', message: 'GymPro API is running' })
-})
+app.use('/api/policy-consents', policyConsentRoutes)
+app.use('/api/workout', workoutRoutes)
+app.use('/api/health', healthRoutes)
 
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} không tồn tại` })

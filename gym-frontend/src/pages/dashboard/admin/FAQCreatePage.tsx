@@ -2,7 +2,7 @@ import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Button, Form, Input, Select, Switch, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { systemExperienceService } from '../../../services/systemExperienceService'
 
@@ -16,8 +16,11 @@ interface CategoryPair {
 export default function FAQCreatePage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { faqId } = useParams()
+  const isEdit = Boolean(faqId)
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(false)
   const [allFaqs, setAllFaqs] = useState<any[]>([])
   const [selectedCategoryVi, setSelectedCategoryVi] = useState<string | undefined>(undefined)
   const [selectedCategoryEn, setSelectedCategoryEn] = useState<string | undefined>(undefined)
@@ -29,6 +32,27 @@ export default function FAQCreatePage() {
       .then((res) => setAllFaqs(res.data.faqs || []))
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!faqId) return
+    setInitialLoading(true)
+    systemExperienceService.getFaq(faqId)
+      .then((res) => {
+        const faq = res.data.faq
+        form.setFieldsValue(faq)
+        const vi = faq.categoryVi
+        const en = faq.categoryEn
+        if (vi || en) {
+          setNewCategoryVi(normalizeCategory(vi || ''))
+          setNewCategoryEn(normalizeCategory(en || ''))
+        }
+      })
+      .catch((error) => {
+        message.error(error.response?.data?.message || t('system_experience.admin.save_failed'))
+        navigate('/admin/faqs', { replace: true })
+      })
+      .finally(() => setInitialLoading(false))
+  }, [faqId, form, navigate, t])
 
   const existingCategoryPairs = useMemo(() => {
     const map = new Map<string, CategoryPair>()
@@ -124,7 +148,8 @@ export default function FAQCreatePage() {
 
     setLoading(true)
     try {
-      await systemExperienceService.createFaq(values)
+      if (faqId) await systemExperienceService.updateFaq(faqId, values)
+      else await systemExperienceService.createFaq(values)
       message.success(t('system_experience.admin.save_success'))
       navigate('/admin/faqs')
     } catch (error: any) {
@@ -158,13 +183,13 @@ export default function FAQCreatePage() {
         style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--theme-accent, #b6462f) 14%, transparent), transparent)' }}
       >
         <h1 className="text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">
-          {t('system_experience.admin.add_faq')}
+          {isEdit ? t('system_experience.admin.edit_faq') : t('system_experience.admin.add_faq')}
         </h1>
-        <p className="mt-1 text-sm text-[var(--gs-text-muted)]">Tạo câu hỏi thường gặp mới</p>
+        <p className="mt-1 text-sm text-[var(--gs-text-muted)]">{isEdit ? 'Cập nhật câu hỏi thường gặp' : 'Tạo câu hỏi thường gặp mới'}</p>
       </div>
 
       <div style={cardStyle} className="p-6 max-[640px]:p-4">
-        <Form form={form} layout="vertical" initialValues={{ isPublished: true }}>
+        <Form form={form} layout="vertical" initialValues={{ isPublished: true }} disabled={initialLoading}>
           <Form.Item name="questionVi" label={t('system_experience.admin.question_vi')} rules={[{ required: true }]}>
             <Input size="large" />
           </Form.Item>
@@ -246,7 +271,7 @@ export default function FAQCreatePage() {
           Hủy
         </Button>
         <Button type="primary" size="large" loading={loading} onClick={handleSave}>
-          Lưu FAQ
+          {isEdit ? 'Cập nhật FAQ' : 'Lưu FAQ'}
         </Button>
       </div>
 

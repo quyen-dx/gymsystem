@@ -6,6 +6,7 @@ import {
   deleteFaq,
   deletePolicy,
   getAllFeedback,
+  getFaqById,
   getFaqs,
   getLandingContent,
   getMyActivity,
@@ -31,6 +32,7 @@ router.get('/landing', getLandingContent)
 router.put('/landing', protect, adminOnly, updateLandingContent)
 
 router.get('/faqs', optionalAuth, getFaqs)
+router.get('/faqs/:id', optionalAuth, getFaqById)
 router.post('/faqs', protect, adminOnly, createFaq)
 router.put('/faqs/:id', protect, adminOnly, updateFaq)
 router.delete('/faqs/:id', protect, adminOnly, deleteFaq)

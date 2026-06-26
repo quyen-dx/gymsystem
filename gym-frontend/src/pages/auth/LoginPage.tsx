@@ -6,8 +6,7 @@ import {
 import { Button, Divider, Form, Input, Typography, message } from 'antd'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
-import LanguageSelect from '../../components/common/LanguageSelect'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import TypewriterSlogans from '../../components/system/TypewriterSlogans'
 import { API_URL } from '../../config/env'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
@@ -50,6 +49,7 @@ export default function LoginPage() {
   const { t, i18n } = useTranslation()
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { settings } = useSystemSettings()
 
   const [loading, setLoading] = useState(false)
@@ -65,7 +65,9 @@ export default function LoginPage() {
       })
 
       message.success(t('login.success'))
-      setTimeout(() => navigate(getDashboardPath(user.role)), 500)
+      const redirect = searchParams.get('redirect')
+      const safeRedirect = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : null
+      setTimeout(() => navigate(safeRedirect || getDashboardPath(user.role)), 500)
     } catch (err: any) {
       const errorCode = err.response?.data?.code
       if (errorCode === 'MAINTENANCE_MODE') {
@@ -101,10 +103,6 @@ export default function LoginPage() {
       />
 
       <div className="absolute inset-0 bg-black/65" />
-
-      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6">
-        <LanguageSelect />
-      </div>
 
       {/* CARD */}
       <div

@@ -2,7 +2,6 @@ import { Button, Divider, Form, Input, Steps, Typography, message } from 'antd'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
-import LanguageSelect from '../../components/common/LanguageSelect'
 import FeatureDisabled from '../../components/system/FeatureDisabled'
 import { useTheme } from '../../context/ThemeProvider'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
@@ -113,10 +112,6 @@ export default function ForgotPasswordPage() {
         className="absolute inset-0"
         style={{ background: dark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)' }}
       />
-
-      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6">
-        <LanguageSelect />
-      </div>
 
       {/* CARD */}
       <div

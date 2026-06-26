@@ -77,14 +77,13 @@ export default function MemberLayout({
   const navItems = [
     { key: '/', label: t('nav.home'), icon: <HomeOutlined /> },
     ...(isEnabled('shop.productStoreEnabled') ? [{ key: '/store', label: t('nav.store'), icon: <ShopOutlined /> }] : []),
-    ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/plans', label: t('nav.plans'), icon: <CalendarOutlined /> }] : []),
+    ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/my-membership', label: t('nav.plans'), icon: <CalendarOutlined /> }] : []),
     ...(isEnabled('pt.memberBookingEnabled') ? [{ key: '/booking', label: t('nav.book_pt'), icon: <CalendarOutlined /> }] : []),
     ...(isEnabled('workout.healthLogEnabled') ? [{ key: '/health', label: t('nav.health'), icon: <HeartOutlined /> }] : []),
     ...(isEnabled('workout.workoutPlanEnabled') ? [{ key: '/workout', label: t('nav.workout'), icon: <FundOutlined /> }] : []),
     ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/checkin', label: t('nav.checkin'), icon: <CreditCardOutlined /> }] : []),
   ]
   const moreNavItems = [
-    ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/my-membership', label: t('nav.my_membership'), icon: <CreditCardOutlined /> }] : []),
     { key: '/feedback', label: t('nav.feedback'), icon: <CommentOutlined /> },
     { key: '/policies', label: t('nav.policies'), icon: <FileTextOutlined /> },
     { key: '/help', label: t('nav.help'), icon: <QuestionCircleOutlined /> },
@@ -147,6 +146,10 @@ export default function MemberLayout({
       document.body.classList.remove('member-interaction-lock')
     }
   }, [lockMemberInteractions])
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [location.pathname])
 
   useEffect(() => {
     if (!moreDropdownOpen) return
@@ -433,7 +436,7 @@ export default function MemberLayout({
         placement="right"
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
-        width={320}
+        size={320}
       >
         <div className="flex items-center gap-3 p-4">
           <img className="h-10 w-10 rounded-full object-cover" src={avatarUrl} alt={displayName} />

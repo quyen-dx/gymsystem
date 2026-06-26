@@ -32,10 +32,23 @@ const paymentSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    txnRef: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     amount: {
       type: Number,
       required: true,
       min: 0,
+    },
+    type: {
+      type: String,
+      trim: true,
+      default: 'payment',
+      index: true,
     },
     currency: {
       type: String,
@@ -49,6 +62,12 @@ const paymentSchema = new mongoose.Schema(
       index: true,
     },
     paymentMethod: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: 'MANUAL',
+    },
+    method: {
       type: String,
       trim: true,
       uppercase: true,

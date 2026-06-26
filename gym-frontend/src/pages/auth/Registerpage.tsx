@@ -3,7 +3,6 @@ import { Button, Divider, Form, Input, Typography, message } from 'antd'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
-import LanguageSelect from '../../components/common/LanguageSelect'
 import FeatureDisabled from '../../components/system/FeatureDisabled'
 import TypewriterSlogans from '../../components/system/TypewriterSlogans'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
@@ -43,9 +42,11 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       const identifier = String(values.phone || '').trim()
+      const fullName = String(values.fullName || '').trim()
       const { data } = await authService.sendRegisterOtp({
         provider: identifier.includes('@') ? 'email' : 'phone',
-        name: values.name,
+        fullName,
+        name: fullName,
         phone: identifier,
         password: values.password,
       })
@@ -106,10 +107,6 @@ export default function RegisterPage() {
       />
 
       <div className="absolute inset-0 bg-black/65" />
-
-      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6">
-        <LanguageSelect />
-      </div>
 
       {/* CARD */}
       <div
@@ -173,7 +170,7 @@ export default function RegisterPage() {
 
             <Form.Item
               label={<span style={{ color: 'var(--gs-text)' }}>{t('register.fullname')}</span>}
-              name="name"
+              name="fullName"
               rules={[{ required: true, message: t('register.fullname_required') }]}
             >
               <Input size="large" style={{ background: 'var(--gs-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }} />

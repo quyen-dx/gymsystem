@@ -1,4 +1,5 @@
 import Booking from '../models/Booking.js'
+import Membership from '../models/Membership.js'
 import Waitlist from '../models/Waitlist.js'
 
 const activeStatus = ['pending', 'confirmed']
@@ -14,6 +15,27 @@ const makeSlotId = (ptId, date, slot) => {
   return `${ptId}_${bookingDate}_${slot}`
 }
 
+const hasActiveMembershipForDate = async (memberId, date) => {
+  const bookingDate = normalizeDate(date)
+  const membership = await Membership.findOne({
+    memberId,
+    status: 'active',
+    endDate: { $gte: bookingDate },
+  }).lean()
+
+  return !!membership
+}
+
+const requireActiveMembershipForDate = async (memberId, date, res) => {
+  const allowed = await hasActiveMembershipForDate(memberId, date)
+  if (allowed) return true
+
+  res.status(403).json({
+    message: 'Bạn cần có gói tập đang hoạt động để đặt lịch PT',
+  })
+  return false
+}
+
 export const checkConflicts = async (req, res) => {
   try {
     const { ptId, date, slot } = req.query
@@ -23,6 +45,8 @@ export const checkConflicts = async (req, res) => {
         message: 'Thiếu ptId, date hoặc slot',
       })
     }
+
+    if (!(await requireActiveMembershipForDate(req.user._id, date, res))) return
 
     const bookingDate = normalizeDate(date)
 
@@ -67,6 +91,8 @@ export const createBooking = async (req, res) => {
         message: 'Thiếu ptId, date hoặc slot',
       })
     }
+
+    if (!(await requireActiveMembershipForDate(req.user._id, date, res))) return
 
     const bookingDate = normalizeDate(date)
 
@@ -126,6 +152,10 @@ export const createRecurringBooking = async (req, res) => {
         message: 'Thiếu ptId, date, slot hoặc weeks',
       })
     }
+
+    const lastBookingDate = normalizeDate(date)
+    lastBookingDate.setDate(lastBookingDate.getDate() + (Number(weeks) - 1) * 7)
+    if (!(await requireActiveMembershipForDate(req.user._id, lastBookingDate, res))) return
 
     const createdBookings = []
     const conflicts = []

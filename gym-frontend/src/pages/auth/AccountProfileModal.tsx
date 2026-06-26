@@ -618,10 +618,12 @@ export default function AccountProfileModal({
 
   useEffect(() => {
     if (!open || !user) return
+    const profileFullName = user.fullName || user.name || ''
     form.setFieldsValue({
-      name: user.name,
+      name: user.name || profileFullName,
       email: user.email || '',
       phone: user.phone || '',
+      fullName: profileFullName,
       dateOfBirth: user.dateOfBirth ? user.dateOfBirth.slice(0, 10) : '',
     })
     setAvatarPreview(null)
@@ -660,11 +662,12 @@ export default function AccountProfileModal({
     setLoading(true)
     try {
       const formData = new FormData()
-      formData.append('name', values.name || '')
+      const submittedFullName = values.fullName || values.name || ''
+      formData.append('name', values.name || submittedFullName)
       if (values.email) formData.append('email', values.email)
       if (values.phone) formData.append('phone', values.phone)
       if (values.dateOfBirth) formData.append('dateOfBirth', values.dateOfBirth)
-      if (values.fullName !== undefined) formData.append('fullName', values.fullName || '')
+      if (values.fullName !== undefined) formData.append('fullName', submittedFullName)
       await authService.updateProfile(formData)
       await refreshUser()
       message.success(t('profile.msg_update_success'))

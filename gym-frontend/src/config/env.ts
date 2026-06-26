@@ -1,3 +1,7 @@
-export const API_URL = (
-  import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
-).replace(/\/+$/, '')
+const apiUrl = import.meta.env.VITE_API_URL
+
+if (!apiUrl) {
+  throw new Error('VITE_API_URL is required')
+}
+
+export const API_URL = apiUrl.replace(/\/+$/, '')

@@ -24,19 +24,23 @@ export interface CancellationRequest {
   reason: string
   usedDays: number
   remainingDays: number
+  totalDays: number
   usedPercent: number
+  policyCode: 'REFUND_100' | 'REFUND_50' | 'NO_REFUND'
+  policyLabel: string
+  refundRate: number
+  registeredAt: string
+  requestedAt: string
+  policyAccepted: boolean
+  policyAcceptedAt: string | null
   refundEligible: boolean
   estimatedRefundAmount: number
   finalRefundAmount: number
   status: 'pending' | 'approved' | 'rejected'
   rejectReason: string
-  refundMethod: 'WALLET' | 'BANK_TRANSFER' | 'CASH_COUNTER' | 'NONE'
+  refundMethod: 'WALLET' | 'NONE'
   refundStatus: 'PENDING' | 'COMPLETED' | 'NOT_APPLICABLE'
   refundCompletedAt: string | null
-  bankName: string
-  bankAccountNumber: string
-  bankAccountName: string
-  bankNote: string
   staffNote: string
   handledBy: any
   handledAt: string | null
@@ -55,7 +59,7 @@ export interface MyMembership {
   startDate: string
   endDate: string
   remainingDays: number
-  status: 'active' | 'expired' | 'cancelled'
+  status: 'active' | 'pending_cancel' | 'expired' | 'cancelled'
   displayStatus: 'active' | 'expiring_soon' | 'expired'
   autoRenew?: boolean
 }
@@ -80,7 +84,7 @@ export const membershipService = {
   offlineRegister: (data: { memberId: string; planId: string; paymentMethod: string; amountPaid: number; note?: string }) =>
     api.post('/members/offline-register', data),
 
-  createCancelRequest: (data: { reason: string; refundMethod?: string; bankName?: string; bankAccountNumber?: string; bankAccountName?: string; bankNote?: string }) =>
+  createCancelRequest: (data: { reason: string; policyAccepted?: boolean; refundMethod?: 'WALLET' | 'NONE' }) =>
     api.post<{ message: string; cancellationRequest: CancellationRequest }>('/memberships/cancel-request', data),
   getMyCancelRequests: () =>
     api.get<{ cancellationRequests: CancellationRequest[] }>('/memberships/my-cancel-request'),
@@ -90,6 +94,4 @@ export const membershipService = {
     api.post<{ message: string; cancellationRequest: CancellationRequest }>(`/memberships/staff/cancellations/${id}/approve`, data),
   rejectCancellation: (id: string, data: { reason: string }) =>
     api.post<{ message: string; cancellationRequest: CancellationRequest }>(`/memberships/staff/cancellations/${id}/reject`, data),
-  markRefundCompleted: (id: string, data?: { staffNote?: string }) =>
-    api.post<{ message: string; cancellationRequest: CancellationRequest }>(`/memberships/staff/cancellations/${id}/mark-refund`, data),
 }

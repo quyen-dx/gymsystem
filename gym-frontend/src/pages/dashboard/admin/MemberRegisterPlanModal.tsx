@@ -32,7 +32,13 @@ export default function MemberRegisterPlanModal({ open, memberId, memberName, on
     if (!selectedPlanId) return
     setLoading(true)
     try {
-      await memberService.registerPlan(memberId, selectedPlanId)
+      const paymentRes = await memberService.createOfflinePlanPayment(memberId, {
+        planId: selectedPlanId,
+        method: 'CASH',
+        confirmed: true,
+        flow: 'register',
+      })
+      await memberService.registerPlan(memberId, selectedPlanId, paymentRes.data?.data?.paymentId)
       message.success('Đăng ký gói tập thành công')
       onSuccess()
     } catch (err: unknown) {

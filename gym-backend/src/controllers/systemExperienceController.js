@@ -2,6 +2,7 @@ import Faq from '../models/Faq.js'
 import Feedback from '../models/Feedback.js'
 import LandingContent from '../models/LandingContent.js'
 import Policy from '../models/Policy.js'
+import mongoose from 'mongoose'
 import UserActivity from '../models/UserActivity.js'
 import { invalidateContextCache } from '../services/conversationContextCache.js'
 import { invalidateAiDomainCache } from '../ai/services/aiService.js'
@@ -212,6 +213,14 @@ export const getFaqs = async (req, res) => {
   res.json({ faqs })
 }
 
+export const getFaqById = async (req, res) => {
+  const filter = { _id: req.params.id }
+  if (!['admin', 'super_admin'].includes(req.user?.role)) filter.isPublished = true
+  const faq = await Faq.findOne(filter)
+  if (!faq) return res.status(404).json({ message: 'Không tìm thấy FAQ' })
+  res.json({ faq })
+}
+
 export const createFaq = async (req, res) => {
   const faq = await Faq.create(req.body)
   invalidateContextCache('faqs')
@@ -261,8 +270,9 @@ export const getPolicies = async (req, res) => {
 }
 
 export const getPolicyBySlug = async (req, res) => {
-  const filter = { slug: req.params.slug }
-  if (req.user?.role !== 'admin') filter.isPublished = true
+  const key = req.params.slug
+  const filter = mongoose.Types.ObjectId.isValid(key) ? { _id: key } : { slug: key }
+  if (!['admin', 'super_admin'].includes(req.user?.role)) filter.isPublished = true
   const policy = await Policy.findOne(filter)
   if (!policy) return res.status(404).json({ message: 'Không tìm thấy chính sách' })
   res.json({ policy })
@@ -276,11 +286,29 @@ export const createPolicy = async (req, res) => {
   res.status(201).json({ message: 'Tạo chính sách thành công', policy })
 }
 
+const bumpVersion = (currentVersion) => {
+  const parts = String(currentVersion || '1.0').split('.')
+  const major = parseInt(parts[0], 10) || 1
+  const minor = parseInt(parts[1], 10) || 0
+  return `${major}.${minor + 1}`
+}
+
 export const updatePolicy = async (req, res) => {
   const payload = { ...req.body }
   if ((payload.titleVi || payload.titleEn) && !payload.slug) payload.slug = slugify(payload.titleVi || payload.titleEn)
+
+  const existingPolicy = await Policy.findById(req.params.id)
+  if (!existingPolicy) return res.status(404).json({ message: 'Không tìm thấy chính sách' })
+
+  const contentChanged =
+    (payload.contentVi !== undefined && payload.contentVi !== existingPolicy.contentVi) ||
+    (payload.contentEn !== undefined && payload.contentEn !== existingPolicy.contentEn)
+
+  if (contentChanged && !payload.version) {
+    payload.version = bumpVersion(existingPolicy.version)
+  }
+
   const policy = await Policy.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true })
-  if (!policy) return res.status(404).json({ message: 'Không tìm thấy chính sách' })
   invalidateContextCache('policies')
   invalidateAiDomainCache('policies')
   res.json({ message: 'Cập nhật chính sách thành công', policy })

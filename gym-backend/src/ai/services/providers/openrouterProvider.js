@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 
 const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1'
-const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || process.env.APP_URL || 'http://localhost:5173'
+const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || process.env.APP_URL || process.env.CLIENT_URL
 const OPENROUTER_APP_NAME = process.env.OPENROUTER_APP_NAME || 'GymPro'
 
 const DEFAULT_OPENROUTER_MODELS = [

@@ -6,8 +6,10 @@ import {
 import { Button, Card, Progress, QRCode, Tag, Tooltip, Typography, message } from 'antd'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { checkInService } from '../../../services/checkInService'
+import { membershipService } from '../../../services/membershipService'
 import type { QRTokenResponse } from '../../../types/admin/checkin'
 
 const { Text, Title } = Typography
@@ -24,11 +26,14 @@ function translateCheckinError(msg: string | undefined, t: ReturnType<typeof use
 
 export default function MemberCheckinPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [qrData, setQrData] = useState<QRTokenResponse | null>(null)
   const [countdown, setCountdown] = useState(30)
   const [streak, setStreak] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [membershipLoading, setMembershipLoading] = useState(true)
+  const [canCheckin, setCanCheckin] = useState(false)
   const timerRef = useRef<number | null>(null)
 
   const fetchQR = useCallback(async () => {
@@ -46,11 +51,28 @@ export default function MemberCheckinPage() {
   }, [t])
 
   useEffect(() => {
-    fetchQR()
-  }, [fetchQR])
+    setMembershipLoading(true)
+    membershipService.getMyMembership()
+      .then((res) => {
+        const membership = res.data.membership
+        const allowed = membership?.status === 'active' && Number(membership.remainingDays || 0) > 0
+        setCanCheckin(allowed)
+        if (allowed) {
+          fetchQR()
+        } else {
+          setLoading(false)
+        }
+      })
+      .catch(() => {
+        setCanCheckin(false)
+        setError(t('checkin_page.error_load_membership'))
+        setLoading(false)
+      })
+      .finally(() => setMembershipLoading(false))
+  }, [fetchQR, t])
 
   useEffect(() => {
-    if (qrData && countdown > 0) {
+    if (canCheckin && qrData && countdown > 0) {
       timerRef.current = window.setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
@@ -64,7 +86,7 @@ export default function MemberCheckinPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [qrData, countdown, fetchQR])
+  }, [canCheckin, qrData, countdown, fetchQR])
 
   useEffect(() => {
     if (qrData) {
@@ -78,12 +100,40 @@ export default function MemberCheckinPage() {
 
   const progressPercent = (countdown / 30) * 100
 
-  if (loading) {
+  if (membershipLoading || loading) {
     return (
       <MemberLayout>
         <div className="member-page">
           <Card className="rounded-[24px]" style={{ textAlign: 'center', padding: 40 }}>
-            <div className="text-[var(--gs-text-muted)]">{t('common.loading')}</div>
+            <div className="text-[var(--gs-text-muted)]">
+              {membershipLoading ? t('checkin_page.checking_membership') : t('common.loading')}
+            </div>
+          </Card>
+        </div>
+      </MemberLayout>
+    )
+  }
+
+  if (!canCheckin) {
+    return (
+      <MemberLayout>
+        <div className="member-page" style={{ maxWidth: 640, margin: '0 auto' }}>
+          <Card className="rounded-[24px]" style={{ textAlign: 'center', padding: 24 }}>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-400">
+              {t('checkin_page.membership_required_kicker')}
+            </p>
+            <Title level={3} style={{ marginTop: 12 }}>
+              {t('checkin_page.membership_required_title')}
+            </Title>
+            <Text type="secondary">{error || t('checkin_page.membership_required_desc')}</Text>
+            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+              <Button type="primary" onClick={() => navigate('/plans')}>
+                {t('checkin_page.view_plans')}
+              </Button>
+              <Button onClick={() => navigate('/my-membership')}>
+                {t('checkin_page.view_my_membership')}
+              </Button>
+            </div>
           </Card>
         </div>
       </MemberLayout>

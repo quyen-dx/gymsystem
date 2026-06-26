@@ -4,7 +4,8 @@ import api from './api'
 export const authService = {
   sendRegisterOtp: (data: {
     provider: Extract<AuthProviderType, 'phone' | 'email'>
-    name: string
+    name?: string
+    fullName?: string
     phone?: string
     password?: string
   }) => api.post('/auth/register/send-otp', data),
@@ -15,7 +16,8 @@ export const authService = {
   }) => api.post('/auth/register/verify-otp', data),
 
   registerFacebook: (data: {
-    name: string
+    name?: string
+    fullName?: string
     email: string
     password?: string
     oauthToken: string

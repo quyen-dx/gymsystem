@@ -18,8 +18,13 @@ const checkInSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['success', 'expired', 'blocked'],
+      enum: ['success', 'failed', 'expired', 'blocked'],
       default: 'success',
+    },
+    errorNote: {
+      type: String,
+      trim: true,
+      default: '',
     },
     qrToken: {
       type: String,

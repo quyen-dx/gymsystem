@@ -1,11 +1,13 @@
 import { CheckCircleOutlined, CreditCardOutlined } from '@ant-design/icons'
-import { Button, Card, Descriptions, Empty, Modal, Spin, Tag, message } from 'antd'
+import { Button, Card, Descriptions, Empty, Modal, Spin, Tag, Tooltip, message } from 'antd'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useWallet } from '../../../context/WalletProvider'
 import { membershipService, type MembershipPlan } from '../../../services/membershipService'
+import PolicyConsentCard from '../../../components/wallet/PolicyConsentCard'
+import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 
 const formatMoney = (value: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 
@@ -15,6 +17,9 @@ export default function PlansPage() {
   const [loading, setLoading] = useState(true)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [selectedPlan, setSelectedPlan] = useState<MembershipPlan | null>(null)
+  const [tickedPolicies, setTickedPolicies] = useState<Record<string, { type: string; version: string }> | null>(null)
+  const [consentSubmitted, setConsentSubmitted] = useState(false)
+  const consentReady = tickedPolicies !== null && Object.keys(tickedPolicies).length > 0
   const { wallet, refreshWallet } = useWallet()
   const navigate = useNavigate()
   const lang = i18n.language
@@ -26,15 +31,28 @@ export default function PlansPage() {
       .finally(() => setLoading(false))
   }, [])
 
+
+
   const getName = (plan: MembershipPlan) => lang.startsWith('vi') ? plan.nameVi || plan.nameEn : plan.nameEn || plan.nameVi
   const getDesc = (plan: MembershipPlan) => lang.startsWith('vi') ? plan.descriptionVi || plan.descriptionEn : plan.descriptionEn || plan.descriptionVi
   const getFeatures = (plan: MembershipPlan) => lang.startsWith('vi') ? plan.featuresVi || plan.featuresEn || [] : plan.featuresEn || plan.featuresVi || []
 
   const handleRegister = async () => {
     if (!selectedPlan) return
+    if (!consentReady) return
     const plan = selectedPlan
     setSubmittingId(plan._id)
     try {
+      if (!consentSubmitted) {
+        await acceptMultiplePolicyConsent(
+          Object.values(tickedPolicies!).map((p) => ({
+            policyType: p.type,
+            policyVersion: p.version,
+            context: 'plans',
+          })),
+        )
+        setConsentSubmitted(true)
+      }
       const res = await membershipService.subscribePlan(plan._id)
       message.success(res.data?.message || t('member_plans.toast_register_success'))
       setSelectedPlan(null)
@@ -97,7 +115,11 @@ export default function PlansPage() {
                   icon={<CreditCardOutlined />}
                   block
                   loading={submittingId === plan._id}
-                  onClick={() => setSelectedPlan(plan)}
+                  onClick={() => {
+                    setSelectedPlan(plan)
+                    setTickedPolicies(null)
+                    setConsentSubmitted(false)
+                  }}
                 >
                   {t('member_plans.register_btn')}
                 </Button>
@@ -109,31 +131,71 @@ export default function PlansPage() {
         <Modal
           title={t('member_plans.modal_title')}
           open={Boolean(selectedPlan)}
-          onCancel={() => setSelectedPlan(null)}
-          footer={[
-            <Button key="cancel" onClick={() => setSelectedPlan(null)}>{t('member_plans.modal_cancel')}</Button>,
-            <Button
-              key="confirm"
-              type="primary"
-              loading={Boolean(submittingId)}
-              onClick={handleRegister}
-            >
-              {t('member_plans.modal_confirm')}
-            </Button>,
-          ]}
+          destroyOnClose
+          onCancel={() => {
+            setSelectedPlan(null)
+            setTickedPolicies(null)
+            setConsentSubmitted(false)
+          }}
+          footer={null}
+          className="policy-ant-modal"
+          width={640}
+          centered
         >
           {selectedPlan && (
-            <Descriptions bordered column={1} size="small">
-              <Descriptions.Item label={t('member_plans.label_plan_name')}>{getName(selectedPlan)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_plans.label_price')}>{formatMoney(selectedPlan.price)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_plans.label_current_balance')}>{formatMoney(currentBalance)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_plans.label_balance_after')}>
-                <span style={{ color: balanceAfter < 0 ? 'var(--gs-danger)' : 'inherit' }}>
-                  {formatMoney(balanceAfter)}
-                </span>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('member_plans.label_duration')}>{t('member_plans.days', { days: selectedPlan.durationDays })}</Descriptions.Item>
-            </Descriptions>
+            <div key={selectedPlan._id} className="policy-modal-shell">
+              <div className="policy-modal-content">
+                <div className="space-y-4">
+                  <Descriptions bordered column={1} size="small">
+                    <Descriptions.Item label={t('member_plans.label_plan_name')}>{getName(selectedPlan)}</Descriptions.Item>
+                    <Descriptions.Item label={t('member_plans.label_price')}>{formatMoney(selectedPlan.price)}</Descriptions.Item>
+                    <Descriptions.Item label={t('member_plans.label_current_balance')}>{formatMoney(currentBalance)}</Descriptions.Item>
+                    <Descriptions.Item label={t('member_plans.label_balance_after')}>
+                      <span style={{ color: balanceAfter < 0 ? 'var(--gs-danger)' : 'inherit' }}>
+                        {formatMoney(balanceAfter)}
+                      </span>
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t('member_plans.label_duration')}>{t('member_plans.days', { days: selectedPlan.durationDays })}</Descriptions.Item>
+                  </Descriptions>
+
+                  <PolicyConsentCard
+                    key={selectedPlan._id}
+                    policies={[
+                      { type: 'membership', label: t('member_plans.link_membership') || 'Chính sách hội viên' },
+                      { type: 'terms', label: t('member_plans.link_terms') || 'Điều khoản sử dụng' },
+                    ]}
+                    context="plans"
+                    onTickedChange={(ticked) => {
+                      setTickedPolicies(Object.keys(ticked).length > 0 ? ticked : null)
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="policy-modal-footer">
+                <div className="policy-modal-actions">
+                  <Button
+                    onClick={() => {
+                      setSelectedPlan(null)
+                      setTickedPolicies(null)
+                      setConsentSubmitted(false)
+                    }}
+                  >
+                    {t('member_plans.modal_cancel')}
+                  </Button>
+                  <Tooltip title={!consentReady ? t('member_plans.tooltip_accept_required') : undefined}>
+                    <Button
+                      className="policy-confirm-action"
+                      type="primary"
+                      loading={Boolean(submittingId)}
+                      disabled={!consentReady}
+                      onClick={handleRegister}
+                    >
+                      {t('member_plans.modal_confirm')}
+                    </Button>
+                  </Tooltip>
+                </div>
+              </div>
+            </div>
           )}
         </Modal>
       </div>
