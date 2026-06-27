@@ -351,6 +351,9 @@ export default function MemberDetailPage() {
         memberId={member._id}
         memberName={getUserDisplayName(member, member.memberCode)}
         currentEndDate={activeMembership?.endDate || ''}
+        currentStartDate={activeMembership?.startDate || ''}
+        currentPlanName={activeMembership?.planId?.nameVi || activeMembership?.planId?.nameEn || ''}
+        currentPlanId={activeMembership?.planId?._id || ''}
         onClose={() => setRenewModalOpen(false)}
         onSuccess={() => { setRenewModalOpen(false); fetchMember() }}
       />

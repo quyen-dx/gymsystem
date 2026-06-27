@@ -36,10 +36,25 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
   const [creatingPayment, setCreatingPayment] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  const selectedPlan = useMemo(() => plans.find((plan) => plan._id === selectedPlanId) || null, [plans, selectedPlanId])
   const activeMembership = member?.activeMembership
   const isRenew = mode === 'renew'
+  const currentPlanId = isRenew ? activeMembership?.planId?._id : null
+
+  const availablePlans = useMemo(() => {
+    if (isRenew && currentPlanId) {
+      return plans.filter((plan) => plan._id === currentPlanId)
+    }
+    return plans
+  }, [plans, isRenew, currentPlanId])
+
+  const selectedPlan = useMemo(() => availablePlans.find((plan) => plan._id === selectedPlanId) || null, [availablePlans, selectedPlanId])
   const finalButtonLabel = isRenew ? 'Gia hạn gói' : 'Kích hoạt gói'
+
+  const newEndDate = useMemo(() => {
+    if (!selectedPlan) return null
+    const base = isRenew && activeMembership?.endDate ? new Date(activeMembership.endDate) : new Date()
+    return new Date(base.getTime() + selectedPlan.durationDays * 86400000)
+  }, [selectedPlan, isRenew, activeMembership])
 
   useEffect(() => {
     let mounted = true
@@ -49,8 +64,13 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
     ])
       .then(([memberRes, plansRes]) => {
         if (!mounted) return
-        setMember(memberRes.data.member)
-        setPlans((plansRes.data.plans || []).filter((plan) => plan.isActive !== false))
+        const loadedMember = memberRes.data.member
+        const loadedPlans = (plansRes.data.plans || []).filter((plan) => plan.isActive !== false)
+        setMember(loadedMember)
+        setPlans(loadedPlans)
+        if (isRenew && loadedMember?.activeMembership?.planId?._id) {
+          setSelectedPlanId(loadedMember.activeMembership.planId._id)
+        }
       })
       .catch(() => message.error('Không thể tải dữ liệu hội viên/gói tập'))
       .finally(() => mounted && setLoading(false))
@@ -186,20 +206,20 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
 
             {isRenew && activeMembership && (
               <section className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-5">
-                <h2 className="mb-4 text-lg font-semibold">Gói hiện tại</h2>
+                <h2 className="mb-4 text-lg font-semibold">Thông tin gói hiện tại</h2>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                   <div><span className="block text-sm text-[var(--gs-text-muted)]">Tên gói</span><b>{activeMembership.planId?.nameVi || activeMembership.planId?.nameEn || '—'}</b></div>
                   <div><span className="block text-sm text-[var(--gs-text-muted)]">Ngày bắt đầu</span><b>{formatDate(activeMembership.startDate)}</b></div>
                   <div><span className="block text-sm text-[var(--gs-text-muted)]">Ngày hết hạn</span><b>{formatDate(activeMembership.endDate)}</b></div>
-                  <div><span className="block text-sm text-[var(--gs-text-muted)]">Số ngày còn lại</span><b>{member.remainingDays}</b></div>
+                  <div><span className="block text-sm text-[var(--gs-text-muted)]">Số ngày còn lại</span><b>{member.remainingDays} ngày</b></div>
                 </div>
               </section>
             )}
 
             <section className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-5">
-              <h2 className="mb-4 text-lg font-semibold">{isRenew ? 'Chọn gói gia hạn' : 'Chọn gói tập'}</h2>
+              <h2 className="mb-4 text-lg font-semibold">{isRenew ? 'Gói tập hiện tại (gia hạn)' : 'Chọn gói tập'}</h2>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {plans.map((plan) => {
+                {availablePlans.map((plan) => {
                   const selected = selectedPlanId === plan._id
                   const features = plan.featuresVi?.length ? plan.featuresVi : plan.featuresEn || []
                   return (
@@ -270,6 +290,15 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
                 <div className="mt-5 rounded-lg bg-[var(--gs-card)] text-sm">
                   <div className="flex justify-between"><span>Gói:</span><b>{selectedPlan.nameVi || selectedPlan.nameEn}</b></div>
                   <div className="mt-2 flex justify-between"><span>Số tiền:</span><b>{formatVND(selectedPlan.price)}</b></div>
+                  {isRenew && newEndDate && (
+                    <>
+                      <div className="mt-2 border-t border-[var(--gs-border)] pt-2" />
+                      <div className="flex justify-between">
+                        <span>Ngày hết hạn mới:</span>
+                        <b style={{ color: '#10B981' }}>{formatDate(newEndDate.toISOString())}</b>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </section>

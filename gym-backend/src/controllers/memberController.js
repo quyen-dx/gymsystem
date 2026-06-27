@@ -655,7 +655,16 @@ export const renewPlanForMember = async (req, res) => {
     const activeMembership = await Membership.findOne({
       memberId: member._id,
       status: 'active',
-    }).sort({ endDate: -1 })
+    }).sort({ endDate: -1 }).populate('planId')
+
+    if (activeMembership) {
+      const currentPlanId = String(activeMembership.planId?._id || activeMembership.planId)
+      if (currentPlanId !== String(plan._id)) {
+        throw new AppError('Chỉ có thể gia hạn gói tập hiện tại của hội viên.', 400)
+      }
+    } else {
+      throw new AppError('Hội viên chưa có gói tập để gia hạn.', 400)
+    }
 
     const payment = await getPlanPurchasePayment({ paymentId, memberId: member._id, planId: plan._id })
     if (!payment) throw new AppError('Không tìm thấy payment mua gói phù hợp', 404)
@@ -753,10 +762,29 @@ export const batchRenewMembers = async (req, res) => {
         memberId: member._id,
         planId: plan._id,
         status: 'active',
-      }).sort({ endDate: -1 })
+      }).sort({ endDate: -1 }).populate('planId')
+
+      if (!existingMembership) {
+        const anyActive = await Membership.findOne({ memberId: member._id, status: 'active' })
+        if (anyActive) {
+          results.push({
+            memberId: member._id,
+            memberName: member.name,
+            error: 'Hội viên đang dùng gói tập khác, không thể gia hạn hàng loạt.',
+          })
+          continue
+        } else {
+          results.push({
+            memberId: member._id,
+            memberName: member.name,
+            error: 'Hội viên chưa có gói tập để gia hạn.',
+          })
+          continue
+        }
+      }
 
       let startDate
-      if (existingMembership && renewFrom === 'endDate') {
+      if (renewFrom === 'endDate') {
         const prevEnd = new Date(existingMembership.endDate)
         prevEnd.setHours(0, 0, 0, 0)
         prevEnd.setDate(prevEnd.getDate() + 1)

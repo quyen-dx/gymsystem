@@ -58,6 +58,9 @@ export default function AdminMembersPage() {
   const [renewMemberId, setRenewMemberId] = useState('')
   const [renewMemberName, setRenewMemberName] = useState('')
   const [renewEndDate, setRenewEndDate] = useState('')
+  const [renewStartDate, setRenewStartDate] = useState('')
+  const [renewPlanName, setRenewPlanName] = useState('')
+  const [renewCurrentPlanId, setRenewCurrentPlanId] = useState('')
   useEffect(() => {
     api.get<{ plans: PlanOption[] }>('/plans', { params: { limit: 100 } }).then(({ data }) => {
       setPlans(data.plans || [])
@@ -146,6 +149,9 @@ export default function AdminMembersPage() {
     setRenewMemberId(member._id)
     setRenewMemberName(getUserDisplayName(member, member.memberCode))
     setRenewEndDate(member.activeMembership?.endDate || '')
+    setRenewStartDate(member.activeMembership?.startDate || '')
+    setRenewPlanName(member.activeMembership?.planId?.nameVi || member.activeMembership?.planId?.nameEn || '')
+    setRenewCurrentPlanId(member.activeMembership?.planId?._id || '')
     setRenewModalOpen(true)
   }
 
@@ -338,6 +344,9 @@ export default function AdminMembersPage() {
         memberId={renewMemberId}
         memberName={renewMemberName}
         currentEndDate={renewEndDate}
+        currentStartDate={renewStartDate}
+        currentPlanName={renewPlanName}
+        currentPlanId={renewCurrentPlanId}
         onClose={() => setRenewModalOpen(false)}
         onSuccess={() => { setRenewModalOpen(false); fetchMembers() }}
       />
