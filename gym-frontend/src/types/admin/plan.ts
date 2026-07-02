@@ -8,6 +8,7 @@ export interface AdminPlan {
   descriptionEn?: string
   featuresVi: string[]
   featuresEn: string[]
+  applicableSpecializations?: string[]
   color: string
   isActive: boolean
   memberCount: number

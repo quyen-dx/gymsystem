@@ -1,17 +1,15 @@
 import { message } from 'antd'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { createProduct } from '../../../services/productService'
 import SellerProductForm from './SellerProductForm'
 
 export default function SellerProductCreatePage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
 
   const handleCreate = async (payload: any) => {
     await createProduct(payload)
-    message.success(t('seller_products.create_success'))
+    message.success('Thêm sản phẩm thành công')
     navigate('/seller/products')
   }
 

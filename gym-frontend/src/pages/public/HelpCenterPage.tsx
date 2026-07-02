@@ -1,6 +1,5 @@
 import { Spin } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { HelpCircle, LifeBuoy, Search, ChevronDown, Users, Calendar, CreditCard, Dumbbell } from 'lucide-react'
 import MemberLayout from '../../components/layout/header/MemberLayout'
 import { systemExperienceService } from '../../services/systemExperienceService'
@@ -19,8 +18,7 @@ const topicIcons: Record<string, React.ReactNode> = {
 }
 
 export default function HelpCenterPage() {
-  const { t, i18n } = useTranslation()
-  const lang = i18n.language?.startsWith('en') ? 'en' : 'vi'
+  const lang = 'vi'
   const [items, setItems] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -35,9 +33,9 @@ export default function HelpCenterPage() {
     systemExperienceService.getFaqs({ lang }).then((res) => setItems(res.data.faqs || [])).finally(() => setLoading(false))
   }, [lang])
 
-  const qField = lang === 'en' ? 'questionEn' : 'questionVi'
-  const aField = lang === 'en' ? 'answerEn' : 'answerVi'
-  const cField = lang === 'en' ? 'categoryEn' : 'categoryVi'
+  const qField = 'questionVi'
+  const aField = 'answerVi'
+  const cField = 'categoryVi'
 
   const categories = useMemo(() => {
     const map = new Map<string, { display: string; count: number }>()
@@ -80,19 +78,19 @@ export default function HelpCenterPage() {
           <div className="support-hero-left">
             <span className="support-kicker">
               <LifeBuoy size={14} />
-              {t('system_experience.help.kicker')}
+              {'Trung tâm trợ giúp'}
             </span>
-            <h1>{t('system_experience.help.title')}</h1>
-            <p>{t('system_experience.help.description')}</p>
+            <h1>{'Câu hỏi thường gặp'}</h1>
+            <p>{'Tra cứu các câu hỏi thường gặp và câu trả lời'}</p>
           </div>
           <div className="support-stats">
             <div className="support-stats-item">
               <strong>{totalCount}</strong>
-              <span>{t('system_experience.help.stats_faqs')}</span>
+              <span>{'Câu hỏi'}</span>
             </div>
             <div className="support-stats-item">
               <strong>{categories.length}</strong>
-              <span>{t('system_experience.help.stats_categories')}</span>
+              <span>{'Danh mục'}</span>
             </div>
           </div>
         </div>
@@ -106,7 +104,7 @@ export default function HelpCenterPage() {
               onClick={() => setActiveCategory(null)}
               className={`support-pill ${!activeCategory ? 'active' : ''}`}
             >
-              {t('system_experience.help.filter_all')} ({totalCount})
+              {'Tất cả'} ({totalCount})
             </button>
             {categories.map(({ display, count }) => (
               <button
@@ -125,7 +123,7 @@ export default function HelpCenterPage() {
           <div className="support-search">
             <input
               type="text"
-              placeholder={t('system_experience.help.search_placeholder')}
+              placeholder={'Tìm kiếm câu hỏi...'}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -152,8 +150,8 @@ export default function HelpCenterPage() {
         ) : filtered.length === 0 ? (
           <div className="support-empty">
             <Search />
-            <p>{t('system_experience.help.empty')}</p>
-            <span>{t('system_experience.help.empty_suggestion')}</span>
+            <p>{'Không tìm thấy câu hỏi nào'}</p>
+            <span>{'Thử thay đổi từ khóa tìm kiếm hoặc danh mục'}</span>
           </div>
         ) : (
           <div className="support-list">

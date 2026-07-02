@@ -1,7 +1,6 @@
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { Badge, Button, Input, Select, Space, Table, Tag, message } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { membershipService, type MembershipPlan } from '../../../services/membershipService'
@@ -10,9 +9,7 @@ import type { MemberListItem } from '../../../types/admin/member'
 import { getUserDisplayName } from '../../../utils/userDisplay'
 
 export default function StaffMemberPage() {
-  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const lang = i18n.language
 
   const [members, setMembers] = useState<MemberListItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -38,11 +35,11 @@ export default function StaffMemberPage() {
       setMembers(data.members)
       setTotal(data.pagination.total)
     } catch {
-      message.error(t('staff.members.error.fetch_failed'))
+      message.error('Không thể tải danh sách hội viên')
     } finally {
       setLoading(false)
     }
-  }, [page, keyword, membershipStatus, planId, remainingDays, t])
+  }, [page, keyword, membershipStatus, planId, remainingDays])
 
   useEffect(() => {
     fetchMembers(1)
@@ -68,7 +65,7 @@ export default function StaffMemberPage() {
         setMembers(data.members)
         setTotal(data.pagination.total)
       })
-      .catch(() => message.error(t('staff.members.error.fetch_failed')))
+      .catch(() => message.error('Không thể tải danh sách hội viên'))
       .finally(() => setLoading(false))
   }
 
@@ -104,7 +101,7 @@ export default function StaffMemberPage() {
       render: (_: any, record: MemberListItem) => {
         const plan = record.activeMembership?.planId
         if (!plan) return <Tag>Chưa có gói</Tag>
-        return lang.startsWith('vi') ? plan.nameVi : plan.nameEn
+        return plan.nameVi
       },
     },
     {
@@ -186,7 +183,7 @@ export default function StaffMemberPage() {
               { value: '', label: 'Tất cả gói' },
               ...plans.map((plan) => ({
                 value: plan._id,
-                label: lang.startsWith('vi') ? plan.nameVi : plan.nameEn,
+                label: plan.nameVi,
               })),
             ]}
           />

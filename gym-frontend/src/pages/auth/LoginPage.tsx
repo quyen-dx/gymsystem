@@ -5,13 +5,11 @@ import {
 } from '@ant-design/icons'
 import { Button, Divider, Form, Input, Typography, message } from 'antd'
 import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import TypewriterSlogans from '../../components/system/TypewriterSlogans'
 import { API_URL } from '../../config/env'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { useAuth } from '../../hooks/useAuth'
-import { getErrorMessage } from '../../utils/errorMessages'
 import { getLocalizedText } from '../../utils/localization'
 
 const { Title } = Typography
@@ -46,14 +44,13 @@ const pickLocalizedSlogans = (slogans: Array<{ vi?: string; en?: string }> = [],
 }
 
 export default function LoginPage() {
-  const { t, i18n } = useTranslation()
   const { login } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { settings } = useSystemSettings()
 
   const [loading, setLoading] = useState(false)
-  const slogans = pickLocalizedSlogans(settings.general.slogans, i18n.language)
+  const slogans = pickLocalizedSlogans(settings.general.slogans, 'vi')
 
   const handleSubmit = async (values: any) => {
     setLoading(true)
@@ -64,7 +61,7 @@ export default function LoginPage() {
         password: values.password,
       })
 
-      message.success(t('login.success'))
+      message.success('Đăng nhập thành công')
       const redirect = searchParams.get('redirect')
       const safeRedirect = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : null
       setTimeout(() => navigate(safeRedirect || getDashboardPath(user.role)), 500)
@@ -74,7 +71,7 @@ export default function LoginPage() {
         navigate('/maintenance', { replace: true })
         return
       }
-      message.error(getErrorMessage(t, err.response?.data?.message, 'login.failed', errorCode))
+      message.error(err.response?.data?.message || 'Đăng nhập thất bại')
     } finally {
       setLoading(false)
     }
@@ -128,7 +125,7 @@ export default function LoginPage() {
             <div style={{ color: 'var(--gs-text)' }}>
               <TypewriterSlogans
                 slogans={slogans}
-                language={i18n.language}
+                language={'vi'}
                 className="mt-1 text-xs font-semibold uppercase tracking-[0.18em]"
               />
             </div>
@@ -144,27 +141,27 @@ export default function LoginPage() {
             color: 'var(--gs-text)',
           }}
         >
-          {t('login.title')}
+          {'Đăng nhập'}
         </Title>
         {/* FORM */}
         <Form layout="vertical" onFinish={handleSubmit}>
 
           <Form.Item
-            label={<span style={{ color: 'var(--gs-text)' }}>{t('login.label')}</span>}
+            label={<span style={{ color: 'var(--gs-text)' }}>{'Số điện thoại'}</span>}
             name="phone"
-            rules={[{ required: true, message: t('login.required') }]}
+            rules={[{ required: true, message: 'Vui lòng nhập số điện thoại' }]}
           >
-            <Input size="large" placeholder={t('login.placeholder')} style={{ background: 'var(--gs-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }} />
+            <Input size="large" placeholder={'Nhập số điện thoại'} style={{ background: 'var(--gs-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }} />
           </Form.Item>
 
           <Form.Item
-            label={<span style={{ color: 'var(--gs-text)' }}>{t('login.password_label')}</span>}
+            label={<span style={{ color: 'var(--gs-text)' }}>{'Mật khẩu'}</span>}
             name="password"
-            rules={[{ required: true, message: t('login.password_required') }]}
+            rules={[{ required: true, message: 'Vui lòng nhập mật khẩu' }]}
           >
             <Input.Password
               size="large"
-              placeholder={t('login.password_placeholder')}
+              placeholder={'Nhập mật khẩu'}
               style={{ background: 'var(--gs-input-bg)', borderColor: 'var(--gs-border)', color: 'var(--gs-text)' }}
               iconRender={(v) =>
                 v ? <EyeTwoTone /> : <EyeInvisibleOutlined />
@@ -179,20 +176,20 @@ export default function LoginPage() {
             size="large"
             loading={loading}
           >
-            {t('login.submit')}
+            {'Đăng nhập'}
           </Button>
 
           {(settings.auth.forgotPasswordEmailEnabled || settings.auth.forgotPasswordSmsOtpEnabled) && (
             <div className="text-right mt-2">
               <Link to="/forgot-password" className="auth-link-action text-sm">
-                {t('login.forgot_password')}
+                {'Quên mật khẩu?'}
               </Link>
             </div>
           )}
 
         </Form>
 
-        {(settings.auth.googleOAuthEnabled || settings.auth.facebookOAuthEnabled) && <Divider style={{ borderColor: 'var(--gs-border)' }}>{t('login.divider')}</Divider>}
+        {(settings.auth.googleOAuthEnabled || settings.auth.facebookOAuthEnabled) && <Divider style={{ borderColor: 'var(--gs-border)' }}>{'hoặc'}</Divider>}
 
         {/* SOCIAL */}
         {settings.auth.googleOAuthEnabled && (
@@ -225,9 +222,9 @@ export default function LoginPage() {
           <div
             className="text-center mt-6 text-sm text-[var(--gs-muted)]"
           >
-            {t('login.no_account')}{' '}
+            {'Chưa có tài khoản?'}{' '}
             <Link to="/register" className="auth-link-action ml-2">
-              {t('login.register')}
+              {'Đăng ký'}
             </Link>
           </div>
         )}

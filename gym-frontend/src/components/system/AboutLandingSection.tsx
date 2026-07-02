@@ -7,65 +7,63 @@ import {
 import { Button } from 'antd'
 import { Mail, MapPin, Phone } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { useTheme } from '../../context/ThemeContext'
 import useScrollReveal from '../../hooks/useScrollReveal'
 import { getShops } from '../../services/shopService'
 import { getLocalizedText } from '../../utils/localization'
-import LanguageSelect from '../common/LanguageSelect'
 
 const heroSlides = [
   {
     image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1900&q=88',
-    titleKey: 'about.hero.slide1.title',
-    subtitleKey: 'about.hero.slide1.subtitle',
-    ctaKey: 'about.hero.slide1.cta',
+    title: 'Khám phá phòng gym hiện đại',
+    subtitle: 'Trang thiết bị nhập khẩu châu Âu',
+    cta: 'Khám phá ngay',
     link: '/register',
   },
   {
     image: 'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=1900&q=88',
-    titleKey: 'about.hero.slide2.title',
-    subtitleKey: 'about.hero.slide2.subtitle',
-    ctaKey: 'about.hero.slide2.cta',
+    title: 'Đội ngũ huấn luyện viên chuyên nghiệp',
+    subtitle: 'Đạt chuẩn quốc tế',
+    cta: 'Xem thêm',
     link: '#features',
   },
   {
     image: 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?auto=format&fit=crop&w=1900&q=88',
-    titleKey: 'about.hero.slide3.title',
-    subtitleKey: 'about.hero.slide3.subtitle',
-    ctaKey: 'about.hero.slide3.cta',
+    title: 'Đặt lịch tập ngay hôm nay',
+    subtitle: 'Linh hoạt thời gian, thoải mái luyện tập',
+    cta: 'Đặt lịch ngay',
     link: '/booking',
   },
 ]
 
 const featureItems = [
-  { icon: '🏆', titleKey: 'about.features.modernTech.title', descKey: 'about.features.modernTech.desc' },
-  { icon: '👨‍💼', titleKey: 'about.features.certifiedPt.title', descKey: 'about.features.certifiedPt.desc' },
-  { icon: '📊', titleKey: 'about.features.personalData.title', descKey: 'about.features.personalData.desc' },
-  { icon: '🔒', titleKey: 'about.features.safe.title', descKey: 'about.features.safe.desc' },
-  { icon: '🌟', titleKey: 'about.features.community.title', descKey: 'about.features.community.desc' },
-  { icon: '📱', titleKey: 'about.features.anywhere.title', descKey: 'about.features.anywhere.desc' },
+  { icon: '🏆', title: 'Công nghệ hiện đại', desc: 'Trang bị công nghệ cao nhất' },
+  { icon: '👨‍💼', title: 'PT chứng nhận', desc: 'Đội ngũ PT chuyên nghiệp' },
+  { icon: '📊', title: 'Dữ liệu cá nhân', desc: 'Theo dõi sát sao' },
+  { icon: '🔒', title: 'An toàn', desc: 'Môi trường an toàn' },
+  { icon: '🌟', title: 'Cộng đồng', desc: 'Kết nối cộng đồng' },
+  { icon: '📱', title: 'Mọi lúc mọi nơi', desc: 'Tập luyện không giới hạn' },
 ]
 
 const stats = [
-  { value: '500+', labelKey: 'about.stats.members' },
-  { value: '20+', labelKey: 'about.stats.trainers' },
-  { value: '4', labelKey: 'about.stats.branches' },
-  { value: '98%', labelKey: 'about.stats.satisfaction' },
+  { value: '500+', label: 'Thành viên' },
+  { value: '20+', label: 'Huấn luyện viên' },
+  { value: '4', label: 'Chi nhánh' },
+  { value: '98%', label: 'Hài lòng' },
 ]
 
 const ptItems = [
-  { name: 'Minh Khang', specialtyKey: 'about.pts.specialties.strength', rating: '4.9', image: 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?auto=format&fit=crop&w=600&q=85' },
-  { name: 'Hoang Linh', specialtyKey: 'about.pts.specialties.fatLoss', rating: '4.8', image: 'https://images.unsplash.com/photo-1609899537878-88d5ba429bdb?auto=format&fit=crop&w=600&q=85' },
-  { name: 'An Tran', specialtyKey: 'about.pts.specialties.mobility', rating: '5.0', image: 'https://images.unsplash.com/photo-1594737625785-a6cbdabd333c?auto=format&fit=crop&w=600&q=85' },
-  { name: 'Bao Nguyen', specialtyKey: 'about.pts.specialties.hiit', rating: '4.9', image: 'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?auto=format&fit=crop&w=600&q=85' },
+  { name: 'Minh Khang', specialty: 'Sức mạnh', rating: '4.9', image: 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?auto=format&fit=crop&w=600&q=85' },
+  { name: 'Hoang Linh', specialty: 'Giảm mỡ', rating: '4.8', image: 'https://images.unsplash.com/photo-1609899537878-88d5ba429bdb?auto=format&fit=crop&w=600&q=85' },
+  { name: 'An Tran', specialty: 'Linh hoạt', rating: '5.0', image: 'https://images.unsplash.com/photo-1594737625785-a6cbdabd333c?auto=format&fit=crop&w=600&q=85' },
+  { name: 'Bao Nguyen', specialty: 'HIIT', rating: '4.9', image: 'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?auto=format&fit=crop&w=600&q=85' },
 ]
 
 const testimonialItems = [
-  { name: 'Minh Anh', durationKey: 'about.testimonials.items.minhAnh.duration', quoteKey: 'about.testimonials.items.minhAnh.quote' },
-  { name: 'Quoc Huy', durationKey: 'about.testimonials.items.quocHuy.duration', quoteKey: 'about.testimonials.items.quocHuy.quote' },
-  { name: 'Linh Chi', durationKey: 'about.testimonials.items.linhChi.duration', quoteKey: 'about.testimonials.items.linhChi.quote' },
+  { name: 'Minh Anh', duration: '6 tháng tập luyện', quote: 'Phòng gym tuyệt vời, tôi đã giảm được 10kg!' },
+  { name: 'Quoc Huy', duration: '1 năm tập luyện', quote: 'Huấn luyện viên rất chuyên nghiệp.' },
+  { name: 'Linh Chi', duration: '3 tháng tập luyện', quote: 'Tôi yêu không khí ở đây!' },
 ]
 
 const galleryImages = [
@@ -83,9 +81,8 @@ type AboutLandingSectionProps = {
 const pick = (value: any, lang: string, fallback = '') => getLocalizedText(value, lang, fallback)
 
 export default function AboutLandingSection({ landing, onCtaClick }: AboutLandingSectionProps) {
-  const { t, i18n } = useTranslation()
   const { settings: systemSettings } = useSystemSettings()
-  const lang = i18n.language
+  const lang = 'vi'
   const [activeSlide, setActiveSlide] = useState(0)
   const [navSolid, setNavSolid] = useState(false)
   const [touchStart, setTouchStart] = useState<number | null>(null)
@@ -94,11 +91,11 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
   const mobileMenuRef = useRef<HTMLDivElement>(null)
   const gymName = systemSettings.general.siteName
   const logoUrl = systemSettings.general.logoUrl
-  const aboutTitle = pick(landing?.aboutTitle, lang, t('about.intro.titleFallback'))
+  const aboutTitle = pick(landing?.aboutTitle, lang, 'Giới thiệu về chúng tôi')
   const aboutContent = pick(
     landing?.aboutContent,
     lang,
-    t('about.intro.contentFallback'),
+    'Nội dung giới thiệu',
   )
   const landingFlags = systemSettings.landing
   const { dark } = useTheme()
@@ -194,33 +191,32 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
           <nav className="hidden md:flex items-center gap-6">
             <button onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })}
               className="text-sm font-medium text-[var(--gs-text)] hover:text-[var(--theme-accent)] transition">
-              {t('nav.about')}
+              Giới thiệu
             </button>
             <button onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
               className="text-sm font-medium text-[var(--gs-text)] hover:text-[var(--theme-accent)] transition">
-              {t('nav.features')}
+              Tính năng
             </button>
             <button onClick={() => document.getElementById('trainers')?.scrollIntoView({ behavior: 'smooth' })}
               className="text-sm font-medium text-[var(--gs-text)] hover:text-[var(--theme-accent)] transition">
-              {t('nav.trainers')}
+              Huấn luyện viên
             </button>
             <button onClick={() => document.getElementById('footer')?.scrollIntoView({ behavior: 'smooth' })}
               className="text-sm font-medium text-[var(--gs-text)] hover:text-[var(--theme-accent)] transition">
-              {t('nav.contact')}
+              Liên hệ
             </button>
           </nav>
           <div className="hidden items-center gap-3 md:flex">
             <div className="flex">
               <Button className="!rounded-full !border-[var(--gs-border)] !bg-[var(--gs-card)] !px-5 !text-[var(--gs-text)] hover:!border-[var(--theme-accent)]" icon={<LoginOutlined />} onClick={() => goTo('/login')}>
-                {t('about.nav.login')}
+                Đăng nhập
               </Button>
             </div>
             {systemSettings.auth.allowRegistration && (
               <Button type="primary" className="!rounded-full !px-5 !font-bold" icon={<UserAddOutlined />} onClick={() => goTo('/register')}>
-                {t('about.nav.register')}
+                Đăng ký
               </Button>
             )}
-            <LanguageSelect />
           </div>
           <div ref={mobileMenuRef} className="relative md:hidden">
             <button
@@ -245,7 +241,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                     setIsMenuOpen(false)
                   }}
                 >
-                  {t('nav.about')}
+                  Giới thiệu
                 </button>
                 <button
                   type="button"
@@ -255,7 +251,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                     setIsMenuOpen(false)
                   }}
                 >
-                  {t('nav.features')}
+                  Tính năng
                 </button>
                 <button
                   type="button"
@@ -265,7 +261,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                     setIsMenuOpen(false)
                   }}
                 >
-                  {t('nav.trainers')}
+                  Huấn luyện viên
                 </button>
                 <button
                   type="button"
@@ -275,7 +271,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                     setIsMenuOpen(false)
                   }}
                 >
-                  {t('nav.contact')}
+                  Liên hệ
                 </button>
                 <div className="my-1 border-t border-[var(--gs-border)]" />
                 <button
@@ -286,7 +282,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                     goTo('/login')
                   }}
                 >
-                  {t('about.nav.login')}
+                  Đăng nhập
                 </button>
                 {systemSettings.auth.allowRegistration && (
                   <button
@@ -297,27 +293,9 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
                       goTo('/register')
                     }}
                   >
-                    {t('about.nav.register')}
+                    Đăng ký
                   </button>
                 )}
-                <div className="flex flex-row gap-3 border-t border-[var(--gs-border)] pt-2">
-                  <button
-                    type="button"
-                    onClick={() => i18n.changeLanguage('vi')}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${i18n.language === 'vi' ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)]' : 'opacity-60'
-                      }`}
-                  >
-                    <img src="https://flagcdn.com/20x15/vn.png" alt="" className="h-3.5 w-5 rounded-sm object-cover" /> VN
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => i18n.changeLanguage('en')}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${i18n.language === 'en' ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)]' : 'opacity-60'
-                      }`}
-                  >
-                    <img src="https://flagcdn.com/20x15/us.png" alt="" className="h-3.5 w-5 rounded-sm object-cover" /> US
-                  </button>
-                </div>
               </div>
             </div>
           </div>
@@ -350,14 +328,14 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
             <div className="w-full max-w-[340px] md:max-w-4xl md:pt-20">
               <p className="mb-4 text-xs font-extrabold uppercase tracking-[0.22em] text-[var(--theme-accent)] md:mb-5 md:text-lg">{gymName}</p>
               <h1 className="max-w-full break-words text-[clamp(28px,8vw,38px)] font-black leading-[1.08] text-white drop-shadow-[0_3px_16px_rgba(0,0,0,0.8)] md:text-5xl md:text-[var(--hero-text)] md:drop-shadow-none lg:text-7xl">
-                {t(heroSlides[activeSlide].titleKey)}
+                {heroSlides[activeSlide].title}
               </h1>
               <p className="mt-4 text-[15px] leading-7 text-white/90 drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)] md:mt-6 md:max-w-2xl md:text-xl md:text-[var(--hero-muted)] md:drop-shadow-none">
-                {t(heroSlides[activeSlide].subtitleKey)}
+                {heroSlides[activeSlide].subtitle}
               </p>
               {landingFlags.startNowButtonEnabled && (
                 <Button type="primary" className="mt-6 !h-[44px] !rounded-full !px-5 !text-sm !font-extrabold md:mt-8 md:!h-[52px] md:!px-8 md:!text-base" onClick={() => goTo(heroSlides[activeSlide].link)}>
-                  {t(heroSlides[activeSlide].ctaKey)}
+                  {heroSlides[activeSlide].cta}
                 </Button>
               )}
             </div>
@@ -389,7 +367,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
           {stats.map((item, i) => (
             <div key={item.value} className={`reveal text-center ${statsReveal.visible ? 'visible' : ''}`} style={{ transitionDelay: `${i * 100}ms` }}>
               <strong className="block text-4xl font-black leading-none text-[var(--theme-accent)] md:text-6xl">{item.value}</strong>
-              <span className="mt-2 block text-sm uppercase tracking-[0.16em] text-[var(--gs-muted)]">{t(item.labelKey)}</span>
+              <span className="mt-2 block text-sm uppercase tracking-[0.16em] text-[var(--gs-muted)]">{item.label}</span>
             </div>
           ))}
         </div>
@@ -398,7 +376,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
       {landingFlags.partnersSectionEnabled && shops.length >= 3 && (
         <section {...brandsReveal.attr} id="brands" className="bg-[var(--gs-page)] px-5 py-18 md:px-8 md:py-24">
           <div className="mx-auto max-w-7xl">
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.partners.title')}</p>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">Đối tác của chúng tôi</p>
             <div className={`mt-10 ${brandsReveal.visible ? 'visible' : ''}`}>
               <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-8">
                 {shops.map((shop) => {
@@ -434,7 +412,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
 
       <section {...introReveal.attr} id="about" className="mx-auto grid max-w-7xl gap-10 px-5 py-18 md:grid-cols-[1fr_0.9fr] md:px-8 md:py-24">
         <div className={`reveal-left ${introReveal.visible ? 'visible' : ''}`}>
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.intro.eyebrow')}</p>
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">Giới thiệu</p>
           <h2 className="mt-4 break-words text-4xl font-black leading-none md:text-[82px]">{aboutTitle}</h2>
           <p className="mt-6 whitespace-pre-wrap text-base leading-8 text-[var(--gs-muted)] md:text-lg">{aboutContent}</p>
         </div>
@@ -443,14 +421,14 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
 
       {landingFlags.servicesSectionEnabled && <section {...featuresReveal.attr} id="features" className="bg-[var(--gs-page)] px-5 py-18 md:px-8 md:py-24">
         <div className="mx-auto max-w-7xl">
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.features.eyebrow')}</p>
-          <h2 className="mt-4 text-4xl font-black leading-none md:text-6xl lg:text-7xl" style={{ wordBreak: 'keep-all' }}>{t('about.features.title')}</h2>
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">Tính năng</p>
+          <h2 className="mt-4 text-4xl font-black leading-none md:text-6xl lg:text-7xl" style={{ wordBreak: 'keep-all' }}>Tính năng nổi bật</h2>
           <div className="mt-9 grid gap-4 md:grid-cols-3">
             {featureItems.map((item, i) => (
-              <article key={item.titleKey} className={`reveal rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 transition hover:border-[var(--theme-accent)] ${featuresReveal.visible ? 'visible' : ''}`} style={{ transitionDelay: `${(i % 3) * 100}ms` }}>
+              <article key={item.title} className={`reveal rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 transition hover:border-[var(--theme-accent)] ${featuresReveal.visible ? 'visible' : ''}`} style={{ transitionDelay: `${(i % 3) * 100}ms` }}>
                 <div className="grid h-12 w-12 place-items-center rounded-full border border-[var(--theme-accent)] text-2xl text-[var(--theme-accent)]">{item.icon}</div>
-                <h3 className="mt-5 text-xl font-black">{t(item.titleKey)}</h3>
-                <p className="mt-3 text-sm leading-7 text-[var(--gs-muted)]">{t(item.descKey)}</p>
+                <h3 className="mt-5 text-xl font-black">{item.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-[var(--gs-muted)]">{item.desc}</p>
               </article>
             ))}
           </div>
@@ -458,14 +436,14 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
       </section>}
 
       <section {...ptReveal.attr} id="trainers" className="mx-auto max-w-7xl px-5 py-18 md:px-8 md:py-24">
-        <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.pts.eyebrow')}</p>
-        <h2 className="mt-4 break-words text-4xl font-black leading-none md:text-[82px]">{t('about.pts.title')}</h2>
+        <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">Huấn luyện viên</p>
+        <h2 className="mt-4 break-words text-4xl font-black leading-none md:text-[82px]">Đội ngũ PT</h2>
         <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {ptItems.map((pt, i) => (
             <article key={pt.name} className={`reveal rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 text-center ${ptReveal.visible ? 'visible' : ''}`} style={{ transitionDelay: `${i * 100}ms` }}>
               <img src={pt.image} alt={pt.name} className="mx-auto h-28 w-28 rounded-full object-cover ring-2 ring-[var(--theme-accent)]" />
               <h3 className="mt-5 text-xl font-black">{pt.name}</h3>
-              <p className="mt-2 text-sm text-[var(--gs-muted)]">{t(pt.specialtyKey)}</p>
+              <p className="mt-2 text-sm text-[var(--gs-muted)]">{pt.specialty}</p>
               <p className="mt-4 text-sm font-bold text-[var(--theme-accent)]">★★★★★ {pt.rating}</p>
             </article>
           ))}
@@ -474,7 +452,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
 
       <section {...facilitiesReveal.attr} className="bg-[var(--gs-page)] px-5 py-18 md:px-8 md:py-24">
         <div className="mx-auto max-w-7xl">
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.facilities.eyebrow')}</p>
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">Cơ sở vật chất</p>
           <div className="mt-8 grid gap-4 md:grid-cols-2">
             {galleryImages.map((src, i) => (
               <div key={src} className={`reveal h-[260px] overflow-hidden rounded-lg border border-[var(--gs-border)] md:h-[340px] ${facilitiesReveal.visible ? 'visible' : ''}`} style={{ transitionDelay: `${(i % 2) * 150}ms` }}>
@@ -486,14 +464,14 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
       </section>
 
       {landingFlags.feedbackSectionEnabled && <section {...testimonialsReveal.attr} className="mx-auto max-w-7xl px-5 py-18 md:px-8 md:py-24">
-        <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">{t('about.testimonials.eyebrow')}</p>
+        <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--theme-accent)]">Khách hàng nói gì</p>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {testimonialItems.map((item, i) => (
             <article key={item.name} className={`reveal rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 ${testimonialsReveal.visible ? 'visible' : ''}`} style={{ transitionDelay: `${i * 100}ms` }}>
-              <p className="text-lg leading-8 text-[var(--gs-text)]">&ldquo;{t(item.quoteKey)}&rdquo;</p>
+              <p className="text-lg leading-8 text-[var(--gs-text)]">&ldquo;{item.quote}&rdquo;</p>
               <div className="mt-6 border-t border-[var(--gs-border)] pt-5">
                 <strong className="block">{item.name}</strong>
-                <span className="text-sm text-[var(--gs-muted)]">{t(item.durationKey)}</span>
+                <span className="text-sm text-[var(--gs-muted)]">{item.duration}</span>
               </div>
             </article>
           ))}
@@ -506,9 +484,9 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
         style={{ background: 'linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.82)), url(https://images.unsplash.com/photo-1517963879433-6ad2b056d712?auto=format&fit=crop&w=1900&q=88) center/cover' }}
       >
         <div className={`reveal text-white ${ctaReveal.visible ? 'visible' : ''}`}>
-          <h2 className="mx-auto max-w-4xl break-words text-4xl font-black leading-[0.95] md:text-[110px] md:leading-[0.9]">{t('about.cta.title')}</h2>
+          <h2 className="mx-auto max-w-4xl break-words text-4xl font-black leading-[0.95] md:text-[110px] md:leading-[0.9]">Bắt đầu ngay hôm nay</h2>
           <Button type="primary" className="mt-9 !h-13 !rounded-full !px-9 !font-extrabold" onClick={() => goTo('/register')}>
-            {t('about.cta.register')}
+            Đăng ký ngay
           </Button>
         </div>
       </section>}
@@ -520,7 +498,7 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
               {logoUrl ? <img src={logoUrl} alt={gymName} className="h-9 w-9 rounded-lg object-cover md:h-10 md:w-10" /> : <span className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--theme-button-bg)] font-black text-[var(--theme-button-text)] md:h-10 md:w-10">GP</span>}
               <span className="text-lg font-black md:text-xl">{gymName}</span>
             </div>
-            <p className="mt-2 text-xs leading-relaxed text-[var(--gs-muted)] md:mt-4 md:text-sm">{t('about.footer.description')}</p>
+            <p className="mt-2 text-xs leading-relaxed text-[var(--gs-muted)] md:mt-4 md:text-sm">Mô tả</p>
             <div className="mt-3 flex items-center gap-2 md:mt-6 md:gap-3">
               <a href="#" className="grid h-8 w-8 place-items-center rounded-full border border-[var(--gs-border)] text-xs text-[var(--gs-muted)] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)] md:h-9 md:w-9 md:text-sm" aria-label="Facebook">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:h-4 md:w-4"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
@@ -534,59 +512,43 @@ export default function AboutLandingSection({ landing, onCtaClick }: AboutLandin
             </div>
           </div>
           <div className="col-span-1">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-accent)] md:text-sm">{t('about.footer.features_title')}</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-accent)] md:text-sm">Tính năng</h3>
             <ul className="mt-3 space-y-1.5 md:mt-5 md:space-y-3">
-              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('nav.checkin')}</button></li>
-              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('nav.book_pt')}</button></li>
-              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('nav.health')}</button></li>
-              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('nav.workout')}</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>Check-in</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>Đặt lịch PT</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>Sức khỏe</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>Bài tập</button></li>
             </ul>
           </div>
           <div className="col-span-1">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-accent)] md:text-sm">{t('about.footer.support_title')}</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-accent)] md:text-sm">Hỗ trợ</h3>
             <ul className="mt-3 space-y-1.5 md:mt-5 md:space-y-3">
-              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/help')}>{t('nav.help')}</button></li>
-              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/policies')}>{t('nav.policies')}</button></li>
-              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('nav.feedback')}</button></li>
-              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>{t('about.footer.about')}</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/help')}>Trợ giúp</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/policies')}>Chính sách</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>Đánh giá</button></li>
+              <li><button type="button" className="text-xs leading-relaxed text-[var(--gs-muted)] transition hover:text-[var(--theme-accent)] md:text-sm" onClick={() => goTo('/about')}>Về chúng tôi</button></li>
             </ul>
           </div>
           <div className="col-span-2 lg:col-span-1">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-accent)] md:text-sm">{t('about.footer.contact_title')}</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-accent)] md:text-sm">Liên hệ</h3>
             <ul className="mt-3 space-y-2 md:mt-5 md:space-y-4">
               <li className="flex items-center gap-2 text-xs text-[var(--gs-muted)] md:gap-3 md:text-sm">
                 <Mail size={13} className="shrink-0 text-[var(--theme-accent)] md:size-[15px]" />
-                <span>{t('about.footer.email')}</span>
+                <span>Email</span>
               </li>
               <li className="flex items-center gap-2 text-xs text-[var(--gs-muted)] md:gap-3 md:text-sm">
                 <Phone size={13} className="shrink-0 text-[var(--theme-accent)] md:size-[15px]" />
-                <span>{t('about.footer.phone')}</span>
+                <span>Điện thoại</span>
               </li>
               <li className="flex items-center gap-2 text-xs text-[var(--gs-muted)] md:gap-3 md:text-sm">
                 <MapPin size={13} className="shrink-0 text-[var(--theme-accent)] md:size-[15px]" />
-                <span>{t('about.footer.address')}</span>
+                <span>Địa chỉ</span>
               </li>
             </ul>
           </div>
         </div>
         <div className="mx-auto mt-6 flex max-w-7xl flex-col items-start gap-2 border-t border-[var(--gs-border)] pt-5 text-xs text-[var(--gs-muted)] md:mt-14 md:flex-row md:items-center md:justify-between md:pt-6 md:text-sm">
-          <span>© {new Date().getFullYear()} {gymName}. {t('about.footer.copyright')}</span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => i18n.changeLanguage('vi')}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition ${i18n.language === 'vi' ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)]' : 'text-[var(--gs-muted)] hover:text-[var(--theme-accent)]'}`}
-            >
-              VI
-            </button>
-            <button
-              type="button"
-              onClick={() => i18n.changeLanguage('en')}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition ${i18n.language === 'en' ? 'bg-[var(--theme-active-bg)] text-[var(--theme-active-text)]' : 'text-[var(--gs-muted)] hover:text-[var(--theme-accent)]'}`}
-            >
-              EN
-            </button>
-          </div>
+          <span>© {new Date().getFullYear()} {gymName}. Bản quyền</span>
         </div>
       </footer>
     </main>

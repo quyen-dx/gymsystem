@@ -1,4 +1,4 @@
-import { Modal, Radio, Select, message } from 'antd'
+import { Modal, Radio, message } from 'antd'
 import { useEffect, useState } from 'react'
 import api from '../../../services/api'
 import { memberService } from '../../../services/memberService'
@@ -92,7 +92,7 @@ export default function MemberRenewPlanModal({ open, memberId, memberName, curre
       confirmLoading={loading}
       okText="Gia hạn"
       cancelText="Hủy"
-      destroyOnClose
+      destroyOnHidden
       width={480}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

@@ -35,7 +35,6 @@ import {
   message,
 } from 'antd'
 import { useCallback, useContext, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import api from '../../../services/api'
@@ -46,7 +45,6 @@ import { getUserDisplayName } from '../../../utils/userDisplay'
 const { Text, Title } = Typography
 
 export default function AdminUserDetailPage() {
-  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const authContext = useContext(AuthContext)
@@ -61,11 +59,11 @@ export default function AdminUserDetailPage() {
       const res = await api.get(`/auth/users/${id}`)
       setData(res.data)
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('admin.users.messages.fetch_failed'))
+      message.error(err.response?.data?.message || 'Không thể tải thông tin người dùng')
     } finally {
       setLoading(false)
     }
-  }, [id, t])
+  }, [id])
 
   useEffect(() => {
     fetchUserDetails()
@@ -75,10 +73,10 @@ export default function AdminUserDetailPage() {
     if (!data?.user) return
     try {
       await api.patch(`/auth/users/${data.user._id}/toggle-status`)
-      message.success(t('admin.users.messages.toggle_success'))
+      message.success('Cập nhật trạng thái thành công')
       fetchUserDetails()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('admin.users.messages.action_failed'))
+      message.error(err.response?.data?.message || 'Thao tác thất bại')
     }
   }
 
@@ -96,9 +94,9 @@ export default function AdminUserDetailPage() {
     return (
       <DashboardLayout>
         <div style={{ textAlign: 'center', padding: 80 }}>
-          <Empty description={t('admin.users.messages.fetch_failed')} />
+          <Empty description="Không thể tải thông tin người dùng" />
           <Button onClick={() => navigate('/admin/users')} icon={<ArrowLeftOutlined />}>
-            {t('admin.users.detail.back')}
+            Quay lại
           </Button>
         </div>
       </DashboardLayout>
@@ -109,31 +107,31 @@ export default function AdminUserDetailPage() {
 
   const membershipColumns = [
     {
-      title: t('admin.users.detail.plan_name'),
+      title: 'Gói tập',
       dataIndex: 'planId',
       key: 'planName',
       render: (plan: any) => plan?.nameVi || plan?.nameEn || '—',
     },
     {
-      title: t('admin.users.detail.start_date'),
+      title: 'Ngày bắt đầu',
       dataIndex: 'startDate',
       key: 'startDate',
       render: (date: string) => new Date(date).toLocaleDateString('vi-VN'),
     },
     {
-      title: t('admin.users.detail.end_date'),
+      title: 'Ngày kết thúc',
       dataIndex: 'endDate',
       key: 'endDate',
       render: (date: string) => new Date(date).toLocaleDateString('vi-VN'),
     },
     {
-      title: t('admin.users.detail.price'),
+      title: 'Giá',
       dataIndex: 'price',
       key: 'price',
       render: (price: number) => price ? `${price.toLocaleString('vi-VN')}đ` : '—',
     },
     {
-      title: t('admin.users.detail.status'),
+      title: 'Trạng thái',
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => {
@@ -145,7 +143,7 @@ export default function AdminUserDetailPage() {
 
   const bookingColumns = [
     {
-      title: t('admin.users.detail.pt'),
+      title: 'PT',
       dataIndex: 'ptId',
       key: 'pt',
       render: (pt: any) => (
@@ -156,18 +154,18 @@ export default function AdminUserDetailPage() {
       ),
     },
     {
-      title: t('admin.users.detail.date'),
+      title: 'Ngày',
       dataIndex: 'date',
       key: 'date',
       render: (date: string) => new Date(date).toLocaleDateString('vi-VN'),
     },
     {
-      title: t('admin.users.detail.slot'),
+      title: 'Khung giờ',
       dataIndex: 'slot',
       key: 'slot',
     },
     {
-      title: t('admin.users.detail.status'),
+      title: 'Trạng thái',
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => {
@@ -182,25 +180,25 @@ export default function AdminUserDetailPage() {
 
   const orderColumns = [
     {
-      title: t('admin.users.detail.order_id'),
+      title: 'Mã đơn hàng',
       dataIndex: '_id',
       key: 'orderId',
       render: (id: string) => `#${id.slice(-6).toUpperCase()}`,
     },
     {
-      title: t('admin.users.detail.created_at'),
+      title: 'Ngày tạo',
       dataIndex: 'createdAt',
       key: 'createdAt',
       render: (date: string) => new Date(date).toLocaleDateString('vi-VN'),
     },
     {
-      title: t('admin.users.detail.order_total'),
+      title: 'Tổng tiền',
       dataIndex: 'totalAmount',
       key: 'totalAmount',
       render: (total: number) => `${total.toLocaleString('vi-VN')}đ`,
     },
     {
-      title: t('admin.users.detail.order_status'),
+      title: 'Trạng thái',
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => {
@@ -222,7 +220,7 @@ export default function AdminUserDetailPage() {
           onClick={() => navigate('/admin/users')}
           style={{ fontSize: 16 }}
         >
-          {t('admin.users.detail.back')}
+          Quay lại
         </Button>
         <Space>
           <Button
@@ -230,7 +228,7 @@ export default function AdminUserDetailPage() {
             onClick={handleToggleStatus}
             danger={user.isActive}
           >
-            {user.isActive ? t('admin.users.tooltips.lock') : t('admin.users.tooltips.unlock')}
+            {user.isActive ? 'Khóa' : 'Mở khóa'}
           </Button>
         </Space>
       </div>
@@ -249,65 +247,65 @@ export default function AdminUserDetailPage() {
               {getUserDisplayName(user, 'Người dùng')}
             </Title>
             <Text type="secondary" className="block mb-3">
-              {user.memberCode ? `${t('admin.users.detail.member_code')}: ${user.memberCode}` : ''}
+              {user.memberCode ? `Mã thành viên: ${user.memberCode}` : ''}
             </Text>
             <div className="mb-4">
               <Space>
                 <Tag color={user.isActive ? 'success' : 'error'} icon={user.isActive ? <CheckCircleOutlined /> : <CloseCircleOutlined />}>
-                  {user.isActive ? t('admin.users.status.active') : t('admin.users.status.locked')}
+                  {user.isActive ? 'Đang hoạt động' : 'Đã khóa'}
                 </Tag>
                 <Tag color={user.isVerified ? 'blue' : 'default'} icon={user.isVerified ? <CheckCircleOutlined /> : <InfoCircleOutlined />}>
-                  {user.isVerified ? t('admin.users.status.verified') : t('admin.users.status.unverified')}
+                  {user.isVerified ? 'Đã xác thực' : 'Chưa xác thực'}
                 </Tag>
               </Space>
             </div>
             
             <Descriptions column={1} size="small" className="text-left mt-6 border-t pt-4">
-              <Descriptions.Item label={t('admin.users.detail.role')}>
+              <Descriptions.Item label="Vai trò">
                 <Tag color="purple">{user.role.toUpperCase()}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.provider')}>
+              <Descriptions.Item label="Nhà cung cấp">
                 {user.provider.toUpperCase()}
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.email')}>
+              <Descriptions.Item label="Email">
                 {user.email || '—'}
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.phone')}>
+              <Descriptions.Item label="Số điện thoại">
                 {user.phone || '—'}
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.created_at')}>
+              <Descriptions.Item label="Ngày tạo">
                 {new Date(user.createdAt).toLocaleDateString('vi-VN')}
               </Descriptions.Item>
             </Descriptions>
           </Card>
 
           <Card
-            title={<><MedicineBoxOutlined /> {t('admin.users.detail.health_info')}</>}
+            title={<><MedicineBoxOutlined /> Thông tin sức khỏe</>}
             className="rounded-[24px] shadow-sm mb-6"
           >
             <Descriptions column={1} size="small">
-              <Descriptions.Item label={t('admin.users.detail.height')}>{user.healthInfo?.height ? `${user.healthInfo.height} cm` : '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.weight')}>{user.healthInfo?.weight ? `${user.healthInfo.weight} kg` : '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.activity_level')}>{user.healthInfo?.activityLevel || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.goals')}>
+              <Descriptions.Item label="Chiều cao">{user.healthInfo?.height ? `${user.healthInfo.height} cm` : '—'}</Descriptions.Item>
+              <Descriptions.Item label="Cân nặng">{user.healthInfo?.weight ? `${user.healthInfo.weight} kg` : '—'}</Descriptions.Item>
+              <Descriptions.Item label="Mức độ hoạt động">{user.healthInfo?.activityLevel || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Mục tiêu">
                 {user.healthInfo?.goals && user.healthInfo.goals.length > 0 ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     {user.healthInfo.goals.map(g => <Tag key={g} color="blue">{g}</Tag>)}
                   </div>
                 ) : '—'}
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.health_notes')}>{user.healthInfo?.notes || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Ghi chú sức khỏe">{user.healthInfo?.notes || '—'}</Descriptions.Item>
             </Descriptions>
           </Card>
 
           <Card
-            title={<><PhoneOutlined /> {t('admin.users.detail.emergency')}</>}
+            title={<><PhoneOutlined /> Liên hệ khẩn cấp</>}
             className="rounded-[24px] shadow-sm"
           >
              <Descriptions column={1} size="small">
-              <Descriptions.Item label={t('admin.users.detail.emergency_name')}>{user.emergencyContact?.name || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.emergency_phone')}>{user.emergencyContact?.phone || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.emergency_relationship')}>{user.emergencyContact?.relationship || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Tên người liên hệ">{user.emergencyContact?.name || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Số điện thoại">{user.emergencyContact?.phone || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Mối quan hệ">{user.emergencyContact?.relationship || '—'}</Descriptions.Item>
             </Descriptions>
           </Card>
         </Col>
@@ -315,48 +313,48 @@ export default function AdminUserDetailPage() {
         {/* Right Column: Personal, Identity, Gym Profile */}
         <Col xs={24} lg={16}>
           <Card
-            title={<><SolutionOutlined /> {t('admin.users.detail.personal_info')}</>}
+            title={<><SolutionOutlined /> Thông tin cá nhân</>}
             className="rounded-[24px] shadow-sm mb-6"
           >
             <Descriptions column={{ xs: 1, sm: 2 }}>
-              <Descriptions.Item label={t('admin.users.detail.full_name')}>{getUserDisplayName(user, 'Người dùng')}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.dob')}>
+              <Descriptions.Item label="Họ và tên">{getUserDisplayName(user, 'Người dùng')}</Descriptions.Item>
+              <Descriptions.Item label="Ngày sinh">
                 {user.dateOfBirth ? new Date(user.dateOfBirth).toLocaleDateString('vi-VN') : '—'}
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.gender')}>{user.gender || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.nationality')}>{user.nationality || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.timezone')}>{user.timezone || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Giới tính">{user.gender || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Quốc tịch">{user.nationality || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Múi giờ">{user.timezone || '—'}</Descriptions.Item>
             </Descriptions>
 
             <Title level={5} className="mt-4 mb-3 border-t pt-4">
-              <EnvironmentOutlined /> {t('admin.users.detail.contact_info')}
+              <EnvironmentOutlined /> Thông tin liên hệ
             </Title>
             <Descriptions column={{ xs: 1, sm: 2 }}>
-              <Descriptions.Item label={t('admin.users.detail.country')}>{user.country || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.province')}>{user.province || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.address')} span={2}>{user.detailedAddress || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.contact_email')}>{user.contactEmail || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.contact_phone')}>{user.phone || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Quốc gia">{user.country || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Tỉnh/Thành">{user.province || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Địa chỉ" span={2}>{user.detailedAddress || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Email liên hệ">{user.contactEmail || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Số điện thoại">{user.phone || '—'}</Descriptions.Item>
             </Descriptions>
           </Card>
 
           <Card
-            title={<><SafetyCertificateOutlined /> {t('admin.users.detail.identity_info')}</>}
+            title={<><SafetyCertificateOutlined /> Thông tin định danh</>}
             className="rounded-[24px] shadow-sm mb-6"
           >
              <Descriptions column={{ xs: 1, sm: 2 }}>
-              <Descriptions.Item label={t('admin.users.detail.identity_type')}>{user.identityType || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.identity_number')}>
+              <Descriptions.Item label="Loại giấy tờ">{user.identityType || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Số giấy tờ">
                 {user.identityNumber ? user.identityNumber.replace(/.(?=.{4})/g, '*') : '—'}
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.identity_country')}>{user.identityCountry || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.identity_status')}>
+              <Descriptions.Item label="Quốc gia cấp">{user.identityCountry || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Trạng thái">
                 <Tag color={user.identityStatus === 'approved' ? 'success' : user.identityStatus === 'rejected' ? 'error' : user.identityStatus === 'pending' ? 'warning' : 'default'}>
-                  {user.identityStatus?.toUpperCase() || t('admin.users.detail.no_data')}
+                  {user.identityStatus?.toUpperCase() || 'Không có dữ liệu'}
                 </Tag>
               </Descriptions.Item>
               {user.identityRejectReason && (
-                 <Descriptions.Item label={t('admin.users.detail.identity_reason')} span={2}>
+                 <Descriptions.Item label="Lý do từ chối" span={2}>
                     <Text type="danger">{user.identityRejectReason}</Text>
                  </Descriptions.Item>
               )}
@@ -364,7 +362,7 @@ export default function AdminUserDetailPage() {
 
             {((user.identityFrontImage || user.identityBackImage) && ['super_admin', 'admin'].includes(currentUser?.role || '')) && (
               <div className="mt-4 pt-4 border-t">
-                <Text strong className="block mb-3">{t('admin.users.detail.view_images')}</Text>
+                <Text strong className="block mb-3">Xem hình ảnh</Text>
                 <Space size="large">
                   {user.identityFrontImage && (
                     <div className="text-center">
@@ -373,7 +371,7 @@ export default function AdminUserDetailPage() {
                         src={user.identityFrontImage}
                         className="rounded-lg border shadow-sm"
                       />
-                      <div className="mt-1"><Text type="secondary" style={{ fontSize: 12 }}>{t('admin.verifications.doc_front')}</Text></div>
+                      <div className="mt-1"><Text type="secondary" style={{ fontSize: 12 }}>Mặt trước</Text></div>
                     </div>
                   )}
                   {user.identityBackImage && (
@@ -383,7 +381,7 @@ export default function AdminUserDetailPage() {
                         src={user.identityBackImage}
                         className="rounded-lg border shadow-sm"
                       />
-                      <div className="mt-1"><Text type="secondary" style={{ fontSize: 12 }}>{t('admin.verifications.doc_back')}</Text></div>
+                      <div className="mt-1"><Text type="secondary" style={{ fontSize: 12 }}>Mặt sau</Text></div>
                     </div>
                   )}
                 </Space>
@@ -392,24 +390,24 @@ export default function AdminUserDetailPage() {
           </Card>
 
           <Card
-            title={<><TrophyOutlined /> {t('admin.users.detail.gym_profile')}</>}
+            title={<><TrophyOutlined /> Hồ sơ Gym</>}
             className="rounded-[24px] shadow-sm mb-6"
           >
              <Descriptions column={{ xs: 1, sm: 2 }}>
-              <Descriptions.Item label={t('admin.users.detail.created_at')}>
+              <Descriptions.Item label="Ngày tạo">
                  {new Date(user.createdAt).toLocaleDateString('vi-VN')}
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.membership_grade')}>
-                 <Tag color="gold">GOLD MEMBER</Tag> {/* Mock grade for now */}
+              <Descriptions.Item label="Hạng thành viên">
+                 <Tag color="gold">GOLD MEMBER</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.active_plan')} span={2}>
+              <Descriptions.Item label="Gói tập hiện tại" span={2}>
                  {activeMembership ? (
                    <Text strong style={{ color: '#1677ff' }}>{activeMembership.planId?.nameVi || activeMembership.planId?.nameEn} (Hết hạn: {new Date(activeMembership.endDate).toLocaleDateString('vi-VN')})</Text>
                  ) : (
-                   <Text type="secondary">{t('admin.members.detail.no_membership')}</Text>
+                   <Text type="secondary">Chưa đăng ký gói tập</Text>
                  )}
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.assigned_pt')}>
+              <Descriptions.Item label="PT được phân công">
                  {recentBookings && recentBookings.length > 0 ? (
                     <Space>
                       <Avatar size="small" src={recentBookings[0].ptId?.avatar} icon={<UserOutlined />} />
@@ -417,10 +415,10 @@ export default function AdminUserDetailPage() {
                     </Space>
                  ) : '—'}
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.total_workouts')}>
-                 <Badge count={totalWorkouts} showZero color="#52c41a" /> {t('booking.status_completed')}
+              <Descriptions.Item label="Tổng số buổi tập">
+                 <Badge count={totalWorkouts} showZero color="#52c41a" /> đã hoàn thành
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.users.detail.points')}>
+              <Descriptions.Item label="Điểm thưởng">
                  <Text strong style={{ color: '#faad14' }}>0 pts</Text>
               </Descriptions.Item>
             </Descriptions>
@@ -435,7 +433,7 @@ export default function AdminUserDetailPage() {
           items={[
             {
               key: 'membership',
-              label: <><HistoryOutlined /> {t('admin.users.detail.membership_history')}</>,
+              label: <><HistoryOutlined /> Lịch sử đăng ký gói tập</>,
               children: (
                 <Table
                   dataSource={membershipHistory}
@@ -448,7 +446,7 @@ export default function AdminUserDetailPage() {
             },
             {
               key: 'bookings',
-              label: <><CalendarOutlined /> {t('admin.users.detail.booking_history')}</>,
+              label: <><CalendarOutlined /> Lịch sử đặt lịch</>,
               children: (
                 <Table
                   dataSource={recentBookings}
@@ -461,7 +459,7 @@ export default function AdminUserDetailPage() {
             },
             {
               key: 'shipping',
-              label: <><EnvironmentOutlined /> {t('admin.users.detail.shipping_addresses')}</>,
+              label: <><EnvironmentOutlined /> Địa chỉ giao hàng</>,
               children: (
                 <Row gutter={[16, 16]}>
                   {addresses && addresses.length > 0 ? (
@@ -482,14 +480,14 @@ export default function AdminUserDetailPage() {
                       </Col>
                     ))
                   ) : (
-                    <Col span={24}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('admin.users.detail.no_data')} /></Col>
+                    <Col span={24}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có dữ liệu" /></Col>
                   )}
                 </Row>
               ),
             },
             {
               key: 'orders',
-              label: <><OrderedListOutlined /> {t('admin.users.detail.order_history')}</>,
+              label: <><OrderedListOutlined /> Lịch sử đơn hàng</>,
               children: (
                 <Table
                   dataSource={orderHistory}

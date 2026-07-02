@@ -58,7 +58,7 @@ export default function MemberRegisterPlanModal({ open, memberId, memberName, on
       confirmLoading={loading}
       okText="Đăng ký"
       cancelText="Hủy"
-      destroyOnClose
+      destroyOnHidden
       width={480}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

@@ -1,6 +1,5 @@
 import { Button, Card, Descriptions, Spin, Typography, message } from 'antd'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { trackOrder } from '../../../services/orderService'
@@ -15,7 +14,6 @@ const statusVi: Record<string, string> = {
 }
 
 export default function OrderTrackingPage() {
-    const { t } = useTranslation()
     const { id } = useParams()
     const navigate = useNavigate()
     const [shipping, setShipping] = useState<any>(null)
@@ -30,36 +28,36 @@ export default function OrderTrackingPage() {
                 setShipping(response.data.data)
             } catch (error) {
                 console.error(error)
-                message.error(t('order_tracking.msg_load_failed'))
+                message.error('Không thể tải thông tin vận chuyển')
             } finally {
                 setLoading(false)
             }
         }
         load()
-    }, [id, t])
+    }, [id])
 
     return (
         <MemberLayout>
             <div className="member-page">
                 <Card>
-                    <Title level={4}>{t('order_tracking.title')}</Title>
+                    <Title level={4}>Theo dõi đơn hàng</Title>
                     {loading ? (
                         <Spin />
                     ) : shipping ? (
                         <Descriptions column={1} bordered>
-                            <Descriptions.Item label={t('order_tracking.status')}>{statusVi[shipping.trackingStatus] || shipping.trackingStatus}</Descriptions.Item>
-                            <Descriptions.Item label={t('order_tracking.shipping_fee')}>{shipping.shippingFee.toLocaleString('vi-VN')} VND</Descriptions.Item>
-                            <Descriptions.Item label={t('order_tracking.estimated_delivery')}>{new Date(shipping.estimatedDeliveryDate).toLocaleDateString()}</Descriptions.Item>
-                            <Descriptions.Item label={t('order_tracking.delivery_address')}>
+                            <Descriptions.Item label="Trạng thái">{statusVi[shipping.trackingStatus] || shipping.trackingStatus}</Descriptions.Item>
+                            <Descriptions.Item label="Phí vận chuyển">{shipping.shippingFee.toLocaleString('vi-VN')} VND</Descriptions.Item>
+                            <Descriptions.Item label="Ngày giao dự kiến">{new Date(shipping.estimatedDeliveryDate).toLocaleDateString()}</Descriptions.Item>
+                            <Descriptions.Item label="Địa chỉ giao hàng">
                                 {shipping.address.recipientName}, {shipping.address.street}, {shipping.address.ward}, {shipping.address.district}, {shipping.address.province}
                             </Descriptions.Item>
-                            <Descriptions.Item label={t('order_tracking.phone')}>{shipping.address.phone}</Descriptions.Item>
+                            <Descriptions.Item label="Số điện thoại">{shipping.address.phone}</Descriptions.Item>
                         </Descriptions>
                     ) : (
-                        <div>{t('order_tracking.not_found')}</div>
+                        <div>Không tìm thấy đơn hàng</div>
                     )}
                     <Button style={{ marginTop: 16 }} onClick={() => navigate('/cart?tab=orders')}>
-                        {t('order_tracking.back_to_orders')}
+                        Quay lại đơn hàng
                     </Button>
                 </Card>
             </div>

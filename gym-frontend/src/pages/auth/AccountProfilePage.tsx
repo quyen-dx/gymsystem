@@ -21,7 +21,6 @@ import {
 } from '@ant-design/icons'
 import { Avatar, Button, Checkbox, Drawer, Empty, Form, Grid, Input, message, Modal, Select, Space, Tag, theme } from 'antd'
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../components/layout/header/DashboardLayout'
 import MemberLayout from '../../components/layout/header/MemberLayout'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
@@ -122,7 +121,6 @@ const ProfileHeader = ({
   onCoverChange,
   onCoverRemove,
   mediaUploading,
-  t,
 }: {
   user: any
   avatarPreview: string | null
@@ -135,9 +133,8 @@ const ProfileHeader = ({
   onCoverChange: (file: File) => void
   onCoverRemove: () => void
   mediaUploading: 'avatar' | 'cover' | 'cover-remove' | null
-  t: (key: string, opts?: any) => string
 }) => {
-  const displayName = getUserDisplayName(user, t('profile.account_name'))
+  const displayName = getUserDisplayName(user, 'Người dùng')
   const avatarName = getUserInitialName(user, 'U')
   const coverSrc = coverPreview !== null && coverPreview !== ''
     ? coverPreview
@@ -156,19 +153,19 @@ const ProfileHeader = ({
         <button type="button" disabled={mediaUploading === 'cover'}
           onClick={() => coverRef.current?.click()}
           className="profile-cover-btn"
-          title={mediaUploading === 'cover' ? undefined : t('profile.change_cover')}
+          title={mediaUploading === 'cover' ? undefined : 'Thay đổi ảnh bìa'}
         >
           <CameraOutlined />
-          <span className="profile-cover-btn-label">{mediaUploading === 'cover' ? t('common.loading') : t('profile.change_cover')}</span>
+          <span className="profile-cover-btn-label">{mediaUploading === 'cover' ? 'Đang tải...' : 'Thay đổi ảnh bìa'}</span>
         </button>
         {(coverPreview || user?.coverImage) && coverPreview !== '' && (
           <button type="button" disabled={mediaUploading === 'cover-remove'}
             onClick={() => onCoverRemove()}
             className="profile-cover-btn profile-cover-btn-remove"
-            title={mediaUploading === 'cover-remove' ? undefined : t('profile.remove')}
+            title={mediaUploading === 'cover-remove' ? undefined : 'Xóa'}
           >
             <DeleteOutlined />
-            <span className="profile-cover-btn-label">{mediaUploading === 'cover-remove' ? t('common.loading') : t('profile.remove')}</span>
+            <span className="profile-cover-btn-label">{mediaUploading === 'cover-remove' ? 'Đang tải...' : 'Xóa'}</span>
           </button>
         )}
         <input ref={coverRef} type="file" hidden accept="image/*"
@@ -184,7 +181,7 @@ const ProfileHeader = ({
           />
           <div className="profile-avatar-edit" onClick={(e) => { e.stopPropagation(); fileRef.current?.click() }}>
             {mediaUploading === 'avatar' ? (
-              <span style={{ fontSize: 10, lineHeight: 1.2, textAlign: 'center' }}>{t('common.loading')}</span>
+              <span style={{ fontSize: 10, lineHeight: 1.2, textAlign: 'center' }}>{'Đang tải...'}</span>
             ) : (
               <CameraOutlined />
             )}
@@ -210,17 +207,15 @@ const SidebarTabs = ({
   activeTab,
   onChange,
   onLogout,
-  t,
 }: {
   tabs: ProfileTabItem[]
   activeTab: ProfileTabKey
   onChange: (tab: ProfileTabKey) => void
   onLogout: () => void
-  t: (key: string, opts?: any) => string
 }) => (
   <aside className="profile-desktop-tabs" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
     <div style={{ padding: '0 4px 12px', fontSize: 20, fontWeight: 700, color: 'var(--theme-text)' }}>
-      {t('profile.settings_title')}
+      {'Cài đặt'}
     </div>
     <div style={{ flex: 1, minHeight: 0 }}>
       {tabs.map((tab) => {
@@ -246,7 +241,7 @@ const SidebarTabs = ({
         style={{ color: '#ef4444' }}
       >
         <span style={{ color: '#ef4444' }}><LogoutOutlined /></span>
-        {t('profile.logout')}
+        {'Đăng xuất'}
       </button>
     </div>
   </aside>
@@ -259,7 +254,6 @@ const MobileMenuDrawer = ({
   onLogout,
   open,
   onClose,
-  t,
 }: {
   tabs: ProfileTabItem[]
   activeTab: ProfileTabKey
@@ -267,14 +261,13 @@ const MobileMenuDrawer = ({
   onLogout: () => void
   open: boolean
   onClose: () => void
-  t: (key: string, opts?: any) => string
 }) => (
   <Drawer
-    title={<span style={{ fontSize: 16, fontWeight: 700 }}>{t('profile.settings_title')}</span>}
+    title={<span style={{ fontSize: 16, fontWeight: 700 }}>{'Cài đặt'}</span>}
     placement="left"
     open={open}
     onClose={onClose}
-    width={280}
+    size={280}
     styles={{ body: { padding: '8px 0' } }}
   >
     {tabs.map((tab) => {
@@ -300,7 +293,7 @@ const MobileMenuDrawer = ({
         style={{ width: '100%', textAlign: 'left', borderRadius: 0, padding: '12px 20px', color: '#ef4444' }}
       >
         <span style={{ color: '#ef4444' }}><LogoutOutlined /></span>
-        {t('profile.logout')}
+        {'Đăng xuất'}
       </button>
     </div>
   </Drawer>
@@ -319,7 +312,6 @@ const TabContent = ({
 )
 
 function ProfileContent() {
-  const { t, i18n } = useTranslation()
   const { user, updateUser, refreshUser, logout } = useAuth()
   const { applyAccentFast, applyThemeFull, applyThemeMode, commitPending, accentColor: savedAccentColor } = useTheme()
   const { settings: systemSettings } = useSystemSettings()
@@ -371,7 +363,7 @@ function ProfileContent() {
   )
 
   const hasPassword = Boolean(user?.hasPassword || user?.password)
-  const contactText = user?.email || user?.phone || t('profile.no_email')
+  const contactText = user?.email || user?.phone || 'Chưa có email'
 
   useEffect(() => {
     if (user?.accentColor) {
@@ -406,11 +398,11 @@ function ProfileContent() {
       await authService.updateProfile(payload)
       const freshUser = await refreshUser()
       applyThemeMode(resolveEffectiveTheme(systemTheme, freshUser?.themePreference || preference))
-      message.success(t('profile.msg_theme_update_success'))
+      message.success('Cập nhật giao diện thành công')
     } catch (err: any) {
       applyThemeMode(resolveEffectiveTheme(systemTheme, previousPreference))
       updateUser({ ...user, themePreference: previousPreference })
-      message.error(err.response?.data?.message || t('profile.msg_theme_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật giao diện thất bại')
     } finally {
       setLoading(false)
       preventCloseRef.current = false
@@ -436,12 +428,12 @@ function ProfileContent() {
       const persistedAccent = freshUser?.accentColor || systemDefault
       setAccentColor(persistedAccent)
       applyThemeFull(persistedAccent)
-      message.success(t('profile.msg_theme_update_success'))
+      message.success('Cập nhật giao diện thành công')
     } catch (err: any) {
       setAccentColor(previousAccent)
       applyThemeFull(previousAccent)
       updateUser({ ...user, accentColor: previousAccent })
-      message.error(err.response?.data?.message || t('profile.msg_theme_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật giao diện thất bại')
     } finally {
       setLoading(false)
       preventCloseRef.current = false
@@ -467,10 +459,10 @@ function ProfileContent() {
       await refreshUser()
       setAvatarPreview(null)
       if (fileRef.current) fileRef.current.value = ''
-      message.success(t('profile.msg_avatar_update_success'))
+      message.success('Cập nhật ảnh đại diện thành công')
     } catch (err: any) {
       setAvatarPreview(previousPreview)
-      message.error(err.response?.data?.message || t('profile.msg_avatar_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật ảnh đại diện thất bại')
     } finally {
       URL.revokeObjectURL(previewUrl)
       setMediaUploading(null)
@@ -495,11 +487,11 @@ function ProfileContent() {
       setCoverPreview(null)
       setCoverRemoved(false)
       if (coverRef.current) coverRef.current.value = ''
-      message.success(t('profile.msg_cover_update_success'))
+      message.success('Cập nhật ảnh bìa thành công')
     } catch (err: any) {
       setCoverPreview(previousPreview)
       setCoverRemoved(previousRemoved)
-      message.error(err.response?.data?.message || t('profile.msg_cover_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật ảnh bìa thất bại')
     } finally {
       URL.revokeObjectURL(previewUrl)
       setMediaUploading(null)
@@ -523,11 +515,11 @@ function ProfileContent() {
       setCoverPreview(null)
       setCoverRemoved(false)
       if (coverRef.current) coverRef.current.value = ''
-      message.success(t('profile.msg_cover_update_success'))
+      message.success('Cập nhật ảnh bìa thành công')
     } catch (err: any) {
       setCoverPreview(previousPreview)
       setCoverRemoved(previousRemoved)
-      message.error(err.response?.data?.message || t('profile.msg_cover_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật ảnh bìa thất bại')
     } finally {
       setMediaUploading(null)
     }
@@ -655,9 +647,9 @@ function ProfileContent() {
       setIdentityFrontFile(null)
       setIdentityBackFile(null)
       setFormDirty(false)
-      message.success(t('profile.msg_save_success'))
+      message.success('Lưu thông tin thành công')
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('profile.msg_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật thất bại')
     } finally {
       setLoading(false)
     }
@@ -665,17 +657,17 @@ function ProfileContent() {
 
   const handleSetPassword = async (values: any) => {
     if (values.newPassword !== values.confirm) {
-      message.error(t('profile.msg_password_mismatch'))
+      message.error('Mật khẩu xác nhận không khớp')
       return
     }
     setLoading(true)
     try {
       await authService.setPassword({ newPassword: values.newPassword })
-      message.success(t('profile.msg_set_password_success'))
+      message.success('Đặt mật khẩu thành công')
       updateUser({ ...user!, hasPassword: true, password: 'set' })
       passwordForm.resetFields()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('profile.msg_set_password_failed'))
+      message.error(err.response?.data?.message || 'Đặt mật khẩu thất bại')
     } finally {
       setLoading(false)
     }
@@ -708,16 +700,16 @@ function ProfileContent() {
     try {
       if (editAddress) {
         await updateAddress(editAddress._id, values)
-        message.success(t('profile.msg_address_update_success'))
+        message.success('Cập nhật địa chỉ thành công')
       } else {
         await createAddress({ ...values, isDefault: true })
-        message.success(t('profile.msg_address_created'))
+        message.success('Thêm địa chỉ thành công')
       }
       setAddressModalOpen(false)
       await loadAddresses()
     } catch (err: any) {
       console.error(err)
-      message.error(err.response?.data?.message || t('profile.msg_address_save_failed'))
+      message.error(err.response?.data?.message || 'Lưu địa chỉ thất bại')
     } finally {
       setLoading(false)
     }
@@ -727,11 +719,11 @@ function ProfileContent() {
     setLoading(true)
     try {
       await deleteAddress(addressId)
-      message.success(t('profile.msg_address_deleted'))
+      message.success('Xóa địa chỉ thành công')
       await loadAddresses()
     } catch (err: any) {
       console.error(err)
-      message.error(err.response?.data?.message || t('profile.msg_address_delete_failed'))
+      message.error(err.response?.data?.message || 'Xóa địa chỉ thất bại')
     } finally {
       setLoading(false)
     }
@@ -741,11 +733,11 @@ function ProfileContent() {
     setLoading(true)
     try {
       await setDefaultAddress(addressId)
-      message.success(t('profile.msg_default_set'))
+      message.success('Đặt làm mặc định thành công')
       await loadAddresses()
     } catch (err: any) {
       console.error(err)
-      message.error(err.response?.data?.message || t('profile.msg_default_failed'))
+      message.error(err.response?.data?.message || 'Đặt mặc định thất bại')
     } finally {
       setLoading(false)
     }
@@ -753,7 +745,7 @@ function ProfileContent() {
 
   const handleChangePassword = async (values: any) => {
     if (values.newPassword !== values.confirm) {
-      message.error(t('profile.msg_password_mismatch'))
+      message.error('Mật khẩu xác nhận không khớp')
       return
     }
     setLoading(true)
@@ -762,10 +754,10 @@ function ProfileContent() {
         currentPassword: values.currentPassword,
         newPassword: values.newPassword,
       })
-      message.success(t('profile.msg_change_password_success'))
+      message.success('Đổi mật khẩu thành công')
       passwordForm.resetFields()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('profile.msg_change_password_failed'))
+      message.error(err.response?.data?.message || 'Đổi mật khẩu thất bại')
     } finally {
       setLoading(false)
     }
@@ -777,12 +769,12 @@ function ProfileContent() {
     setOtpSendingMethod(method)
     try {
       await authService.requestPasswordResetOtp({ method })
-      message.success(t('profile.otp_sent'))
+      message.success('Mã OTP đã được gửi')
       setForgotPasswordMethod(method)
       setForgotPasswordStep('reset')
       setResendCooldown(60)
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('profile.msg_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật thất bại')
     } finally {
       setOtpSending(false)
       setOtpSendingMethod(null)
@@ -791,15 +783,15 @@ function ProfileContent() {
 
   const handleForgotPasswordConfirm = async () => {
     if (forgotPasswordNewPassword.length < 6) {
-      message.error(t('profile.new_password_min'))
+      message.error('Mật khẩu phải có ít nhất 6 ký tự')
       return
     }
     if (forgotPasswordNewPassword !== forgotPasswordConfirmPassword) {
-      message.error(t('profile.confirm_password_match'))
+      message.error('Mật khẩu xác nhận không khớp')
       return
     }
     if (!forgotPasswordOtp) {
-      message.error(t('profile.otp_code'))
+      message.error('Mã OTP')
       return
     }
     setForgotPasswordLoading(true)
@@ -809,11 +801,11 @@ function ProfileContent() {
         otp: forgotPasswordOtp,
         newPassword: forgotPasswordNewPassword,
       })
-      message.success(t('profile.reset_password_success'))
+      message.success('Đặt lại mật khẩu thành công')
       setForgotPasswordModalOpen(false)
       passwordForm.resetFields()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('profile.msg_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật thất bại')
     } finally {
       setForgotPasswordLoading(false)
     }
@@ -842,7 +834,7 @@ function ProfileContent() {
   const handleCopyContact = async () => {
     if (!user?.email && !user?.phone) return
     await navigator.clipboard?.writeText(user.email || user.phone || '')
-    message.success(t('profile.msg_contact_copied'))
+    message.success('Đã sao chép thông tin liên hệ')
   }
 
   const isProfileMobile = !screens.md
@@ -859,20 +851,20 @@ function ProfileContent() {
 
   const handleRequestEmailChange = async () => {
     if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-      message.error(t('profile.invalid_email'))
+      message.error('Email không hợp lệ')
       return
     }
     if (newEmail === user?.email) {
-      message.error(t('profile.invalid_email'))
+      message.error('Email không hợp lệ')
       return
     }
     setEmailChangeLoading(true)
     try {
       await authService.requestEmailChange({ newEmail })
-      message.success(t('profile.email_sent_otp'))
+      message.success('Mã OTP đã được gửi đến email mới')
       setEmailChangeStep('otp')
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('profile.msg_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật thất bại')
     } finally {
       setEmailChangeLoading(false)
     }
@@ -880,30 +872,30 @@ function ProfileContent() {
 
   const handleConfirmEmailChange = async () => {
     if (!otpValue) {
-      message.error(t('profile.otp_code'))
+      message.error('Mã OTP')
       return
     }
     setEmailChangeLoading(true)
     try {
       await authService.confirmEmailChange({ newEmail, otp: otpValue })
-      message.success(t('profile.email_change_success'))
+      message.success('Đổi email thành công')
       setChangeEmailModalOpen(false)
       if (user && updateUser) {
         updateUser({ ...user, email: newEmail })
       }
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('profile.msg_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật thất bại')
     } finally {
       setEmailChangeLoading(false)
     }
   }
 
   const tabs: ProfileTabItem[] = [
-    { key: 'account', label: t('profile.account_security_title'), icon: <SafetyCertificateOutlined /> },
-    { key: 'personal', label: t('profile.personal_info'), icon: <UserOutlined /> },
-    { key: 'health', label: t('profile.health_info'), icon: <HeartOutlined /> },
-    { key: 'gym', label: t('profile.gym_profile'), icon: <TrophyOutlined /> },
-    { key: 'appearance', label: t('profile.appearance_title'), icon: <BgColorsOutlined /> },
+    { key: 'account', label: 'Tài khoản & Bảo mật', icon: <SafetyCertificateOutlined /> },
+    { key: 'personal', label: 'Thông tin cá nhân', icon: <UserOutlined /> },
+    { key: 'health', label: 'Sức khỏe', icon: <HeartOutlined /> },
+    { key: 'gym', label: 'Hồ sơ Gym', icon: <TrophyOutlined /> },
+    { key: 'appearance', label: 'Giao diện', icon: <BgColorsOutlined /> },
   ]
 
   const renderSectionHeader = (icon: ReactNode, title: string, subtitle: string) => (
@@ -938,21 +930,21 @@ function ProfileContent() {
           boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
         }}>
           <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--theme-muted)', flex: 1, lineHeight: 1.4 }}>
-            {t('profile.unsaved_changes')}
+            {'Bạn có thay đổi chưa lưu'}
           </span>
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             <Button
               style={{ background: 'transparent', borderColor: 'var(--theme-border)' }}
               onClick={() => { form.resetFields(); setFormDirty(false) }}
             >
-              {t('profile.cancel')}
+              {'Hủy'}
             </Button>
             <Button
               type="primary"
               loading={loading}
               onClick={() => form.submit()}
             >
-              {t('profile.save_changes')}
+              {'Lưu thay đổi'}
             </Button>
           </div>
                   </div>
@@ -962,7 +954,7 @@ function ProfileContent() {
       <div className="profile-settings-layout">
         <div className="profile-settings-sidebar">
           <div className="profile-settings-sidebar-inner">
-            <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} onLogout={handleLogout} t={t} />
+            <SidebarTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} onLogout={handleLogout} />
           </div>
         </div>
 
@@ -977,7 +969,6 @@ function ProfileContent() {
             onLogout={handleLogout}
             open={mobileMenuOpen}
             onClose={() => setMobileMenuOpen(false)}
-            t={t}
           />
         </div>
 
@@ -994,7 +985,7 @@ function ProfileContent() {
                 <MenuOutlined />
               </button>
               <span className="profile-mobile-header-title">
-                {tabs.find(t => t.key === activeTab)?.label || t('profile.settings_title')}
+                {tabs.find(t => t.key === activeTab)?.label || 'Cài đặt'}
               </span>
             </div>
           )}
@@ -1002,7 +993,7 @@ function ProfileContent() {
             {!dismissBanner && (() => {
               const pct = calcProfileCompletion(user)
               if (pct >= 100) return null
-              const statusText = pct < 50 ? t('profile.completion_low') : t('profile.completion_medium')
+              const statusText = pct < 50 ? 'Cần bổ sung thêm thông tin' : 'Gần hoàn thiện'
               return (
                 <div className="profile-completion-alert">
                   <div style={{
@@ -1014,19 +1005,19 @@ function ProfileContent() {
                     <LockOutlined />
                   </div>
                   <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.5 }}>
-                    <span style={{ fontWeight: 600, color: 'var(--theme-text)' }}>{t('profile.completion_title')}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--theme-text)' }}>{'Hoàn thiện hồ sơ'}</span>
                     <span style={{ color: 'var(--theme-muted)', marginLeft: 6 }}>{pct}% — {statusText}</span>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
                     <Button type="primary" size="small" style={{ borderRadius: 8, fontWeight: 600, fontSize: 12, height: 30, whiteSpace: 'nowrap' }}
                       onClick={() => setActiveTab('account')}
                     >
-                      {t('profile.completion_cta')}
+                      {'Hoàn thiện ngay'}
                     </Button>
                     <Button size="small" style={{ borderRadius: 8, fontWeight: 500, fontSize: 12, height: 30, background: 'transparent', borderColor: 'var(--theme-border)', color: 'var(--theme-muted)', whiteSpace: 'nowrap' }}
                       onClick={() => setDismissBanner(true)}
                     >
-                      {t('profile.completion_later')}
+                      {'Để sau'}
                     </Button>
                   </div>
                 </div>
@@ -1050,15 +1041,14 @@ function ProfileContent() {
                       onCoverChange={handleCoverFileChange}
                       onCoverRemove={handleCoverRemove}
                       mediaUploading={mediaUploading}
-                      t={t}
                     />
                    <div style={responsiveSectionCardStyle}>
-                    {renderSectionHeader(<UserOutlined />, t('profile.account_security_title'), t('profile.account_security_subtitle'))}
+                    {renderSectionHeader(<UserOutlined />, 'Tài khoản & Bảo mật', 'Quản lý thông tin tài khoản và bảo mật')}
 
-                   <Form.Item label={t('profile.member_code')}>
+                   <Form.Item label={'Mã hội viên'}>
                      <Input
                        disabled
-                       suffix={<span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><LockOutlined /><CopyOutlined style={{ cursor: 'pointer', color: 'var(--theme-accent)' }} onClick={() => { navigator.clipboard.writeText(user.memberCode || ''); message.success(t('profile.msg_contact_copied')) }} /></span>}
+                       suffix={<span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><LockOutlined /><CopyOutlined style={{ cursor: 'pointer', color: 'var(--theme-accent)' }} onClick={() => { navigator.clipboard.writeText(user.memberCode || ''); message.success('Đã sao chép thông tin liên hệ') }} /></span>}
                        value={user.memberCode || '—'}
                        style={{ ...profileDisabledInputStyle, fontWeight: 600, fontSize: 14 }}
                      />
@@ -1068,12 +1058,12 @@ function ProfileContent() {
                      <Input />
                    </Form.Item>
 
-                   <Form.Item label={t('profile.login_email')} name="email">
+                   <Form.Item label={'Email đăng nhập'} name="email">
                      <Input disabled suffix={<LockOutlined />} style={profileDisabledInputStyle} />
                    </Form.Item>
                    <div className="mb-5 -mt-2">
                      <div className="text-xs leading-relaxed text-[var(--theme-muted)]" style={{ maxWidth: 480 }}>
-                       {t('profile.change_email_note')}
+                       {'Email không thể thay đổi trực tiếp. Nhấn vào liên kết bên dưới để yêu cầu thay đổi.'}
                      </div>
                       <Button
                         type="link"
@@ -1081,11 +1071,11 @@ function ProfileContent() {
                         style={{ padding: 0, marginTop: 6, fontSize: 12, height: 'auto' }}
                         onClick={() => { setNewEmail(''); setOtpValue(''); setEmailChangeStep('email'); setChangeEmailModalOpen(true) }}
                       >
-                        {t('profile.change_email')}
+                        {'Yêu cầu đổi email'}
                       </Button>
                    </div>
 
-                   <Form.Item label={t('profile.username')}>
+                   <Form.Item label={'Tên đăng nhập'}>
                      <Input
                        disabled
                        value={user.username || (user.email ? user.email.split('@')[0] : '—')}
@@ -1093,7 +1083,7 @@ function ProfileContent() {
                      />
                    </Form.Item>
 
-                   <Form.Item label={t('profile.created_at')}>
+                   <Form.Item label={'Ngày tạo'}>
                      <Input disabled value={user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'} style={profileDisabledInputStyle} />
                    </Form.Item>
                  </div>
@@ -1102,14 +1092,14 @@ function ProfileContent() {
                 {/* Personal Information */}
                 {activeTab === 'personal' && (
                 <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<UserOutlined />, t('profile.personal_info'), t('profile.personal_info_subtitle'))}
+                  {renderSectionHeader(<UserOutlined />, 'Thông tin cá nhân', 'Thông tin cá nhân của bạn')}
                   {isProfileMobile && mobileSubTabPicker ? (
                     <div className="profile-subtab-picker">
                       {[
-                        { key: 'basic' as PersonalSubTab, label: t('profile.personal_subtab_basic') },
-                        { key: 'contact' as PersonalSubTab, label: t('profile.personal_subtab_contact') },
-                        { key: 'emergency' as PersonalSubTab, label: t('profile.personal_subtab_emergency') },
-                        { key: 'verification' as PersonalSubTab, label: t('profile.personal_subtab_verification') },
+                        { key: 'basic' as PersonalSubTab, label: 'Cơ bản' },
+                        { key: 'contact' as PersonalSubTab, label: 'Liên hệ' },
+                        { key: 'emergency' as PersonalSubTab, label: 'Khẩn cấp' },
+                        { key: 'verification' as PersonalSubTab, label: 'Xác thực' },
                       ].map((sub) => (
                         <button key={sub.key} type="button" className="profile-subtab-picker-btn"
                           onClick={() => { setPersonalSubTab(sub.key); setMobileSubTabPicker(false) }}
@@ -1130,16 +1120,16 @@ function ProfileContent() {
                     {isProfileMobile && (
                       <button type="button" className="profile-subtab-back" onClick={() => setMobileSubTabPicker(true)}>
                         <ArrowLeftOutlined style={{ fontSize: 14 }} />
-                        <span>{t('profile.back_to_sections', 'Quay lại các mục thông tin')}</span>
+                        <span>{'Quay lại các mục thông tin'}</span>
                       </button>
                     )}
                     {!isProfileMobile && (
                     <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-2 scrollbar-thin">
                       {[
-                        { key: 'basic' as PersonalSubTab, label: t('profile.personal_subtab_basic') },
-                        { key: 'contact' as PersonalSubTab, label: t('profile.personal_subtab_contact') },
-                        { key: 'emergency' as PersonalSubTab, label: t('profile.personal_subtab_emergency') },
-                        { key: 'verification' as PersonalSubTab, label: t('profile.personal_subtab_verification') },
+                        { key: 'basic' as PersonalSubTab, label: 'Cơ bản' },
+                        { key: 'contact' as PersonalSubTab, label: 'Liên hệ' },
+                        { key: 'emergency' as PersonalSubTab, label: 'Khẩn cấp' },
+                        { key: 'verification' as PersonalSubTab, label: 'Xác thực' },
                       ].map((sub) => (
                         <button
                           key={sub.key}
@@ -1155,17 +1145,17 @@ function ProfileContent() {
                     <div className={profileFormClass}>
                     {personalSubTab === 'basic' && (
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                        <Form.Item label={t('profile.full_name')} name="fullName" className="col-span-full">
-                          <Input placeholder={t('profile.full_name_placeholder')} style={profileInputStyle} />
+                        <Form.Item label={'Họ và tên'} name="fullName" className="col-span-full">
+                          <Input placeholder={'Nhập họ và tên'} style={profileInputStyle} />
                         </Form.Item>
-                        <Form.Item label={t('profile.dob')} name="dateOfBirth">
+                        <Form.Item label={'Ngày sinh'} name="dateOfBirth">
                           <Input type="date" style={profileInputStyle} />
                         </Form.Item>
-                        <Form.Item label={t('profile.gender')} name="gender">
+                        <Form.Item label={'Giới tính'} name="gender">
                           <Select style={profileInputStyle}>
-                            <Select.Option value="male">{t('profile.gender_male')}</Select.Option>
-                            <Select.Option value="female">{t('profile.gender_female')}</Select.Option>
-                            <Select.Option value="other">{t('profile.gender_other')}</Select.Option>
+                            <Select.Option value="male">{'Nam'}</Select.Option>
+                            <Select.Option value="female">{'Nữ'}</Select.Option>
+                            <Select.Option value="other">{'Khác'}</Select.Option>
                           </Select>
                         </Form.Item>
                       </div>
@@ -1173,13 +1163,13 @@ function ProfileContent() {
 
                     {personalSubTab === 'contact' && (
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                        <Form.Item label={t('profile.phone')} name="phone" className="col-span-full">
-                          <Input prefix={<PhoneOutlined />} placeholder={t('profile.phone_placeholder')} style={profileInputStyle} />
+                        <Form.Item label={'Số điện thoại'} name="phone" className="col-span-full">
+                          <Input prefix={<PhoneOutlined />} placeholder={'Nhập số điện thoại'} style={profileInputStyle} />
                         </Form.Item>
-                        <Form.Item label={t('profile.country')} name="country">
+                        <Form.Item label={'Quốc gia'} name="country">
                           <Select
                             showSearch
-                            placeholder={t('profile.country_placeholder')}
+                            placeholder={'Chọn quốc gia'}
                             style={profileInputStyle}
                             optionFilterProp="label"
                           >
@@ -1202,27 +1192,27 @@ function ProfileContent() {
                             ))}
                           </Select>
                         </Form.Item>
-                        <Form.Item label={t('profile.province')} name="province">
-                          <Input placeholder={t('profile.province_placeholder')} style={profileInputStyle} />
+                        <Form.Item label={'Tỉnh / Thành phố'} name="province">
+                          <Input placeholder={'Nhập tỉnh/thành phố'} style={profileInputStyle} />
                         </Form.Item>
-                        <Form.Item label={t('profile.detailed_address')} name="detailedAddress" className="col-span-full">
-                          <Input placeholder={t('profile.detailed_address_placeholder')} style={profileInputStyle} />
+                        <Form.Item label={'Địa chỉ chi tiết'} name="detailedAddress" className="col-span-full">
+                          <Input placeholder={'Nhập địa chỉ chi tiết'} style={profileInputStyle} />
                         </Form.Item>
                       </div>
                     )}
 
                     {personalSubTab === 'emergency' && (
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                        <Form.Item label={t('profile.emergency_name')} name="emergencyName">
-                          <Input placeholder={t('profile.emergency_name_placeholder')} style={profileInputStyle} />
+                        <Form.Item label={'Tên người liên hệ khẩn cấp'} name="emergencyName">
+                          <Input placeholder={'Nhập tên người liên hệ'} style={profileInputStyle} />
                         </Form.Item>
-                        <Form.Item label={t('profile.emergency_phone')} name="emergencyPhone">
-                          <Input placeholder={t('profile.emergency_phone_placeholder')} style={profileInputStyle} />
+                        <Form.Item label={'Số điện thoại khẩn cấp'} name="emergencyPhone">
+                          <Input placeholder={'Nhập số điện thoại'} style={profileInputStyle} />
                         </Form.Item>
-                        <Form.Item label={t('profile.emergency_contact_country')} name="emergencyContactCountry">
+                        <Form.Item label={'Quốc gia'} name="emergencyContactCountry">
                           <Select
                             showSearch
-                            placeholder={t('profile.country_placeholder')}
+                            placeholder={'Chọn quốc gia'}
                             style={profileInputStyle}
                             optionFilterProp="label"
                           >
@@ -1245,14 +1235,14 @@ function ProfileContent() {
                             ))}
                           </Select>
                         </Form.Item>
-                        <Form.Item label={t('profile.emergency_relationship')} name="emergencyRelationship">
-                          <Select placeholder={t('profile.emergency_relationship_placeholder')} style={profileInputStyle}>
-                            <Select.Option value="spouse">{t('profile.rel_spouse')}</Select.Option>
-                            <Select.Option value="parent">{t('profile.rel_parent')}</Select.Option>
-                            <Select.Option value="sibling">{t('profile.rel_sibling')}</Select.Option>
-                            <Select.Option value="relative">{t('profile.rel_relative')}</Select.Option>
-                            <Select.Option value="friend">{t('profile.rel_friend')}</Select.Option>
-                            <Select.Option value="other">{t('profile.rel_other')}</Select.Option>
+                        <Form.Item label={'Mối quan hệ'} name="emergencyRelationship">
+                          <Select placeholder={'Chọn mối quan hệ'} style={profileInputStyle}>
+                            <Select.Option value="spouse">{'Vợ / Chồng'}</Select.Option>
+                            <Select.Option value="parent">{'Cha / Mẹ'}</Select.Option>
+                            <Select.Option value="sibling">{'Anh / Chị / Em'}</Select.Option>
+                            <Select.Option value="relative">{'Họ hàng'}</Select.Option>
+                            <Select.Option value="friend">{'Bạn bè'}</Select.Option>
+                            <Select.Option value="other">{'Khác'}</Select.Option>
                           </Select>
                         </Form.Item>
                       </div>
@@ -1261,31 +1251,31 @@ function ProfileContent() {
                     {personalSubTab === 'verification' && (
                       <div>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                          <Form.Item label={t('profile.identity_type')} name="identityType">
+                          <Form.Item label={'Loại giấy tờ'} name="identityType">
                             <Select
-                              placeholder={t('profile.doc_select')}
+                              placeholder={'Chọn loại giấy tờ'}
                               style={profileInputStyle}
                               onChange={(val: string) => {
                                 if (val && val !== 'other') form.setFieldValue('identityCountry', '')
                               }}
                             >
-                              <Select.Option value="cccd">{t('profile.doc_cccd')}</Select.Option>
-                              <Select.Option value="cmnd">{t('profile.doc_cmnd')}</Select.Option>
-                              <Select.Option value="passport">{t('profile.doc_passport')}</Select.Option>
-                              <Select.Option value="other">{t('profile.doc_other')}</Select.Option>
+                              <Select.Option value="cccd">{'Căn cước công dân'}</Select.Option>
+                              <Select.Option value="cmnd">{'Chứng minh nhân dân'}</Select.Option>
+                              <Select.Option value="passport">{'Hộ chiếu'}</Select.Option>
+                              <Select.Option value="other">{'Giấy tờ khác'}</Select.Option>
                             </Select>
                           </Form.Item>
-                          <Form.Item label={t('profile.identity_number')} name="identityNumber">
+                          <Form.Item label={'Số giấy tờ'} name="identityNumber">
                             <Input
-                              placeholder={t('profile.document_number_placeholder')}
+                              placeholder={'Nhập số giấy tờ'}
                               style={profileInputStyle}
                               type={user.role === 'admin' ? 'text' : 'password'}
                             />
                           </Form.Item>
-                          <Form.Item label={t('profile.identity_country')} name="identityCountry">
+                          <Form.Item label={'Quốc gia cấp'} name="identityCountry">
                             <Select
                               showSearch
-                              placeholder={t('profile.identity_country_placeholder')}
+                              placeholder={'Chọn quốc gia cấp'}
                               style={profileInputStyle}
                               optionFilterProp="label"
                             >
@@ -1311,11 +1301,11 @@ function ProfileContent() {
                         </div>
                         <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
                           <div className="mb-3 text-sm font-semibold text-[var(--theme-text)]">
-                            {t('profile.identity_images')}
+                            {'Hình ảnh giấy tờ'}
                           </div>
                           <div className="grid grid-cols-2 gap-4 max-[480px]:grid-cols-1">
                             <div>
-                              <div className="mb-1 text-xs text-[var(--theme-muted)]">{t('profile.identity_front')}</div>
+                              <div className="mb-1 text-xs text-[var(--theme-muted)]">{'Mặt trước'}</div>
                               <label
                                 style={{
                                   display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -1336,7 +1326,7 @@ function ProfileContent() {
                                   <>
                                     <PlusOutlined style={{ fontSize: 20, color: 'var(--theme-muted)' }} />
                                     <span style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
-                                      {t('profile.identity_upload')}
+                                      {'Tải lên hình ảnh'}
                                     </span>
                                   </>
                                 )}
@@ -1355,7 +1345,7 @@ function ProfileContent() {
                               </label>
                             </div>
                             <div>
-                              <div className="mb-1 text-xs text-[var(--theme-muted)]">{t('profile.identity_back')}</div>
+                              <div className="mb-1 text-xs text-[var(--theme-muted)]">{'Mặt sau'}</div>
                               <label
                                 style={{
                                   display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -1376,7 +1366,7 @@ function ProfileContent() {
                                   <>
                                     <PlusOutlined style={{ fontSize: 20, color: 'var(--theme-muted)' }} />
                                     <span style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
-                                      {t('profile.identity_upload')}
+                                      {'Tải lên hình ảnh'}
                                     </span>
                                   </>
                                 )}
@@ -1400,15 +1390,15 @@ function ProfileContent() {
                           <div className="mt-4 flex items-center gap-2 text-sm flex-wrap">
                             {(() => {
                               const st = (user.identityStatus || '') as string
-                              if (!st) return <Tag color="default">{t('profile.identity_not_submitted')}</Tag>
-                              if (st === 'pending') return <Tag color="processing">{t('profile.identity_pending')}</Tag>
-                              if (st === 'approved') return <Tag color="success">{t('profile.identity_approved')}</Tag>
+                              if (!st) return <Tag color="default">{'Chưa nộp'}</Tag>
+                              if (st === 'pending') return <Tag color="processing">{'Đang chờ xét duyệt'}</Tag>
+                              if (st === 'approved') return <Tag color="success">{'Đã duyệt'}</Tag>
                               if (st === 'rejected') {
                                 return <>
-                                  <Tag color="error">{t('profile.identity_rejected')}</Tag>
+                                  <Tag color="error">{'Từ chối'}</Tag>
                                   {user.identityRejectReason && (
                                     <span className="text-xs text-[var(--theme-muted)] ml-1">
-                                      ({t('profile.identity_reject_reason')}: {user.identityRejectReason})
+                                      ({'Lý do từ chối'}: {user.identityRejectReason})
                                     </span>
                   )}
                             </>
@@ -1425,13 +1415,13 @@ function ProfileContent() {
                         {form.getFieldValue('identityType') === 'cccd' && user.nationality === 'Vietnamese' && (
                           <div className="mt-2 text-xs text-[var(--theme-accent)]">
                             <InfoCircleOutlined className="mr-1" />
-                            {t('profile.identity_suggest_vn')}
+                            {'Sử dụng CCCD gắn chip để xác thực nhanh hơn'}
                           </div>
                         )}
                         {form.getFieldValue('identityType') === 'passport' && user.nationality !== 'Vietnamese' && user.nationality && (
                           <div className="mt-2 text-xs text-[var(--theme-accent)]">
                             <InfoCircleOutlined className="mr-1" />
-                            {t('profile.identity_suggest_foreign')}
+                            {'Sử dụng hộ chiếu để xác thực'}
                           </div>
                         )}
                       </div>
@@ -1445,33 +1435,33 @@ function ProfileContent() {
                 {/* Health Information */}
                 {activeTab === 'health' && (
                 <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<HeartOutlined />, t('profile.health_info'), t('profile.health_info_subtitle'))}
+                  {renderSectionHeader(<HeartOutlined />, 'Sức khỏe', 'Thông tin sức khỏe và thể hình')}
                   <div className={profileFormClass}>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                      <Form.Item label={t('profile.height')} name="height">
-                        <Input type="number" placeholder={t('profile.height_placeholder')} style={profileInputStyle} />
+                      <Form.Item label={'Chiều cao (cm)'} name="height">
+                        <Input type="number" placeholder={'Nhập chiều cao'} style={profileInputStyle} />
                       </Form.Item>
-                      <Form.Item label={t('profile.weight')} name="weight">
-                        <Input type="number" placeholder={t('profile.weight_placeholder')} style={profileInputStyle} />
+                      <Form.Item label={'Cân nặng (kg)'} name="weight">
+                        <Input type="number" placeholder={'Nhập cân nặng'} style={profileInputStyle} />
                       </Form.Item>
                     </div>
-                    <Form.Item label={t('profile.fitness_goals')} name="goals">
-                      <Select mode="multiple" placeholder={t('profile.fitness_goals')} style={profileInputStyle}>
-                        <Select.Option value="fat_loss">{t('profile.goal_fat_loss')}</Select.Option>
-                        <Select.Option value="muscle_gain">{t('profile.goal_muscle_gain')}</Select.Option>
-                        <Select.Option value="weight_gain">{t('profile.goal_weight_gain')}</Select.Option>
-                        <Select.Option value="maintain">{t('profile.goal_maintain')}</Select.Option>
+                    <Form.Item label={'Mục tiêu tập luyện'} name="goals">
+                      <Select mode="multiple" placeholder={'Mục tiêu tập luyện'} style={profileInputStyle}>
+                        <Select.Option value="fat_loss">{'Giảm mỡ'}</Select.Option>
+                        <Select.Option value="muscle_gain">{'Tăng cơ'}</Select.Option>
+                        <Select.Option value="weight_gain">{'Tăng cân'}</Select.Option>
+                        <Select.Option value="maintain">{'Duy trì'}</Select.Option>
                       </Select>
                     </Form.Item>
-                    <Form.Item label={t('profile.activity_level')} name="activityLevel">
-                      <Select placeholder={t('profile.activity_level')} style={profileInputStyle}>
-                        <Select.Option value="beginner">{t('profile.activity_beginner')}</Select.Option>
-                        <Select.Option value="intermediate">{t('profile.activity_intermediate')}</Select.Option>
-                        <Select.Option value="advanced">{t('profile.activity_advanced')}</Select.Option>
+                    <Form.Item label={'Mức độ tập luyện'} name="activityLevel">
+                      <Select placeholder={'Mức độ tập luyện'} style={profileInputStyle}>
+                        <Select.Option value="beginner">{'Mới bắt đầu'}</Select.Option>
+                        <Select.Option value="intermediate">{'Trung bình'}</Select.Option>
+                        <Select.Option value="advanced">{'Nâng cao'}</Select.Option>
                       </Select>
                     </Form.Item>
-                    <Form.Item label={t('profile.health_notes')} name="healthNotes">
-                      <Input.TextArea rows={3} placeholder={t('profile.health_notes_placeholder')} style={profileInputStyle} />
+                    <Form.Item label={'Ghi chú sức khỏe'} name="healthNotes">
+                      <Input.TextArea rows={3} placeholder={'Nhập ghi chú sức khỏe (nếu có)'} style={profileInputStyle} />
                     </Form.Item>
                   </div>
                 </div>
@@ -1485,19 +1475,19 @@ function ProfileContent() {
 
             {activeTab === 'account' && !hasPassword && (
               <div style={responsiveSectionCardStyle}>
-                {renderSectionHeader(<LockOutlined />, t('profile.set_password_title'), t('profile.set_password_subtitle'))}
+                {renderSectionHeader(<LockOutlined />, 'Đặt mật khẩu', 'Tạo mật khẩu cho tài khoản của bạn')}
 
                 <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
-                  <Form.Item label={t('profile.new_password')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
+                  <Form.Item label={'Mật khẩu mới'} name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu mới' }]}>
+                    <Input.Password placeholder={'Ít nhất 6 ký tự'} style={profilePasswordInputStyle} />
                   </Form.Item>
 
-                  <Form.Item label={t('profile.confirm_password')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.confirm_password_hint')} style={profilePasswordInputStyle} />
+                  <Form.Item label={'Xác nhận mật khẩu'} name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu mới' }]}>
+                    <Input.Password placeholder={'Nhập lại mật khẩu mới'} style={profilePasswordInputStyle} />
                   </Form.Item>
 
                   <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                    {t('profile.set_password_btn')}
+                    {'Đặt mật khẩu'}
                   </Button>
                 </Form>
               </div>
@@ -1505,11 +1495,11 @@ function ProfileContent() {
 
             {activeTab === 'account' && hasPassword && (
               <div style={responsiveSectionCardStyle}>
-                {renderSectionHeader(<LockOutlined />, t('profile.change_password_title'), t('profile.change_password_subtitle'))}
+                {renderSectionHeader(<LockOutlined />, 'Đổi mật khẩu', 'Cập nhật mật khẩu tài khoản')}
 
                 <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
-                  <Form.Item label={t('profile.current_password')} name="currentPassword" rules={[{ required: true, message: t('profile.current_password_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.current_password_hint')} style={profilePasswordInputStyle} />
+                  <Form.Item label={'Mật khẩu hiện tại'} name="currentPassword" rules={[{ required: true, message: 'Nhập mật khẩu hiện tại' }]}>
+                    <Input.Password placeholder={'Nhập mật khẩu hiện tại của bạn'} style={profilePasswordInputStyle} />
                   </Form.Item>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -12, marginBottom: 8 }}>
                     <Button
@@ -1518,20 +1508,20 @@ function ProfileContent() {
                       style={{ padding: 0, height: 'auto', fontSize: 12 }}
                       onClick={() => { setForgotPasswordStep('method'); setForgotPasswordMethod(null); setForgotPasswordOtp(''); setForgotPasswordNewPassword(''); setForgotPasswordConfirmPassword(''); setResendCooldown(0); setOtpSending(false); setOtpSendingMethod(null); setForgotPasswordModalOpen(true) }}
                     >
-                      {t('profile.forgot_password')}
+                      {'Quên mật khẩu?'}
                     </Button>
                   </div>
 
-                  <Form.Item label={t('profile.new_password_change')} name="newPassword" rules={[{ required: true, min: 6, message: t('profile.new_password_min') }]}>
-                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
+                  <Form.Item label={'Mật khẩu mới'} name="newPassword" rules={[{ required: true, min: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự' }]}>
+                    <Input.Password placeholder={'Ít nhất 6 ký tự'} style={profilePasswordInputStyle} />
                   </Form.Item>
 
-                  <Form.Item label={t('profile.confirm_password_change')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_change_placeholder') }, { validator: (_: any, value: string) => { if (!value || passwordForm.getFieldValue('newPassword') === value) return Promise.resolve(); return Promise.reject(new Error(t('profile.confirm_password_match'))) } }]}>
-                    <Input.Password placeholder={t('profile.confirm_password_hint')} style={profilePasswordInputStyle} />
+                  <Form.Item label={'Xác nhận mật khẩu mới'} name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu mới' }, { validator: (_: any, value: string) => { if (!value || passwordForm.getFieldValue('newPassword') === value) return Promise.resolve(); return Promise.reject(new Error('Mật khẩu xác nhận không khớp')) } }]}>
+                    <Input.Password placeholder={'Nhập lại mật khẩu mới'} style={profilePasswordInputStyle} />
                   </Form.Item>
 
                   <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                    {t('profile.change_password_btn')}
+                    {'Đổi mật khẩu'}
                   </Button>
                 </Form>
               </div>
@@ -1541,32 +1531,32 @@ function ProfileContent() {
               <div>
                 {/* Gym Profile */}
                 <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<TrophyOutlined />, t('profile.gym_profile'), t('profile.gym_profile_subtitle'))}
+                  {renderSectionHeader(<TrophyOutlined />, 'Hồ sơ Gym', 'Thông tin tập luyện tại phòng gym')}
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
-                      <span className="text-[var(--theme-muted)]">{t('profile.join_date')}</span>
+                      <span className="text-[var(--theme-muted)]">{'Ngày tham gia'}</span>
                       <span className="font-medium text-[var(--theme-text)]">
                         {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
                       </span>
                     </div>
                     <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
-                      <span className="text-[var(--theme-muted)]">{t('profile.member_tier')}</span>
-                      <span className="font-medium text-[var(--theme-text)]">{t('profile.default')}</span>
+                      <span className="text-[var(--theme-muted)]">{'Hạng thành viên'}</span>
+                      <span className="font-medium text-[var(--theme-text)]">{'Mặc định'}</span>
                     </div>
                     <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
-                      <span className="text-[var(--theme-muted)]">{t('profile.current_plan')}</span>
+                      <span className="text-[var(--theme-muted)]">{'Gói tập hiện tại'}</span>
                       <span className="font-medium text-[var(--theme-text)]">-</span>
                     </div>
                     <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
-                      <span className="text-[var(--theme-muted)]">{t('profile.assigned_pt')}</span>
+                      <span className="text-[var(--theme-muted)]">{'Huấn luyện viên'}</span>
                       <span className="font-medium text-[var(--theme-text)]">-</span>
                     </div>
                     <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
-                      <span className="text-[var(--theme-muted)]">{t('profile.total_sessions')}</span>
+                      <span className="text-[var(--theme-muted)]">{'Tổng số buổi'}</span>
                       <span className="font-medium text-[var(--theme-text)]">-</span>
                     </div>
                     <div className="flex justify-between pb-2">
-                      <span className="text-[var(--theme-muted)]">{t('profile.loyalty_points')}</span>
+                      <span className="text-[var(--theme-muted)]">{'Điểm tích lũy'}</span>
                       <span className="font-medium text-[var(--theme-text)]">-</span>
                     </div>
                   </div>
@@ -1577,17 +1567,17 @@ function ProfileContent() {
 
             {activeTab === 'appearance' && (
               <div style={responsiveSectionCardStyle}>
-                {renderSectionHeader(<BgColorsOutlined />, t('profile.appearance_title'), t('profile.appearance_subtitle'))}
+                {renderSectionHeader(<BgColorsOutlined />, 'Giao diện', 'Tùy chỉnh giao diện cá nhân của bạn')}
                 <div className="mb-6 border-b border-[var(--theme-border)] pb-5">
-                  <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.personal_theme')}</div>
+                  <div className="font-extrabold" style={{ color: token.colorText }}>{'Giao diện cá nhân'}</div>
                   <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                    {t('profile.personal_theme_subtitle')}
+                    {'Chọn chế độ giao diện bạn muốn'}
                   </div>
                   <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
                     {([
-                      { value: 'system', label: t('profile.theme_system') },
-                      { value: 'light', label: t('profile.theme_light') },
-                      { value: 'dark', label: t('profile.theme_dark') },
+                      { value: 'system', label: 'Theo hệ thống' },
+                      { value: 'light', label: 'Sáng' },
+                      { value: 'dark', label: 'Tối' },
                     ] as Array<{ value: 'system' | 'light' | 'dark'; label: string }>).map((item) => {
                       const active = (user.themePreference || 'system') === item.value
                       return (
@@ -1612,14 +1602,14 @@ function ProfileContent() {
                 </div>
                 <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
                   <div>
-                    <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.accent_color')}</div>
+                    <div className="font-extrabold" style={{ color: token.colorText }}>{'Màu nhấn'}</div>
                     <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                      {t('profile.accent_subtitle')}
+                      {'Tùy chỉnh màu nhấn cho giao diện'}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {[
-                      { label: t('profile.bg_mode'), color: previewTheme.bg },
+                      { label: 'Nền', color: previewTheme.bg },
                       { label: 'Card', color: previewTheme.card },
                       { label: 'Text', color: previewTheme.text },
                     ].map((item) => (
@@ -1652,7 +1642,7 @@ function ProfileContent() {
                       onTouchEnd={(event) => handleAccentCommit(event.currentTarget.value)}
                       className="h-11 w-16 cursor-pointer rounded-xl border bg-transparent p-1"
                       style={{ borderColor: 'var(--theme-border-strong)' }}
-                      aria-label={t('profile.choose_accent')}
+                      aria-label={'Chọn màu nhấn'}
                     />
                   </div>
                   <div className="font-semibold" style={{ color: token.colorText }}>{accentColor.toUpperCase()}</div>
@@ -1667,7 +1657,7 @@ function ProfileContent() {
                       color: !user?.accentColor ? 'var(--theme-button-text)' : 'var(--gs-text)',
                     }}
                   >
-                    {t('profile.accent_system')}
+                    {'Mặc định'}
                   </button>
                 </div>
 
@@ -1682,62 +1672,13 @@ function ProfileContent() {
                         backgroundColor: item.color,
                         borderColor: accentColor.toLowerCase() === item.color.toLowerCase() ? '#ffffff' : token.colorBorder,
                       }}
-                      aria-label={t('profile.choose_color', { label: item.label })}
+                      aria-label={'Chọn màu'}
                       title={item.label}
                     />
                   ))}
                 </div>
 
-                <div className="mt-6 border-t border-[var(--theme-border)] pt-6">
-                  <div className="font-extrabold" style={{ color: token.colorText }}>Ngôn ngữ / Language</div>
-                  <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                    Chuyển đổi giữa Tiếng Việt và English
-                  </div>
-                  <div className="mt-4 flex items-center gap-3">
-                    <button
-                      onClick={() => i18n.changeLanguage('vi')}
-                      title="Tiếng Việt"
-                      style={{
-                        background: i18n.language === 'vi' ? 'var(--theme-active-bg)' : 'transparent',
-                        border: i18n.language === 'vi' ? '1px solid var(--theme-active-bg)' : '1px solid var(--theme-border-strong)',
-                        borderRadius: 10,
-                        cursor: 'pointer',
-                        padding: '8px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        opacity: i18n.language === 'vi' ? 1 : 0.5,
-                        transition: 'all 0.2s',
-                        fontWeight: i18n.language === 'vi' ? 600 : 400,
-                        color: i18n.language === 'vi' ? 'var(--theme-active-text)' : 'var(--theme-text)',
-                      }}
-                    >
-                      <img src="https://flagcdn.com/16x12/vn.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />
-                      Tiếng Việt
-                    </button>
-                    <button
-                      onClick={() => i18n.changeLanguage('en')}
-                      title="English"
-                      style={{
-                        background: i18n.language === 'en' ? 'var(--theme-active-bg)' : 'transparent',
-                        border: i18n.language === 'en' ? '1px solid var(--theme-active-bg)' : '1px solid var(--theme-border-strong)',
-                        borderRadius: 10,
-                        cursor: 'pointer',
-                        padding: '8px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        opacity: i18n.language === 'en' ? 1 : 0.5,
-                        transition: 'all 0.2s',
-                        fontWeight: i18n.language === 'en' ? 600 : 400,
-                        color: i18n.language === 'en' ? 'var(--theme-active-text)' : 'var(--theme-text)',
-                      }}
-                    >
-                      <img src="https://flagcdn.com/16x12/us.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />
-                      English
-                    </button>
-                  </div>
-                </div>
+                
               </div>
             )}
 
@@ -1746,16 +1687,16 @@ function ProfileContent() {
                 className={profileFormClass}
                 style={responsiveSectionCardStyle}
               >
-                {renderSectionHeader(<EnvironmentOutlined />, t('profile.address_title'), t('profile.address_subtitle'))}
+                {renderSectionHeader(<EnvironmentOutlined />, 'Sổ địa chỉ', 'Quản lý địa chỉ giao hàng')}
                 <div className="flex items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
                   <Button type="primary" icon={<PlusOutlined />} onClick={openCreateAddress} loading={loading} className="!rounded-lg !border-0 !bg-[var(--profile-accent)] !font-bold !text-[var(--theme-button-text)] hover:!bg-[var(--profile-accent-hover)]">
-                    {t('profile.add_address')}
+                    {'Thêm địa chỉ'}
                   </Button>
                 </div>
 
                 <div className="mt-4">
                   {addresses.length === 0 ? (
-                    <Empty description={t('profile.no_address')} />
+                    <Empty description={'Chưa có địa chỉ'} />
                   ) : addresses.map((address) => {
                     const fullAddress = [
                       address.street,
@@ -1789,7 +1730,7 @@ function ProfileContent() {
                                 }}
                               >
                                 <StarFilled />
-                                {t('profile.default')}
+                                {'Mặc định'}
                               </span>
                             )}
                           </div>
@@ -1804,7 +1745,7 @@ function ProfileContent() {
                             <button
                               className={addressActionButtonClass}
                               type="button"
-                              title={t('profile.set_default')}
+                              title={'Đặt làm mặc định'}
                               onClick={() => handleSetDefault(address._id)}
                             >
                               <StarOutlined />
@@ -1813,7 +1754,7 @@ function ProfileContent() {
                           <button
                             className={addressActionButtonClass}
                             type="button"
-                            title={t('profile.edit_address')}
+                            title={'Sửa địa chỉ'}
                             onClick={() => openEditAddress(address)}
                           >
                             <EditOutlined />
@@ -1821,7 +1762,7 @@ function ProfileContent() {
                           <button
                             className={`${addressActionButtonClass} hover:!border-[var(--profile-accent-border)] hover:!bg-[var(--profile-accent-bg)] hover:!text-[var(--profile-accent)]`}
                             type="button"
-                            title={t('profile.delete_address')}
+                            title={'Xóa địa chỉ'}
                             onClick={() => handleDeleteAddress(address._id)}
                           >
                             <DeleteOutlined />
@@ -1833,40 +1774,40 @@ function ProfileContent() {
                 </div>
 
                 <Modal
-                  title={editAddress ? t('profile.address_modal_edit') : t('profile.address_modal_create')}
+                  title={editAddress ? 'Sửa địa chỉ' : 'Thêm địa chỉ mới'}
                   open={addressModalOpen}
                   onCancel={() => setAddressModalOpen(false)}
                   footer={null}
-                  destroyOnClose
+                  destroyOnHidden
                   className={addressEditModalClass}
                   style={profileThemeStyle}
                 >
                   <Form form={addressForm} layout="vertical" onFinish={handleSaveAddress} initialValues={{ isDefault: false }} className={profileFormClass}>
-                    <Form.Item name="fullName" label={t('profile.form_recipient')} rules={[{ required: true, message: t('profile.form_recipient_required') }]}>
+                    <Form.Item name="fullName" label={'Người nhận'} rules={[{ required: true, message: 'Vui lòng nhập tên người nhận' }]}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
-                    <Form.Item name="phone" label={t('profile.form_phone')} rules={[{ required: true, message: t('profile.form_phone_required') }, { pattern: /^0\d{9,10}$/, message: t('profile.form_phone_invalid') }]}>
+                    <Form.Item name="phone" label={'Số điện thoại'} rules={[{ required: true, message: 'Vui lòng nhập số điện thoại' }, { pattern: /^0\d{9,10}$/, message: 'Số điện thoại không hợp lệ' }]}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
-                    <Form.Item name="street" label={t('profile.form_street')} rules={[{ required: true, message: t('profile.form_street_required') }]}>
+                    <Form.Item name="street" label={'Địa chỉ'} rules={[{ required: true, message: 'Vui lòng nhập địa chỉ' }]}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
-                    <Form.Item name="ward" label={t('profile.form_ward')}>
+                    <Form.Item name="ward" label={'Phường / Xã'}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
-                    <Form.Item name="district" label={t('profile.form_district')} rules={[{ required: true, message: t('profile.form_district_required') }]}>
+                    <Form.Item name="district" label={'Quận / Huyện'} rules={[{ required: true, message: 'Vui lòng nhập quận/huyện' }]}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
-                    <Form.Item name="city" label={t('profile.form_city')} rules={[{ required: true, message: t('profile.form_city_required') }]}>
+                    <Form.Item name="city" label={'Tỉnh / Thành phố'} rules={[{ required: true, message: 'Vui lòng nhập tỉnh/thành phố' }]}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
                     <Form.Item name="isDefault" valuePropName="checked">
-                      <Checkbox>{t('profile.form_is_default')}</Checkbox>
+                      <Checkbox>{'Đặt làm địa chỉ mặc định'}</Checkbox>
                     </Form.Item>
                     <Form.Item>
                       <Space>
-                        <Button type="primary" htmlType="submit" loading={loading}>{t('profile.form_save')}</Button>
-                        <Button onClick={() => setAddressModalOpen(false)}>{t('profile.form_cancel')}</Button>
+                        <Button type="primary" htmlType="submit" loading={loading}>{'Lưu'}</Button>
+                        <Button onClick={() => setAddressModalOpen(false)}>{'Hủy'}</Button>
                       </Space>
                     </Form.Item>
                   </Form>
@@ -1879,18 +1820,18 @@ function ProfileContent() {
         </div>
       </div>
       <Modal
-        title={t('profile.password_recovery')}
+        title={'Khôi phục mật khẩu'}
         open={forgotPasswordModalOpen}
         onCancel={() => { setForgotPasswordModalOpen(false); setResendCooldown(0); setOtpSending(false); setOtpSendingMethod(null) }}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
         className={addressEditModalClass}
         style={profileThemeStyle}
       >
         {forgotPasswordStep === 'method' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
             <div style={{ fontSize: 13, color: 'var(--theme-muted)', marginBottom: 4 }}>
-              {t('profile.choose_otp_method')}
+              {'Chọn phương thức nhận mã OTP'}
             </div>
 
             <Button
@@ -1914,8 +1855,8 @@ function ProfileContent() {
               }}
               className="!font-normal"
             >
-              ✉ {t('profile.send_otp_email')}
-              {!user?.email && <span style={{ marginLeft: 'auto', fontSize: 11 }}>{t('profile.method_unavailable')}</span>}
+              ✉ {'Gửi qua Email'}
+              {!user?.email && <span style={{ marginLeft: 'auto', fontSize: 11 }}>{'Không khả dụng'}</span>}
             </Button>
 
             <Button
@@ -1939,8 +1880,8 @@ function ProfileContent() {
               }}
               className="!font-normal"
             >
-              📞 {t('profile.send_otp_phone')}
-              {!user?.phone && <span style={{ marginLeft: 'auto', fontSize: 11 }}>{t('profile.method_unavailable')}</span>}
+              📞 {'Gửi qua SĐT'}
+              {!user?.phone && <span style={{ marginLeft: 'auto', fontSize: 11 }}>{'Không khả dụng'}</span>}
             </Button>
           </div>
         ) : (
@@ -1950,34 +1891,34 @@ function ProfileContent() {
             </div>
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
-                {t('profile.otp_code')}
+                {'Mã OTP'}
               </div>
               <Input
                 value={forgotPasswordOtp}
                 onChange={(e) => setForgotPasswordOtp(e.target.value)}
-                placeholder={t('profile.otp_code')}
+                placeholder={'Mã OTP'}
                 style={profileInputStyle}
               />
             </div>
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
-                {t('profile.new_password')}
+                {'Mật khẩu mới'}
               </div>
               <Input.Password
                 value={forgotPasswordNewPassword}
                 onChange={(e) => setForgotPasswordNewPassword(e.target.value)}
-                placeholder={t('profile.new_password_hint')}
+                placeholder={'Ít nhất 6 ký tự'}
                 style={profilePasswordInputStyle}
               />
             </div>
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
-                {t('profile.confirm_password')}
+                {'Xác nhận mật khẩu'}
               </div>
               <Input.Password
                 value={forgotPasswordConfirmPassword}
                 onChange={(e) => setForgotPasswordConfirmPassword(e.target.value)}
-                placeholder={t('profile.confirm_password_hint')}
+                placeholder={'Nhập lại mật khẩu mới'}
                 style={profilePasswordInputStyle}
               />
             </div>
@@ -1988,18 +1929,18 @@ function ProfileContent() {
               onClick={handleForgotPasswordConfirm}
               className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}
             >
-              {t('profile.reset_password')}
+              {'Đặt lại mật khẩu'}
             </Button>
           </div>
         )}
       </Modal>
 
       <Modal
-        title={t('profile.change_email_title')}
+        title={'Đổi email'}
         open={changeEmailModalOpen}
         onCancel={() => setChangeEmailModalOpen(false)}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
         className={addressEditModalClass}
         style={profileThemeStyle}
       >
@@ -2007,18 +1948,18 @@ function ProfileContent() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
-                {t('profile.current_email')}
+                {'Email hiện tại'}
               </div>
               <Input disabled value={user?.email || '—'} style={profileDisabledInputStyle} />
             </div>
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
-                {t('profile.new_email')}
+                {'Email mới'}
               </div>
               <Input
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
-                placeholder={t('profile.email_placeholder')}
+                placeholder={'example@email.com'}
                 style={profileInputStyle}
               />
             </div>
@@ -2029,30 +1970,30 @@ function ProfileContent() {
               onClick={handleRequestEmailChange}
               className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}
             >
-              {t('profile.send_otp')}
+              {'Gửi mã OTP'}
             </Button>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
-                {t('profile.new_email')}
+                {'Email mới'}
               </div>
               <Input disabled value={newEmail} style={profileDisabledInputStyle} />
             </div>
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--theme-muted)', marginBottom: 4 }}>
-                {t('profile.otp_code')}
+                {'Mã OTP'}
               </div>
               <Input
                 value={otpValue}
                 onChange={(e) => setOtpValue(e.target.value)}
-                placeholder={t('profile.otp_code')}
+                placeholder={'Mã OTP'}
                 style={profileInputStyle}
               />
             </div>
             <div className="text-xs leading-relaxed text-[var(--theme-muted)]">
-              {t('profile.email_change_note')}
+              {'Mã OTP sẽ được gửi đến email mới của bạn'}
             </div>
             <Button
               type="primary"
@@ -2061,7 +2002,7 @@ function ProfileContent() {
               onClick={handleConfirmEmailChange}
               className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}
             >
-              {t('profile.confirm_change_email')}
+              {'Xác nhận đổi email'}
             </Button>
           </div>
         )}

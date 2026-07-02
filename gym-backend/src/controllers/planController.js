@@ -7,9 +7,9 @@ import { invalidateAiDomainCache } from '../ai/services/aiService.js';
 // ==================== TẠO GÓI TẬP ====================
 export const createPlan = async (req, res) => {
   try {
-    const { nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive } = req.body;
+    const { nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive, applicableSpecializations } = req.body;
 
-    const plan = await Plan.create({ nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive });
+    const plan = await Plan.create({ nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive, applicableSpecializations });
     await recordAuditLog({
       req,
       module: 'plans',
@@ -38,6 +38,7 @@ export const getPlans = async (req, res) => {
       limit = 10,
       search = '',
       isActive,
+      specialization,
     } = req.query;
 
     const filter = {};
@@ -47,6 +48,10 @@ export const getPlans = async (req, res) => {
         { nameVi: { $regex: search, $options: 'i' } },
         { nameEn: { $regex: search, $options: 'i' } },
       ];
+    }
+
+    if (specialization) {
+      filter.applicableSpecializations = specialization;
     }
 
     if (req.user?.role === 'admin') {
@@ -107,7 +112,7 @@ export const getPlanById = async (req, res) => {
 // ==================== CẬP NHẬT GÓI TẬP ====================
 export const updatePlan = async (req, res) => {
   try {
-    const { nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive } = req.body;
+    const { nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive, applicableSpecializations } = req.body;
 
     const plan = await Plan.findById(req.params.id);
     if (!plan) return res.status(404).json({ message: 'Không tìm thấy gói tập' });
@@ -120,6 +125,7 @@ export const updatePlan = async (req, res) => {
     plan.descriptionEn = descriptionEn;
     plan.featuresVi = featuresVi || [];
     plan.featuresEn = featuresEn || [];
+    plan.applicableSpecializations = applicableSpecializations || [];
     plan.isActive = isActive !== undefined ? isActive : plan.isActive;
     plan.color = color;
     await plan.save();

@@ -1,33 +1,34 @@
-import { CalendarOutlined, CheckCircleFilled, CloseCircleOutlined, ExclamationCircleOutlined, InfoCircleOutlined, SettingOutlined } from '@ant-design/icons'
-import { Button, Card, Checkbox, Descriptions, Empty, Modal, Progress, Spin, Switch, Tag, message } from 'antd'
+import { CalendarOutlined, CheckCircleFilled, CloseCircleOutlined, ExclamationCircleOutlined, InfoCircleOutlined, WalletOutlined } from '@ant-design/icons'
+import { Button, Card, Descriptions, Empty, Modal, Progress, Spin, Tag, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
+import { useWallet } from '../../../context/WalletProvider'
 import { membershipService, type CancellationRequest, type MyMembership } from '../../../services/membershipService'
 
 const formatMoney = (value?: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString('vi-VN') : '-'
 
 export default function MyMembershipPage() {
-  const { t } = useTranslation()
-  const statusMeta = {
-    active: { color: 'success', label: t('member_membership.status_active') },
-    expiring_soon: { color: 'warning', label: t('member_membership.status_expiring_soon') },
-    expired: { color: 'error', label: t('member_membership.status_expired') },
+  const { wallet, refreshWallet } = useWallet()
+  const statusMeta: Record<string, { color: string; label: string }> = {
+    active: { color: 'success', label: 'Đang hoạt động' },
+    expiring_soon: { color: 'warning', label: 'Sắp hết hạn' },
+    expired: { color: 'error', label: 'Đã hết hạn' },
   }
   const [searchParams] = useSearchParams()
   const [membership, setMembership] = useState<MyMembership | null>(null)
   const [loading, setLoading] = useState(true)
-  const [togglingAutoRenew, setTogglingAutoRenew] = useState(false)
-  const [autoRenewModalOpen, setAutoRenewModalOpen] = useState(false)
-  const [autoRenewConsent, setAutoRenewConsent] = useState(false)
   const [pendingCancel, setPendingCancel] = useState<CancellationRequest | null>(null)
   const [lastCancelRequest, setLastCancelRequest] = useState<CancellationRequest | null>(null)
+  const [canRenew, setCanRenew] = useState(false)
+  const [renewalThresholdDays, setRenewalThresholdDays] = useState(7)
+  const [renewModalOpen, setRenewModalOpen] = useState(false)
+  const [renewing, setRenewing] = useState(false)
 
   useEffect(() => {
     if (searchParams.get('payment') === 'success') {
-      message.success(t('member_membership.toast_payment_success'))
+      message.success('Thanh toán thành công!')
     }
   }, [searchParams])
 
@@ -40,13 +41,15 @@ export default function MyMembershipPage() {
       .then(([membershipRes, cancelRes]) => {
         const m = membershipRes.data.membership
         setMembership(m)
+        setCanRenew(membershipRes.data.canRenew)
+        setRenewalThresholdDays(membershipRes.data.renewalThresholdDays ?? 7)
 
         const requests = cancelRes.data.cancellationRequests || []
         const pending = requests.find((r) => r.status === 'pending') || null
         setPendingCancel(pending)
         setLastCancelRequest(requests[0] || null)
       })
-      .catch(() => message.error(t('member_membership.toast_fetch_error')))
+      .catch(() => message.error('Không thể tải thông tin gói tập'))
       .finally(() => setLoading(false))
   }
 
@@ -55,6 +58,7 @@ export default function MyMembershipPage() {
   const isCancelled = membership?.status === 'cancelled'
   const isPendingCancel = !!pendingCancel
   const planName = membership?.plan?.nameVi || membership?.planNameVi || membership?.plan?.nameEn || membership?.planNameEn || '-'
+  const planPrice = membership?.price || membership?.plan?.price || 0
   const progressPercent = useMemo(() => {
     if (isCancelled) return 0
     const duration = membership?.durationDays || membership?.plan?.durationDays || 0
@@ -62,46 +66,22 @@ export default function MyMembershipPage() {
     return Math.max(0, Math.min(100, Math.round((membership.remainingDays / duration) * 100)))
   }, [membership, isCancelled])
 
-  const submitToggleAutoRenew = () => {
-    setTogglingAutoRenew(true)
-    return membershipService.toggleAutoRenew()
-      .then((res) => {
-        message.success(res.data.autoRenew
-          ? t('member_membership.toast_auto_renew_enabled')
-          : t('member_membership.toast_auto_renew_disabled'))
-        setMembership((prev) => prev ? { ...prev, autoRenew: res.data.autoRenew } : prev)
-        return true
-      })
-      .catch(() => {
-        message.error(t('member_membership.toast_toggle_auto_renew_error'))
-        return false
-      })
-      .finally(() => setTogglingAutoRenew(false))
-  }
-
-  const handleToggleAutoRenew = (checked: boolean) => {
-    if (checked) {
-      setAutoRenewConsent(false)
-      setAutoRenewModalOpen(true)
-      return
-    }
-
-    Modal.confirm({
-      title: t('member_membership.auto_renew_disable_confirm_title'),
-      okText: t('member_membership.auto_renew_disable_confirm_ok'),
-      cancelText: t('member_membership.auto_renew_disable_confirm_cancel'),
-      okButtonProps: { danger: true },
-      onOk: submitToggleAutoRenew,
-    })
-  }
-
-  const handleEnableAutoRenew = async () => {
-    const success = await submitToggleAutoRenew()
-    if (success) {
-      setAutoRenewModalOpen(false)
-      setAutoRenewConsent(false)
+  const handleRenew = async () => {
+    setRenewing(true)
+    try {
+      await membershipService.renewPlanWithWallet()
+      message.success('Gia hạn thành công')
+      setRenewModalOpen(false)
+      loadData()
+      refreshWallet()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || 'Gia hạn thất bại')
+    } finally {
+      setRenewing(false)
     }
   }
+
+  const balanceSufficient = (wallet?.balance || 0) >= planPrice
 
   if (loading) {
     return (
@@ -117,14 +97,14 @@ export default function MyMembershipPage() {
         <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">{t('member_membership.page_subtitle')}</p>
-              <h1 className="m-0 mt-2 text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('member_membership.title')}</h1>
+              <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">Gói tập của tôi</p>
+              <h1 className="m-0 mt-2 text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Gói tập của tôi</h1>
             </div>
-            <Button href="/plans">{t('member_membership.view_plans_btn')}</Button>
+            <Button href="/plans">Xem gói tập</Button>
           </div>
           <Card>
-            <Empty description={t('member_membership.empty')}>
-              <Button type="primary" href="/plans">{t('member_membership.register_btn')}</Button>
+            <Empty description='Bạn chưa đăng ký gói tập nào'>
+              <Button type="primary" href="/plans">Đăng ký ngay</Button>
             </Empty>
           </Card>
         </div>
@@ -137,10 +117,10 @@ export default function MyMembershipPage() {
       <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">{t('member_membership.page_subtitle')}</p>
-            <h1 className="m-0 mt-2 text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('member_membership.title')}</h1>
+            <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">Quản lý gói tập</p>
+            <h1 className="m-0 mt-2 text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Gói tập của tôi</h1>
           </div>
-          <Button href="/plans">{t('member_membership.view_plans_btn')}</Button>
+          <Button href="/plans">Xem gói tập</Button>
         </div>
 
         {isCancelled ? (
@@ -149,7 +129,7 @@ export default function MyMembershipPage() {
               <div>
                 <h2 className="m-0 text-2xl font-semibold">{planName}</h2>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Tag color="error">{t('member_membership.status_cancelled')}</Tag>
+                  <Tag color="error">Đã hủy</Tag>
                 </div>
               </div>
             </div>
@@ -158,17 +138,17 @@ export default function MyMembershipPage() {
               <div className="mb-4 rounded-xl border border-[var(--gs-success)] bg-[var(--gs-success-bg)] p-4">
                 <div className="flex items-center gap-2 text-[var(--gs-success)]">
                   <CheckCircleFilled />
-                  <span className="font-medium">{t('member_membership.cancel_refund_completed', { amount: formatMoney(lastCancelRequest.finalRefundAmount) })}</span>
+                  <span className="font-medium">{`Đã hoàn tiền ${formatMoney(lastCancelRequest.finalRefundAmount)}`}</span>
                 </div>
               </div>
             )}
 
             <Descriptions bordered column={{ xs: 1, sm: 2, lg: 3 }}>
-              <Descriptions.Item label={t('member_membership.label_plan_name')}>{planName}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_price')}>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_start_date')}>{formatDate(membership.startDate)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_end_date')}>{formatDate(membership.endDate)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_status')}>{t('member_membership.status_cancelled')}</Descriptions.Item>
+              <Descriptions.Item label='Gói tập'>{planName}</Descriptions.Item>
+              <Descriptions.Item label='Giá'>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
+              <Descriptions.Item label='Ngày bắt đầu'>{formatDate(membership.startDate)}</Descriptions.Item>
+              <Descriptions.Item label='Ngày kết thúc'>{formatDate(membership.endDate)}</Descriptions.Item>
+              <Descriptions.Item label='Trạng thái'>Đã hủy</Descriptions.Item>
             </Descriptions>
           </Card>
         ) : isPendingCancel ? (
@@ -177,8 +157,8 @@ export default function MyMembershipPage() {
               <div>
                 <h2 className="m-0 text-2xl font-semibold">{planName}</h2>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Tag icon={<ExclamationCircleOutlined />} color="warning">{t('member_membership.cancel_pending_badge')}</Tag>
-                  <Tag icon={<CalendarOutlined />}>{t('member_membership.days_remaining', { days: membership.remainingDays })}</Tag>
+                  <Tag icon={<ExclamationCircleOutlined />} color="warning">Đang chờ hủy</Tag>
+                  <Tag icon={<CalendarOutlined />}>{`${membership.remainingDays} ngày còn lại`}</Tag>
                 </div>
               </div>
             </div>
@@ -187,67 +167,67 @@ export default function MyMembershipPage() {
               <div className="flex gap-2">
                 <InfoCircleOutlined className="mt-0.5 text-[var(--gs-warning)]" />
                 <div className="text-sm text-[var(--gs-text)] whitespace-pre-line">
-                  {t('member_membership.cancel_alert_text')}
+                  {'Yêu cầu hủy gói tập của bạn đang được xử lý.'}
                 </div>
               </div>
             </div>
 
             <div className="mb-5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-5">
-              <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--gs-text-soft)]">{t('member_membership.cancel_section_title')}</h4>
+              <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--gs-text-soft)]">Chi tiết hủy</h4>
               <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
                 <div>
-                    <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">{t('member_membership.cancel_label_request_date')}</div>
-                    <div className="mt-0.5 text-base font-semibold text-[var(--gs-text)]">{formatDate(pendingCancel.createdAt)}</div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">Ngày yêu cầu</div>
+                  <div className="mt-0.5 text-base font-semibold text-[var(--gs-text)]">{formatDate(pendingCancel.createdAt)}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">Phương thức hoàn tiền</div>
+                  <div className="mt-0.5 text-base font-semibold text-[var(--gs-text)]">
+                    {pendingCancel.refundEligible ? ({
+                      WALLET: 'Hoàn vào ví',
+                      NONE: 'Không hoàn tiền',
+                    }[pendingCancel.refundMethod] || pendingCancel.refundMethod) : 'Không đủ điều kiện hoàn tiền'}
                   </div>
+                </div>
+                {pendingCancel.refundEligible && (
                   <div>
-                    <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">{t('member_membership.cancel_label_refund_method')}</div>
-                    <div className="mt-0.5 text-base font-semibold text-[var(--gs-text)]">
-                      {pendingCancel.refundEligible ? ({
-                        WALLET: t('member_membership.refund_method_wallet'),
-                        NONE: t('member_membership.refund_method_none'),
-                      }[pendingCancel.refundMethod] || pendingCancel.refundMethod) : t('member_membership.cancel_not_eligible')}
+                    <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">Số tiền hoàn dự kiến</div>
+                    <div className="mt-0.5 text-base font-semibold text-[var(--gs-success)]">{formatMoney(pendingCancel.estimatedRefundAmount)}</div>
+                  </div>
+                )}
+                {pendingCancel.refundEligible && (
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">Trạng thái hoàn tiền</div>
+                    <div className="mt-0.5">
+                      <Tag color={{
+                        PENDING: 'warning',
+                        COMPLETED: 'success',
+                        NOT_APPLICABLE: 'default',
+                      }[pendingCancel.refundStatus] || 'default'}>
+                        {{
+                          PENDING: 'Đang chờ',
+                          COMPLETED: 'Đã hoàn thành',
+                          NOT_APPLICABLE: 'Không áp dụng',
+                        }[pendingCancel.refundStatus] || pendingCancel.refundStatus}
+                      </Tag>
                     </div>
                   </div>
-                  {pendingCancel.refundEligible && (
-                    <div>
-                      <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">{t('member_membership.cancel_label_estimated_refund')}</div>
-                      <div className="mt-0.5 text-base font-semibold text-[var(--gs-success)]">{formatMoney(pendingCancel.estimatedRefundAmount)}</div>
-                    </div>
-                  )}
-                  {pendingCancel.refundEligible && (
-                    <div>
-                      <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">{t('member_membership.cancel_label_refund_status')}</div>
-                      <div className="mt-0.5">
-                        <Tag color={{
-                          PENDING: 'warning',
-                          COMPLETED: 'success',
-                          NOT_APPLICABLE: 'default',
-                        }[pendingCancel.refundStatus] || 'default'}>
-                          {{
-                            PENDING: t('member_membership.refund_status_pending'),
-                            COMPLETED: t('member_membership.refund_status_completed'),
-                            NOT_APPLICABLE: t('member_membership.refund_status_not_applicable'),
-                          }[pendingCancel.refundStatus] || pendingCancel.refundStatus}
-                        </Tag>
-                      </div>
-                    </div>
-                  )}
-                  {pendingCancel.reason && (
-                    <div className="sm:col-span-2">
-                      <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">{t('member_membership.cancel_label_reason')}</div>
-                      <div className="mt-0.5 text-base text-[var(--gs-text)]">{pendingCancel.reason}</div>
-                    </div>
-                  )}
+                )}
+                {pendingCancel.reason && (
+                  <div className="sm:col-span-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">Lý do hủy</div>
+                    <div className="mt-0.5 text-base text-[var(--gs-text)]">{pendingCancel.reason}</div>
+                  </div>
+                )}
               </div>
             </div>
 
             <Descriptions bordered column={{ xs: 1, sm: 2, lg: 3 }}>
-              <Descriptions.Item label={t('member_membership.label_plan_name')}>{planName}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_price')}>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_start_date')}>{formatDate(membership.startDate)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_end_date')}>{formatDate(membership.endDate)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_remaining_days')}>{membership.remainingDays}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_status')}>{t('member_membership.cancel_pending_status')}</Descriptions.Item>
+              <Descriptions.Item label='Gói tập'>{planName}</Descriptions.Item>
+              <Descriptions.Item label='Giá'>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
+              <Descriptions.Item label='Ngày bắt đầu'>{formatDate(membership.startDate)}</Descriptions.Item>
+              <Descriptions.Item label='Ngày kết thúc'>{formatDate(membership.endDate)}</Descriptions.Item>
+              <Descriptions.Item label='Số ngày còn lại'>{membership.remainingDays}</Descriptions.Item>
+              <Descriptions.Item label='Trạng thái'>Đang chờ hủy</Descriptions.Item>
             </Descriptions>
           </Card>
         ) : (
@@ -259,37 +239,45 @@ export default function MyMembershipPage() {
                   <Tag color={(statusMeta[membership.displayStatus] || statusMeta.active).color}>
                     {(statusMeta[membership.displayStatus] || statusMeta.active).label}
                   </Tag>
-                  <Tag icon={<CalendarOutlined />}>{t('member_membership.days_remaining', { days: membership.remainingDays })}</Tag>
+                  <Tag icon={<CalendarOutlined />}>{`${membership.remainingDays} ngày còn lại`}</Tag>
                 </div>
               </div>
               <div className="flex gap-2">
+                {canRenew ? (
+                  <Button type="primary" icon={<WalletOutlined />} onClick={() => setRenewModalOpen(true)}>
+                    Gia hạn
+                  </Button>
+                ) : (
+                  <Button type="primary" icon={<WalletOutlined />} disabled>
+                    Gia hạn
+                  </Button>
+                )}
                 {membership?.status === 'active' && membership.remainingDays > 0 && (
                   <Button
                     danger
                     icon={<CloseCircleOutlined />}
                     onClick={() => window.location.href = '/my-membership/cancel-request'}
                   >
-                    {t('member_membership.cancel_btn')}
+                    Hủy gói
                   </Button>
                 )}
               </div>
             </div>
 
-            {membership?.status === 'active' && membership.remainingDays > 0 && (
-              <div className="mb-5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-5">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <SettingOutlined className="shrink-0 text-lg text-[var(--gs-text-soft)]" />
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-[var(--gs-text)]">{t('member_membership.auto_renew_label')}</div>
-                      <div className="text-xs text-[var(--gs-text-muted)]">{t('member_membership.auto_renew_short_desc')}</div>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={!!membership.autoRenew}
-                    loading={togglingAutoRenew}
-                    onChange={handleToggleAutoRenew}
-                  />
+            {membership?.status === 'active' && membership.remainingDays <= 0 && (
+              <div className="mb-5 rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-4">
+                <div className="flex items-center gap-2 text-[var(--gs-warning)]">
+                  <ExclamationCircleOutlined />
+                  <span className="font-medium">Gói tập của bạn đã hết hạn. Vui lòng gia hạn để tiếp tục sử dụng.</span>
+                </div>
+              </div>
+            )}
+
+            {!canRenew && membership.remainingDays > 0 && (
+              <div className="mb-5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
+                <div className="flex items-center gap-2 text-[var(--gs-text-soft)]">
+                  <InfoCircleOutlined />
+                  <span className="font-medium">{`Chỉ có thể gia hạn trong vòng ${renewalThresholdDays} ngày trước khi hết hạn`}</span>
                 </div>
               </div>
             )}
@@ -297,12 +285,12 @@ export default function MyMembershipPage() {
             <Progress percent={progressPercent} status={membership.displayStatus === 'expired' ? 'exception' : 'active'} />
 
             <Descriptions bordered column={{ xs: 1, sm: 2, lg: 3 }} className="mt-6">
-              <Descriptions.Item label={t('member_membership.label_plan_name')}>{planName}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_price')}>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_start_date')}>{formatDate(membership.startDate)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_end_date')}>{formatDate(membership.endDate)}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_remaining_days')}>{membership.remainingDays}</Descriptions.Item>
-              <Descriptions.Item label={t('member_membership.label_status')}>{(statusMeta[membership.displayStatus] || statusMeta.active).label}</Descriptions.Item>
+              <Descriptions.Item label='Gói tập'>{planName}</Descriptions.Item>
+              <Descriptions.Item label='Giá'>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
+              <Descriptions.Item label='Ngày bắt đầu'>{formatDate(membership.startDate)}</Descriptions.Item>
+              <Descriptions.Item label='Ngày kết thúc'>{formatDate(membership.endDate)}</Descriptions.Item>
+              <Descriptions.Item label='Số ngày còn lại'>{membership.remainingDays}</Descriptions.Item>
+              <Descriptions.Item label='Trạng thái'>{(statusMeta[membership.displayStatus] || statusMeta.active).label}</Descriptions.Item>
             </Descriptions>
           </Card>
         )}
@@ -311,47 +299,58 @@ export default function MyMembershipPage() {
       <Modal
         title={
           <span className="inline-flex items-center gap-2">
-            <SettingOutlined />
-            {t('member_membership.auto_renew_label')}
+            <WalletOutlined />
+            Xác nhận gia hạn
           </span>
         }
-        open={autoRenewModalOpen}
-        onCancel={() => {
-          setAutoRenewModalOpen(false)
-          setAutoRenewConsent(false)
-        }}
+        open={renewModalOpen}
+        onCancel={() => setRenewModalOpen(false)}
         footer={[
-          <Button
-            key="cancel"
-            onClick={() => {
-              setAutoRenewModalOpen(false)
-              setAutoRenewConsent(false)
-            }}
-          >
-            {t('common.cancel')}
+          <Button key="cancel" onClick={() => setRenewModalOpen(false)}>
+            Hủy
           </Button>,
           <Button
-            key="enable"
+            key="renew"
             type="primary"
-            disabled={!autoRenewConsent}
-            loading={togglingAutoRenew}
-            onClick={handleEnableAutoRenew}
-            className={!autoRenewConsent ? '!opacity-45 !brightness-75 !cursor-not-allowed' : undefined}
+            loading={renewing}
+            disabled={!balanceSufficient}
+            onClick={handleRenew}
           >
-            {t('member_membership.auto_renew_enable_button')}
+            Xác nhận gia hạn
           </Button>,
         ]}
       >
         <div className="space-y-4">
-          <div className="whitespace-pre-line text-sm leading-6 text-[var(--gs-text)]">
-            {t('member_membership.auto_renew_policy_text')}
+          <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[var(--gs-text-soft)]">Gói tập</span>
+              <span className="text-sm font-semibold text-[var(--gs-text)]">{planName}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[var(--gs-text-soft)]">Thời gian gia hạn</span>
+              <span className="text-sm font-semibold text-[var(--gs-success)]">
+                +{membership?.durationDays || membership?.plan?.durationDays || 0} ngày
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[var(--gs-text-soft)]">Giá</span>
+              <span className="text-base font-bold text-[var(--gs-accent)]">{formatMoney(planPrice)}</span>
+            </div>
+            <div className="border-t border-[var(--gs-border)] pt-3 flex items-center justify-between">
+              <span className="text-sm text-[var(--gs-text-soft)]">
+                <WalletOutlined className="mr-1" />
+                {'Số dư ví'}
+              </span>
+              <span className={`text-sm font-semibold ${balanceSufficient ? 'text-[var(--gs-success)]' : 'text-[var(--gs-error)]'}`}>
+                {formatMoney(wallet?.balance || 0)}
+              </span>
+            </div>
           </div>
-          <Checkbox checked={autoRenewConsent} onChange={(event) => setAutoRenewConsent(event.target.checked)}>
-            <span>{t('member_membership.auto_renew_consent')}</span>
-            <Button type="link" href="/policies" className="!h-auto !p-0 !pl-1 !text-[var(--theme-accent)] hover:!text-[var(--theme-accent-hover)]">
-              {t('member_membership.auto_renew_policy_view')}
-            </Button>
-          </Checkbox>
+          {!balanceSufficient && (
+            <div className="rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-3 text-sm text-[var(--gs-warning)]">
+              {'Số dư ví không đủ để gia hạn. Vui lòng nạp thêm tiền.'}
+            </div>
+          )}
         </div>
       </Modal>
     </MemberLayout>

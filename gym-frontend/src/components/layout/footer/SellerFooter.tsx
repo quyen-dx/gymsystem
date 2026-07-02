@@ -15,8 +15,7 @@ import {
   Store,
   Truck,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-
+ 
 type FooterLink = {
   label: string
   href: string
@@ -35,28 +34,27 @@ const socialLogos = {
 }
 
 function SellerFooter() {
-  const { t } = useTranslation()
   const currentYear = new Date().getFullYear()
 
   const commitments: Commitment[] = [
-    { label: t('footer.seller.commitments.authentic'), icon: ShieldCheck },
-    { label: t('footer.seller.commitments.delivery'), icon: Truck },
-    { label: t('footer.seller.commitments.payment'), icon: LockKeyhole },
-    { label: t('footer.seller.commitments.returns'), icon: RotateCcw },
+    { label: 'Hàng chính hãng 100%', icon: ShieldCheck },
+    { label: 'Giao hàng toàn quốc', icon: Truck },
+    { label: 'Thanh toán an toàn', icon: LockKeyhole },
+    { label: 'Đổi trả miễn phí', icon: RotateCcw },
   ]
 
   const sellerLinks: FooterLink[] = [
-    { label: t('footer.seller.links.products'), href: '/seller/products', icon: Package },
-    { label: t('footer.seller.links.orders'), href: '/seller/orders', icon: ClipboardList },
-    { label: t('footer.seller.links.revenue'), href: '/seller/revenue', icon: BarChart3 },
-    { label: t('footer.seller.links.policy'), href: '/seller/policy', icon: ScrollText },
+    { label: 'Quản lý sản phẩm', href: '/seller/products', icon: Package },
+    { label: 'Quản lý đơn hàng', href: '/seller/orders', icon: ClipboardList },
+    { label: 'Doanh thu', href: '/seller/revenue', icon: BarChart3 },
+    { label: 'Chính sách', href: '/seller/policy', icon: ScrollText },
   ]
 
   const supportLinks: FooterLink[] = [
-    { label: t('footer.seller.support.help_center'), href: '/support/help-center', icon: LifeBuoy },
-    { label: t('footer.seller.support.contact'), href: '/support/contact', icon: Headphones },
-    { label: t('footer.seller.support.report'), href: '/support/report', icon: Flag },
-    { label: t('footer.seller.support.terms'), href: '/terms', icon: FileText },
+    { label: 'Trung tâm trợ giúp', href: '/support/help-center', icon: LifeBuoy },
+    { label: 'Liên hệ', href: '/support/contact', icon: Headphones },
+    { label: 'Báo cáo', href: '/support/report', icon: Flag },
+    { label: 'Điều khoản', href: '/terms', icon: FileText },
   ]
 
   const renderLink = (item: FooterLink) => {
@@ -86,7 +84,7 @@ function SellerFooter() {
       >
         <div className="w-full">
           <h2 className="text-center text-xl font-extrabold md:text-2xl">
-            {t('footer.seller.heading')}
+            {'Cam kết từ GymPro'}
           </h2>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {commitments.map((item) => {
@@ -125,32 +123,32 @@ function SellerFooter() {
               <div>
                 <p className="text-lg font-extrabold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymPro Seller</p>
                 <p className="text-sm" style={{ color: 'var(--gs-muted)' }}>
-                  {t('footer.seller.tagline')}
+                  {'Nền tảng bán hàng thể thao'}
                 </p>
               </div>
             </div>
             <p className="mt-5 text-sm leading-6" style={{ color: 'var(--gs-muted)' }}>
-              {t('footer.seller.description')}
+              {'Đồng hành cùng bạn trên con đường kinh doanh thể thao.'}
             </p>
           </div>
 
           <div>
             <h3 className="text-sm font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--gs-text)' }}>
-              {t('footer.seller.section.for_seller')}
+              {'Dành cho người bán'}
             </h3>
             <div className="mt-5 space-y-3">{sellerLinks.map(renderLink)}</div>
           </div>
 
           <div>
             <h3 className="text-sm font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--gs-text)' }}>
-              {t('footer.seller.section.support')}
+              {'Hỗ trợ'}
             </h3>
             <div className="mt-5 space-y-3">{supportLinks.map(renderLink)}</div>
           </div>
 
           <div>
             <h3 className="text-sm font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--gs-text)' }}>
-              {t('footer.seller.section.connect')}
+              {'Kết nối'}
             </h3>
             <div className="mt-5 flex items-center gap-3">
               <a
@@ -193,10 +191,10 @@ function SellerFooter() {
         style={{ borderColor: 'var(--theme-border)' }}
       >
         <div className="flex w-full flex-col gap-2 text-sm md:flex-row md:items-center md:justify-between" style={{ color: 'var(--gs-muted)' }}>
-          <p>{t('footer.seller.copyright', { year: currentYear })}</p>
+          <p>{`© ${currentYear} GymPro Seller. Đã đăng ký bản quyền.`}</p>
           <p className="flex items-center gap-2 font-semibold" style={{ color: 'var(--gs-text)' }}>
             <BadgeCheck className="h-4 w-4" style={{ color: 'var(--theme-accent)' }} />
-            {t('footer.seller.trust')}
+            {'Đã được xác thực'}
           </p>
         </div>
       </div>

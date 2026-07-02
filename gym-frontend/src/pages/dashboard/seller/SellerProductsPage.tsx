@@ -12,7 +12,6 @@ import {
   Tag,
 } from 'antd'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { deleteProduct, getMyProducts } from '../../../services/productService'
@@ -20,7 +19,6 @@ import { getMyShop, updateMyShop } from '../../../services/shopService'
 import type { AdminProduct } from '../../../types/admin/product'
 
 export default function SellerProductsPage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const [products, setProducts] = useState<AdminProduct[]>([])
   const [loading, setLoading] = useState(false)
@@ -36,7 +34,7 @@ export default function SellerProductsPage() {
       const res = await getMyProducts()
       setProducts(res.data.products || [])
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('seller_products.load_failed'))
+      message.error(err.response?.data?.message || 'Tải sản phẩm thất bại')
     } finally {
       setLoading(false)
     }
@@ -63,10 +61,10 @@ export default function SellerProductsPage() {
   const handleDelete = async (id: string) => {
     try {
       await deleteProduct(id)
-      message.success(t('seller_products.delete_success'))
+      message.success('Xóa sản phẩm thành công')
       fetchProducts()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('seller_products.delete_failed'))
+      message.error(err.response?.data?.message || 'Xóa sản phẩm thất bại')
     }
   }
 
@@ -83,9 +81,9 @@ export default function SellerProductsPage() {
     try {
       const res = await updateMyShop(values)
       setShop(res.data.shop)
-      message.success(t('seller_products.shop_update_success'))
+      message.success('Cập nhật cửa hàng thành công')
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('seller_products.shop_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật cửa hàng thất bại')
     } finally {
       setShopSaving(false)
     }
@@ -93,7 +91,7 @@ export default function SellerProductsPage() {
 
   const columns = [
     {
-      title: t('seller_products.product'),
+      title: 'Sản phẩm',
       render: (_: any, p: AdminProduct) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {p.image ? (
@@ -111,7 +109,7 @@ export default function SellerProductsPage() {
               alignItems: 'center', justifyContent: 'center',
               color: 'var(--gs-text-muted)', fontSize: 12,
             }}>
-              {t('seller_products.no_image')}
+              {'Không có ảnh'}
             </div>
           )}
           <div>
@@ -124,17 +122,17 @@ export default function SellerProductsPage() {
       ),
     },
     {
-      title: t('seller_products.category'),
+      title: 'Danh mục',
       dataIndex: 'category',
-      render: (c: string) => <Tag>{c || t('seller_products.other')}</Tag>,
+      render: (c: string) => <Tag>{c || 'Khác'}</Tag>,
     },
     {
-      title: t('seller_products.price'),
+      title: 'Giá',
       dataIndex: 'price',
       render: (v: number) => v?.toLocaleString('vi-VN') + 'đ',
     },
     {
-      title: t('seller_products.stock'),
+      title: 'Tồn kho',
       render: (_: any, p: AdminProduct) => {
         const variants = p.weightVariants || []
         if (variants.length > 0) {
@@ -143,7 +141,7 @@ export default function SellerProductsPage() {
               {variants.map((variant) => {
                 const stock = Number(variant.stock || 0)
                 const color = stock <= 0 ? 'red' : stock <= 3 ? 'gold' : 'green'
-                const text = stock <= 0 ? t('seller_products.out_of_stock') : stock <= 3 ? t('seller_products.low_stock') : t('seller_products.in_stock')
+                const text = stock <= 0 ? 'Hết hàng' : stock <= 3 ? 'Sắp hết' : 'Còn hàng'
                 return (
                   <Tag key={variant.label} color={color}>
                     {variant.label}: {stock} - {text}
@@ -154,19 +152,19 @@ export default function SellerProductsPage() {
           )
         }
         const stock = Number(p.stock || 0)
-        return <Tag color={stock > 0 ? 'green' : 'red'}>{stock > 0 ? `${stock} ${t('seller_products.piece')}` : t('seller_products.out_of_stock')}</Tag>
+        return <Tag color={stock > 0 ? 'green' : 'red'}>{stock > 0 ? `${stock} cái` : 'Hết hàng'}</Tag>
       },
     },
     {
-      title: t('seller_products.actions'),
+      title: 'Thao tác',
       render: (_: any, p: AdminProduct) => (
         <Space>
           <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/seller/products/edit/${p._id}`)} />
           <Popconfirm
-            title={t('seller_products.delete_confirm')}
+            title="Bạn có chắc muốn xóa sản phẩm này?"
             onConfirm={() => handleDelete(p._id)}
-            okText={t('seller_products.delete')}
-            cancelText={t('seller_products.cancel')}
+            okText="Xóa"
+            cancelText="Hủy"
           >
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
@@ -178,40 +176,40 @@ export default function SellerProductsPage() {
   return (
     <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)]" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--theme-accent, #b6462f) 14%, transparent), transparent)' }}>
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('seller_products.seller_label')}</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('seller_products.hero_title')}</h1>
-        <p className="mt-2 text-sm text-[var(--gs-text-muted)]">{t('seller_products.total_products', { count: products.length })}</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Người bán</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý sản phẩm</h1>
+        <p className="mt-2 text-sm text-[var(--gs-text-muted)]">Tổng cộng {products.length} sản phẩm</p>
       </div>
 
       <div className="mb-6 rounded-[24px] border border-[var(--gs-border)] p-6 max-[640px]:p-4" style={{ background: 'var(--gs-card)' }}>
-        <h2 className="mb-4 text-xl font-semibold">{t('seller_products.shop_info')}</h2>
+        <h2 className="mb-4 text-xl font-semibold">Thông tin cửa hàng</h2>
         <Form layout="vertical" form={shopForm} onFinish={handleSaveShop}>
-          <Form.Item label={t('seller_products.shop_name')} name="name" rules={[{ required: true, message: t('seller_products.shop_name_required') }]}> 
+          <Form.Item label="Tên cửa hàng" name="name" rules={[{ required: true, message: 'Vui lòng nhập tên cửa hàng' }]}> 
             <Input />
           </Form.Item>
-          <Form.Item label={t('seller_products.shop_description')} name="description">
+          <Form.Item label="Mô tả" name="description">
             <Input.TextArea rows={2} />
           </Form.Item>
           <div className="grid gap-4 md:grid-cols-2">
-            <Form.Item label={t('seller_products.shop_address')} name={['address', 'street']}>
-              <Input placeholder={t('seller_products.street_placeholder')} />
+            <Form.Item label="Địa chỉ" name={['address', 'street']}>
+              <Input placeholder="Số nhà, tên đường" />
             </Form.Item>
-            <Form.Item label={t('seller_products.ward')} name={['address', 'ward']}>
+            <Form.Item label="Phường/Xã" name={['address', 'ward']}>
               <Input />
             </Form.Item>
-            <Form.Item label={t('seller_products.district')} name={['address', 'district']}>
+            <Form.Item label="Quận/Huyện" name={['address', 'district']}>
               <Input />
             </Form.Item>
-            <Form.Item label={t('seller_products.city')} name={['address', 'city']}>
+            <Form.Item label="Tỉnh/Thành phố" name={['address', 'city']}>
               <Input />
             </Form.Item>
           </div>
           <Button type="primary" htmlType="submit" loading={shopSaving}>
-            {t('seller_products.save_shop')}
+            {'Lưu'}
           </Button>
           {shop?.rating > 0 && (
             <span className="ml-3 text-sm text-[var(--gs-text-muted)]">
-              {t('seller_products.shop_rating', { rating: shop.rating.toFixed(1), count: shop.reviewCount || 0 })}
+              {`${shop.rating.toFixed(1)} ⭐ (${shop.reviewCount || 0} đánh giá)`}
             </span>
           )}
         </Form>
@@ -221,13 +219,13 @@ export default function SellerProductsPage() {
         <div className="dashboard-filter-bar">
           <Space wrap>
             <Input.Search
-              placeholder={t('seller_products.search_placeholder')}
+              placeholder="Tìm kiếm sản phẩm..."
               allowClear
               onChange={(e) => setSearch(e.target.value)}
             />
             <Select
               allowClear
-              placeholder={t('seller_products.category_filter')}
+              placeholder="Lọc danh mục"
               style={{ minWidth: 180 }}
               value={categoryFilter}
               onChange={setCategoryFilter}
@@ -235,7 +233,7 @@ export default function SellerProductsPage() {
             />
           </Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/seller/products/create')}>
-            {t('seller_products.add_product')}
+            {'Thêm sản phẩm'}
           </Button>
         </div>
 

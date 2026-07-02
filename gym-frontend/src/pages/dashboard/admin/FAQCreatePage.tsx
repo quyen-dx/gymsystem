@@ -1,7 +1,6 @@
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Button, Form, Input, Select, Switch, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { systemExperienceService } from '../../../services/systemExperienceService'
@@ -14,7 +13,6 @@ interface CategoryPair {
 }
 
 export default function FAQCreatePage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const { faqId } = useParams()
   const isEdit = Boolean(faqId)
@@ -48,11 +46,11 @@ export default function FAQCreatePage() {
         }
       })
       .catch((error) => {
-        message.error(error.response?.data?.message || t('system_experience.admin.save_failed'))
+        message.error(error.response?.data?.message || 'Lưu thất bại')
         navigate('/admin/faqs', { replace: true })
       })
       .finally(() => setInitialLoading(false))
-  }, [faqId, form, navigate, t])
+  }, [faqId, form, navigate])
 
   const existingCategoryPairs = useMemo(() => {
     const map = new Map<string, CategoryPair>()
@@ -142,7 +140,7 @@ export default function FAQCreatePage() {
       values.categoryVi = pair.vi
       values.categoryEn = pair.en
     } else {
-      message.error(t('system_experience.admin.category_required'))
+      message.error('Vui lòng chọn hoặc nhập danh mục')
       return
     }
 
@@ -150,10 +148,10 @@ export default function FAQCreatePage() {
     try {
       if (faqId) await systemExperienceService.updateFaq(faqId, values)
       else await systemExperienceService.createFaq(values)
-      message.success(t('system_experience.admin.save_success'))
+      message.success('Lưu thành công')
       navigate('/admin/faqs')
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('system_experience.admin.save_failed'))
+      message.error(error.response?.data?.message || 'Lưu thất bại')
     } finally {
       setLoading(false)
     }
@@ -183,31 +181,31 @@ export default function FAQCreatePage() {
         style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--theme-accent, #b6462f) 14%, transparent), transparent)' }}
       >
         <h1 className="text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">
-          {isEdit ? t('system_experience.admin.edit_faq') : t('system_experience.admin.add_faq')}
+          {isEdit ? 'Chỉnh sửa FAQ' : 'Thêm FAQ'}
         </h1>
         <p className="mt-1 text-sm text-[var(--gs-text-muted)]">{isEdit ? 'Cập nhật câu hỏi thường gặp' : 'Tạo câu hỏi thường gặp mới'}</p>
       </div>
 
       <div style={cardStyle} className="p-6 max-[640px]:p-4">
         <Form form={form} layout="vertical" initialValues={{ isPublished: true }} disabled={initialLoading}>
-          <Form.Item name="questionVi" label={t('system_experience.admin.question_vi')} rules={[{ required: true }]}>
+          <Form.Item name="questionVi" label="Câu hỏi (Tiếng Việt)" rules={[{ required: true }]}>
             <Input size="large" />
           </Form.Item>
-          <Form.Item name="questionEn" label={t('system_experience.admin.question_en')} rules={[{ required: true }]}>
+          <Form.Item name="questionEn" label="Câu hỏi (Tiếng Anh)" rules={[{ required: true }]}>
             <Input size="large" />
           </Form.Item>
-          <Form.Item name="answerVi" label={t('system_experience.admin.answer_vi')} rules={[{ required: true }]}>
+          <Form.Item name="answerVi" label="Câu trả lời (Tiếng Việt)" rules={[{ required: true }]}>
             <Input.TextArea rows={3} size="large" />
           </Form.Item>
-          <Form.Item name="answerEn" label={t('system_experience.admin.answer_en')} rules={[{ required: true }]}>
+          <Form.Item name="answerEn" label="Câu trả lời (Tiếng Anh)" rules={[{ required: true }]}>
             <Input.TextArea rows={3} size="large" />
           </Form.Item>
-          <Form.Item label={t('system_experience.admin.category')}>
+          <Form.Item label="Danh mục">
             <div className="grid gap-3">
               {existingCategoryPairs.length > 0 && (
                 <>
                   <div className="text-sm font-medium text-[var(--gs-text-soft)]">
-                    {t('system_experience.admin.category_existing_label')}
+                    Chọn danh mục có sẵn
                   </div>
                   <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
                     <Select
@@ -230,11 +228,11 @@ export default function FAQCreatePage() {
                 </>
               )}
               <div className="text-sm font-medium text-[var(--gs-text-soft)]">
-                {t('system_experience.admin.category_new_label')}
+                Hoặc tạo danh mục mới
               </div>
               <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
                 <Input
-                  placeholder={t('system_experience.admin.category_new_vi_placeholder')}
+                  placeholder="Tên danh mục (Tiếng Việt)"
                   value={newCategoryVi}
                   onChange={(e) => {
                     setNewCategoryVi(e.target.value)
@@ -246,7 +244,7 @@ export default function FAQCreatePage() {
                   size="large"
                 />
                 <Input
-                  placeholder={t('system_experience.admin.category_new_en_placeholder')}
+                  placeholder="Tên danh mục (Tiếng Anh)"
                   value={newCategoryEn}
                   onChange={(e) => {
                     setNewCategoryEn(e.target.value)
@@ -260,7 +258,7 @@ export default function FAQCreatePage() {
               </div>
             </div>
           </Form.Item>
-          <Form.Item name="isPublished" label={t('system_experience.admin.publish')} valuePropName="checked">
+          <Form.Item name="isPublished" label="Xuất bản" valuePropName="checked">
             <Switch />
           </Form.Item>
         </Form>

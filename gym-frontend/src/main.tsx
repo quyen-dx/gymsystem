@@ -5,7 +5,6 @@ import App from './App.tsx';
 import { AuthProvider } from './context/AuthProvider.tsx';
 import { CartProvider } from './context/CartProvider';
 import { WalletProvider } from './context/WalletProvider.tsx';
-import './i18n';
 import './index.css';
 import 'swiper/css'
 import 'swiper/css/pagination'

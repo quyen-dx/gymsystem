@@ -1,6 +1,5 @@
 import { Button, Spin, message } from 'antd'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { trainerService } from '../../../services/trainerService'
@@ -8,7 +7,6 @@ import type { PT } from '../../../types/admin/trainer'
 import AdminTrainersForm from './AdminTrainersForm'
 
 export default function AdminTrainersEditPage() {
-  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [pt, setPt] = useState<PT | null>(null)
@@ -20,7 +18,7 @@ export default function AdminTrainersEditPage() {
     trainerService.getPTById(id)
       .then(res => setPt(res.data.pt))
       .catch(() => {
-        message.error(t('admin.trainers.messages.fetch_detail_failed'))
+        message.error('Không thể tải thông tin huấn luyện viên')
         navigate('/admin/trainers')
       })
       .finally(() => setLoading(false))
@@ -51,7 +49,7 @@ export default function AdminTrainersEditPage() {
     <DashboardLayout>
       <AdminTrainersForm
         pt={pt}
-        pageTitle={t('admin.trainers.edit')}
+        pageTitle="Chỉnh sửa huấn luyện viên"
         pageDescription="Chỉnh sửa thông tin huấn luyện viên"
         onSuccess={() => navigate('/admin/trainers')}
       />

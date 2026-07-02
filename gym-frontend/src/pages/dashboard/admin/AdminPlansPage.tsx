@@ -6,113 +6,49 @@ import {
 } from '@ant-design/icons'
 import {
   Button,
-  Card,
+  Checkbox,
   ColorPicker,
   Form,
   Input,
   InputNumber,
   Modal,
   Popconfirm,
+  Radio,
   Select,
   Space,
   Table,
   Tag,
-  Typography,
   message
 } from 'antd'
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import api from '../../../services/api'
 import type { AdminPlan } from '../../../types/admin/plan'
 import AdminHistoryButton from './AdminHistoryButton'
 
-const { Text } = Typography
+const PRESET_COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#10B981', '#EC4899', '#06B6D4', '#F97316']
 
-interface PackageTemplate {
-  key: string
-  nameVi: string
-  nameEn: string
-  descriptionVi: string
-  descriptionEn: string
-  featuresVi: string[]
-  featuresEn: string[]
-  durationDays: number
-  color: string
-}
-
-const packageTemplates: PackageTemplate[] = [
-  {
-    key: 'basic',
-    nameVi: 'Gói Cơ Bản',
-    nameEn: 'Basic Membership',
-    descriptionVi: 'Gói tập cơ bản dành cho hội viên mới bắt đầu.',
-    descriptionEn: 'Basic plan for new members.',
-    featuresVi: ['Sử dụng phòng tập', 'Check-in QR'],
-    featuresEn: ['Gym access', 'QR check-in'],
-    durationDays: 30,
-    color: '#3B82F6',
-  },
-  {
-    key: 'premium',
-    nameVi: 'Gói Nâng Cao',
-    nameEn: 'Premium Membership',
-    descriptionVi: 'Gói tập nâng cao với nhiều tiện ích hơn.',
-    descriptionEn: 'Premium plan with additional benefits.',
-    featuresVi: ['Sử dụng phòng tập', 'Check-in QR', 'Theo dõi sức khỏe'],
-    featuresEn: ['Gym access', 'QR check-in', 'Health monitoring'],
-    durationDays: 90,
-    color: '#8B5CF6',
-  },
-  {
-    key: 'vip',
-    nameVi: 'Gói VIP',
-    nameEn: 'VIP Membership',
-    descriptionVi: 'Gói VIP cao cấp dành cho hội viên thân thiết.',
-    descriptionEn: 'Premium VIP package for loyal members.',
-    featuresVi: ['Sử dụng phòng tập', 'Check-in QR', 'Theo dõi sức khỏe', 'Ưu tiên hỗ trợ'],
-    featuresEn: ['Gym access', 'QR check-in', 'Health monitoring', 'Priority support'],
-    durationDays: 365,
-    color: '#F59E0B',
-  },
-  {
-    key: 'personal_training',
-    nameVi: 'Gói Huấn Luyện Cá Nhân',
-    nameEn: 'Personal Training Package',
-    descriptionVi: 'Gói huấn luyện 1-1 với PT chuyên nghiệp.',
-    descriptionEn: 'One-on-one training with a professional personal trainer.',
-    featuresVi: ['Huấn luyện cá nhân', 'Giáo án riêng'],
-    featuresEn: ['Personal trainer', 'Custom workout plan'],
-    durationDays: 30,
-    color: '#EF4444',
-  },
-  {
-    key: 'corporate',
-    nameVi: 'Gói Doanh Nghiệp',
-    nameEn: 'Corporate Membership',
-    descriptionVi: 'Gói tập dành cho doanh nghiệp, quản lý nhóm nhân viên.',
-    descriptionEn: 'Corporate plan for employee groups.',
-    featuresVi: ['Dành cho doanh nghiệp', 'Quản lý nhóm nhân viên'],
-    featuresEn: ['Corporate access', 'Employee group management'],
-    durationDays: 365,
-    color: '#10B981',
-  },
+const DEFAULT_FEATURES = [
+  'Sử dụng phòng tập',
+  'Check-in QR',
+  'Theo dõi sức khỏe',
+  'Huấn luyện cá nhân',
+  'Giáo án riêng',
+  'Dành cho doanh nghiệp',
+  'Quản lý nhóm nhân viên',
+  'Ưu tiên hỗ trợ',
+  'Lịch tập cá nhân hóa',
+  'Đo lường chỉ số cơ thể',
+  'Dinh dưỡng',
+  'Thể dục nhóm',
 ]
 
-function matchTemplate(plan: AdminPlan): PackageTemplate | undefined {
-  return packageTemplates.find(
-    (t) => t.nameVi === plan.nameVi && t.nameEn === plan.nameEn,
-  )
-}
+const DEFAULT_SPECIALIZATIONS = ['Yoga', 'GYM', 'Boxing', 'CrossFit', 'Pilates', 'Zumba', 'Personal Training', 'Cardio', 'Weight Loss', 'Muscle Gain']
 
 function getPlanDisplayName(plan: AdminPlan, lang: string): string {
   if (lang.startsWith('vi')) return plan.nameVi || plan.nameEn
   return plan.nameEn || plan.nameVi
-}
-
-function getPlanDisplayDesc(plan: AdminPlan, lang: string): string {
-  if (lang.startsWith('vi')) return plan.descriptionVi || plan.descriptionEn || ''
-  return plan.descriptionEn || plan.descriptionVi || ''
 }
 
 function getPlanDisplayFeatures(plan: AdminPlan, lang: string): string[] {
@@ -121,38 +57,40 @@ function getPlanDisplayFeatures(plan: AdminPlan, lang: string): string[] {
 }
 
 export default function AdminPlansPage() {
-  const { t, i18n } = useTranslation()
-  const lang = i18n.language
+  const lang = 'vi'
+  const navigate = useNavigate()
   const [plans, setPlans] = useState<AdminPlan[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [specializationFilter, setSpecializationFilter] = useState<string | undefined>(undefined)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState<AdminPlan | null>(null)
-  const [selectedTemplate, setSelectedTemplate] = useState<PackageTemplate | null>(null)
   const [form] = Form.useForm()
   const [submitLoading, setSubmitLoading] = useState(false)
+  const [allFeatures, setAllFeatures] = useState<string[]>(DEFAULT_FEATURES)
+  const [newFeatureInput, setNewFeatureInput] = useState('')
+  const [allSpecializations, setAllSpecializations] = useState<string[]>(DEFAULT_SPECIALIZATIONS)
+  const [newSpecializationInput, setNewSpecializationInput] = useState('')
+  const [selectedColor, setSelectedColor] = useState('#3B82F6')
 
-  const planTypeOptions = useMemo(
-    () =>
-      packageTemplates.map((pkg) => ({
-        value: pkg.key,
-        label: lang.startsWith('vi') ? pkg.nameVi : pkg.nameEn,
-      })),
-    [lang],
-  )
+  const updateColor = (color: string) => {
+    setSelectedColor(color)
+    form.setFieldsValue({ color })
+  }
 
-  const fetchPlans = async (p = page, s = search) => {
+  const fetchPlans = async (p = page, s = search, spec = specializationFilter) => {
     setLoading(true)
     try {
-      const { data } = await api.get('/plans', {
-        params: { page: p, limit: 10, search: s },
-      })
+      const params: Record<string, any> = { page: p, limit: 10 }
+      if (s) params.search = s
+      if (spec) params.specialization = spec
+      const { data } = await api.get('/plans', { params })
       setPlans(data.plans)
       setTotal(data.pagination.total)
     } catch {
-      message.error(t('admin.plans.messages.fetch_failed'))
+      message.error('Không thể tải danh sách gói tập')
     } finally {
       setLoading(false)
     }
@@ -162,42 +100,18 @@ export default function AdminPlansPage() {
     fetchPlans()
   }, [])
 
-  const applyTemplate = (template: PackageTemplate) => {
-    setSelectedTemplate(template)
-    form.setFieldsValue({
-      nameVi: template.nameVi,
-      nameEn: template.nameEn,
-      descriptionVi: template.descriptionVi,
-      descriptionEn: template.descriptionEn,
-      featuresVi: template.featuresVi,
-      featuresEn: template.featuresEn,
-      durationDays: template.durationDays,
-      color: template.color,
-    })
-  }
 
-  const openCreate = () => {
-    setEditingPlan(null)
-    setSelectedTemplate(null)
-    form.resetFields()
-    form.setFieldsValue({ color: '#3B82F6', isActive: true })
-    setModalOpen(true)
-  }
 
   const openEdit = (plan: AdminPlan) => {
     setEditingPlan(plan)
-    const matched = matchTemplate(plan)
-    setSelectedTemplate(matched || null)
+    setSelectedColor(plan.color || '#3B82F6')
     form.setFieldsValue({
-      planType: matched?.key || 'custom',
       nameVi: plan.nameVi,
-      nameEn: plan.nameEn,
       price: plan.price,
       durationDays: plan.durationDays,
       descriptionVi: plan.descriptionVi || '',
-      descriptionEn: plan.descriptionEn || '',
       featuresVi: plan.featuresVi || [],
-      featuresEn: plan.featuresEn || [],
+      applicableSpecializations: plan.applicableSpecializations?.[0] || undefined,
       color: plan.color,
       isActive: plan.isActive,
     })
@@ -207,33 +121,36 @@ export default function AdminPlansPage() {
   const handleSubmit = async (values: any) => {
     setSubmitLoading(true)
     try {
+      const features = values.featuresVi || []
+      if (features.length === 0) {
+        message.warning('Vui lòng chọn ít nhất 1 quyền lợi')
+        setSubmitLoading(false)
+        return
+      }
+
       const payload = {
         nameVi: values.nameVi,
-        nameEn: values.nameEn,
+        nameEn: values.nameVi,
         price: values.price,
         durationDays: values.durationDays,
         descriptionVi: values.descriptionVi || '',
-        descriptionEn: values.descriptionEn || '',
-        featuresVi: values.featuresVi || [],
-        featuresEn: values.featuresEn || [],
+        descriptionEn: values.descriptionVi || '',
+        featuresVi: features,
+        featuresEn: features,
+        applicableSpecializations: values.applicableSpecializations ? [values.applicableSpecializations] : [],
         isActive: values.isActive ?? true,
         color: typeof values.color === 'string'
           ? values.color
           : values.color?.toHexString?.() || '#3B82F6',
       }
 
-      if (editingPlan) {
-        await api.put(`/plans/${editingPlan._id}`, payload)
-        message.success(t('admin.plans.messages.update_success'))
-      } else {
-        await api.post('/plans', payload)
-        message.success(t('admin.membershipPlan.createSuccess'))
-      }
+      await api.put(`/plans/${editingPlan!._id}`, payload)
+      message.success('Cập nhật gói tập thành công')
 
       setModalOpen(false)
       fetchPlans()
     } catch (err: any) {
-      message.error(err.response?.data?.message || (editingPlan ? t('admin.plans.messages.action_failed') : t('admin.membershipPlan.createError')))
+      message.error(err.response?.data?.message || 'Thao tác thất bại')
     } finally {
       setSubmitLoading(false)
     }
@@ -242,32 +159,32 @@ export default function AdminPlansPage() {
   const handleDelete = async (id: string) => {
     try {
       await api.delete(`/plans/${id}`)
-      message.success(t('admin.plans.messages.delete_success'))
+      message.success('Xóa gói tập thành công')
       fetchPlans()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('admin.plans.messages.delete_failed'))
+      message.error(err.response?.data?.message || 'Không thể xóa gói tập')
     }
   }
 
   const handleToggle = async (id: string) => {
     try {
       await api.patch(`/plans/${id}/toggle-status`)
-      message.success(t('admin.plans.messages.toggle_success'))
+      message.success('Thay đổi trạng thái thành công')
       fetchPlans()
     } catch {
-      message.error(t('admin.plans.messages.action_failed'))
+      message.error('Thao tác thất bại')
     }
   }
 
   const columns = [
     {
-      title: t('admin.table_no'),
+      title: 'STT',
       width: 70,
       align: 'center' as const,
       render: (_: any, __: AdminPlan, index: number) => (page - 1) * 10 + index + 1,
     },
     {
-      title: t('admin.plans.columns.name'),
+      title: 'Tên gói tập',
       render: (_: any, record: AdminPlan) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div
@@ -281,19 +198,19 @@ export default function AdminPlansPage() {
       ),
     },
     {
-      title: t('admin.plans.columns.price'),
+      title: 'Giá',
       dataIndex: 'price',
       render: (price: number) => (
         <span>{price.toLocaleString('vi-VN')}đ</span>
       ),
     },
     {
-      title: t('admin.plans.columns.duration'),
+      title: 'Thời hạn',
       dataIndex: 'durationDays',
-      render: (days: number) => t('admin.plans.days', { days }),
+      render: (days: number) => `${days} ngày`,
     },
     {
-      title: t('admin.membershipPlan.columnFeatures'),
+      title: 'Quyền lợi',
       render: (_: any, record: AdminPlan) => {
         const feats = getPlanDisplayFeatures(record, lang)
         return feats.length > 0
@@ -304,23 +221,23 @@ export default function AdminPlansPage() {
       },
     },
     {
-      title: t('admin.plans.columns.members'),
+      title: 'Thành viên',
       dataIndex: 'memberCount',
       render: (count: number) => (
-        <Tag color={count > 0 ? 'blue' : 'default'}>{count} members</Tag>
+        <Tag color={count > 0 ? 'blue' : 'default'}>{count} thành viên</Tag>
       ),
     },
     {
-      title: t('admin.plans.columns.status'),
+      title: 'Trạng thái',
       dataIndex: 'isActive',
       render: (isActive: boolean) => (
         <Tag color={isActive ? 'success' : 'error'}>
-          {isActive ? t('admin.plans.status.active') : t('admin.plans.status.disabled')}
+          {isActive ? 'Đang hoạt động' : 'Đã tắt'}
         </Tag>
       ),
     },
     {
-      title: t('admin.plans.columns.actions'),
+      title: 'Thao tác',
       render: (_: any, record: AdminPlan) => (
         <Space>
           <Button
@@ -332,14 +249,14 @@ export default function AdminPlansPage() {
             size="small"
             icon={<PoweroffOutlined />}
             onClick={() => handleToggle(record._id)}
-            title={record.isActive ? t('admin.plans.actions.disable') : t('admin.plans.actions.enable')}
+            title={record.isActive ? 'Vô hiệu hóa' : 'Kích hoạt'}
           />
           <Popconfirm
-            title={t('admin.plans.popconfirm.title')}
-            description={t('admin.plans.popconfirm.description')}
+            title="Xóa gói tập"
+            description="Bạn có chắc chắn muốn xóa gói tập này?"
             onConfirm={() => handleDelete(record._id)}
-            okText={t('admin.plans.popconfirm.ok')}
-            cancelText={t('admin.plans.popconfirm.cancel')}
+            okText="Xóa"
+            cancelText="Hủy"
           >
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
@@ -348,45 +265,70 @@ export default function AdminPlansPage() {
     },
   ]
 
-  const template = selectedTemplate
-  const previewName = template
-    ? (lang.startsWith('vi') ? template.nameVi : template.nameEn)
-    : editingPlan
-      ? getPlanDisplayName(editingPlan, lang)
-      : ''
-  const previewDesc = template
-    ? (lang.startsWith('vi') ? template.descriptionVi : template.descriptionEn)
-    : editingPlan
-      ? getPlanDisplayDesc(editingPlan, lang)
-      : ''
-  const previewFeatures = template
-    ? (lang.startsWith('vi') ? template.featuresVi : template.featuresEn)
-    : editingPlan
-      ? getPlanDisplayFeatures(editingPlan, lang)
-      : []
+  const handleAddFeature = () => {
+    const val = newFeatureInput.trim()
+    if (!val) return
+    if (allFeatures.includes(val)) {
+      message.info('Quyền lợi này đã có trong danh sách')
+      setNewFeatureInput('')
+      return
+    }
+    setAllFeatures((prev) => [...prev, val])
+    const current = form.getFieldValue('featuresVi') || []
+    form.setFieldsValue({ featuresVi: [...current, val] })
+    setNewFeatureInput('')
+  }
+
+  const handleAddSpecialization = () => {
+    const val = newSpecializationInput.trim()
+    if (!val) return
+    if (allSpecializations.includes(val)) {
+      message.info('Chuyên môn này đã có trong danh sách')
+      setNewSpecializationInput('')
+      return
+    }
+    setAllSpecializations((prev) => [...prev, val])
+    form.setFieldsValue({ applicableSpecializations: val })
+    setNewSpecializationInput('')
+  }
 
   return (
     <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Admin</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.plans.title')}</h1>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý gói tập</h1>
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
         <div className="dashboard-filter-bar">
           <Input.Search
-            placeholder={t('admin.plans.search_placeholder')}
+            placeholder="Tìm kiếm gói tập..."
             allowClear
             onSearch={(val) => {
               setSearch(val)
               setPage(1)
-              fetchPlans(1, val)
+              fetchPlans(1, val, specializationFilter)
             }}
+          />
+          <Select
+            placeholder="Chuyên môn"
+            style={{ minWidth: 160 }}
+            value={specializationFilter || ''}
+            onChange={(val) => {
+              const next = val || undefined
+              setSpecializationFilter(next)
+              setPage(1)
+              fetchPlans(1, search, val)
+            }}
+            options={[
+              { value: '', label: 'Tất cả' },
+              ...allSpecializations.map((s) => ({ value: s, label: s })),
+            ]}
           />
           <Space wrap>
             <AdminHistoryButton module="plans" title="gói tập" />
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              {t('admin.plans.create')}
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/admin/plans/create')}>
+              Tạo gói tập
             </Button>
           </Space>
         </div>
@@ -403,7 +345,7 @@ export default function AdminPlansPage() {
               pageSize: 10,
               onChange: (p) => {
                 setPage(p)
-                fetchPlans(p, search)
+                fetchPlans(p, search, specializationFilter)
               },
             }}
           />
@@ -411,109 +353,143 @@ export default function AdminPlansPage() {
       </div>
 
       <Modal
-        title={editingPlan ? t('admin.plans.modal.edit_title') : t('admin.membershipPlan.createTitle')}
+        title="Chỉnh sửa gói tập"
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={null}
-        destroyOnClose
-        width={640}
+        destroyOnHidden
+        width={720}
       >
         <Form layout="vertical" form={form} onFinish={handleSubmit}>
-          {/* planType — hidden field for tracking */}
-          <Form.Item name="planType" hidden />
-          <Form.Item name="nameVi" hidden />
-          <Form.Item name="nameEn" hidden />
-          <Form.Item name="descriptionVi" hidden />
-          <Form.Item name="descriptionEn" hidden />
-          <Form.Item name="featuresVi" hidden />
-          <Form.Item name="featuresEn" hidden />
-          <Form.Item name="durationDays" hidden />
           <Form.Item name="isActive" hidden />
 
-          {/* Template selector (create only) */}
-          {!editingPlan && (
+          <div className="grid grid-cols-2 gap-x-4">
             <Form.Item
-              label={t('admin.membershipPlan.planType')}
-              rules={[{ required: true, message: t('admin.membershipPlan.required') }]}
+              label="Tên gói tập"
+              name="nameVi"
+              rules={[{ required: true, message: 'Vui lòng nhập tên gói tập' }]}
             >
-              <Select
-                placeholder={t('admin.membershipPlan.planTypePlaceholder')}
-                options={planTypeOptions}
-                onChange={(key) => {
-                  const pkg = packageTemplates.find((p) => p.key === key)
-                  if (pkg) applyTemplate(pkg)
-                }}
-                allowClear
-              />
+              <Input placeholder="VD: Gói Cơ Bản" />
             </Form.Item>
-          )}
 
-          {/* Preview card */}
-          {(template || editingPlan) && (
-            <Card
-              size="small"
-              title={t('admin.membershipPlan.planPreview')}
-              style={{ marginBottom: 16 }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <div
-                  style={{
-                    width: 14, height: 14, borderRadius: '50%',
-                    background: template?.color || editingPlan?.color || '#3B82F6',
-                    flexShrink: 0,
-                  }}
-                />
-                <Text strong style={{ fontSize: 16 }}>{previewName}</Text>
-              </div>
-
-              {previewDesc && (
-                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                  {previewDesc}
-                </Text>
-              )}
-
-              {previewFeatures.length > 0 && (
-                <div style={{ marginBottom: 8 }}>
-                  {previewFeatures.map((f, i) => (
-                    <Tag key={i} style={{ marginBottom: 4 }}>{f}</Tag>
-                  ))}
-                </div>
-              )}
-
-              <Text type="secondary">
-                {t('admin.membershipPlan.duration')}: {template?.durationDays || editingPlan?.durationDays} ngày
-              </Text>
-            </Card>
-          )}
-
-          {/* Editable fields */}
-          <Space style={{ width: '100%' }} direction="vertical" size={12}>
             <Form.Item
-              label={t('admin.membershipPlan.price')}
+              label="Giá"
               name="price"
-              rules={[{ required: true, message: t('admin.membershipPlan.required') }]}
-              style={{ marginBottom: 0 }}
+              rules={[{ required: true, message: 'Vui lòng nhập giá gói tập' }]}
             >
               <InputNumber
                 style={{ width: '100%' }}
                 min={0}
                 formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                placeholder={t('admin.membershipPlan.pricePlaceholder')}
+                addonAfter="VNĐ"
+                placeholder="250000"
               />
             </Form.Item>
 
-            <Form.Item label={t('admin.membershipPlan.color')} name="color" style={{ marginBottom: 0 }}>
-              <ColorPicker format="hex" />
+            <Form.Item
+              label="Thời hạn"
+              name="durationDays"
+              rules={[{ required: true, message: 'Vui lòng nhập số ngày sử dụng' }]}
+            >
+              <InputNumber
+                style={{ width: '100%' }}
+                min={1}
+                addonAfter="ngày"
+                placeholder="30"
+              />
             </Form.Item>
-          </Space>
+
+            <Form.Item
+              label="Màu sắc"
+              name="color"
+            >
+              <div className="flex items-center gap-2">
+                {PRESET_COLORS.map((c) => (
+                  <div
+                    key={c}
+                    onClick={() => updateColor(c)}
+                    style={{
+                      width: 28, height: 28, borderRadius: '50%', background: c, cursor: 'pointer',
+                      border: selectedColor === c ? '3px solid #fff' : '2px solid transparent',
+                      boxShadow: selectedColor === c ? `0 0 0 2px ${c}` : 'none',
+                    }}
+                  />
+                ))}
+                <ColorPicker format="hex" value={selectedColor} onChange={(c) => updateColor(c.toHexString())} />
+              </div>
+            </Form.Item>
+          </div>
+
+          <Form.Item
+            label="Mô tả ngắn"
+            name="descriptionVi"
+          >
+            <Input.TextArea rows={2} placeholder="Mô tả gói tập (không bắt buộc)" />
+          </Form.Item>
+
+          <Form.Item
+            label="Quyền lợi"
+            name="featuresVi"
+            rules={[{ required: true, type: 'array', min: 1, message: 'Vui lòng chọn ít nhất 1 quyền lợi' }]}
+          >
+            <Checkbox.Group>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                {allFeatures.map((f) => (
+                  <Checkbox key={f} value={f}>{f}</Checkbox>
+                ))}
+              </div>
+            </Checkbox.Group>
+          </Form.Item>
+
+          <div className="flex items-center gap-2 mb-4">
+            <Input
+              size="small"
+              style={{ width: 260 }}
+              placeholder="Nhập quyền lợi mới..."
+              value={newFeatureInput}
+              onChange={(e) => setNewFeatureInput(e.target.value)}
+              onPressEnter={handleAddFeature}
+            />
+            <Button size="small" icon={<PlusOutlined />} onClick={handleAddFeature}>
+              Thêm quyền lợi mới
+            </Button>
+          </div>
+
+          <Form.Item
+            label="Chuyên môn áp dụng"
+            name="applicableSpecializations"
+            rules={[{ required: true, message: 'Vui lòng chọn chuyên môn' }]}
+          >
+            <Radio.Group>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                {allSpecializations.map((s) => (
+                  <Radio key={s} value={s}>{s}</Radio>
+                ))}
+              </div>
+            </Radio.Group>
+          </Form.Item>
+
+          <div className="flex items-center gap-2 mb-4">
+            <Input
+              size="small"
+              style={{ width: 260 }}
+              placeholder="Nhập chuyên môn mới..."
+              value={newSpecializationInput}
+              onChange={(e) => setNewSpecializationInput(e.target.value)}
+              onPressEnter={handleAddSpecialization}
+            />
+            <Button size="small" icon={<PlusOutlined />} onClick={handleAddSpecialization}>
+              Thêm chuyên môn mới
+            </Button>
+          </div>
 
           <div style={{ marginTop: 24, textAlign: 'right' }}>
             <Space>
               <Button onClick={() => setModalOpen(false)}>
-                {t('admin.membershipPlan.close')}
+                Đóng
               </Button>
               <Button type="primary" htmlType="submit" loading={submitLoading}>
-                {editingPlan ? t('admin.plans.submit.update') : t('admin.membershipPlan.submitCreate')}
+                Cập nhật
               </Button>
             </Space>
           </div>

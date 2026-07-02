@@ -1,7 +1,6 @@
 import { ArrowLeftOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import { Alert, Button, Form, Image, Input, InputNumber, message, Select, Upload } from 'antd'
 import { useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { getMyProducts, uploadProductImage } from '../../../services/productService'
 
@@ -51,7 +50,6 @@ export default function SellerProductForm({
   pageTitle,
   pageDescription,
 }: SellerProductFormProps) {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const quillRef = useRef<ReactQuill>(null)
@@ -499,7 +497,7 @@ export default function SellerProductForm({
 
       await onFinish(payload)
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('seller_products.action_failed'))
+      message.error(err.response?.data?.message || 'Thao tác thất bại')
     } finally {
       setIsNormalizingDescription(false)
       setLoading(false)

@@ -1,6 +1,5 @@
 import { Button, Spin, message } from 'antd'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { memberService } from '../../../services/memberService'
@@ -8,7 +7,6 @@ import type { MemberListItem } from '../../../types/admin/member'
 import AdminMembersForm from './AdminMembersForm'
 
 export default function AdminMembersEditPage() {
-  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [member, setMember] = useState<MemberListItem | null>(null)
@@ -20,7 +18,7 @@ export default function AdminMembersEditPage() {
     memberService.getMemberById(id)
       .then(res => setMember(res.data.member as unknown as MemberListItem))
       .catch(() => {
-        message.error(t('admin.members.messages.fetch_failed'))
+        message.error('Không thể tải thông tin thành viên')
         navigate('/admin/members')
       })
       .finally(() => setLoading(false))
@@ -51,7 +49,7 @@ export default function AdminMembersEditPage() {
     <DashboardLayout>
       <AdminMembersForm
         member={member}
-        pageTitle={t('admin.members.edit')}
+        pageTitle="Chỉnh sửa thành viên"
         pageDescription="Chỉnh sửa thông tin member"
         onSuccess={() => navigate('/admin/members')}
       />

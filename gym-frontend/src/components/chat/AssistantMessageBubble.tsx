@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import type { AiSource, ChatMessage, PlanPayloadPlan } from '../../types/aichat/aichat'
 import { ComboRecommendCard } from './ComboRecommendCard'
@@ -68,13 +67,12 @@ function tryExtractAnswerFromJsonText(input: unknown): string {
 }
 
 export function AssistantMessageBubble({ message, content, loadingMessage }: Props) {
-  const { i18n } = useTranslation()
   const navigate = useNavigate()
   const lang = message.metadata?.answerLanguage === 'en'
     ? 'en'
     : message.metadata?.answerLanguage === 'vi'
       ? 'vi'
-      : i18n.language?.startsWith('en') ? 'en' : 'vi'
+      : 'vi'
   const rawText = typeof content === 'string' ? content : (typeof message.content === 'string' ? message.content : '')
   const displayContent = tryExtractAnswerFromJsonText(rawText)
   const text = tryExtractAnswerFromJsonText(stripUnsafeModelOutput(displayContent))

@@ -1,7 +1,5 @@
 import { QRCodeSVG } from 'qrcode.react'
 import { Button, Typography } from 'antd'
-import { useTranslation } from 'react-i18next'
-import i18n from '../../i18n'
 import type { BankInfo } from '../../types/member/wallet'
 import type { BankMeta } from '../../types/member/wallet'
 
@@ -20,7 +18,7 @@ interface DepositQRProps {
 }
 
 function formatVND(amount: number) {
-  return new Intl.NumberFormat(i18n.language === 'vi' ? 'vi-VN' : 'en-US', {
+  return new Intl.NumberFormat('vi-VN', {
     style: 'currency',
     currency: 'VND',
   }).format(amount)
@@ -37,7 +35,6 @@ export default function DepositQR({
   onConfirm,
   onCancel,
 }: DepositQRProps) {
-  const { t } = useTranslation()
   const qrValue = [
     `https://img.vietqr.io/image/${bankMeta.id}-${bankInfo.accountNumber}-compact.png`,
     `?amount=${amount}`,
@@ -66,7 +63,7 @@ export default function DepositQR({
       </div>
 
       <div className="text-center">
-        <Text className="block text-xs text-[var(--theme-muted)]">{t('deposit.qr.amount_label')}</Text>
+        <Text className="block text-xs text-[var(--theme-muted)]">Số tiền</Text>
         <p className="text-2xl font-bold tracking-tight text-[var(--theme-text)]">
           {formatVND(amount)}
         </p>
@@ -74,11 +71,11 @@ export default function DepositQR({
 
       {isExpired ? (
         <div className="rounded-lg bg-[#ef444415] px-4 py-2.5 text-sm text-[#ef4444]">
-          {t('deposit.qr.expired')}
+          {'Mã QR đã hết hạn'}
         </div>
       ) : (
         <div className="text-xs text-[var(--theme-muted)]">
-          {t('deposit.qr.expires_at', { time: expiredDate.toLocaleTimeString('vi-VN') })}
+          {`Hết hạn lúc ${expiredDate.toLocaleTimeString('vi-VN')}`}
         </div>
       )}
 
@@ -91,10 +88,10 @@ export default function DepositQR({
           onClick={onConfirm}
           className="!bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
         >
-          {confirmLoading ? t('deposit.qr.confirming') : t('deposit.qr.confirm_btn')}
+          {confirmLoading ? 'Đang xác nhận...' : 'Xác nhận đã chuyển khoản'}
         </Button>
         <Button size="large" disabled={confirmLoading} loading={cancelLoading} onClick={onCancel}>
-          {t('deposit.qr.cancel_btn')}
+          {'Hủy'}
         </Button>
       </div>
     </div>

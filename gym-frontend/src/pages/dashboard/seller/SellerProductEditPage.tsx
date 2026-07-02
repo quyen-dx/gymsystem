@@ -1,6 +1,5 @@
 import { Button, Spin, message } from 'antd'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { getProductById, updateProduct } from '../../../services/productService'
@@ -8,7 +7,6 @@ import type { AdminProduct } from '../../../types/admin/product'
 import SellerProductForm from './SellerProductForm'
 
 export default function SellerProductEditPage() {
-  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [product, setProduct] = useState<AdminProduct | null>(null)
@@ -29,7 +27,7 @@ export default function SellerProductEditPage() {
   const handleUpdate = async (payload: any) => {
     if (!id) return
     await updateProduct(id, payload)
-    message.success(t('seller_products.update_success'))
+    message.success('Cập nhật sản phẩm thành công')
     navigate('/seller/products')
   }
 

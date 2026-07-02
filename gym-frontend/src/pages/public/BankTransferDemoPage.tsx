@@ -1,7 +1,6 @@
 import { Button, Card, Result, Skeleton, message } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import i18n from '../../i18n'
 import { getManualQrDepositInfo, simulateManualQrPayment } from '../../services/walletService'
 import BankTransferSimulator, { SIMULATED_BANK_ACCOUNT } from './BankTransferSimulator'
 
@@ -15,7 +14,7 @@ type ManualQrInfo = {
 }
 
 function formatVND(amount: number) {
-  return new Intl.NumberFormat(i18n.language === 'vi' ? 'vi-VN' : 'en-US', {
+  return new Intl.NumberFormat('vi-VN', {
     style: 'currency',
     currency: 'VND',
   }).format(amount)

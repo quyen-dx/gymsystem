@@ -11,7 +11,6 @@ import {
 } from 'antd'
 import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { trainerService } from '../../../services/trainerService'
 import type { PT } from '../../../types/admin/trainer'
 import { UploadOutlined } from '@ant-design/icons'
@@ -29,7 +28,6 @@ interface Props {
 }
 
 export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props) {
-  const { t } = useTranslation()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -95,15 +93,15 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
 
       if (isEdit) {
         await trainerService.updatePT(pt!._id, payload)
-        message.success(t('admin.trainers.messages.update_success'))
+        message.success('Cập nhật huấn luyện viên thành công')
       } else {
         await trainerService.createPT(payload)
-        message.success(t('admin.trainers.messages.create_success'))
+        message.success('Thêm huấn luyện viên thành công')
       }
       onSuccess()
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } }
-      message.error(apiError?.response?.data?.message || t('admin.trainers.messages.action_failed'))
+      message.error(apiError?.response?.data?.message || 'Thao tác thất bại')
     } finally {
       setLoading(false)
     }
@@ -111,79 +109,79 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
 
   return (
     <Modal
-      title={isEdit ? t('admin.trainers.edit') : t('admin.trainers.add')}
+      title={isEdit ? 'Chỉnh sửa huấn luyện viên' : 'Thêm huấn luyện viên'}
       open={open}
       onCancel={onClose}
       onOk={() => form.submit()}
       confirmLoading={loading}
-      okText={isEdit ? t('admin.trainers.form.submit_edit') : t('admin.trainers.form.submit_add')}
-      cancelText={t('admin.trainers.form.cancel')}
+      okText={isEdit ? 'Cập nhật' : 'Thêm mới'}
+      cancelText='Hủy'
       destroyOnHidden
       width={640}
     >
       <Form layout="vertical" form={form} onFinish={handleSubmit}>
         <Form.Item
-          label={t('admin.trainers.form.name')}
+          label='Họ tên'
           name="name"
-          rules={[{ required: true, message: t('admin.trainers.form.name_required') }]}
+          rules={[{ required: true, message: 'Vui lòng nhập họ tên' }]}
         >
-          <Input placeholder={t('admin.trainers.form.name_placeholder')} />
+          <Input placeholder='Nhập họ tên' />
         </Form.Item>
 
-        <Form.Item label={t('admin.trainers.form.email')} name="email">
-          <Input placeholder={t('admin.trainers.form.email_placeholder')} type="email" />
+        <Form.Item label='Email' name="email">
+          <Input placeholder='Nhập email' type="email" />
         </Form.Item>
 
-        <Form.Item label={t('admin.trainers.form.phone')} name="phone">
-          <Input placeholder={t('admin.trainers.form.phone_placeholder')} />
+        <Form.Item label='Số điện thoại' name="phone">
+          <Input placeholder='Nhập số điện thoại' />
         </Form.Item>
 
-        <Form.Item label={t('admin.trainers.form.gender')} name="gender">
+        <Form.Item label='Giới tính' name="gender">
           <Select
             allowClear
-            placeholder={t('admin.trainers.form.gender')}
+            placeholder='Giới tính'
             options={[
-              { value: 'male', label: t('admin.trainers.form.gender_male') },
-              { value: 'female', label: t('admin.trainers.form.gender_female') },
-              { value: 'other', label: t('admin.trainers.form.gender_other') },
+              { value: 'male', label: 'Nam' },
+              { value: 'female', label: 'Nữ' },
+              { value: 'other', label: 'Khác' },
             ]}
           />
         </Form.Item>
 
-        <Form.Item label={t('admin.trainers.form.dateOfBirth')} name="dateOfBirth">
+        <Form.Item label='Ngày sinh' name="dateOfBirth">
           <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" placeholder="DD/MM/YYYY" />
         </Form.Item>
 
-        <Form.Item label={t('admin.trainers.form.specialties')} name="specialties">
+        <Form.Item label='Chuyên môn' name="specialties">
           <Select
             mode="tags"
-            placeholder={t('admin.trainers.form.specialties_placeholder')}
+            placeholder='Nhập chuyên môn'
             options={SPECIALTY_OPTIONS.map((s) => ({ value: s, label: s }))}
           />
         </Form.Item>
 
-        <Form.Item label={t('admin.trainers.form.bio')} name="bio">
-          <Input.TextArea rows={3} placeholder={t('admin.trainers.form.bio_placeholder')} />
+        <Form.Item label='Giới thiệu' name="bio">
+          <Input.TextArea rows={3} placeholder='Nhập giới thiệu' />
         </Form.Item>
 
-        <Form.Item label={t('admin.trainers.form.experienceYears')} name="experienceYears">
-          <InputNumber min={0} style={{ width: '100%' }} placeholder={t('admin.trainers.form.experienceYears_placeholder')} />
+        <Form.Item label='Số năm kinh nghiệm' name="experienceYears">
+          <InputNumber min={0} style={{ width: '100%' }} placeholder='Nhập số năm kinh nghiệm' />
         </Form.Item>
 
-        <Form.Item label={t('admin.trainers.form.videoIntro')} name="introVideoUrl">
-          <Input placeholder={t('admin.trainers.form.videoIntro_placeholder')} />
+        <Form.Item label='Video giới thiệu' name="introVideoUrl">
+          <Input placeholder='Nhập URL video giới thiệu' />
         </Form.Item>
 
-        <Form.Item label={t('admin.trainers.form.certificates')} name="certificates">
+        <Form.Item label='Chứng chỉ' name="certificates">
           <Select
             mode="tags"
-            placeholder={t('admin.trainers.form.certificates_placeholder')}
+            placeholder='Nhập chứng chỉ'
           />
         </Form.Item>
 
         {!isEdit && (
-          <Form.Item label={t('admin.trainers.form.password')} name="password">
-            <Input.Password placeholder={t('admin.trainers.form.password_placeholder')} />
+          <Form.Item label='Mật khẩu' name="password">
+            <Input.Password placeholder='Nhập mật khẩu' />
           </Form.Item>
         )}
 
@@ -197,7 +195,7 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
             }}
           >
             <Button icon={<UploadOutlined />}>
-              {avatarFile ? avatarFile.name : t('admin.trainers.form.avatar_upload')}
+              {avatarFile ? avatarFile.name : 'Tải ảnh đại diện'}
             </Button>
           </Upload>
         </Form.Item>

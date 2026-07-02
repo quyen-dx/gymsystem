@@ -1,7 +1,6 @@
 import { ArrowLeftOutlined, CheckCircleOutlined, WalletOutlined, WarningOutlined } from '@ant-design/icons'
 import { Button, Card, Checkbox, Input, Progress, Spin, Tooltip, message } from 'antd'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { membershipService, type MyMembership } from '../../../services/membershipService'
@@ -11,7 +10,6 @@ const formatMoney = (value: number) => `${Number(value || 0).toLocaleString('vi-
 const formatDate = (value?: string) => (value ? new Date(value).toLocaleDateString('vi-VN') : '-')
 
 export default function CancelMembershipPage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const [, setMembership] = useState<MyMembership | null>(null)
   const [loading, setLoading] = useState(true)
@@ -48,7 +46,7 @@ export default function CancelMembershipPage() {
       .then((res) => {
         const m = res.data.membership
         if (!m) {
-          message.error(t('member_cancel.toast_no_membership'))
+          message.error('Không tìm thấy gói tập')
           navigate('/my-membership')
           return
         }
@@ -87,11 +85,11 @@ export default function CancelMembershipPage() {
         }
       })
       .catch(() => {
-        message.error(t('member_cancel.toast_fetch_error'))
+        message.error('Lỗi khi tải thông tin gói tập')
         navigate('/my-membership')
       })
       .finally(() => setLoading(false))
-  }, [navigate, t])
+  }, [navigate])
 
   useEffect(() => {
     checkConsentStatus(['refund', 'membership']).then(setConsentStatus)
@@ -99,11 +97,11 @@ export default function CancelMembershipPage() {
 
   const handleSubmit = async () => {
     if (!reason.trim()) {
-      message.warning(t('member_cancel.toast_reason_required'))
+      message.warning('Vui lòng nhập lý do hủy')
       return
     }
     if (!canSubmitCancel) {
-      message.warning(t('member_cancel.toast_policy_required'))
+      message.warning('Vui lòng đồng ý với chính sách')
       return
     }
     setSubmitting(true)
@@ -116,7 +114,7 @@ export default function CancelMembershipPage() {
       message.success(res.data.message)
       navigate('/my-membership')
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('member_cancel.toast_submit_failed'))
+      message.error(error.response?.data?.message || 'Gửi yêu cầu thất bại')
     } finally {
       setSubmitting(false)
     }
@@ -133,43 +131,43 @@ export default function CancelMembershipPage() {
   }
 
   const statusLabel = refundEligibility.policyCode === 'NO_REFUND'
-    ? t('member_cancel.used_over_50')
-    : t('member_cancel.used_percent', { percent: usedPercent })
+    ? 'Đã sử dụng trên 50%'
+    : `Đã sử dụng ${usedPercent}%`
 
   const policyResultText = refundEligibility.policyCode === 'REFUND_100'
-    ? t('member_cancel.policy_result_100', { days: usedDays })
+    ? `Bạn đã sử dụng ${usedDays} ngày, đủ điều kiện hoàn tiền 100%`
     : refundEligibility.policyCode === 'REFUND_50'
-      ? t('member_cancel.policy_result_50', { days: usedDays })
-      : t('member_cancel.policy_result_none')
+      ? `Bạn đã sử dụng ${usedDays} ngày, đủ điều kiện hoàn tiền 50%`
+      : 'Bạn đã sử dụng trên 50%, không đủ điều kiện hoàn tiền'
 
   const refundPolicyStatus = refundEligibility.eligible
     ? {
         icon: <CheckCircleOutlined />,
-        title: t('member_cancel.policy_eligible_title'),
-        text: t('member_cancel.policy_eligible_100_text', { amount: formatMoney(refundEligibility.maxRefundAmount) }),
-        note: t('member_cancel.policy_eligible_note'),
+        title: 'Đủ điều kiện hoàn tiền',
+        text: `Bạn có thể được hoàn tối đa ${formatMoney(refundEligibility.maxRefundAmount)}`,
+        note: 'Số tiền hoàn sẽ được cộng vào ví của bạn',
         tone: 'success' as const,
       }
     : {
         icon: <WarningOutlined />,
-        title: t('member_cancel.policy_not_eligible_title'),
-        text: t('member_cancel.policy_not_eligible_over_50_text'),
+        title: 'Không đủ điều kiện hoàn tiền',
+        text: 'Bạn đã sử dụng quá 50% thời gian gói tập',
         note: '',
         tone: 'warning' as const,
       }
 
   const infoItems = [
-    { label: t('member_cancel.label_plan_name'), value: planName },
-    { label: t('member_cancel.label_plan_price'), value: formatMoney(planPrice) },
-    { label: t('member_cancel.label_start_date'), value: startDate },
-    { label: t('member_cancel.label_end_date'), value: endDate },
-    { label: t('member_cancel.label_used_days'), value: t('member_cancel.days', { count: usedDays }) },
-    { label: t('member_cancel.label_total_days'), value: t('member_cancel.days', { count: totalDays }) },
-    { label: t('member_cancel.label_remaining_days'), value: t('member_cancel.days', { count: remainingDays }) },
-    { label: t('member_cancel.label_used_percent'), value: `${usedPercent}%` },
+    { label: 'Tên gói tập', value: planName },
+    { label: 'Giá gói', value: formatMoney(planPrice) },
+    { label: 'Ngày bắt đầu', value: startDate },
+    { label: 'Ngày kết thúc', value: endDate },
+    { label: 'Số ngày đã dùng', value: `${usedDays} ngày` },
+    { label: 'Tổng số ngày', value: `${totalDays} ngày` },
+    { label: 'Số ngày còn lại', value: `${remainingDays} ngày` },
+    { label: 'Tỷ lệ đã dùng', value: `${usedPercent}%` },
     {
-      label: t('member_cancel.label_estimated_refund'),
-      value: refundEligibility.eligible ? formatMoney(refundEligibility.estimatedAmount) : t('member_cancel.value_not_eligible'),
+      label: 'Số tiền hoàn dự kiến',
+      value: refundEligibility.eligible ? formatMoney(refundEligibility.estimatedAmount) : 'Không đủ điều kiện',
       highlight: refundEligibility.eligible ? 'success' as const : 'muted' as const,
     },
   ]
@@ -180,13 +178,13 @@ export default function CancelMembershipPage() {
         <div className="mb-6 flex items-center gap-3">
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/my-membership')} />
           <div>
-            <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">{t('member_cancel.page_subtitle')}</p>
-            <h1 className="m-0 mt-1 text-2xl font-semibold text-[var(--gs-text)] max-[480px]:text-xl">{t('member_cancel.title')}</h1>
+            <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">QUẢN LÝ GÓI TẬP</p>
+            <h1 className="m-0 mt-1 text-2xl font-semibold text-[var(--gs-text)] max-[480px]:text-xl">Hủy gói tập</h1>
           </div>
         </div>
 
         <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
-          <h3 className="mb-5 text-base font-semibold text-[var(--gs-text)]">{t('member_cancel.section_plan_info')}</h3>
+          <h3 className="mb-5 text-base font-semibold text-[var(--gs-text)]">Thông tin gói tập</h3>
           <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
             {infoItems.slice(0, 4).map((item) => (
               <div key={item.label}>
@@ -231,14 +229,14 @@ export default function CancelMembershipPage() {
         {refundEligibility.eligible && refundEligibility.estimatedAmount > 0 && (
           <>
             <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
-              <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">{t('member_cancel.section_refund_method')}</h3>
+              <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">Phương thức hoàn tiền</h3>
               <div className="rounded-xl border-2 border-[var(--gs-accent)] bg-[var(--gs-accent-muted)] p-4">
                 <div className="flex items-start gap-3">
                   <WalletOutlined className="mt-0.5 flex-shrink-0 text-base text-[var(--gs-accent)]" />
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold leading-snug">{t('member_cancel.refund_wallet_title')}</div>
+                    <div className="font-semibold leading-snug">Hoàn tiền vào ví</div>
                     <div className="mt-1 text-sm leading-relaxed text-[var(--gs-text-muted)]">
-                      {t('member_cancel.refund_wallet_desc')}
+                      Số tiền hoàn sẽ được chuyển trực tiếp vào ví của bạn
                     </div>
                   </div>
                 </div>
@@ -250,18 +248,18 @@ export default function CancelMembershipPage() {
 
         <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
           <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">
-            {t('member_cancel.section_reason')} <span className="text-red-500">*</span>
+            Lý do hủy <span className="text-red-500">*</span>
           </h3>
           <Input.TextArea
             rows={4}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder={t('member_cancel.reason_placeholder')}
+            placeholder="Nhập lý do hủy gói tập của bạn..."
           />
         </Card>
 
         <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
-          <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">{t('member_cancel.section_terms')}</h3>
+          <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">Điều khoản & Chính sách</h3>
           <div className={`mb-4 rounded-xl border p-5 ${
             refundPolicyStatus.tone === 'success'
               ? 'border-[var(--gs-success)] bg-[var(--gs-success-bg)]'
@@ -280,12 +278,12 @@ export default function CancelMembershipPage() {
           </div>
           {consentStatus && !allConsented && (
             <p className="m-0 mb-3 rounded-lg border border-[var(--theme-accent-border)] bg-[var(--theme-accent-muted)] px-3 py-2 text-xs text-[var(--theme-accent)]">
-              {t('member_cancel.version_changed') || 'Chính sách đã được cập nhật. Vui lòng đọc và xác nhận lại trước khi tiếp tục.'}
+              Chính sách đã được cập nhật. Vui lòng đọc và xác nhận lại trước khi tiếp tục.
             </p>
           )}
           {consentStatus && allConsented && (
             <p className="m-0 mb-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
-              {t('member_cancel.all_consented') || 'Bạn đã đồng ý với phiên bản chính sách hiện tại.'}
+              Bạn đã đồng ý với phiên bản chính sách hiện tại.
             </p>
           )}
           <Checkbox
@@ -305,7 +303,7 @@ export default function CancelMembershipPage() {
             }}
           >
             <span className="text-sm text-[var(--theme-text)]">
-              {t('member_cancel.policy_accept_all')}{' '}
+              Tôi đã đọc và đồng ý với{' '}
               <Link
                 to="/policies"
                 className="font-medium underline-offset-2 hover:underline"
@@ -313,7 +311,7 @@ export default function CancelMembershipPage() {
                 onMouseEnter={(event) => { event.currentTarget.style.color = 'var(--theme-accent-hover)' }}
                 onMouseLeave={(event) => { event.currentTarget.style.color = 'var(--theme-accent)' }}
               >
-                {t('member_cancel.policy_view_short')}
+                chính sách
               </Link>
             </span>
           </Checkbox>
@@ -321,14 +319,14 @@ export default function CancelMembershipPage() {
 
         <div className="flex flex-col gap-3 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="m-0 text-sm font-medium text-[var(--gs-text)]">{t('member_cancel.confirm_title')}</p>
+            <p className="m-0 text-sm font-medium text-[var(--gs-text)]">Xác nhận hủy gói tập</p>
             <p className="m-0 mt-0.5 text-xs text-[var(--gs-text-muted)]">
-              {t('member_cancel.confirm_desc')}
+              Vui lòng kiểm tra kỹ thông tin trước khi gửi yêu cầu
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Button onClick={() => navigate('/my-membership')}>{t('member_cancel.back_btn')}</Button>
-            <Tooltip title={!canSubmitCancel ? t('member_cancel.tooltip_accept_required') : undefined}>
+            <Button onClick={() => navigate('/my-membership')}>Quay lại</Button>
+            <Tooltip title={!canSubmitCancel ? 'Vui lòng đồng ý với chính sách' : undefined}>
               <Button
                 className="policy-confirm-action"
                 type="primary"
@@ -337,7 +335,7 @@ export default function CancelMembershipPage() {
                 disabled={!reason.trim() || !canSubmitCancel}
                 onClick={handleSubmit}
               >
-                {t('member_cancel.submit_btn')}
+                Gửi yêu cầu
               </Button>
             </Tooltip>
           </div>

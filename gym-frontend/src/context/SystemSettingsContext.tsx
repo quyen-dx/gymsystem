@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import i18n from '../i18n'
 import { systemSettingsService } from '../services/systemSettingsService'
 import { resolveEffectiveTheme, useTheme } from './ThemeContext'
 
@@ -23,7 +22,7 @@ export const SYSTEM_SETTINGS_DEFAULTS = {
   },
   auth: { allowRegistration: true, allowPhoneLogin: true, allowEmailUsernameLogin: true, googleOAuthEnabled: true, facebookOAuthEnabled: true, demoOtpEnabled: true, otpExpiresInSeconds: 300, forgotPasswordSmsOtpEnabled: true, forgotPasswordEmailEnabled: true },
   members: { allowProfileUpdate: true, allowAvatarUpload: true, allowAccountLockToggle: true, protectPrimaryAdmin: true, allowBulkActions: true },
-  billing: { allowPlanPurchase: true, allowAssignPlanToMember: true, allowPlanRenewal: true, allowAutoRenewal: true, discountCodesEnabled: true, qrPaymentEnabled: true, planMemberCountEnabled: true },
+  billing: { allowPlanPurchase: true, allowAssignPlanToMember: true, allowPlanRenewal: true, renewalThresholdDays: 7, discountCodesEnabled: true, qrPaymentEnabled: true, planMemberCountEnabled: true },
   checkin: { qrCheckinEnabled: true, qrTokenTtlSeconds: 30, preventDuplicateWithinHour: true, selfieRequired: false, streakEnabled: true, successSoundEnabled: true },
   pt: { moduleEnabled: true, scheduleEnabled: true, memberBookingEnabled: true, weeklyRecurringBookingEnabled: true, waitlistEnabled: true, reviewAfterSessionEnabled: true },
   workout: { workoutPlanEnabled: true, workoutTimerEnabled: true, healthLogEnabled: true, bmiHistoryEnabled: true, progressPhotoUploadEnabled: true, healthChartEnabled: true },
@@ -97,10 +96,6 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
     if (nextSettings.general.logoUrl) {
       const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null
       if (link) link.href = nextSettings.general.logoUrl
-    }
-    const preferredLanguage = nextSettings.general.defaultLanguage
-    if (!localStorage.getItem('i18nextLng') && ['vi', 'en'].includes(preferredLanguage)) {
-      i18n.changeLanguage(preferredLanguage)
     }
   }
 

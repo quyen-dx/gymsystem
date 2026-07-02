@@ -1,6 +1,5 @@
 import { Button, theme } from 'antd'
 import React, { useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { getLocalizedText, normalizeLandingData } from '../../utils/localization'
 import TypewriterSlogans from './TypewriterSlogans'
@@ -144,17 +143,16 @@ function HomeLandingSectionInner({
   editable = false,
   onSettingsChange,
 }: HomeLandingSectionProps) {
-  const { t, i18n } = useTranslation()
   const { settings: systemSettings } = useSystemSettings()
   const { token } = theme.useToken()
-  const lang = language || i18n.language
+  const lang = language || 'vi'
   const renderMode = mode ?? (preview ? 'preview' : 'page')
   const safeLanding = useMemo(() => normalizeLandingData(landing || {}), [landing])
   const fallbackStats = [
-    { value: '500+', label: t('dashboard.stats.members') },
-    { value: '20+', label: t('dashboard.stats.trainers') },
-    { value: '4', label: t('dashboard.stats.branches') },
-    { value: '98%', label: t('dashboard.stats.satisfaction') },
+    { value: '500+', label: 'Hội viên' },
+    { value: '20+', label: 'Huấn luyện viên' },
+    { value: '4', label: 'Chi nhánh' },
+    { value: '98%', label: 'Hài lòng' },
   ]
   const stats = (safeLanding.stats?.length ? safeLanding.stats : fallbackStats).map((item: any) => ({
     value: pickLocalized(item.value, lang, String(item.value ?? '')),
@@ -162,10 +160,10 @@ function HomeLandingSectionInner({
   }))
 
   const services = (safeLanding.services?.length ? safeLanding.services : [
-    { icon: '▣', title: t('dashboard.services.qr_checkin'), description: t('dashboard.services.qr_checkin_desc'), color: '#e05a30', link: '/checkin' },
-    { icon: '◴', title: t('dashboard.services.book_pt'), description: t('dashboard.services.book_pt_desc'), color: '#3d9dd0', link: '/booking' },
-    { icon: '↗', title: t('dashboard.services.workout'), description: t('dashboard.services.workout_desc'), color: '#5cb85c', link: '/workout' },
-    { icon: '♡', title: t('dashboard.services.health'), description: t('dashboard.services.health_desc'), color: '#e6a317', link: '/health' },
+    { icon: '▣', title: 'Check-in QR', description: 'Điểm danh nhanh bằng mã QR', color: '#e05a30', link: '/checkin' },
+    { icon: '◴', title: 'Đặt PT', description: 'Đặt lịch với huấn luyện viên', color: '#3d9dd0', link: '/booking' },
+    { icon: '↗', title: 'Tập luyện', description: 'Giáo án tập luyện cá nhân hóa', color: '#5cb85c', link: '/workout' },
+    { icon: '♡', title: 'Sức khỏe', description: 'Theo dõi chỉ số sức khỏe', color: '#e6a317', link: '/health' },
   ]).map((item: any) => ({
     ...item,
     title: pickLocalized(item.title, lang, ''),
@@ -173,9 +171,9 @@ function HomeLandingSectionInner({
   }))
 
   const testimonials = [
-    { rating: 5, content: t('dashboard.testimonials.item_0_quote'), userName: t('dashboard.testimonials.item_0_name'), userSubtitle: t('dashboard.testimonials.item_0_duration') },
-    { rating: 5, content: t('dashboard.testimonials.item_1_quote'), userName: t('dashboard.testimonials.item_1_name'), userSubtitle: t('dashboard.testimonials.item_1_duration') },
-    { rating: 5, content: t('dashboard.testimonials.item_2_quote'), userName: t('dashboard.testimonials.item_2_name'), userSubtitle: t('dashboard.testimonials.item_2_duration') },
+    { rating: 5, content: 'Phòng tập hiện đại, sạch sẽ, nhân viên nhiệt tình. Tôi rất hài lòng!', userName: 'Nguyễn Văn A', userSubtitle: 'Hội viên 2 năm' },
+    { rating: 5, content: 'Các HLV chuyên nghiệp, tận tâm. Sau 3 tháng tôi đã thấy kết quả rõ rệt.', userName: 'Trần Thị B', userSubtitle: 'Hội viên 1 năm' },
+    { rating: 5, content: 'Không gian tập thoải mái, máy móc đầy đủ. Rất đáng để đầu tư cho sức khỏe!', userName: 'Lê Văn C', userSubtitle: 'Hội viên 6 tháng' },
   ].map((item: any) => ({
     ...item,
     content: pickLocalized(item.content, lang, ''),
@@ -186,18 +184,18 @@ function HomeLandingSectionInner({
     return pickLocalizedSlogans(systemSettings.general.slogans, lang)
   }, [lang, systemSettings.general.slogans])
 
-  const heroSubtitle = pickLocalized(safeLanding.heroSubtitle, lang, t('dashboard.subtitle'))
+  const heroSubtitle = pickLocalized(safeLanding.heroSubtitle, lang, 'Đồng hành cùng bạn trên mọi hành trình thể thao')
   const heroBadge = systemSettings.general.siteName
-  const primaryText = pickLocalized(safeLanding.ctaText, lang, t('dashboard.cta_booking'))
-  const secondaryText = pickLocalized(safeLanding.secondaryCtaText, lang, t('dashboard.cta_checkin'))
-  const servicesEyebrow = pickLocalized(safeLanding.servicesEyebrow, lang, t('dashboard.services.overline'))
-  const servicesTitle = pickLocalized(safeLanding.servicesTitle, lang, t('dashboard.services.heading'))
-  const testimonialsEyebrow = t('dashboard.testimonials.overline')
-  const testimonialsTitle = t('dashboard.testimonials.heading')
-  const finalTitle = pickLocalized(safeLanding.finalCtaTitle, lang, `${t('dashboard.cta.heading1')}\n${t('dashboard.cta.heading2')}`)
-  const finalSubtitle = pickLocalized(safeLanding.finalCtaSubtitle, lang, t('dashboard.cta.subtitle', { firstName }))
-  const finalPrimaryText = pickLocalized(safeLanding.finalCtaPrimaryText, lang, t('dashboard.cta.book_pt'))
-  const finalSecondaryText = pickLocalized(safeLanding.finalCtaSecondaryText, lang, t('dashboard.cta.view_health'))
+  const primaryText = pickLocalized(safeLanding.ctaText, lang, 'Đặt lịch ngay')
+  const secondaryText = pickLocalized(safeLanding.secondaryCtaText, lang, 'Check-in ngay')
+  const servicesEyebrow = pickLocalized(safeLanding.servicesEyebrow, lang, 'Dịch vụ')
+  const servicesTitle = pickLocalized(safeLanding.servicesTitle, lang, 'Dịch vụ của chúng tôi')
+  const testimonialsEyebrow = 'Phản hồi'
+  const testimonialsTitle = 'Khách hàng nói gì về chúng tôi'
+  const finalTitle = pickLocalized(safeLanding.finalCtaTitle, lang, 'Bắt đầu hành trình\ncủa bạn ngay hôm nay')
+  const finalSubtitle = pickLocalized(safeLanding.finalCtaSubtitle, lang, `Chào mừng ${firstName}, hãy cùng chúng tôi xây dựng cơ thể khỏe mạnh!`)
+  const finalPrimaryText = pickLocalized(safeLanding.finalCtaPrimaryText, lang, 'Đặt PT ngay')
+  const finalSecondaryText = pickLocalized(safeLanding.finalCtaSecondaryText, lang, 'Xem sức khỏe')
   const widthClass = preview ? 'w-full' : 'w-[calc(100%-40px)] md:w-[calc(100%-64px)]'
   const landingFlags = systemSettings.landing
 

@@ -1,6 +1,5 @@
 import { Button, Checkbox, Spin, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ShieldCheck, FileText, Search, ChevronDown, Info } from 'lucide-react'
 import MemberLayout from '../../components/layout/header/MemberLayout'
@@ -30,8 +29,7 @@ const CATEGORY_TYPE_MAP: Record<string, { types: string[]; viewedType: 'deposit'
 }
 
 export default function PolicyPage() {
-  const { t, i18n } = useTranslation()
-  const lang = i18n.language?.startsWith('en') ? 'en' : 'vi'
+  const lang = 'vi'
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const categoryParam = searchParams.get('category')
@@ -47,9 +45,9 @@ export default function PolicyPage() {
   const [consentVersions, setConsentVersions] = useState<Record<string, any> | null>(null)
   const [consentLoading, setConsentLoading] = useState(false)
   const [consentError, setConsentError] = useState<string | null>(null)
-  const titleField = lang === 'en' ? 'titleEn' : 'titleVi'
-  const contentField = lang === 'en' ? 'contentEn' : 'contentVi'
-  const categoryField = lang === 'en' ? 'categoryEn' : 'categoryVi'
+  const titleField = 'titleVi'
+  const contentField = 'contentVi'
+  const categoryField = 'categoryVi'
 
   const categoryInfo = categoryParam ? CATEGORY_TYPE_MAP[categoryParam.toLowerCase()] : null
   const returnInfo = (returnTo ? RETURN_TYPE_MAP[returnTo] : null) || categoryInfo
@@ -110,11 +108,11 @@ export default function PolicyPage() {
   const consentPolicies = useMemo(() => {
     if (!returnInfo) return []
     const typeLabelMap: Record<string, string> = {
-      payment: t('system_experience.policy.type_payment') || 'Chính sách thanh toán',
-      refund: t('system_experience.policy.type_refund') || 'Chính sách hoàn tiền',
-      wallet: t('system_experience.policy.type_wallet') || 'Chính sách ví',
-      membership: t('system_experience.policy.type_membership') || 'Chính sách hội viên',
-      terms: t('system_experience.policy.type_terms') || 'Điều khoản sử dụng',
+      payment: 'Chính sách thanh toán',
+      refund: 'Chính sách hoàn tiền',
+      wallet: 'Chính sách ví',
+      membership: 'Chính sách hội viên',
+      terms: 'Điều khoản sử dụng',
     }
     return returnInfo.types.map((type) => {
       const fromItems = items.find((item) =>
@@ -132,7 +130,7 @@ export default function PolicyPage() {
         _id: fromItems?._id,
       }
     })
-  }, [items, returnInfo, consentVersions, titleField, t])
+  }, [items, returnInfo, consentVersions, titleField])
 
   const consentReady = !!returnInfo && !loading && !consentLoading
 
@@ -191,10 +189,10 @@ export default function PolicyPage() {
         policyId: policy._id,
       }))
       await acceptMultiplePolicyConsent(payload)
-      message.success(t('system_experience.policy.consent_success') || 'Đã xác nhận chính sách.')
+      message.success('Đã xác nhận chính sách.')
       navigate(returnTo)
     } catch (error: any) {
-      const errMsg = error?.response?.data?.message || error?.message || t('system_experience.policy.consent_failed') || 'Xác nhận thất bại'
+      const errMsg = error?.response?.data?.message || error?.message || 'Xác nhận thất bại'
       message.error(errMsg)
     } finally {
       setSubmitting(false)
@@ -209,20 +207,20 @@ export default function PolicyPage() {
           <div className="support-hero-left">
             <span className="support-kicker">
               <ShieldCheck size={14} />
-              {t('system_experience.policy.kicker')}
+              {'Chính sách'}
             </span>
-            <h1>{t('system_experience.policy.title')}</h1>
-            <p>{t('system_experience.policy.description')}</p>
+            <h1>{'Chính sách & Điều khoản'}</h1>
+            <p>{'Tra cứu các chính sách và điều khoản của trung tâm'}</p>
           </div>
           <div className="support-stats">
             <div className="support-stats-item">
               <strong>{totalCount}</strong>
-              <span>{t('system_experience.policy.stats_total')}</span>
+              <span>{'Tổng số chính sách'}</span>
             </div>
             {latestDate && (
               <div className="support-stats-item">
                 <strong style={{ fontSize: 14, fontWeight: 600 }}>{latestDate}</strong>
-                <span>{t('system_experience.policy.stats_updated')}</span>
+                <span>{'Cập nhật gần đây'}</span>
               </div>
             )}
           </div>
@@ -232,14 +230,14 @@ export default function PolicyPage() {
         {!returnInfo && (
           <div className="support-notice">
             <Info />
-            {t('system_experience.policy.notice')}
+            {'Các chính sách được cập nhật định kỳ. Vui lòng kiểm tra thường xuyên để nắm thông tin mới nhất.'}
           </div>
         )}
 
         {returnInfo && (
           <div className="mb-4 rounded-lg border border-[var(--theme-accent-border)] bg-[var(--theme-accent-muted)] px-4 py-3 text-sm text-[var(--theme-accent)]">
             <Info size={16} className="mr-2 inline-block" />
-            {t('system_experience.policy.return_notice') || 'Vui lòng đọc và xác nhận chính sách để tiếp tục giao dịch.'}
+            {'Vui lòng đọc và xác nhận chính sách để tiếp tục giao dịch.'}
           </div>
         )}
 
@@ -251,7 +249,7 @@ export default function PolicyPage() {
               onClick={() => setActiveCategory(null)}
               className={`support-pill ${!activeCategory ? 'active' : ''}`}
             >
-              {t('system_experience.policy.filter_all')} ({totalCount})
+              {'Tất cả'} ({totalCount})
             </button>
             {categories.map(({ display, count }) => (
               <button
@@ -269,7 +267,7 @@ export default function PolicyPage() {
           <div className="support-search">
             <input
               type="text"
-              placeholder={t('system_experience.policy.search_placeholder')}
+              placeholder={'Tìm kiếm chính sách...'}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -296,8 +294,8 @@ export default function PolicyPage() {
         ) : filtered.length === 0 ? (
           <div className="support-empty">
             <Search />
-            <p>{t('system_experience.policy.empty')}</p>
-            <span>{t('system_experience.policy.empty_suggestion')}</span>
+            <p>{'Không tìm thấy chính sách nào'}</p>
+            <span>{'Thử thay đổi từ khóa tìm kiếm hoặc danh mục'}</span>
           </div>
         ) : (
           <div className="support-list">
@@ -316,7 +314,7 @@ export default function PolicyPage() {
                       <div className="support-card-meta">
                         <span className="support-card-category">{category}</span>
                         {item.version && <span className="support-card-version">v{item.version}</span>}
-                        {updated && <span className="support-card-date">{t('system_experience.policy.updated_label')}: {updated}</span>}
+                        {updated &&                         <span className="support-card-date">{'Cập nhật'}: {updated}</span>}
                       </div>
                     </div>
                     <ChevronDown className="support-card-arrow" />
@@ -333,7 +331,7 @@ export default function PolicyPage() {
         {returnInfo && requireConsent && (
           <div id="policy-consent-section" className="mt-8 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-6">
             <h3 className="mb-2 text-base font-semibold text-[var(--theme-text)]">
-              {t('system_experience.policy.consent_title') || 'Xác nhận chính sách'}
+              {'Xác nhận chính sách'}
             </h3>
             <ul className="mb-4 space-y-1 text-sm text-[var(--theme-muted)]">
               {consentError ? (
@@ -350,15 +348,15 @@ export default function PolicyPage() {
             </ul>
             <Checkbox checked={accepted} onChange={(e) => setAccepted(e.target.checked)}>
               <span className="text-sm text-[var(--theme-text)]">
-                {t('system_experience.policy.consent_checkbox') || 'Tôi đã đọc và đồng ý với phiên bản hiện tại của các chính sách liên quan.'}
+                {'Tôi đã đọc và đồng ý với phiên bản hiện tại của các chính sách liên quan.'}
               </span>
             </Checkbox>
             <div className="mt-4 flex gap-3">
               <Button onClick={() => navigate(returnTo!)}>
-                {t('system_experience.policy.consent_cancel') || 'Quay lại'}
+                {'Quay lại'}
               </Button>
               <Button type="primary" disabled={!accepted || !consentReady || !!consentError} loading={submitting} onClick={handleAcceptAndReturn}>
-                {t('system_experience.policy.consent_confirm') || 'Đồng ý và quay lại giao dịch'}
+                {'Đồng ý và quay lại giao dịch'}
               </Button>
             </div>
           </div>

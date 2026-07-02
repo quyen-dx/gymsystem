@@ -1,7 +1,6 @@
 import { CheckCircleOutlined, CreditCardOutlined } from '@ant-design/icons'
-import { Button, Card, Descriptions, Empty, Modal, Spin, Tag, Tooltip, message } from 'antd'
+import { Button, Card, Descriptions, Empty, Modal, Select, Spin, Tag, Tooltip, message } from 'antd'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useWallet } from '../../../context/WalletProvider'
@@ -11,10 +10,12 @@ import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 
 const formatMoney = (value: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 
+const SPECIALIZATIONS = ['Yoga', 'GYM', 'Boxing', 'CrossFit', 'Pilates', 'Zumba', 'Personal Training', 'Cardio', 'Weight Loss', 'Muscle Gain']
+
 export default function PlansPage() {
-  const { t, i18n } = useTranslation()
   const [plans, setPlans] = useState<MembershipPlan[]>([])
   const [loading, setLoading] = useState(true)
+  const [specializationFilter, setSpecializationFilter] = useState<string | undefined>(undefined)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [selectedPlan, setSelectedPlan] = useState<MembershipPlan | null>(null)
   const [tickedPolicies, setTickedPolicies] = useState<Record<string, { type: string; version: string }> | null>(null)
@@ -22,20 +23,24 @@ export default function PlansPage() {
   const consentReady = tickedPolicies !== null && Object.keys(tickedPolicies).length > 0
   const { wallet, refreshWallet } = useWallet()
   const navigate = useNavigate()
-  const lang = i18n.language
 
   useEffect(() => {
-    membershipService.getPlans()
+    setLoading(true)
+    const params: Record<string, any> = {}
+    if (specializationFilter) {
+      params.specialization = specializationFilter
+    }
+    membershipService.getPlans(params)
       .then((res) => setPlans(res.data.plans || []))
-      .catch(() => message.error(t('member_plans.toast_fetch_error')))
+      .catch(() => message.error('Không thể tải danh sách gói tập'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [specializationFilter])
 
 
 
-  const getName = (plan: MembershipPlan) => lang.startsWith('vi') ? plan.nameVi || plan.nameEn : plan.nameEn || plan.nameVi
-  const getDesc = (plan: MembershipPlan) => lang.startsWith('vi') ? plan.descriptionVi || plan.descriptionEn : plan.descriptionEn || plan.descriptionVi
-  const getFeatures = (plan: MembershipPlan) => lang.startsWith('vi') ? plan.featuresVi || plan.featuresEn || [] : plan.featuresEn || plan.featuresVi || []
+  const getName = (plan: MembershipPlan) => plan.nameVi || plan.nameEn
+  const getDesc = (plan: MembershipPlan) => plan.descriptionVi || plan.descriptionEn
+  const getFeatures = (plan: MembershipPlan) => plan.featuresVi || plan.featuresEn || []
 
   const handleRegister = async () => {
     if (!selectedPlan) return
@@ -54,7 +59,7 @@ export default function PlansPage() {
         setConsentSubmitted(true)
       }
       const res = await membershipService.subscribePlan(plan._id)
-      message.success(res.data?.message || t('member_plans.toast_register_success'))
+      message.success(res.data?.message || 'Đăng ký gói tập thành công')
       setSelectedPlan(null)
       await refreshWallet()
       navigate('/my-membership')
@@ -62,9 +67,9 @@ export default function PlansPage() {
       const status = error.response?.status
       const msg = error.response?.data?.message || ''
       if (status === 400 && (msg.includes('đang có gói tập') || msg.includes('active plan'))) {
-        message.error(t('member_plans.toast_active_exists'))
+        message.error('Bạn đang có gói tập hoạt động')
       } else {
-        message.error(msg || t('member_plans.toast_register_error'))
+        message.error(msg || 'Đăng ký thất bại')
       }
     } finally {
       setSubmittingId(null)
@@ -80,16 +85,28 @@ export default function PlansPage() {
       <div className="mx-auto w-full max-w-6xl px-4 py-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">{t('member_plans.page_subtitle')}</p>
-            <h1 className="m-0 mt-2 text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('member_plans.title')}</h1>
+            <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">GÓI TẬP</p>
+            <h1 className="m-0 mt-2 text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Chọn gói tập</h1>
           </div>
-          <Button href="/my-membership">{t('member_plans.my_membership_btn')}</Button>
+          <div className="flex items-center gap-3">
+            <Select
+              placeholder="Chuyên môn"
+              style={{ minWidth: 160 }}
+              value={specializationFilter || ''}
+              onChange={(val) => setSpecializationFilter(val || undefined)}
+              options={[
+                { value: '', label: 'Tất cả chuyên môn' },
+                ...SPECIALIZATIONS.map((s) => ({ value: s, label: s })),
+              ]}
+            />
+            <Button href="/my-membership">Gói của tôi</Button>
+          </div>
         </div>
 
         {loading ? (
           <div className="flex min-h-[320px] items-center justify-center"><Spin /></div>
         ) : plans.length === 0 ? (
-          <Empty description={t('member_plans.empty')} />
+          <Empty description="Không có gói tập nào" />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {plans.map((plan) => (
@@ -98,10 +115,10 @@ export default function PlansPage() {
                 className="h-full"
                 style={{ borderTop: `4px solid ${plan.color || '#1677ff'}` }}
                 title={<span>{getName(plan)}</span>}
-                extra={<Tag color="blue">{t('member_plans.days', { days: plan.durationDays })}</Tag>}
+                extra={<Tag color="blue">{plan.durationDays} ngày</Tag>}
               >
                 <div className="mb-4 text-2xl font-semibold">{formatMoney(plan.price)}</div>
-                <p className="min-h-[44px] text-sm text-[var(--gs-text-muted)]">{getDesc(plan) || t('member_plans.card_desc_fallback')}</p>
+                <p className="min-h-[44px] text-sm text-[var(--gs-text-muted)]">{getDesc(plan) || 'Gói tập phù hợp với nhu cầu của bạn'}</p>
                 <div className="mb-5 space-y-2">
                   {getFeatures(plan).slice(0, 5).map((feature) => (
                     <div key={feature} className="flex items-center gap-2 text-sm">
@@ -121,7 +138,7 @@ export default function PlansPage() {
                     setConsentSubmitted(false)
                   }}
                 >
-                  {t('member_plans.register_btn')}
+                  Đăng ký
                 </Button>
               </Card>
             ))}
@@ -129,9 +146,9 @@ export default function PlansPage() {
         )}
 
         <Modal
-          title={t('member_plans.modal_title')}
+          title="Xác nhận đăng ký"
           open={Boolean(selectedPlan)}
-          destroyOnClose
+          destroyOnHidden
           onCancel={() => {
             setSelectedPlan(null)
             setTickedPolicies(null)
@@ -147,22 +164,22 @@ export default function PlansPage() {
               <div className="policy-modal-content">
                 <div className="space-y-4">
                   <Descriptions bordered column={1} size="small">
-                    <Descriptions.Item label={t('member_plans.label_plan_name')}>{getName(selectedPlan)}</Descriptions.Item>
-                    <Descriptions.Item label={t('member_plans.label_price')}>{formatMoney(selectedPlan.price)}</Descriptions.Item>
-                    <Descriptions.Item label={t('member_plans.label_current_balance')}>{formatMoney(currentBalance)}</Descriptions.Item>
-                    <Descriptions.Item label={t('member_plans.label_balance_after')}>
+                    <Descriptions.Item label="Tên gói">{getName(selectedPlan)}</Descriptions.Item>
+                    <Descriptions.Item label="Giá">{formatMoney(selectedPlan.price)}</Descriptions.Item>
+                    <Descriptions.Item label="Số dư hiện tại">{formatMoney(currentBalance)}</Descriptions.Item>
+                    <Descriptions.Item label="Số dư sau khi đăng ký">
                       <span style={{ color: balanceAfter < 0 ? 'var(--gs-danger)' : 'inherit' }}>
                         {formatMoney(balanceAfter)}
                       </span>
                     </Descriptions.Item>
-                    <Descriptions.Item label={t('member_plans.label_duration')}>{t('member_plans.days', { days: selectedPlan.durationDays })}</Descriptions.Item>
+                    <Descriptions.Item label="Thời hạn">{selectedPlan.durationDays} ngày</Descriptions.Item>
                   </Descriptions>
 
                   <PolicyConsentCard
                     key={selectedPlan._id}
                     policies={[
-                      { type: 'membership', label: t('member_plans.link_membership') || 'Chính sách hội viên' },
-                      { type: 'terms', label: t('member_plans.link_terms') || 'Điều khoản sử dụng' },
+                      { type: 'membership', label: 'Chính sách hội viên' },
+                      { type: 'terms', label: 'Điều khoản sử dụng' },
                     ]}
                     context="plans"
                     onTickedChange={(ticked) => {
@@ -180,9 +197,9 @@ export default function PlansPage() {
                       setConsentSubmitted(false)
                     }}
                   >
-                    {t('member_plans.modal_cancel')}
+                    Hủy
                   </Button>
-                  <Tooltip title={!consentReady ? t('member_plans.tooltip_accept_required') : undefined}>
+                  <Tooltip title={!consentReady ? 'Vui lòng đồng ý với chính sách' : undefined}>
                     <Button
                       className="policy-confirm-action"
                       type="primary"
@@ -190,7 +207,7 @@ export default function PlansPage() {
                       disabled={!consentReady}
                       onClick={handleRegister}
                     >
-                      {t('member_plans.modal_confirm')}
+                      Xác nhận
                     </Button>
                   </Tooltip>
                 </div>

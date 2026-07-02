@@ -1,7 +1,6 @@
 import { DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, SearchOutlined } from '@ant-design/icons'
 import { Button, Card, Input, InputNumber, Select, Space, Spin, Switch, Typography, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { SYSTEM_SETTINGS_DEFAULTS, useSystemSettings } from '../../../context/SystemSettingsContext'
 import { systemSettingsService } from '../../../services/systemSettingsService'
@@ -50,13 +49,13 @@ type SettingGroup = {
 }
 
 const langOptions = [
-  { labelKey: 'system_settings.options.vi', value: 'vi' },
-  { labelKey: 'system_settings.options.en', value: 'en' },
+  { label: 'Tiếng Việt', value: 'vi' },
+  { label: 'Tiếng Anh', value: 'en' },
 ]
 
 const themeOptions = [
-  { labelKey: 'system_settings.options.dark', value: 'dark' },
-  { labelKey: 'system_settings.options.light', value: 'light' },
+  { label: 'Tối', value: 'dark' },
+  { label: 'Sáng', value: 'light' },
 ]
 
 const SETTING_GROUPS: SettingGroup[] = [
@@ -104,7 +103,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       { path: 'billing.allowPlanPurchase', type: 'switch' },
       { path: 'billing.allowAssignPlanToMember', type: 'switch' },
       { path: 'billing.allowPlanRenewal', type: 'switch' },
-      { path: 'billing.allowAutoRenewal', type: 'switch' },
+      { path: 'billing.renewalThresholdDays', type: 'number', min: 1, max: 90 },
       { path: 'billing.discountCodesEnabled', type: 'switch' },
       { path: 'billing.qrPaymentEnabled', type: 'switch' },
       { path: 'billing.planMemberCountEnabled', type: 'switch' },
@@ -210,8 +209,172 @@ const setByPath = (source: any, path: string, value: any) => {
   return next
 }
 
+const settingLabels: Record<string, string> = {
+  'general.siteName': 'Tên trang web',
+  'general.slogans': 'Slogan',
+  'general.logoUrl': 'URL Logo',
+  'general.defaultLanguage': 'Ngôn ngữ mặc định',
+  'general.defaultTheme': 'Giao diện mặc định',
+  'general.defaultAccentColor': 'Màu nhấn mặc định',
+  'general.maintenanceMode': 'Chế độ bảo trì',
+  'general.maintenanceMessage.vi': 'Thông báo bảo trì (VI)',
+  'general.maintenanceMessage.en': 'Thông báo bảo trì (EN)',
+  'auth.allowRegistration': 'Cho phép đăng ký',
+  'auth.allowPhoneLogin': 'Cho phép đăng nhập bằng SĐT',
+  'auth.allowEmailUsernameLogin': 'Cho phép đăng nhập bằng Email',
+  'auth.googleOAuthEnabled': 'Đăng nhập Google',
+  'auth.facebookOAuthEnabled': 'Đăng nhập Facebook',
+  'auth.demoOtpEnabled': 'OTP chế độ demo',
+  'auth.otpExpiresInSeconds': 'Thời gian hết hạn OTP (giây)',
+  'auth.forgotPasswordSmsOtpEnabled': 'Quên MK bằng OTP SMS',
+  'auth.forgotPasswordEmailEnabled': 'Quên MK bằng Email',
+  'members.allowProfileUpdate': 'Cho phép cập nhật hồ sơ',
+  'members.allowAvatarUpload': 'Cho phép tải ảnh đại diện',
+  'members.allowAccountLockToggle': 'Cho phép khóa/mở tài khoản',
+  'members.protectPrimaryAdmin': 'Bảo vệ Admin chính',
+  'members.allowBulkActions': 'Cho phép thao tác hàng loạt',
+  'billing.allowPlanPurchase': 'Cho phép mua gói tập',
+  'billing.allowAssignPlanToMember': 'Gán gói tập cho HV',
+  'billing.allowPlanRenewal': 'Cho phép gia hạn gói tập',
+  'billing.renewalThresholdDays': 'Ngày cảnh báo gia hạn',
+  'billing.discountCodesEnabled': 'Mã giảm giá',
+  'billing.qrPaymentEnabled': 'Thanh toán QR',
+  'billing.planMemberCountEnabled': 'Số lượng HV tối đa/gói',
+  'checkin.qrCheckinEnabled': 'Check-in bằng QR',
+  'checkin.qrTokenTtlSeconds': 'Thời hạn token QR (giây)',
+  'checkin.preventDuplicateWithinHour': 'Chống check-in trùng trong 1h',
+  'checkin.selfieRequired': 'Yêu cầu chụp ảnh check-in',
+  'checkin.streakEnabled': 'Streak check-in',
+  'checkin.successSoundEnabled': 'Âm thanh check-in thành công',
+  'pt.moduleEnabled': 'Module PT',
+  'pt.scheduleEnabled': 'Lịch PT',
+  'pt.memberBookingEnabled': 'HV đặt lịch PT',
+  'pt.weeklyRecurringBookingEnabled': 'Đặt lịch định kỳ',
+  'pt.waitlistEnabled': 'Danh sách chờ',
+  'pt.reviewAfterSessionEnabled': 'Đánh giá sau buổi tập',
+  'workout.workoutPlanEnabled': 'Giáo án tập luyện',
+  'workout.workoutTimerEnabled': 'Đồng hồ bấm giờ',
+  'workout.healthLogEnabled': 'Nhật ký sức khỏe',
+  'workout.bmiHistoryEnabled': 'Lịch sử BMI',
+  'workout.progressPhotoUploadEnabled': 'Ảnh tiến trình',
+  'workout.healthChartEnabled': 'Biểu đồ sức khỏe',
+  'reports.revenueChartEnabled': 'Biểu đồ doanh thu',
+  'reports.checkinHeatmapEnabled': 'Heatmap check-in',
+  'reports.revenueForecastEnabled': 'Dự báo doanh thu',
+  'reports.churnRiskEnabled': 'Rủi ro rời bỏ',
+  'reports.excelExportEnabled': 'Xuất Excel',
+  'reports.pdfExportEnabled': 'Xuất PDF',
+  'reports.auditLogEnabled': 'Nhật ký hoạt động',
+  'notifications.systemNotificationsEnabled': 'Thông báo hệ thống',
+  'notifications.roleGroupNotificationsEnabled': 'Thông báo theo nhóm',
+  'notifications.emailNotificationsEnabled': 'Thông báo Email',
+  'notifications.readUnreadStatusEnabled': 'Trạng thái đã đọc/chưa đọc',
+  'shop.productStoreEnabled': 'Cửa hàng sản phẩm',
+  'shop.cartEnabled': 'Giỏ hàng',
+  'shop.productReviewsEnabled': 'Đánh giá sản phẩm',
+  'shop.productDetailPageEnabled': 'Trang chi tiết sản phẩm',
+  'ai.systemAiEnabled': 'AI hệ thống',
+  'ai.memberAiEnabled': 'AI cho hội viên',
+  'ai.adminAiEnabled': 'AI cho Admin',
+  'landing.statsSectionEnabled': 'Phần thống kê',
+  'landing.servicesSectionEnabled': 'Phần dịch vụ',
+  'landing.feedbackSectionEnabled': 'Phần phản hồi',
+  'landing.partnersSectionEnabled': 'Phần đối tác',
+  'landing.startNowButtonEnabled': 'Nút bắt đầu ngay',
+  'landing.checkinNowButtonEnabled': 'Nút check-in ngay',
+}
+
+const settingDescriptions: Record<string, string> = {
+  'general.siteName': 'Tên hiển thị của trang web',
+  'general.slogans': 'Các slogan hiển thị trên trang chủ',
+  'general.logoUrl': 'URL hình ảnh logo',
+  'general.defaultLanguage': 'Ngôn ngữ mặc định khi truy cập',
+  'general.defaultTheme': 'Giao diện hiển thị mặc định',
+  'general.defaultAccentColor': 'Màu nhấn chính của giao diện',
+  'general.maintenanceMode': 'Bật để đưa trang web vào chế độ bảo trì',
+  'general.maintenanceMessage.vi': 'Thông báo bảo trì tiếng Việt',
+  'general.maintenanceMessage.en': 'Thông báo bảo trì tiếng Anh',
+  'auth.allowRegistration': 'Cho phép người dùng mới đăng ký tài khoản',
+  'auth.allowPhoneLogin': 'Cho phép đăng nhập bằng số điện thoại',
+  'auth.allowEmailUsernameLogin': 'Cho phép đăng nhập bằng email hoặc tên đăng nhập',
+  'auth.googleOAuthEnabled': 'Bật đăng nhập qua Google',
+  'auth.facebookOAuthEnabled': 'Bật đăng nhập qua Facebook',
+  'auth.demoOtpEnabled': 'Sử dụng OTP mặc định trong môi trường demo',
+  'auth.otpExpiresInSeconds': 'Thời gian hiệu lực của mã OTP',
+  'auth.forgotPasswordSmsOtpEnabled': 'Cho phép gửi OTP qua SMS để đặt lại mật khẩu',
+  'auth.forgotPasswordEmailEnabled': 'Cho phép gửi email đặt lại mật khẩu',
+  'members.allowProfileUpdate': 'Cho phép hội viên tự cập nhật hồ sơ',
+  'members.allowAvatarUpload': 'Cho phép tải lên ảnh đại diện',
+  'members.allowAccountLockToggle': 'Cho phép admin khóa/mở khóa tài khoản',
+  'members.protectPrimaryAdmin': 'Ngăn không cho sửa/xóa tài khoản admin chính',
+  'members.allowBulkActions': 'Cho phép thao tác hàng loạt trên danh sách hội viên',
+  'billing.allowPlanPurchase': 'Cho phép hội viên mua gói tập',
+  'billing.allowAssignPlanToMember': 'Cho phép admin gán gói tập cho hội viên',
+  'billing.allowPlanRenewal': 'Cho phép gia hạn gói tập tự động',
+  'billing.renewalThresholdDays': 'Số ngày trước khi hết hạn để cảnh báo gia hạn',
+  'billing.discountCodesEnabled': 'Bật tính năng mã giảm giá',
+  'billing.qrPaymentEnabled': 'Bật tính năng thanh toán qua mã QR',
+  'billing.planMemberCountEnabled': 'Giới hạn số lượng hội viên tối đa cho mỗi gói',
+  'checkin.qrCheckinEnabled': 'Cho phép check-in bằng mã QR',
+  'checkin.qrTokenTtlSeconds': 'Thời gian hiệu lực của mã QR check-in',
+  'checkin.preventDuplicateWithinHour': 'Ngăn check-in trùng trong vòng 1 giờ',
+  'checkin.selfieRequired': 'Yêu cầu chụp ảnh khi check-in',
+  'checkin.streakEnabled': 'Theo dõi số ngày check-in liên tiếp',
+  'checkin.successSoundEnabled': 'Phát âm thanh khi check-in thành công',
+  'pt.moduleEnabled': 'Bật module Huấn luyện viên cá nhân',
+  'pt.scheduleEnabled': 'Bật lịch làm việc của PT',
+  'pt.memberBookingEnabled': 'Cho phép hội viên đặt lịch với PT',
+  'pt.weeklyRecurringBookingEnabled': 'Cho phép đặt lịch định kỳ hàng tuần',
+  'pt.waitlistEnabled': 'Bật danh sách chờ cho lịch PT',
+  'pt.reviewAfterSessionEnabled': 'Cho phép đánh giá sau buổi tập',
+  'workout.workoutPlanEnabled': 'Bật tính năng giáo án tập luyện',
+  'workout.workoutTimerEnabled': 'Bật đồng hồ bấm giờ tập luyện',
+  'workout.healthLogEnabled': 'Bật nhật ký sức khỏe',
+  'workout.bmiHistoryEnabled': 'Theo dõi lịch sử chỉ số BMI',
+  'workout.progressPhotoUploadEnabled': 'Cho phép tải ảnh tiến trình',
+  'workout.healthChartEnabled': 'Hiển thị biểu đồ sức khỏe',
+  'reports.revenueChartEnabled': 'Hiển thị biểu đồ doanh thu',
+  'reports.checkinHeatmapEnabled': 'Hiển thị heatmap check-in',
+  'reports.revenueForecastEnabled': 'Bật dự báo doanh thu',
+  'reports.churnRiskEnabled': 'Phân tích rủi ro rời bỏ',
+  'reports.excelExportEnabled': 'Cho phép xuất báo cáo Excel',
+  'reports.pdfExportEnabled': 'Cho phép xuất báo cáo PDF',
+  'reports.auditLogEnabled': 'Ghi nhật ký hoạt động hệ thống',
+  'notifications.systemNotificationsEnabled': 'Bật thông báo hệ thống',
+  'notifications.roleGroupNotificationsEnabled': 'Gửi thông báo theo nhóm quyền',
+  'notifications.emailNotificationsEnabled': 'Gửi thông báo qua email',
+  'notifications.readUnreadStatusEnabled': 'Theo dõi trạng thái đã đọc',
+  'shop.productStoreEnabled': 'Bật cửa hàng sản phẩm',
+  'shop.cartEnabled': 'Bật giỏ hàng',
+  'shop.productReviewsEnabled': 'Cho phép đánh giá sản phẩm',
+  'shop.productDetailPageEnabled': 'Bật trang chi tiết sản phẩm',
+  'ai.systemAiEnabled': 'Bật AI hệ thống',
+  'ai.memberAiEnabled': 'Bật AI hỗ trợ hội viên',
+  'ai.adminAiEnabled': 'Bật AI hỗ trợ quản trị',
+  'landing.statsSectionEnabled': 'Hiển thị phần thống kê trên trang chủ',
+  'landing.servicesSectionEnabled': 'Hiển thị phần dịch vụ trên trang chủ',
+  'landing.feedbackSectionEnabled': 'Hiển thị phần phản hồi trên trang chủ',
+  'landing.partnersSectionEnabled': 'Hiển thị phần đối tác trên trang chủ',
+  'landing.startNowButtonEnabled': 'Hiển thị nút bắt đầu ngay',
+  'landing.checkinNowButtonEnabled': 'Hiển thị nút check-in ngay',
+}
+
+const groupLabels: Record<string, string> = {
+  general: 'Chung',
+  auth: 'Xác thực',
+  members: 'Hội viên',
+  billing: 'Thanh toán',
+  checkin: 'Check-in',
+  pt: 'Huấn luyện viên',
+  workout: 'Tập luyện',
+  reports: 'Báo cáo',
+  notifications: 'Thông báo',
+  shop: 'Cửa hàng',
+  ai: 'AI',
+  landing: 'Trang chủ',
+}
+
 export default function SystemSettingsPage() {
-  const { t } = useTranslation()
   const { settings, loading, refresh } = useSystemSettings()
   const [draft, setDraft] = useState<any>(SYSTEM_SETTINGS_DEFAULTS)
   const [saving, setSaving] = useState(false)
@@ -231,8 +394,8 @@ export default function SystemSettingsPage() {
         ...group,
         items: group.items.filter((item) => {
           if (!query) return true
-          const label = t(`system_settings.items.${item.path}.label`).toLowerCase()
-          const description = t(`system_settings.items.${item.path}.description`).toLowerCase()
+          const label = (settingLabels[item.path] || item.path).toLowerCase()
+          const description = (settingDescriptions[item.path] || '').toLowerCase()
           return label.includes(query) || description.includes(query) || item.path.toLowerCase().includes(query)
         }),
       }))
@@ -242,12 +405,12 @@ export default function SystemSettingsPage() {
   const save = async () => {
     const slogans = Array.isArray(draft?.general?.slogans) ? draft.general.slogans : []
     if (slogans.length < 1) {
-      message.error(t('system_settings.slogans.at_least_one'))
+      message.error('Cần ít nhất một slogan')
       return
     }
     const invalidIndex = slogans.findIndex((slogan: any) => !String(slogan?.vi || '').trim() || !String(slogan?.en || '').trim())
     if (invalidIndex >= 0) {
-      message.error(t('system_settings.slogans.bilingual_required', { index: invalidIndex + 1 }))
+      message.error('Slogan thứ ' + (invalidIndex + 1) + ' cần có cả tiếng Việt và tiếng Anh')
       return
     }
 
@@ -256,10 +419,10 @@ export default function SystemSettingsPage() {
       const response = await systemSettingsService.update(draft)
       setDraft(response.data.settings)
       await refresh()
-      message.success(t('system_settings.save_success'))
+      message.success('Đã lưu cài đặt')
     } catch (error: any) {
       console.error('[system-settings] save failed response:', error.response?.status, error.response?.data || error.message)
-      message.error(error.response?.data?.message || t('system_settings.save_failed'))
+      message.error(error.response?.data?.message || 'Lưu cài đặt thất bại')
     } finally {
       setSaving(false)
     }
@@ -271,10 +434,10 @@ export default function SystemSettingsPage() {
       const response = await systemSettingsService.resetDefault()
       setDraft(response.data.settings)
       await refresh()
-      message.success(t('system_settings.reset_success'))
+      message.success('Đã khôi phục cài đặt gốc')
     } catch (error: any) {
       console.error('[system-settings] reset failed response:', error.response?.status, error.response?.data || error.message)
-      message.error(error.response?.data?.message || t('system_settings.reset_failed'))
+      message.error(error.response?.data?.message || 'Khôi phục thất bại')
     } finally {
       setResetting(false)
     }
@@ -297,7 +460,7 @@ export default function SystemSettingsPage() {
               <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-center">
                 <Input
                   value={slogan.vi || ''}
-                  placeholder={t('system_settings.slogans.vi_placeholder')}
+                  placeholder="Slogan tiếng Việt"
                   onChange={(event) => {
                     const next = clone(slogans)
                     next[index].vi = event.target.value
@@ -306,7 +469,7 @@ export default function SystemSettingsPage() {
                 />
                 <Input
                   value={slogan.en || ''}
-                  placeholder={t('system_settings.slogans.en_placeholder')}
+                  placeholder="Slogan tiếng Anh"
                   onChange={(event) => {
                     const next = clone(slogans)
                     next[index].en = event.target.value
@@ -318,7 +481,7 @@ export default function SystemSettingsPage() {
                   icon={<DeleteOutlined />}
                   onClick={() => updateSlogans(slogans.filter((_: any, itemIndex: number) => itemIndex !== index))}
                 >
-                  {t('system_settings.slogans.delete')}
+                  Xóa
                 </Button>
               </div>
             </div>
@@ -327,7 +490,7 @@ export default function SystemSettingsPage() {
             icon={<PlusOutlined />}
             onClick={() => updateSlogans([...slogans, { vi: '', en: '' }])}
           >
-            {t('system_settings.slogans.add')}
+            Thêm slogan
           </Button>
         </div>
       )
@@ -340,7 +503,7 @@ export default function SystemSettingsPage() {
         <Select
           value={value}
           style={{ minWidth: 160 }}
-          options={(item.options || []).map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+          options={(item.options || [])}
           onChange={(nextValue) => setDraft(setByPath(draft, item.path, nextValue))}
         />
       )
@@ -372,15 +535,15 @@ export default function SystemSettingsPage() {
         <div className="sticky top-0 z-20 -mx-4 border-b border-[var(--theme-border)] bg-[var(--theme-bg)]/95 px-4 py-4 backdrop-blur-md sm:-mx-6 sm:px-6">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="m-0 text-2xl font-bold text-[var(--theme-text)]">{t('system_settings.title')}</h1>
-              <p className="m-0 mt-1 text-sm text-[var(--theme-muted)]">{t('system_settings.subtitle')}</p>
+              <h1 className="m-0 text-2xl font-bold text-[var(--theme-text)]">Cài đặt hệ thống</h1>
+              <p className="m-0 mt-1 text-sm text-[var(--theme-muted)]">Quản lý các cấu hình và tùy chỉnh hệ thống</p>
             </div>
             <Space wrap>
               <Button icon={<ReloadOutlined />} loading={resetting} onClick={resetDefault}>
-                {t('system_settings.reset_default')}
+                Khôi phục mặc định
               </Button>
               <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
-                {t('system_settings.save_changes')}
+                Lưu thay đổi
               </Button>
             </Space>
           </div>
@@ -389,7 +552,7 @@ export default function SystemSettingsPage() {
             <Input
               prefix={<SearchOutlined />}
               value={search}
-              placeholder={t('system_settings.search_placeholder')}
+              placeholder="Tìm kiếm cài đặt..."
               onChange={(event) => setSearch(event.target.value)}
               allowClear
             />
@@ -397,8 +560,8 @@ export default function SystemSettingsPage() {
               value={groupFilter}
               onChange={setGroupFilter}
               options={[
-                { value: 'all', label: t('system_settings.all_groups') },
-                ...SETTING_GROUPS.map((group) => ({ value: group.key, label: t(`system_settings.groups.${group.key}`) })),
+                { value: 'all', label: 'Tất cả nhóm' },
+                ...SETTING_GROUPS.map((group) => ({ value: group.key, label: groupLabels[group.key] || group.key })),
               ]}
             />
           </div>
@@ -411,15 +574,15 @@ export default function SystemSettingsPage() {
             {groups.map((group) => (
               <Card
                 key={group.key}
-                title={<span className="text-[var(--theme-text)]">{t(`system_settings.groups.${group.key}`)}</span>}
+                title={<span className="text-[var(--theme-text)]">{groupLabels[group.key] || group.key}</span>}
                 className="border border-[var(--theme-border)] bg-[var(--theme-card)]"
               >
                 <div className="flex flex-col divide-y divide-[var(--theme-border)]">
                   {group.items.map((item) => (
                     <div key={item.path} className={`grid gap-3 py-4 ${item.type === 'slogans' ? '' : 'sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center'}`}>
                       <div className="min-w-0">
-                        <div className="font-medium text-[var(--theme-text)]">{t(`system_settings.items.${item.path}.label`)}</div>
-                        <Text className="text-sm text-[var(--theme-muted)]">{t(`system_settings.items.${item.path}.description`)}</Text>
+                        <div className="font-medium text-[var(--theme-text)]">{settingLabels[item.path] || item.path}</div>
+                        <Text className="text-sm text-[var(--theme-muted)]">{settingDescriptions[item.path] || ''}</Text>
                       </div>
                       <div className={item.type === 'slogans' ? 'min-w-0' : 'sm:justify-self-end'}>{renderControl(item)}</div>
                     </div>
