@@ -1,5 +1,4 @@
 import { Button, Form, Input, Select, message } from 'antd'
-import { useTranslation } from 'react-i18next'
 import {
   createPartnershipRequest,
   partnershipCategories,
@@ -12,17 +11,16 @@ type PartnershipRequestFormProps = {
 }
 
 export default function PartnershipRequestForm({ onSuccess, compact = false }: PartnershipRequestFormProps) {
-  const { t } = useTranslation()
   const [form] = Form.useForm<PartnershipRequestPayload>()
 
   const handleSubmit = async (values: PartnershipRequestPayload) => {
     try {
       await createPartnershipRequest(values)
-      message.success(t('partnership_form.msg_success'))
+      message.success('Gửi yêu cầu hợp tác thành công')
       form.resetFields()
       onSuccess?.()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('partnership_form.msg_failed'))
+      message.error(err.response?.data?.message || 'Gửi yêu cầu thất bại')
     }
   }
 
@@ -34,61 +32,61 @@ export default function PartnershipRequestForm({ onSuccess, compact = false }: P
       className="[&_.ant-form-item-label>label]:!text-[var(--theme-text)]"
     >
       <Form.Item
-        label={t('partnership_form.brand_name')}
+        label="Tên thương hiệu"
         name="brand_name"
-        rules={[{ required: true, message: t('partnership_form.brand_name_required') }]}
+        rules={[{ required: true, message: 'Vui lòng nhập tên thương hiệu' }]}
       >
-        <Input placeholder={t('partnership_form.brand_name_placeholder')} />
+        <Input placeholder="VD: Thương hiệu của bạn" />
       </Form.Item>
 
       <Form.Item
-        label={t('partnership_form.category')}
+        label="Danh mục"
         name="category"
-        rules={[{ required: true, message: t('partnership_form.category_required') }]}
+        rules={[{ required: true, message: 'Vui lòng chọn danh mục' }]}
       >
         <Select
-          placeholder={t('partnership_form.category_placeholder')}
+          placeholder="Chọn danh mục"
           options={partnershipCategories.map((item) => ({ label: item, value: item }))}
         />
       </Form.Item>
 
       <div className={compact ? '' : 'grid grid-cols-2 gap-4 max-[640px]:grid-cols-1'}>
         <Form.Item
-          label={t('partnership_form.contact_name')}
+          label="Người liên hệ"
           name="contact_name"
-          rules={[{ required: true, message: t('partnership_form.contact_name_required') }]}
+          rules={[{ required: true, message: 'Vui lòng nhập tên người liên hệ' }]}
         >
-          <Input placeholder={t('partnership_form.contact_name_placeholder')} />
+          <Input placeholder="VD: Nguyễn Văn A" />
         </Form.Item>
 
         <Form.Item
-          label={t('partnership_form.phone')}
+          label="Số điện thoại"
           name="phone"
-          rules={[{ required: true, message: t('partnership_form.phone_required') }]}
+          rules={[{ required: true, message: 'Vui lòng nhập số điện thoại' }]}
         >
-          <Input placeholder={t('partnership_form.phone_placeholder')} />
+          <Input placeholder="VD: 0901234567" />
         </Form.Item>
       </div>
 
       <div className={compact ? '' : 'grid grid-cols-2 gap-4 max-[640px]:grid-cols-1'}>
         <Form.Item
-          label={t('partnership_form.email')}
+          label="Email"
           name="email"
           rules={[
-            { required: true, message: t('partnership_form.email_required') },
-            { type: 'email', message: t('partnership_form.email_invalid') },
+            { required: true, message: 'Vui lòng nhập email' },
+            { type: 'email', message: 'Email không hợp lệ' },
           ]}
         >
-          <Input placeholder={t('partnership_form.email_placeholder')} />
+          <Input placeholder="VD: email@example.com" />
         </Form.Item>
 
-        <Form.Item label={t('partnership_form.website')} name="website">
-          <Input placeholder={t('partnership_form.website_placeholder')} />
+        <Form.Item label="Website" name="website">
+          <Input placeholder="VD: https://example.com" />
         </Form.Item>
       </div>
 
-      <Form.Item label={t('partnership_form.description')} name="description">
-        <Input.TextArea rows={4} placeholder={t('partnership_form.description_placeholder')} />
+      <Form.Item label="Mô tả" name="description">
+        <Input.TextArea rows={4} placeholder="Mô tả ngắn về thương hiệu của bạn..." />
       </Form.Item>
 
       <Button
@@ -97,7 +95,7 @@ export default function PartnershipRequestForm({ onSuccess, compact = false }: P
         block
         className="!h-11 !rounded-xl !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)]"
       >
-        {t('partnership_form.submit')}
+        Gửi yêu cầu
       </Button>
     </Form>
   )

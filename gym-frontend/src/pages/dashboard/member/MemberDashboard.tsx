@@ -1,6 +1,5 @@
 import { Result, Spin } from 'antd'
-import React, { useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import HomeLandingSection from '../../../components/system/HomeLandingSection'
@@ -35,17 +34,11 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 }
 
 export default function MemberDashboard() {
-  const { t, i18n } = useTranslation()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [landing, setLanding] = useState<any>(null)
-  const langRef = useRef(i18n.language)
-  const firstName = getUserFirstName(user, t('dashboard.greeting_fallback'))
-
-  useEffect(() => {
-    langRef.current = i18n.language
-  }, [i18n.language])
+  const firstName = getUserFirstName(user, 'Bạn')
 
   useEffect(() => {
     Promise.allSettled([

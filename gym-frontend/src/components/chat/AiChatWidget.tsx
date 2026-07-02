@@ -4,7 +4,6 @@ import type { CSSProperties, ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { useTheme } from '../../context/ThemeProvider'
 import { useAuth } from '../../hooks/useAuth'
 import { deleteAiChatSession, getAiChatHistory, renameAiChatSession, requestAiAssistant, requestAiAssistantStream, saveAiChatHistory, uploadAiChatImage, type AiMode, type InBodyAnalysisResult } from '../../services/aiService'
@@ -33,6 +32,19 @@ const MEMBER_SUGGESTED_PROMPT_KEYS = [
     'suggest_training_goals',
 ]
 
+const SUGGESTION_LABELS_VI: Record<string, string> = {
+    today_workout: 'Bài tập hôm nay',
+    weekly_schedule: 'Lịch tập tuần này',
+    membership_days_left: 'Số ngày tập còn lại',
+    monthly_checkins: 'Check-in tháng này',
+    eat_to_lose_fat: 'Ăn gì để giảm mỡ?',
+    eat_to_gain_muscle: 'Ăn gì để tăng cơ?',
+    explain_health_metrics: 'Giải thích chỉ số sức khỏe',
+    completed_sessions: 'Buổi tập đã hoàn thành',
+    training_progress: 'Tiến độ tập luyện',
+    suggest_training_goals: 'Gợi ý mục tiêu tập luyện',
+}
+
 const getSourceDomain = (url: string) => {
     try {
         return new URL(url).hostname.replace(/^www\./, '')
@@ -41,10 +53,10 @@ const getSourceDomain = (url: string) => {
     }
 }
 
-const getSourceName = (source: WebSearchResult, t?: (key: string) => string) => {
+const getSourceName = (source: WebSearchResult) => {
     const domain = String(source.domain || source.sourceDomain || '').trim() || getSourceDomain(source.url)
     const title = String(source.title || source.sourceTitle || '').replace(/\s+/g, ' ').trim()
-    if (!title) return domain || (t ? t('ai.sourceWeb') : 'Web source')
+    if (!title) return domain || 'Nguồn web'
     return title
         .replace(/\s*[-|]\s*.*$/, '')
         .slice(0, 80)
@@ -163,53 +175,52 @@ const getAiResponseActionPayload = (response: unknown): AiActionPayload | null =
     return null
 }
 
-const getAiActionFallbackMessage = (t: (key: string) => string, action?: string) => {
+const getAiActionFallbackMessage = (action?: string) => {
     const messages: Record<string, string> = {
-        change_theme: t('ai.actionChangeTheme'),
-        open_modal: t('ai.actionOpenModal'),
-        navigate: t('ai.actionNavigate'),
-        search_web: t('ai.actionSearchWeb'),
+        change_theme: 'Đã thay đổi giao diện',
+        open_modal: 'Đã mở cửa sổ',
+        navigate: 'Đã chuyển trang',
+        search_web: 'Đã tìm kiếm trên web',
     }
-    return action ? messages[action] || t('ai.actionFallback') : t('ai.actionFallback')
+    return action ? messages[action] || 'Đã xử lý yêu cầu' : 'Đã xử lý yêu cầu'
 }
 
 const getAiActionDisplayMessage = (
     actionPayload: ReturnType<typeof parseAiActionPayload>,
     currentContent = '',
-    t: (key: string) => string,
 ) => {
     if (!actionPayload) return currentContent
     const actionMessage = typeof actionPayload.message === 'string'
         ? actionPayload.message
         : ''
-    return actionMessage.trim() ? actionMessage : getAiActionFallbackMessage(t, actionPayload.action)
+    return actionMessage.trim() ? actionMessage : getAiActionFallbackMessage(actionPayload.action)
 }
 
-const getAiObjectDisplayMessage = (content: unknown, t: (key: string) => string) => {
+const getAiObjectDisplayMessage = (content: unknown) => {
     const parsed = extractJsonObjectPayload(content)
     if (!parsed) return null
     const actionPayload = typeof parsed.action === 'string'
         ? parsed as AiActionPayload
         : null
-    if (actionPayload) return getAiActionDisplayMessage(actionPayload, '', t)
+    if (actionPayload) return getAiActionDisplayMessage(actionPayload)
 
     const naturalMessage = [parsed.message, parsed.text, parsed.answer, parsed.content]
         .find((value) => typeof value === 'string' && value.trim())
     return typeof naturalMessage === 'string'
         ? naturalMessage
-        : t('ai.actionProcessed')
+        : 'Đã xử lý'
 }
 
-const getSafeAssistantDisplayContent = (content: unknown, actionPayload: ReturnType<typeof parseAiActionPayload>, t: (key: string) => string) => {
-    if (actionPayload) return getAiActionDisplayMessage(actionPayload, '', t)
-    const objectMessage = getAiObjectDisplayMessage(content, t)
+const getSafeAssistantDisplayContent = (content: unknown, actionPayload: ReturnType<typeof parseAiActionPayload>) => {
+    if (actionPayload) return getAiActionDisplayMessage(actionPayload)
+    const objectMessage = getAiObjectDisplayMessage(content)
     return objectMessage ? objectMessage : typeof content === 'string' ? content : ''
 }
 
-const splitAiAssistantResponse = (rawContent: unknown, currentContent = '', t: (key: string) => string) => {
+const splitAiAssistantResponse = (rawContent: unknown, currentContent = '') => {
     const actionPayload = parseAiActionPayload(rawContent)
     const chatContent = rawContent
-        ? getSafeAssistantDisplayContent(rawContent, actionPayload, t)
+        ? getSafeAssistantDisplayContent(rawContent, actionPayload)
         : currentContent
 
     return {
@@ -226,7 +237,7 @@ const extractAiResponseContent = (response: unknown, fallback = '') => {
     return answer
 }
 
-const normalizeChatContent = (content: unknown, t?: (key: string) => string) => {
+const normalizeChatContent = (content: unknown) => {
     if (typeof content === 'string') {
         const cleaned = content
             .replace(/<think>[\s\S]*?<\/think>/gi, '')
@@ -240,7 +251,7 @@ const normalizeChatContent = (content: unknown, t?: (key: string) => string) => 
         }
 
         if (/^\s*\{[\s\S]*\}\s*$/.test(cleaned)) {
-            return getAiObjectDisplayMessage(cleaned, t || ((key: string) => key)) || ''
+            return getAiObjectDisplayMessage(cleaned) || ''
         }
         return cleaned
     }
@@ -250,7 +261,7 @@ const normalizeChatContent = (content: unknown, t?: (key: string) => string) => 
         return extracted
     }
 
-    return getAiObjectDisplayMessage(content, t || ((key: string) => key)) || ''
+    return getAiObjectDisplayMessage(content) || ''
 }
 
 const isPotentialJsonObjectResponse = (content: unknown) => {
@@ -371,7 +382,7 @@ const renderMarkdownText = (text: string, color: string) => {
     )
 }
 
-const renderWebSourceCards = (sourcesInput: unknown, dark: boolean, t?: (key: string) => string) => {
+const renderWebSourceCards = (sourcesInput: unknown, dark: boolean) => {
     const sources = Array.isArray(sourcesInput) ? sourcesInput : []
     const uniqueSources = sources
         .filter((source): source is WebSearchResult => Boolean(source) && typeof source === 'object' && !Array.isArray(source))
@@ -384,11 +395,11 @@ const renderWebSourceCards = (sourcesInput: unknown, dark: boolean, t?: (key: st
     return (
         <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
             <Typography.Text style={{ color: 'var(--theme-muted)', fontSize: 12, fontWeight: 700 }}>
-                {t ? t('ai.sourcesTitle') : 'Sources'}
+                Nguồn tham khảo
             </Typography.Text>
             {uniqueSources.map((source) => {
                 const domain = String(source.domain || source.sourceDomain || '').trim() || getSourceDomain(source.url)
-                const name = getSourceName(source, t)
+                const name = getSourceName(source)
                 const favicon = typeof source.favicon === 'string' && source.favicon.trim()
                     ? source.favicon.trim()
                     : `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`
@@ -423,7 +434,7 @@ const renderWebSourceCards = (sourcesInput: unknown, dark: boolean, t?: (key: st
                                 {domain || name}
                             </Typography.Text>
                             <Typography.Text ellipsis style={{ color: dark ? '#d8d8d8' : 'rgba(237,235,230,0.55)', fontSize: 12, lineHeight: 1.2 }}>
-                                {t ? t('ai.sourceArticle') : 'Article'}: {name}
+                                Bài viết: {name}
                             </Typography.Text>
                         </span>
                     </a>
@@ -710,7 +721,6 @@ type AiChatWidgetProps = {
 
 function AiChatFloatingButton() {
     const navigate = useNavigate()
-    const { t } = useTranslation()
 
     if (typeof document === 'undefined') return null
 
@@ -788,7 +798,7 @@ function AiChatFloatingButton() {
             <button
                 type="button"
                 className="ai-gympro-floating-chat"
-                aria-label={t('ai.askAI') || 'Ask AI'}
+                aria-label={'Trợ lý AI'}
                 onClick={() => {
                     playAiClickSound()
                     navigate('/ai-chat')
@@ -797,7 +807,7 @@ function AiChatFloatingButton() {
                 <span className="ai-gympro-floating-chat-avatar">
                     <RobotOutlined />
                 </span>
-                <span className="ai-gympro-floating-chat-text">{t('ai.askAI') || 'Ask AI'}</span>
+                <span className="ai-gympro-floating-chat-text">{'Trợ lý AI'}</span>
             </button>
         </>,
         document.body,
@@ -809,7 +819,6 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
 
     const { dark, tokens, applyTheme } = useTheme()
     const { user } = useAuth()
-    const { t, i18n } = useTranslation()
     const navigate = useNavigate()
     const [sessions, setSessions] = useState<ChatSession[]>([])
     const [activeSessionId, setActiveSessionId] = useState<string>('')
@@ -1110,10 +1119,10 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
 
     const confirmDeleteSession = (sessionId: string) => {
         Modal.confirm({
-            title: t('ai.deleteModalTitle'),
-            content: t('ai.deleteModalContent'),
-            okText: t('ai.delete'),
-            cancelText: t('ai.cancel'),
+            title: 'Xóa cuộc trò chuyện',
+            content: 'Bạn có chắc muốn xóa cuộc trò chuyện này?',
+            okText: 'Xóa',
+            cancelText: 'Hủy',
             okButtonProps: { danger: true },
             zIndex: 12000,
             onOk: () => deleteSession(sessionId),
@@ -1218,8 +1227,8 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
         const assistantType = 'member'
         const domain = 'gym'
         const chatMode = 'chat'
-        const currentLanguage = i18n.language?.startsWith('en') ? 'en' : 'vi'
-        const tab = t('ai.gymTab')
+        const currentLanguage = 'vi'
+        const tab = 'Gym'
         const intent = 'member_question'
         console.log('Prompt:', trimmed)
         console.log('DETECTED INTENT:', intent)
@@ -1325,14 +1334,14 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                     intent,
                 })
                 const fallbackContent = extractAiResponseContent(fallbackResponse)
-                const fallbackSplit = splitAiAssistantResponse(fallbackContent, '', t)
+                const fallbackSplit = splitAiAssistantResponse(fallbackContent, '')
                 const fallbackAction = fallbackSplit.actionPayload || getAiResponseActionPayload(fallbackResponse)
                 if (fallbackAction) executeAiAction(fallbackAction)
                 console.log('Response:', fallbackResponse)
                 setAiActionLoading(false)
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
-                    content: fallbackSplit.chatContent || t('ai.fallbackResponse'),
+                    content: fallbackSplit.chatContent || 'Hiện tại tôi chưa thể trả lời câu hỏi này',
                     answer: fallbackSplit.chatContent,
                     suggestions: normalizeSuggestions(fallbackResponse.suggestions)
                         .filter((suggestion) => normalizeCommandText(suggestion) !== normalizeCommandText(trimmed)),
@@ -1352,7 +1361,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
             }
 
             const responseContent = extractAiResponseContent(response, suppressedActionText)
-            const splitResponse = splitAiAssistantResponse(responseContent, suppressedActionText, t)
+            const splitResponse = splitAiAssistantResponse(responseContent, suppressedActionText)
             const actionPayload = splitResponse.actionPayload || getAiResponseActionPayload(response)
             if (actionPayload) executeAiAction(actionPayload)
             console.log('Response:', response)
@@ -1383,7 +1392,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                 setAiActionLoading(false)
                 updateMessageInSession(assistantMessageId, (message) => ({
                     ...message,
-                    content: splitResponse.chatContent || t('ai.fallbackResponse'),
+                    content: splitResponse.chatContent || 'Hiện tại tôi chưa thể trả lời câu hỏi này',
                     answer: splitResponse.chatContent,
                     suggestions: normalizeSuggestions(response.suggestions)
                         .filter((suggestion) => normalizeCommandText(suggestion) !== normalizeCommandText(trimmed)),
@@ -1402,7 +1411,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
             }
         } catch (error: any) {
             setAiActionLoading(false)
-            const errMsg = error?.userMessage || t('ai.error')
+            const errMsg = error?.userMessage || 'Đã có lỗi xảy ra, vui lòng thử lại'
             if (error?.code === 429) setRetryCountdown(4)
             setErrorInfo({ code: error?.code || 500, message: errMsg })
             flushStreamTextBuffer(assistantMessageId)
@@ -1538,15 +1547,15 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                 {session.title}
                                             </Typography.Text>
                                             <Typography.Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>
-                                                            {new Date(session.createdAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}
+                                                            {new Date(session.createdAt).toLocaleString('vi-VN')}
                                             </Typography.Text>
                                         </div>
                                         <Dropdown
                                             trigger={['click']}
                                             menu={{
                                                 items: [
-                                                    { key: 'rename', icon: <EditOutlined />, label: t('ai.rename') },
-                                                    { key: 'delete', icon: <DeleteOutlined />, label: t('ai.delete'), danger: true },
+                                                    { key: 'rename', icon: <EditOutlined />, label: 'Đổi tên' },
+                                                    { key: 'delete', icon: <DeleteOutlined />, label: 'Xóa', danger: true },
                                                 ],
                                                 onClick: ({ key, domEvent }) => {
                                                     domEvent.stopPropagation()
@@ -1970,7 +1979,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                         onBlur={(event) => applyNewChatActionFocus(event.currentTarget, false)}
                                                         onClick={createNewChat}
                                                     >
-                                                        {t('ai.newChat') || 'New Chat'}
+                                                        {'Trò chuyện mới'}
                                                     </Button>
                                                     <Button
                                                         size="small"
@@ -2066,8 +2075,8 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                                         getPopupContainer={(trigger) => trigger.parentElement || document.body}
                                                                         menu={{
                                                                             items: [
-                                                                                { key: 'rename', icon: <EditOutlined />, label: t('ai.rename') },
-                                                                                { key: 'delete', icon: <DeleteOutlined />, label: t('ai.delete'), danger: true },
+                                                                                { key: 'rename', icon: <EditOutlined />, label: 'Đổi tên' },
+                                                                                { key: 'delete', icon: <DeleteOutlined />, label: 'Xóa', danger: true },
                                                                             ],
                                                                             onClick: ({ key, domEvent }) => {
                                                                                 domEvent.stopPropagation()
@@ -2089,7 +2098,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                             )}
                                                         </div>
                                                         <Typography.Text style={{ fontSize: 11, color: 'var(--theme-muted)' }}>
-                                                {new Date(session.createdAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}
+                                                {new Date(session.createdAt).toLocaleString('vi-VN')}
                                                         </Typography.Text>
                                                             </>
                                                         )}
@@ -2124,12 +2133,12 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                         )}
                                         <div style={{ minWidth: 0, flex: 1 }}>
                                             <Typography.Text strong style={{ color: panelText, fontSize: mobileChat ? 13 : 14, display: 'block' }}>
-                                                {activeSession?.title || t('ai.defaultSessionTitle')}
+                                                {activeSession?.title || 'Cuộc trò chuyện mới'}
                                             </Typography.Text>
                                             <Typography.Text style={{ fontSize: 11, color: panelMutedText }}>
                                                 {activeSession?.messages.length
-                                                    ? t('ai.sessionCount', { count: activeSession.messages.length })
-                                                    : t('ai.newChatEmpty')}
+                                                    ? `${activeSession.messages.length} tin nhắn`
+                                                    : 'Cuộc trò chuyện trống'}
                                             </Typography.Text>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}></div>
@@ -2157,14 +2166,14 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                             <div className="ai-chat-message-inner" style={{ display: 'grid', gap: 16, margin: mobileChat ? '24px auto' : '42px auto' }}>
                                                 <div style={{ textAlign: 'center', display: 'grid', gap: 6 }}>
                                                     <Typography.Text strong style={{ color: panelText, fontSize: mobileChat ? 15 : 16 }}>
-                                                        {t('ai.startTitle')}
+                                                        {'Bạn cần hỗ trợ gì?'}
                                                     </Typography.Text>
                                                     <Typography.Text style={{ color: panelMutedText, fontSize: 13 }}>
-                                                        {t('ai.startDescription')}
+                                                        {'Tôi là trợ lý AI của GymPro, sẵn sàng hỗ trợ bạn!'}
                                                     </Typography.Text>
                                                 </div>
                                                 <Typography.Text style={{ color: panelMutedText, fontSize: 13, textAlign: 'center', display: 'block' }}>
-                                                    {t('ai.startHint') || 'Bạn có thể hỏi hoặc gửi ảnh để tôi phân tích.'}
+                                                    {'Bạn có thể hỏi hoặc gửi ảnh để tôi phân tích.'}
                                                 </Typography.Text>
                                                 <div
                                                     style={{
@@ -2174,7 +2183,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                     }}
                                                 >
                                                     {MEMBER_SUGGESTED_PROMPT_KEYS.map((promptKey) => {
-                                                        const suggestion = t(`ai.suggestions.${promptKey}`)
+                                                        const suggestion = SUGGESTION_LABELS_VI[promptKey] || promptKey
                                                         return (
                                                         <button
                                                             key={promptKey}
@@ -2237,7 +2246,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                          : extractSourceResultsFromText(messageContent))
                                                      : []
                                                  const safeAssistantContent = !isUser
-                                                     ? getSafeAssistantDisplayContent(messageContent, actionPayload, t)
+                                                      ? getSafeAssistantDisplayContent(messageContent, actionPayload)
                                                      : messageContent
 
                                                  const visibleContent = isUser
@@ -2371,11 +2380,11 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                                                                     {name}
                                                                                                 </Typography.Text>
                                                                                                 <Typography.Text style={{ color: 'var(--theme-accent)' }}>
-                                                                                                    {Number(item?.price || 0).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}đ
+                                                                                                    {Number(item?.price || 0).toLocaleString('vi-VN')}đ
                                                                                                 </Typography.Text>
                                                                                                 {item?.selectedVariant && (
                                                                                                     <Typography.Text style={{ color: bubbleColor, display: 'block', fontSize: 12 }}>
-                                                                                                        {t('ai.weightLabel')}: {String(item.selectedVariant)}
+                                                                                                        {'Khối lượng'}: {String(item.selectedVariant)}
                                                                                                     </Typography.Text>
                                                                                                 )}
                                                                                             </div>
@@ -2435,20 +2444,20 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                                                 loadingMessage={index === lastAssistantMessageIndex && !visibleContent ? (aiStatus?.message || null) : null}
                                                                             />
                                                                         )}
-                                                                        {!toolPayload && !actionPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark, t)}
+                                                                         {!toolPayload && !actionPayload && sourceCards.length > 0 && renderWebSourceCards(sourceCards, dark)}
                                                                     </>
                                                                 ), panelMutedText, visibleContent)}
                                                               </div>
                                                           </div>
-                                                          <Tooltip title={copiedMessageIds.has(message.id) ? t('ai.copied') : t('ai.copy')}>
+                                                          <Tooltip title={copiedMessageIds.has(message.id) ? 'Đã sao chép' : 'Sao chép'}>
                                                               <button
                                                                   type="button"
-                                                                  aria-label={copiedMessageIds.has(message.id) ? t('ai.copied') : t('ai.copy')}
+                                                                  aria-label={copiedMessageIds.has(message.id) ? 'Đã sao chép' : 'Sao chép'}
                                                                   className="ai-chat-copy-btn"
                                                                   onClick={(e) => { e.stopPropagation(); copyMessage(message.id, message.content) }}
                                                               >
                                                                   {copiedMessageIds.has(message.id) ? <CheckOutlined /> : <CopyOutlined />}
-                                                                  <span>{t(copiedMessageIds.has(message.id) ? 'ai.copied' : 'ai.copy')}</span>
+                                                                  <span>{copiedMessageIds.has(message.id) ? 'Đã sao chép' : 'Sao chép'}</span>
                                                               </button>
                                                           </Tooltip>
                                                          {!isUser && message.role === 'assistant' && index === lastAssistantMessageIndex && !loading && messageSuggestions.length > 0 && (
@@ -2461,7 +2470,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                                 }}
                                                             >
                                                                 <Typography.Text style={{ color: panelMutedText, fontSize: 12, fontWeight: 700 }}>
-                                                                    {t('ai.relatedPromptsTitle')}
+                                                                    {'Câu hỏi liên quan'}
                                                                 </Typography.Text>
                                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                                                                     {messageSuggestions.map((suggestion) => (
@@ -2524,10 +2533,10 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                             }}>
                                                 <Typography.Text style={{ color: 'var(--theme-accent)', fontSize: 13, fontWeight: 600 }}>
                                                     📷{' '}
-                                                    {visionImageType === 'inbody' ? (t('ai.analyzingInBody') || 'Đang phân tích InBody...') :
-                                                     visionImageType === 'food' ? (t('ai.analyzingFood') || 'Đang phân tích bữa ăn...') :
-                                                     visionImageType === 'exercise' ? (t('ai.analyzingExercise') || 'Đang phân tích bài tập...') :
-                                                     (t('ai.analyzingImage') || 'Đang phân tích ảnh...')}
+                                                    {visionImageType === 'inbody' ? 'Đang phân tích InBody...' :
+                                                     visionImageType === 'food' ? 'Đang phân tích bữa ăn...' :
+                                                     visionImageType === 'exercise' ? 'Đang phân tích bài tập...' :
+                                                     'Đang phân tích ảnh...'}
                                                 </Typography.Text>
                                             </div>
                                         )}
@@ -2550,7 +2559,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                     onClick={handleRetry}
                                                     style={{ background: 'var(--theme-button-bg)', borderColor: 'var(--theme-button-border)', color: 'var(--theme-button-text)' }}
                                                 >
-                                                    {retryCountdown > 0 ? t('ai.retryAfter', { count: retryCountdown }) : t('ai.retry')}
+                                                    {retryCountdown > 0 ? `Thử lại sau ${retryCountdown}s` : 'Thử lại'}
                                                 </Button>
                                             </div>
                                         )}
@@ -2570,7 +2579,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                         onClick={clearSelectedImage}
                                                         style={{ justifySelf: 'start', color: panelMutedText, paddingInline: 0 }}
                                                     >
-                                                        {t('ai.removeImage') || 'Remove'}
+                                                        {'Xóa ảnh'}
                                                     </Button>
                                                 </div>
                                             </div>
@@ -2583,7 +2592,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                             onChange={(event) => handleImageFileChange(event.target.files)}
                                         />
                                         <div className="ai-chat-composer-shell">
-                                            <Tooltip title={t('ai.attach') || 'Attach'}>
+                                            <Tooltip title={'Đính kèm'}>
                                                 <Button
                                                     type="text"
                                                     icon={<PaperClipOutlined />}
@@ -2598,7 +2607,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                 onPressEnter={(e) => {
                                                     if (!e.shiftKey) { e.preventDefault(); handleSend() }
                                                 }}
-                                                placeholder={selectedImage ? (t('ai.imageAttachedPlaceholder') || 'Thêm ghi chú (không bắt buộc)') : t('ai.inputPlaceholder')}
+                                                placeholder={selectedImage ? 'Thêm ghi chú (không bắt buộc)' : 'Nhập tin nhắn...'}
                                                 autoSize={{ minRows: 1, maxRows: mobileChat ? 4 : 6 }}
                                                 disabled={loading}
                                                 style={{
@@ -2608,7 +2617,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                                     lineHeight: 1.55,
                                                 }}
                                             />
-                                            <Tooltip title={t('ai.send')}>
+                                            <Tooltip title={'Gửi'}>
                                                 <Button
                                                     icon={<SendOutlined />}
                                                     onClick={() => handleSend()}
@@ -2621,7 +2630,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                                         </div>
                                         {!mobileChat && (
                                             <Typography.Text style={{ display: 'block', marginTop: 8, textAlign: 'center', fontSize: 12, color: panelMutedText }}>
-                                                {t('ai.enterToSend')} · {t('ai.shiftEnterNewLine')}
+                                                {'Enter để gửi'} · {'Shift+Enter để xuống dòng'}
                                             </Typography.Text>
                                         )}
                                         </div>
@@ -2640,7 +2649,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                 className="ai-session-drawer"
                 title={
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <span>{t('ai.sessionDrawerTitle')}</span>
+                        <span>{'Lịch sử trò chuyện'}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Badge count={sessions.length} color="var(--theme-accent)" />
                              <Button
@@ -2668,7 +2677,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                     cancelEditingSession()
                 }}
                 zIndex={11500}
-                width={280}
+                size={280}
                 styles={{
                     body: {
                         padding: 0,
@@ -2715,7 +2724,7 @@ export default function AiChatWidget({ variant = 'floating' }: AiChatWidgetProps
                         onBlur={(event) => applyNewChatActionFocus(event.currentTarget, false)}
                         onClick={() => { createNewChat(); setSessionDrawerOpen(false) }}
                     >
-                        {t('ai.newChat') || 'New Chat'}
+                        {'Cuộc trò chuyện mới'}
                     </Button>
                 </div>
                 {renderSessionList()}

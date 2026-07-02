@@ -14,9 +14,14 @@ import { invalidatePersonalContextCache } from './conversationContextCache.js'
 import { recordUserActivity } from './userActivityService.js'
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
 import { assertPolicyConsent } from '../utils/policyConsent.js'
+import {
+  startOfTodayVN,
+  endOfDayVN,
+  calculateRemainingDays,
+  calcMembershipEndDate,
+} from '../utils/dateUtils.js'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
-const MS_PER_DAY = 24 * 60 * 60 * 1000
 
 const toObjectId = (value, fieldName) => {
   if (!mongoose.Types.ObjectId.isValid(String(value))) {
@@ -27,25 +32,31 @@ const toObjectId = (value, fieldName) => {
   return new mongoose.Types.ObjectId(value)
 }
 
-const startOfToday = () => {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  return now
+const getRenewalThresholdDays = async () => {
+  try {
+    const settings = await getSystemSettingsValue()
+    return settings?.billing?.renewalThresholdDays ?? 7
+  } catch {
+    return 7
+  }
 }
 
-const endOfDay = (date) => {
-  const value = new Date(date)
-  value.setHours(23, 59, 59, 999)
-  return value
-}
-
-const calculateRemainingDays = (endDate) => {
-  const end = endOfDay(endDate)
-  return Math.max(0, Math.ceil((end.getTime() - Date.now()) / MS_PER_DAY))
+const assertRenewalAllowed = async (endDate) => {
+  const remainingDays = calculateRemainingDays(endDate)
+  if (remainingDays === 0) return
+  const threshold = await getRenewalThresholdDays()
+  if (remainingDays > threshold) {
+    const error = new Error(
+      `Bạn chỉ có thể gia hạn khi gói sắp hết hạn (còn ≤ ${threshold} ngày) hoặc đã hết hạn.`
+    )
+    error.statusCode = 400
+    throw error
+  }
 }
 
 const getMembershipDisplayStatus = (membership) => {
   if (!membership) return 'expired'
+  if (membership.status === 'pending_cancel') return 'expiring_soon'
   const remainingDays = calculateRemainingDays(membership.endDate)
   if (remainingDays <= 0) return 'expired'
   if (remainingDays < 30) return 'expiring_soon'
@@ -87,7 +98,6 @@ const serializeMembership = (membership) => {
     status: remainingDays <= 0 ? 'expired' : raw.status,
     displayStatus: getMembershipDisplayStatus(raw),
     source: raw.source,
-    autoRenew: raw.autoRenew || false,
   }
 }
 
@@ -125,14 +135,14 @@ const findLatestActiveMembership = (memberId) =>
   Membership.findOne({ memberId, status: 'active' }).sort({ endDate: -1 }).populate('planId')
 
 const calculateNewMembershipDates = ({ existingMembership, durationDays, mode }) => {
-  const today = startOfToday()
+  const today = startOfTodayVN()
   let startDate = new Date(today)
 
   if (mode === 'renew' && existingMembership) {
     const existingEnd = new Date(existingMembership.endDate)
     if (existingEnd >= today) {
       startDate = new Date(existingEnd)
-      startDate.setHours(0, 0, 0, 0)
+      startDate.setHours(0, 0, 0, 0) // midnight VN (nhờ TZ env)
       startDate.setDate(startDate.getDate() + 1)
     }
   }
@@ -140,13 +150,7 @@ const calculateNewMembershipDates = ({ existingMembership, durationDays, mode })
   const endDate = new Date(startDate)
   endDate.setDate(endDate.getDate() + Number(durationDays) - 1)
 
-  return { startDate, endDate: endOfDay(endDate) }
-}
-
-const calculateWalletMembershipEndDate = ({ baseDate, durationDays }) => {
-  const endDate = new Date(baseDate)
-  endDate.setDate(endDate.getDate() + Number(durationDays))
-  return endOfDay(endDate)
+  return { startDate, endDate: endOfDayVN(endDate) }
 }
 
 const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
@@ -160,6 +164,15 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
     const error = new Error('Bạn đang có gói tập hoạt động. Vui lòng gia hạn trong mục Gói tập của tôi.')
     error.statusCode = 400
     throw error
+  }
+
+  if (mode === 'renew') {
+    if (!existingActive) {
+      const error = new Error('Bạn chưa có gói tập để gia hạn. Vui lòng đăng ký gói mới.')
+      error.statusCode = 404
+      throw error
+    }
+    await assertRenewalAllowed(existingActive.endDate)
   }
 
   const session = await mongoose.startSession()
@@ -182,15 +195,16 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
 
     const balanceBefore = Number(wallet.balance || 0)
     const walletBalance = balanceBefore - amount
-    const today = startOfToday()
+    const today = startOfTodayVN()
     const isRenew = existingActive && new Date(existingActive.endDate) >= today
 
     let membership = isRenew ? existingActive : null
 
     if (membership) {
-      const currentEnd = endOfDay(membership.endDate)
+      // Gia hạn: lấy endDate hiện tại, cộng thêm durationDays
+      const currentEnd = endOfDayVN(membership.endDate)
       membership.planId = planObjectId
-      membership.endDate = calculateWalletMembershipEndDate({
+      membership.endDate = calcMembershipEndDate({
         baseDate: currentEnd,
         durationDays: plan.durationDays,
       })
@@ -202,6 +216,7 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
         await existingActive.save({ session })
       }
 
+      // Đăng ký mới: startDate = 00:00:00 VN hôm nay, endDate = 23:59:59 VN ngày cuối
       const startDate = new Date(today)
       const [createdMembership] = await Membership.create(
         [
@@ -209,7 +224,7 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
             memberId,
             planId: planObjectId,
             startDate,
-            endDate: calculateWalletMembershipEndDate({ baseDate: startDate, durationDays: plan.durationDays }),
+            endDate: calcMembershipEndDate({ baseDate: startDate, durationDays: plan.durationDays }),
             status: 'active',
             source: 'manual',
           },
@@ -325,11 +340,7 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
       throw error
     }
 
-    if (calculateRemainingDays(existingActive.endDate) >= 30) {
-      const error = new Error('Chỉ được gia hạn khi còn dưới 30 ngày hoặc đã hết hạn.')
-      error.statusCode = 400
-      throw error
-    }
+    await assertRenewalAllowed(existingActive.endDate)
   }
 
   const { startDate, endDate } = calculateNewMembershipDates({
@@ -338,6 +349,7 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
     mode,
   })
 
+  // Lưu vào MongoDB: startDate/endDate là giờ VN (MongoDB hiển thị UTC là bình thường)
   const membership = await Membership.create({
     memberId,
     planId: planObjectId,
@@ -769,168 +781,28 @@ const listPayments = async ({ page = 1, limit = 20, status }) => {
   }
 }
 
-const processAutoRenewal = async ({ userId }) => {
+const getMyMembership = async ({ userId }) => {
   const memberId = toObjectId(userId, 'userId')
-  const membership = await Membership.findOne({ memberId, autoRenew: true, status: 'active' })
-    .sort({ endDate: -1 })
-    .populate('planId')
 
-  if (!membership) return null
-
-  const remainingDays = calculateRemainingDays(membership.endDate)
-  if (remainingDays > 0) return null
-
-  const plan = membership.planId
-  if (!plan || !plan.price || !plan.durationDays) {
-    membership.autoRenew = false
-    membership.status = 'expired'
-    await membership.save()
-    return { expired: true, reason: 'no_plan' }
-  }
-
-  const price = Number(plan.price)
-  const durationDays = Number(plan.durationDays)
-
-  const wallet = await Wallet.findOneAndUpdate(
-    { userId: memberId, balance: { $gte: price } },
-    { $inc: { balance: -price } },
-    { new: false },
-  )
-
-  if (!wallet) {
-    membership.autoRenew = false
-    membership.status = 'expired'
-    await membership.save()
-    return { expired: true, reason: 'insufficient_balance' }
-  }
-
-  const balanceBefore = Number(wallet.balance || 0)
-  const walletBalance = balanceBefore - price
-  const currentEnd = endOfDay(membership.endDate)
-  const newEndDate = calculateWalletMembershipEndDate({ baseDate: currentEnd, durationDays })
-
-  membership.endDate = newEndDate
-  membership.source = 'manual'
-  await membership.save()
-
-  const planName = plan.nameVi || plan.nameEn || ''
-  const [payment] = await Payment.create([
-    {
-      userId: memberId,
-      planId: plan._id,
-      membershipId: membership._id,
-      amount: price,
-      currency: 'vnd',
-      status: 'PAID',
-      paymentMethod: 'WALLET',
-      source: 'ONLINE',
-      type: 'RENEWAL',
-      paidAt: new Date(),
-      metadata: {
-        walletBalanceBefore: balanceBefore,
-        walletBalanceAfter: walletBalance,
-        autoRenew: true,
-      },
-    },
-  ])
-
-  await Transaction.create([
-    {
-      userId: memberId,
-      walletId: wallet._id,
-      type: 'payment',
-      provider: 'wallet',
-      source: 'membership',
-      description: `Tự động gia hạn gói tập ${planName}`,
-      amount: -price,
-      balanceBefore,
-      balanceAfter: walletBalance,
-      referenceId: payment._id.toString(),
-      status: 'completed',
-      completedAt: new Date(),
-      metadata: { paymentId: payment._id, planId: plan._id, membershipId: membership._id, autoRenew: true },
-      idempotencyKey: `auto_renew_${membership._id}_${Date.now()}`,
-    },
-  ])
-
-  membership.paymentId = payment._id
-  await membership.save()
-
-  try {
-    await recordUserActivity({
-      userId,
-      type: 'membership',
-      title: 'Tự động gia hạn gói tập',
-      description: `Tự động gia hạn gói "${planName}" bằng ví tài khoản`,
-      metadata: { membershipId: membership._id, planId: plan._id, paymentId: payment._id, autoRenew: true },
-    })
-    invalidatePersonalContextCache(userId)
-  } catch (activityError) {
-    console.error('Không thể ghi hoạt động tự động gia hạn:', activityError.message)
-  }
-
-  return { renewed: true, newEndDate }
-}
-
-const toggleAutoRenew = async ({ userId }) => {
-  const memberId = toObjectId(userId, 'userId')
   const membership = await Membership.findOne({ memberId, status: { $in: ['active', 'pending_cancel'] } })
     .sort({ endDate: -1 })
     .populate('planId')
 
-  if (!membership) {
-    const error = new Error('Bạn chưa có gói tập đang hoạt động.')
-    error.statusCode = 400
-    throw error
+  let canRenew = false
+  if (membership) {
+    const remainingDays = calculateRemainingDays(membership.endDate)
+    if (remainingDays === 0) {
+      canRenew = true
+    } else {
+      const threshold = await getRenewalThresholdDays()
+      canRenew = remainingDays <= threshold
+    }
   }
-
-  if (membership.status === 'cancelled') {
-    const error = new Error('Gói tập đã bị hủy, không thể bật tự động gia hạn.')
-    error.statusCode = 400
-    throw error
-  }
-
-  const remainingDays = calculateRemainingDays(membership.endDate)
-  if (remainingDays <= 0) {
-    const error = new Error('Gói tập đã hết hạn, không thể bật tự động gia hạn.')
-    error.statusCode = 400
-    throw error
-  }
-
-  const pendingCancel = await MembershipCancellationRequest.findOne({
-    memberId,
-    membershipId: membership._id,
-    status: 'pending',
-  })
-  if (pendingCancel) {
-    const error = new Error('Gói tập đang chờ xử lý hủy, không thể bật tự động gia hạn.')
-    error.statusCode = 400
-    throw error
-  }
-
-  membership.autoRenew = !membership.autoRenew
-  await membership.save()
-
-  return {
-    autoRenew: membership.autoRenew,
-    message: membership.autoRenew ? 'Đã bật tự động gia hạn.' : 'Đã tắt tự động gia hạn.',
-  }
-}
-
-const getMyMembership = async ({ userId }) => {
-  const memberId = toObjectId(userId, 'userId')
-
-  const autoRenewResult = await processAutoRenewal({ userId })
-
-  const membership = await Membership.findOne({ memberId, status: 'active' })
-    .sort({ endDate: -1 })
-    .populate('planId')
 
   return {
     membership: serializeMembership(membership),
-    canRenew: false,
-    autoRenew: membership?.autoRenew || false,
-    autoRenewResult,
+    canRenew,
+    renewalThresholdDays: membership ? await getRenewalThresholdDays() : 7,
   }
 }
 
@@ -942,11 +814,12 @@ const renewMembershipWithWallet = async ({ userId }) => {
     error.statusCode = 404
     throw error
   }
+  await assertRenewalAllowed(existingActive.endDate)
   const planId = existingActive.planId?._id || existingActive.planId
   return subscribeWithWallet({ userId, planId, mode: 'renew' })
 }
 
-const renewMembershipWithDuration = async ({ userId, durationMultiplier }) => {
+const renewMembershipWithDuration = async ({ userId, durationMultiplier = 1 }) => {
   const memberId = toObjectId(userId, 'userId')
   const existingActive = await findLatestActiveMembership(memberId)
   if (!existingActive) {
@@ -955,150 +828,9 @@ const renewMembershipWithDuration = async ({ userId, durationMultiplier }) => {
     throw error
   }
 
-  const plan = existingActive.planId
-  const totalDays = Number(plan.durationDays) * durationMultiplier
-  const totalPrice = Number(plan.price) * durationMultiplier
-  const today = startOfToday()
-  const currentEnd = new Date(existingActive.endDate)
-  const isActive = currentEnd >= today
+  await assertRenewalAllowed(existingActive.endDate)
 
-  const session = await mongoose.startSession()
-  let committed = false
-
-  try {
-    session.startTransaction()
-
-    const wallet = await Wallet.findOneAndUpdate(
-      { userId: memberId, balance: { $gte: totalPrice } },
-      { $inc: { balance: -totalPrice } },
-      { new: false, session },
-    )
-
-    if (!wallet) {
-      const error = new Error('Số dư ví không đủ để gia hạn gói tập.')
-      error.statusCode = 400
-      throw error
-    }
-
-    const balanceBefore = Number(wallet.balance || 0)
-    const walletBalance = balanceBefore - totalPrice
-    let membership
-
-    if (isActive) {
-      existingActive.endDate = endOfDay(
-        calculateWalletMembershipEndDate({ baseDate: currentEnd, durationDays: totalDays }),
-      )
-      existingActive.source = 'manual'
-      await existingActive.save({ session })
-      membership = existingActive
-    } else {
-      existingActive.status = 'expired'
-      await existingActive.save({ session })
-
-      const [newMembership] = await Membership.create(
-        [
-          {
-            memberId,
-            planId: plan._id,
-            startDate: new Date(today),
-            endDate: endOfDay(
-              calculateWalletMembershipEndDate({ baseDate: today, durationDays: totalDays }),
-            ),
-            status: 'active',
-            source: 'manual',
-          },
-        ],
-        { session },
-      )
-      membership = newMembership
-    }
-
-    const [payment] = await Payment.create(
-      [
-        {
-          userId: memberId,
-          planId: plan._id,
-          membershipId: membership._id,
-          amount: totalPrice,
-          currency: 'vnd',
-          status: 'PAID',
-          paymentMethod: 'WALLET',
-          source: 'ONLINE',
-          type: 'RENEWAL',
-          paidAt: new Date(),
-          metadata: {
-            walletBalanceBefore: balanceBefore,
-            walletBalanceAfter: walletBalance,
-            durationMultiplier,
-            totalDays,
-          },
-        },
-      ],
-      { session },
-    )
-
-    await Transaction.create(
-      [
-        {
-          userId: memberId,
-          walletId: wallet._id,
-          type: 'payment',
-          provider: 'wallet',
-          source: 'membership',
-          description: `Gia hạn gói tập ${plan.nameVi || plan.nameEn} (${durationMultiplier}x)`,
-          amount: -totalPrice,
-          balanceBefore,
-          balanceAfter: walletBalance,
-          referenceId: payment._id.toString(),
-          status: 'completed',
-          completedAt: new Date(),
-          metadata: {
-            paymentId: payment._id,
-            planId: plan._id,
-            membershipId: membership._id,
-            durationMultiplier,
-            totalDays,
-          },
-          idempotencyKey: payment._id.toString(),
-        },
-      ],
-      { session },
-    )
-
-    membership.paymentId = payment._id
-    await membership.save({ session })
-
-    await session.commitTransaction()
-    committed = true
-
-    try {
-      await recordUserActivity({
-        userId,
-        type: 'membership',
-        title: 'Gia hạn gói tập',
-        description: `Gia hạn gói "${plan.nameVi || plan.nameEn}" (${durationMultiplier}x) bằng ví tài khoản`,
-        metadata: { membershipId: membership._id, planId: plan._id, paymentId: payment._id, paymentMethod: 'WALLET', durationMultiplier },
-      })
-      invalidatePersonalContextCache(userId)
-    } catch (activityError) {
-      console.error('Không thể ghi hoạt động gia hạn gói tập:', activityError.message)
-    }
-
-    const populated = await Membership.findById(membership._id).populate('planId')
-    return {
-      message: 'Gia hạn gói tập thành công.',
-      walletBalance,
-      membership: serializeMembership(populated),
-      payment,
-    }
-  } catch (error) {
-    if (!committed) {
-      await session.abortTransaction()
-    }
-    throw error
-  } finally {
-    session.endSession()
-  }
+  return subscribeWithWallet({ userId, planId: existingActive.planId?._id || existingActive.planId, mode: 'renew' })
 }
 
 export {
@@ -1115,6 +847,4 @@ export {
   listRegistrations,
   renewMembershipWithDuration,
   renewMembershipWithWallet,
-  toggleAutoRenew,
-  processAutoRenewal,
 }

@@ -1,6 +1,5 @@
 import { Spin } from 'antd'
 import React, { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import AboutLandingSection from '../../components/system/AboutLandingSection'
 import { systemExperienceService } from '../../services/systemExperienceService'
@@ -29,7 +28,6 @@ class AboutErrorBoundary extends React.Component<{ children: React.ReactNode }, 
 }
 
 export default function AboutPage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [landing, setLanding] = useState<any>(null)
@@ -55,7 +53,7 @@ export default function AboutPage() {
   if (loading) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-[var(--theme-bg)]">
-        <Spin tip={t('common.loading')} />
+        <Spin tip={'Đang tải...'} />
       </div>
     )
   }

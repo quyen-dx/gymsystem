@@ -22,7 +22,7 @@ const membershipSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'pending_cancel', 'expired', 'cancelled'],
+      enum: ['active', 'pending_cancel', 'expired', 'cancelled', 'refunded'],
       default: 'active',
     },
     source: {
@@ -34,10 +34,6 @@ const membershipSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Payment',
       default: null,
-    },
-    autoRenew: {
-      type: Boolean,
-      default: false,
     },
     cancelledAt: {
       type: Date,

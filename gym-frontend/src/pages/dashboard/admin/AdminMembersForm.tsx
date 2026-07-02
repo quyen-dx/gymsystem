@@ -1,7 +1,6 @@
 import { Button, DatePicker, Form, Input, Select, Upload, message } from 'antd'
 import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { memberService } from '../../../services/memberService'
 import type { MemberListItem } from '../../../types/admin/member'
@@ -17,7 +16,6 @@ interface Props {
 }
 
 export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDescription }: Props) {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
@@ -64,11 +62,11 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
       }
 
       await memberService.updateMember(member._id, payload)
-      message.success(t('admin.members.update_success'))
+      message.success('Cập nhật thành viên thành công')
       onSuccess?.()
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } }
-      message.error(apiError?.response?.data?.message || t('admin.members.messages.action_failed'))
+      message.error(apiError?.response?.data?.message || 'Thao tác thất bại')
     } finally {
       setLoading(false)
     }
@@ -96,7 +94,7 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
           onClick={() => navigate('/admin/members')}
           style={{ color: 'var(--gs-text)', fontSize: 15 }}
         >
-          ← {t('admin.members.detail.back')}
+            ← Quay lại
         </Button>
       </div>
 
@@ -114,51 +112,51 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
       <Form layout="vertical" form={form} onFinish={handleSubmit}>
         <div className="grid gap-6">
           <div style={cardStyle} className="p-6 max-[640px]:p-4">
-            <h2 style={sectionTitleStyle}>{t('admin.members.detail.basic_info')}</h2>
+            <h2 style={sectionTitleStyle}>Thông tin cơ bản</h2>
 
             <Form.Item
-              label={t('admin.members.form.name')}
+              label="Tên"
               name="name"
-              rules={[{ required: true, message: t('admin.members.form.name_required') }]}
+              rules={[{ required: true, message: 'Vui lòng nhập tên thành viên' }]}
             >
-              <Input placeholder={t('admin.members.form.name_placeholder')} size="large" />
+              <Input placeholder="Nhập tên thành viên" size="large" />
             </Form.Item>
 
             <Form.Item
-              label={t('admin.members.form.email')}
+              label="Email"
               name="email"
               rules={[
                 { type: 'email', message: 'Email không hợp lệ' },
               ]}
             >
-              <Input placeholder={t('admin.members.form.email_placeholder')} size="large" />
+              <Input placeholder="Nhập email" size="large" />
             </Form.Item>
 
             <Form.Item
-              label={t('admin.members.form.phone')}
+              label="Số điện thoại"
               name="phone"
               rules={[
                 { pattern: PHONE_REGEX, message: 'Số điện thoại không hợp lệ (VD: 0912345678)' },
               ]}
             >
-              <Input placeholder={t('admin.members.form.phone_placeholder')} size="large" />
+              <Input placeholder="Nhập số điện thoại" size="large" />
             </Form.Item>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <Form.Item label={t('admin.members.form.gender')} name="gender">
+              <Form.Item label="Giới tính" name="gender">
                 <Select
                   allowClear
-                  placeholder={t('admin.members.form.gender')}
+                  placeholder="Giới tính"
                   size="large"
                   options={[
-                    { value: 'male', label: t('admin.members.form.gender_male') },
-                    { value: 'female', label: t('admin.members.form.gender_female') },
-                    { value: 'other', label: t('admin.members.form.gender_other') },
+                    { value: 'male', label: 'Nam' },
+                    { value: 'female', label: 'Nữ' },
+                    { value: 'other', label: 'Khác' },
                   ]}
                 />
               </Form.Item>
 
-              <Form.Item label={t('admin.members.form.dateOfBirth')} name="dateOfBirth">
+              <Form.Item label="Ngày sinh" name="dateOfBirth">
                 <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" placeholder="DD/MM/YYYY" size="large" />
               </Form.Item>
             </div>
@@ -177,7 +175,7 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
                 }}
               >
                 <Button icon={<UploadOutlined />} size="large">
-                  {avatarFile ? avatarFile.name : t('admin.members.form.avatar_upload')}
+                  {avatarFile ? avatarFile.name : 'Chọn ảnh đại diện'}
                 </Button>
               </Upload>
             </Form.Item>
@@ -185,10 +183,10 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
             <Button size="large" onClick={() => navigate('/admin/members')}>
-              {t('admin.members.form.cancel')}
+              Hủy
             </Button>
             <Button type="primary" htmlType="submit" size="large" loading={loading}>
-              {t('admin.members.form.submit_edit')}
+              Lưu thay đổi
             </Button>
           </div>
         </div>

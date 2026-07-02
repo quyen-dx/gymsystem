@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { GoogleGenAI } from '@google/genai'
 
-const GEMINI_FALLBACK_MESSAGE = 'Promp này quá mới -_-  Doraemon chưa cập nhật dữ liệu đó! '
+const GEMINI_FALLBACK_MESSAGE = 'Mình chưa cập nhật dữ liệu cho câu hỏi này!'
 
 const createGeminiClient = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
 
@@ -64,13 +64,13 @@ const getLanguageInstruction = (language) => normalizeLanguage(language) === 'en
 
 const aiServiceMessages = {
     vi: {
-        greeting: 'Chào bạn, mình là Doraemon AI của GymPro đây! Hôm nay bạn muốn hỏi về tập luyện, dinh dưỡng hay cần mình hỗ trợ gì khác nào?',
+        greeting: 'Chào bạn, mình là AI GymPro — trợ lý tập luyện cá nhân của bạn! Hôm nay bạn muốn hỏi về tập luyện, dinh dưỡng hay cần mình hỗ trợ gì khác?',
         noAnswer: 'Mình chưa có câu trả lời phù hợp.',
         gymOnly: 'Ở chế độ Gym, mình chỉ trả lời dựa trên dữ liệu hệ thống GymPro hiện tại như PT, sản phẩm, gói tập, tập luyện, dinh dưỡng và sức khỏe. Bạn có thể chuyển sang chế độ Tất cả để hỏi nội dung ngoài hệ thống.',
         noResults: 'Mình không tìm thấy kết quả phù hợp.',
     },
     en: {
-        greeting: 'Hi, I am Doraemon AI from GymPro. What would you like help with today: workouts, nutrition, membership, or training progress?',
+        greeting: 'Hi, I am GymPro AI — your personal fitness assistant. What would you like help with today: workouts, nutrition, membership, or training progress?',
         noAnswer: 'I do not have a suitable answer yet.',
         gymOnly: 'In Gym mode, I only answer using current GymPro data such as trainers, products, membership plans, workouts, nutrition, and health. Switch to Other mode for non-gym questions.',
         noResults: 'I could not find suitable results.',
@@ -320,7 +320,7 @@ export const generateAssistantResponse = async (query, pts, products, plans, mod
     const summaryRules = buildSummaryRules(query)
     const summaryMode = Boolean(summaryRules)
     const styleRules = `PHONG CÁCH BẮT BUỘC:
-- Bạn là trợ lý AI của GymPro, thân thiện kiểu Doraemon nhưng vẫn chuyên nghiệp.
+- Bạn là trợ lý AI của GymPro, thân thiện, gần gũi nhưng vẫn chuyên nghiệp.
 - Không trả lời cụt ngủn. Với câu hỏi đơn giản, trả lời câu chính rồi thêm 1 câu cảm xúc nhẹ nếu phù hợp.
 - Không lan man; ưu tiên 1 câu chính và 1 câu bổ sung nhẹ.
 - Tự nhiên như người thật, không robot, không roleplay quá đà.
@@ -480,7 +480,7 @@ export const generateAssistantResponseStream = async (
     const summaryRules = buildSummaryRules(query)
     const summaryMode = Boolean(summaryRules)
     const styleRules = `PHONG CÁCH BẮT BUỘC:
-- Bạn là trợ lý AI của GymPro, thân thiện kiểu Doraemon nhưng vẫn chuyên nghiệp.
+- Bạn là trợ lý AI của GymPro, thân thiện, gần gũi nhưng vẫn chuyên nghiệp.
 - Không trả lời cụt ngủn. Với câu hỏi đơn giản, trả lời câu chính rồi thêm 1 câu cảm xúc nhẹ nếu phù hợp.
 - Không lan man; ưu tiên 1 câu chính và 1 câu bổ sung nhẹ.
 - Tự nhiên như người thật, không robot, không roleplay quá đà.
@@ -962,7 +962,7 @@ QUY TẮC:
 - KHÔNG chẩn đoán bệnh lý.
 - Nếu ảnh chụp người, phân tích vóc dáng tổng quát (dáng người, ước lượng tình trạng).
 - Nếu không rõ nội dung, hỏi lại người dùng muốn phân tích gì.
-- Trả lời tự nhiên, thân thiện như Doraemon.
+- Trả lời tự nhiên, thân thiện, gần gũi.
 
 ${query ? `Người dùng hỏi: "${query}"` : 'Hãy xem ảnh và cho biết bạn thấy gì, sau đó đề xuất cách tôi có thể giúp.'}`
     }

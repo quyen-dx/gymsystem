@@ -14,7 +14,6 @@ import {
   message,
 } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useCart } from '../../../context/useCart'
@@ -45,12 +44,12 @@ const statusColor: Record<string, string> = {
   canceled: 'red',
 }
 
-const statusFilters: Array<{ key: string; labelKey: string; statuses: string[] }> = [
-  { key: 'all', labelKey: 'cart.status_all', statuses: [] },
-  { key: 'pending', labelKey: 'cart.status_pending', statuses: ['pending', 'paid', 'processing'] },
-  { key: 'shipping', labelKey: 'cart.status_shipping', statuses: ['shipped'] },
-  { key: 'completed', labelKey: 'cart.status_completed', statuses: ['delivered', 'completed'] },
-  { key: 'cancelled', labelKey: 'cart.status_cancelled', statuses: ['cancelled', 'canceled'] },
+const statusFilters: Array<{ key: string; label: string; statuses: string[] }> = [
+  { key: 'all', label: 'Tất cả', statuses: [] },
+  { key: 'pending', label: 'Chờ xác nhận', statuses: ['pending', 'paid', 'processing'] },
+  { key: 'shipping', label: 'Đang giao', statuses: ['shipped'] },
+  { key: 'completed', label: 'Hoàn thành', statuses: ['delivered', 'completed'] },
+  { key: 'cancelled', label: 'Đã hủy', statuses: ['cancelled', 'canceled'] },
 ]
 
 const formatMoney = (value: number = 0) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
@@ -65,7 +64,6 @@ const getOrderQuantity = (order: any) =>
     : 0
 
 export default function CartPage() {
-  const { t } = useTranslation()
   const { cart, setCart } = useCart()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -112,7 +110,7 @@ export default function CartPage() {
     setCart((prev: CartItem[]) =>
       prev.filter((i: CartItem) => !(i._id === id && (i.weight || '') === w))
     )
-    message.success(t('cart.removed'))
+    message.success('Đã xóa sản phẩm khỏi giỏ hàng')
   }
 
   const total = cart.reduce(
@@ -136,7 +134,7 @@ export default function CartPage() {
       <div className="cart-product-list">
         {cart.length === 0 ? (
           <Card className="cart-panel">
-            <Empty description={t('cart.empty')} />
+            <Empty description="Giỏ hàng trống" />
           </Card>
         ) : (
           cart.map((item: CartItem) => (
@@ -154,17 +152,17 @@ export default function CartPage() {
                   <Text strong className="cart-item-name">{item.name}</Text>
                   {item.weight ? (
                     <Text className="cart-item-meta">
-                      {t('cart.weight')} <b>{item.weight}</b>
+                      Khối lượng <b>{item.weight}</b>
                     </Text>
                   ) : null}
                   <Text className="cart-item-meta">
-                    {t('cart.price')} <b>{formatMoney(item.price)}</b>
+                    Đơn giá <b>{formatMoney(item.price)}</b>
                   </Text>
                 </div>
 
                 <div className="cart-item-actions">
                   <div className="cart-quantity-control">
-                    <Text className="cart-label">{t('cart.quantity')}</Text>
+                    <Text className="cart-label">Số lượng</Text>
                     <InputNumber
                       min={1}
                       max={item.stock || 99}
@@ -177,13 +175,13 @@ export default function CartPage() {
                     {formatMoney(item.price * item.quantity)}
                   </Text>
                   <Popconfirm
-                    title={t('cart.confirm_delete_title')}
+                    title="Xóa sản phẩm?"
                     onConfirm={() => removeItem(item._id, item.weight)}
-                    okText={t('cart.confirm_delete_ok')}
-                    cancelText={t('cart.confirm_delete_cancel')}
+                    okText="Xóa"
+                    cancelText="Hủy"
                   >
                     <Button danger icon={<DeleteOutlined />}>
-                      {t('cart.delete')}
+                      Xóa
                     </Button>
                   </Popconfirm>
                 </div>
@@ -195,14 +193,14 @@ export default function CartPage() {
 
       <aside className="cart-checkout-panel">
         <Card className="cart-panel">
-          <Title level={4} style={{ marginTop: 0 }}>{t('cart.payment_title')}</Title>
+          <Title level={4} style={{ marginTop: 0 }}>Thông tin thanh toán</Title>
           <div className="cart-summary-line">
-            <Text>{t('cart.total')}</Text>
+            <Text>Tổng tiền</Text>
             <Text strong className="cart-summary-total">{formatMoney(total)}</Text>
           </div>
           <div className="cart-voucher-box">
-            <Text className="cart-label">{t('cart.voucher')}</Text>
-            <Input placeholder={t('cart.voucher_placeholder')} />
+            <Text className="cart-label">Mã giảm giá</Text>
+            <Input placeholder="Nhập mã giảm giá" />
           </div>
           <Button
             type="primary"
@@ -211,7 +209,7 @@ export default function CartPage() {
             disabled={cart.length === 0}
             onClick={() => navigate('/checkout')}
           >
-            {t('cart.checkout')}
+            Thanh toán
           </Button>
         </Card>
       </aside>
@@ -224,7 +222,7 @@ export default function CartPage() {
         className="cart-status-tabs"
         activeKey={activeStatus}
         onChange={setActiveStatus}
-        items={statusFilters.map((item) => ({ key: item.key, label: t(item.labelKey) }))}
+        items={statusFilters.map((item) => ({ key: item.key, label: item.label }))}
       />
 
       {ordersLoading ? (
@@ -232,7 +230,7 @@ export default function CartPage() {
           <Spin />
         </div>
       ) : filteredOrders.length === 0 ? (
-        <Empty description={t('cart.orders_empty')} />
+        <Empty description="Không có đơn hàng nào" />
       ) : (
         <div className="cart-order-list">
           {filteredOrders.map((order) => {
@@ -254,7 +252,7 @@ export default function CartPage() {
                             <div className="cart-order-image-fallback" />
                           )}
                           <div>
-                            <Text strong>{getOrderItemName(item, t('order_history.product_fallback'))}</Text>
+                            <Text strong>{getOrderItemName(item, 'Sản phẩm')}</Text>
                             <div className="cart-order-meta">
                               <Text type="secondary">
                                 x{item.quantity} - {formatMoney(item.price)}
@@ -266,31 +264,31 @@ export default function CartPage() {
                       )
                     })}
                     {order.items.length > 3 ? (
-                      <Text type="secondary">+{order.items.length - 3} {t('cart.more_products')}</Text>
+                      <Text type="secondary">+{order.items.length - 3} sản phẩm khác</Text>
                     ) : null}
                   </div>
 
                   <div className="cart-order-summary">
                     <div>
-                      <Text type="secondary">{t('cart.purchase_date')}</Text>
+                      <Text type="secondary">Ngày mua</Text>
                       <Text strong>{orderDate ? new Date(orderDate).toLocaleDateString('vi-VN') : '-'}</Text>
                     </div>
                     <div>
-                      <Text type="secondary">{t('cart.order_quantity')}</Text>
+                      <Text type="secondary">Số lượng</Text>
                       <Text strong>{quantity}</Text>
                     </div>
                     <div>
-                      <Text type="secondary">{t('cart.order_total')}</Text>
+                      <Text type="secondary">Tổng tiền</Text>
                       <Text strong>{formatMoney(order.totalAmount)}</Text>
                     </div>
                     <div>
-                      <Text type="secondary">{t('cart.order_status')}</Text>
+                      <Text type="secondary">Trạng thái</Text>
                       <Tag color={statusColor[orderStatus] || 'default'} style={{ width: 'fit-content', marginInlineEnd: 0 }}>
                         {statusText[orderStatus] || order.status}
                       </Tag>
                     </div>
                     <Link to={`/track/${order._id}`}>
-                      <Button type="primary" ghost block>{t('cart.view_detail')}</Button>
+                      <Button type="primary" ghost block>Xem chi tiết</Button>
                     </Link>
                   </div>
                 </div>
@@ -312,11 +310,11 @@ export default function CartPage() {
           items={[
             {
               key: 'cart',
-              label: t('cart.tab_cart'),
+              label: 'Giỏ hàng',
               children: (
                 <>
                   <Title level={3} style={{ marginTop: 0 }}>
-                    {t('cart.title', { count: cart.length })}
+                    {`Giỏ hàng (${cart.length})`}
                   </Title>
                   {renderCartItems()}
                 </>
@@ -324,7 +322,7 @@ export default function CartPage() {
             },
             {
               key: 'orders',
-              label: t('cart.tab_orders'),
+              label: 'Đơn hàng',
               children: renderOrders(),
             },
           ]}

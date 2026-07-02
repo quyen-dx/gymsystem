@@ -23,7 +23,6 @@ import {
   message,
 } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { trainerService } from '../../../services/trainerService'
@@ -42,7 +41,6 @@ const SHIFT_LABELS = {
 }
 
 export default function TrainerDetailPage() {
-  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { tokens } = useTheme()
@@ -58,11 +56,11 @@ export default function TrainerDetailPage() {
       setPt(data.pt)
       setBookings(data.bookings)
     } catch {
-      message.error(t('admin.trainers.messages.fetch_detail_failed'))
+      message.error('Không thể tải thông tin huấn luyện viên')
     } finally {
       setLoading(false)
     }
-  }, [id, t])
+  }, [id])
 
   useEffect(() => {
     fetchData()
@@ -82,7 +80,7 @@ export default function TrainerDetailPage() {
     return (
       <DashboardLayout>
         <div style={{ textAlign: 'center', padding: 80, color: 'var(--gs-text-muted)' }}>
-          {t('admin.trainers.messages.fetch_detail_failed')}
+          {'Không thể tải thông tin huấn luyện viên'}
         </div>
       </DashboardLayout>
     )
@@ -122,12 +120,12 @@ export default function TrainerDetailPage() {
         onClick={() => navigate('/admin/trainers')}
         style={{ marginBottom: 16 }}
       >
-        {t('admin.trainers.detail.back')}
+        'Quay lại'
       </Button>
 
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('admin.trainers.module')}</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.trainers.detail.title')}</h1>
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">HUẤN LUYỆN VIÊN</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Chi tiết huấn luyện viên</h1>
       </div>
 
       <Row gutter={[16, 16]}>
@@ -150,7 +148,7 @@ export default function TrainerDetailPage() {
             </div>
             <div style={{ marginTop: 8 }}>
               <Tag color={pt.isActive ? 'success' : 'error'} icon={pt.isActive ? <CheckCircleOutlined /> : <CloseCircleOutlined />}>
-                {pt.isActive ? t('admin.members.status.active') : t('admin.members.status.locked')}
+                {pt.isActive ? 'Đang hoạt động' : 'Đã khóa'}
               </Tag>
             </div>
 
@@ -179,16 +177,16 @@ export default function TrainerDetailPage() {
         </Col>
 
         <Col xs={24} lg={16}>
-          <Card className="rounded-[24px]" title={<><UserOutlined /> {t('admin.trainers.detail.basic_info')}</>} style={{ marginBottom: 16 }}>
+          <Card className="rounded-[24px]" title={<><UserOutlined /> Thông tin cơ bản</>} style={{ marginBottom: 16 }}>
             <Descriptions column={{ xs: 1, sm: 2 }} size="small">
-              <Descriptions.Item label={t('admin.trainers.form.name')}>{pt.name}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.trainers.form.email')}>{pt.email || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.trainers.form.phone')}>{pt.phone || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.trainers.form.dateOfBirth')}>
+              <Descriptions.Item label='Họ tên'>{pt.name}</Descriptions.Item>
+              <Descriptions.Item label='Email'>{pt.email || '—'}</Descriptions.Item>
+              <Descriptions.Item label='Số điện thoại'>{pt.phone || '—'}</Descriptions.Item>
+              <Descriptions.Item label='Ngày sinh'>
                 {pt.dateOfBirth ? new Date(pt.dateOfBirth).toLocaleDateString('vi-VN') : '—'}
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.trainers.form.gender')}>
-                {pt.gender ? t(`admin.trainers.form.gender_${pt.gender}`) : '—'}
+              <Descriptions.Item label='Giới tính'>
+                {pt.gender ? ({ male: 'Nam', female: 'Nữ', other: 'Khác' }[pt.gender] || pt.gender) : '—'}
               </Descriptions.Item>
               <Descriptions.Item label="ID">{pt._id}</Descriptions.Item>
             </Descriptions>
@@ -203,7 +201,7 @@ export default function TrainerDetailPage() {
           <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
             {pt.introVideoUrl && (
               <Col xs={24} sm={12}>
-                <Card className="rounded-[24px]" size="small" title={<><PlayCircleOutlined /> {t('admin.trainers.detail.video_intro')}</>}>
+                <Card className="rounded-[24px]" size="small" title={<><PlayCircleOutlined /> Video giới thiệu</>}>
                   <video
                     src={pt.introVideoUrl}
                     controls
@@ -214,7 +212,7 @@ export default function TrainerDetailPage() {
             )}
             {pt.certificates?.length > 0 && (
               <Col xs={24} sm={pt.introVideoUrl ? 12 : 24}>
-                <Card className="rounded-[24px]" size="small" title={<><CheckCircleOutlined /> {t('admin.trainers.detail.certificates')}</>}>
+                <Card className="rounded-[24px]" size="small" title={<><CheckCircleOutlined /> Chứng chỉ</>}>
                   <ul style={{ margin: 0, paddingLeft: 20 }}>
                     {pt.certificates.map((cert, i) => (
                       <li key={i} style={{ marginBottom: 4 }}>{cert}</li>
@@ -227,7 +225,7 @@ export default function TrainerDetailPage() {
 
           <Card
             className="rounded-[24px]"
-            title={<><CalendarOutlined /> {t('admin.trainers.detail.weekly_schedule')}</>}
+            title={<><CalendarOutlined /> Lịch làm việc trong tuần</>}
           >
             <Row gutter={[8, 8]}>
               {weekDays.map((day) => {
@@ -257,7 +255,7 @@ export default function TrainerDetailPage() {
                         ))
                       ) : (
                         <div style={{ fontSize: 12, color: 'var(--gs-text-soft)', opacity: 0.5 }}>
-                          {t('admin.trainers.detail.no_bookings')}
+                          'Không có lịch hẹn'
                         </div>
                       )}
                     </div>

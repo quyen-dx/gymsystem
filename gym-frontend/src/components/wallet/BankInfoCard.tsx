@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { message } from 'antd'
-import { useTranslation } from 'react-i18next'
 import type { BankInfo } from '../../types/member/wallet'
 import type { BankMeta } from '../../types/member/wallet'
 
@@ -12,7 +11,6 @@ interface BankInfoCardProps {
 }
 
 function CopyableRow({ label, value }: { label: string; value: string }) {
-  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -22,7 +20,7 @@ function CopyableRow({ label, value }: { label: string; value: string }) {
       message.success(label)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      message.error(t('deposit.bank.copy_failed'))
+      message.error('Sao chép thất bại')
     }
   }
 
@@ -57,17 +55,16 @@ export default function BankInfoCard({
   transferContent,
   showWarning,
 }: BankInfoCardProps) {
-  const { t } = useTranslation()
   return (
     <div className="space-y-2">
-      <CopyableRow label={t('deposit.bank.account_number')} value={bankInfo.accountNumber} />
-      <CopyableRow label={t('deposit.bank.account_name')} value={bankInfo.accountName} />
-      <CopyableRow label={t('deposit.bank.transfer_content')} value={transferContent} />
-      <CopyableRow label={t('deposit.bank.bank_name')} value={bankMeta.name} />
+      <CopyableRow label="Số tài khoản" value={bankInfo.accountNumber} />
+      <CopyableRow label="Chủ tài khoản" value={bankInfo.accountName} />
+      <CopyableRow label="Nội dung chuyển khoản" value={transferContent} />
+      <CopyableRow label="Ngân hàng" value={bankMeta.name} />
 
       {showWarning && (
         <div className="mt-3 rounded-lg border border-[#f59e0b33] bg-[#f59e0b0f] px-4 py-3 text-sm text-[#f59e0b]">
-          ⚠ {t('deposit.bank.warning')}
+          ⚠ Vui lòng kiểm tra kỹ thông tin tài khoản trước khi chuyển khoản
         </div>
       )}
     </div>

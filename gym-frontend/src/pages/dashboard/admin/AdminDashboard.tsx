@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import api from '../../../services/api'
 
 export default function AdminDashboard() {
-  const { t } = useTranslation()
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalMembers: 0,
@@ -43,21 +41,21 @@ export default function AdminDashboard() {
   }, [])
 
   const statCards = [
-    { label: t('admin.dashboard.stats.total_users'), value: stats.totalUsers, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
-    { label: t('admin.dashboard.stats.members'), value: stats.totalMembers, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
-    { label: t('admin.dashboard.stats.pt'), value: stats.totalPT, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
-    { label: t('admin.dashboard.stats.staff'), value: stats.totalStaff, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
-    { label: t('admin.dashboard.stats.total_plans'), value: stats.totalPlans, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
-    { label: t('admin.dashboard.stats.active_plans'), value: stats.activePlans, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: 'Tổng người dùng', value: stats.totalUsers, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: 'Thành viên', value: stats.totalMembers, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: 'Huấn luyện viên', value: stats.totalPT, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: 'Nhân viên', value: stats.totalStaff, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: 'Tổng gói tập', value: stats.totalPlans, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
+    { label: 'Gói tập đang hoạt động', value: stats.activePlans, tone: 'bg-[var(--gs-accent-soft)] text-[var(--gs-text)]' },
   ]
 
   return (
     <DashboardLayout>
       <section className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('admin.dashboard.overline')}</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.dashboard.title')}</h1>
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Tổng quan</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Bảng điều khiển</h1>
         <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--gs-text-muted)]">
-          {t('admin.dashboard.description')}
+          Xem tổng quan về hệ thống phòng gym của bạn.
         </p>
       </section>
 

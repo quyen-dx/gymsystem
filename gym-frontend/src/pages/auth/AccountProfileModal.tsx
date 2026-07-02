@@ -16,7 +16,6 @@ import {
 import { Avatar, Button, Checkbox, Empty, Form, Grid, Input, message, Modal, Space, theme } from 'antd'
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useTranslation } from 'react-i18next'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 import { generateTheme, PRESET_ACCENT_COLORS, resolveEffectiveTheme, useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../hooks/useAuth'
@@ -126,7 +125,6 @@ const ProfileHeader = ({
   onCoverRemove,
   mediaUploading,
   isMobile,
-  t,
 }: {
   user: any
   avatarPreview: string | null
@@ -140,9 +138,8 @@ const ProfileHeader = ({
   onCoverRemove: () => void
   mediaUploading: 'avatar' | 'cover' | 'cover-remove' | null
   isMobile: boolean
-  t: (key: string, opts?: any) => string
 }) => {
-  const displayName = getUserDisplayName(user, t('profile.account_name'))
+  const displayName = getUserDisplayName(user, 'Người dùng')
   const avatarName = getUserInitialName(user, 'U')
   const coverSrc = coverPreview !== null && coverPreview !== ''
     ? coverPreview
@@ -196,7 +193,7 @@ const ProfileHeader = ({
               gap: 4,
             }}
           >
-            <CameraOutlined /> {mediaUploading === 'cover' ? t('common.loading') : t('profile.change_cover')}
+            <CameraOutlined /> {mediaUploading === 'cover' ? 'Đang tải...' : 'Thay đổi ảnh bìa'}
           </button>
 
           {(coverPreview || user?.coverImage) && coverPreview !== '' && (
@@ -219,7 +216,7 @@ const ProfileHeader = ({
                 gap: 4,
               }}
             >
-              <DeleteOutlined /> {mediaUploading === 'cover-remove' ? t('common.loading') : t('profile.remove')}
+              <DeleteOutlined /> {mediaUploading === 'cover-remove' ? 'Đang tải...' : 'Xóa'}
             </button>
           )}
         </div>
@@ -249,7 +246,7 @@ const ProfileHeader = ({
           />
           <span className="profile-avatar-status" />
           <div className="profile-avatar-camera">
-            {mediaUploading === 'avatar' ? t('common.loading') : <CameraOutlined />}
+            {mediaUploading === 'avatar' ? 'Đang tải...' : <CameraOutlined />}
           </div>
         </div>
 
@@ -417,7 +414,6 @@ export default function AccountProfileModal({
   open: boolean
   onClose: () => void
 }) {
-  const { t, i18n } = useTranslation()
   const { user, updateUser, refreshUser, logout } = useAuth()
   const { applyAccentFast, applyThemeFull, applyThemeMode, commitPending, accentColor: savedAccentColor } = useTheme()
   const { settings: systemSettings } = useSystemSettings()
@@ -448,7 +444,7 @@ export default function AccountProfileModal({
   )
 
   const hasPassword = Boolean(user?.hasPassword || user?.password)
-  const contactText = user?.email || user?.phone || t('profile.no_email')
+  const contactText = user?.email || user?.phone || 'Chưa có email'
 
   useEffect(() => {
     if (user?.accentColor) {
@@ -483,11 +479,11 @@ export default function AccountProfileModal({
       await authService.updateProfile(payload)
       const freshUser = await refreshUser()
       applyThemeMode(resolveEffectiveTheme(systemTheme, freshUser?.themePreference || preference))
-      message.success(t('profile.msg_theme_update_success'))
+      message.success('Cập nhật giao diện thành công')
     } catch (err: any) {
       applyThemeMode(resolveEffectiveTheme(systemTheme, previousPreference))
       updateUser({ ...user, themePreference: previousPreference })
-      message.error(err.response?.data?.message || t('profile.msg_theme_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật giao diện thất bại')
     } finally {
       setLoading(false)
       preventCloseRef.current = false
@@ -513,12 +509,12 @@ export default function AccountProfileModal({
       const persistedAccent = freshUser?.accentColor || systemDefault
       setAccentColor(persistedAccent)
       applyThemeFull(persistedAccent)
-      message.success(t('profile.msg_theme_update_success'))
+      message.success('Cập nhật giao diện thành công')
     } catch (err: any) {
       setAccentColor(previousAccent)
       applyThemeFull(previousAccent)
       updateUser({ ...user, accentColor: previousAccent })
-      message.error(err.response?.data?.message || t('profile.msg_theme_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật giao diện thất bại')
     } finally {
       setLoading(false)
       preventCloseRef.current = false
@@ -544,10 +540,10 @@ export default function AccountProfileModal({
       await refreshUser()
       setAvatarPreview(null)
       if (fileRef.current) fileRef.current.value = ''
-      message.success(t('profile.msg_avatar_update_success'))
+      message.success('Cập nhật ảnh đại diện thành công')
     } catch (err: any) {
       setAvatarPreview(previousPreview)
-      message.error(err.response?.data?.message || t('profile.msg_avatar_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật ảnh đại diện thất bại')
     } finally {
       URL.revokeObjectURL(previewUrl)
       setMediaUploading(null)
@@ -572,11 +568,11 @@ export default function AccountProfileModal({
       setCoverPreview(null)
       setCoverRemoved(false)
       if (coverRef.current) coverRef.current.value = ''
-      message.success(t('profile.msg_cover_update_success'))
+      message.success('Cập nhật ảnh bìa thành công')
     } catch (err: any) {
       setCoverPreview(previousPreview)
       setCoverRemoved(previousRemoved)
-      message.error(err.response?.data?.message || t('profile.msg_cover_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật ảnh bìa thất bại')
     } finally {
       URL.revokeObjectURL(previewUrl)
       setMediaUploading(null)
@@ -600,11 +596,11 @@ export default function AccountProfileModal({
       setCoverPreview(null)
       setCoverRemoved(false)
       if (coverRef.current) coverRef.current.value = ''
-      message.success(t('profile.msg_cover_update_success'))
+      message.success('Cập nhật ảnh bìa thành công')
     } catch (err: any) {
       setCoverPreview(previousPreview)
       setCoverRemoved(previousRemoved)
-      message.error(err.response?.data?.message || t('profile.msg_cover_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật ảnh bìa thất bại')
     } finally {
       setMediaUploading(null)
     }
@@ -670,10 +666,10 @@ export default function AccountProfileModal({
       if (values.fullName !== undefined) formData.append('fullName', submittedFullName)
       await authService.updateProfile(formData)
       await refreshUser()
-      message.success(t('profile.msg_update_success'))
+      message.success('Cập nhật thành công')
       handleClose()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('profile.msg_update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật thất bại')
     } finally {
       setLoading(false)
     }
@@ -681,17 +677,17 @@ export default function AccountProfileModal({
 
   const handleSetPassword = async (values: any) => {
     if (values.newPassword !== values.confirm) {
-      message.error(t('profile.msg_password_mismatch'))
+      message.error('Mật khẩu xác nhận không khớp')
       return
     }
     setLoading(true)
     try {
       await authService.setPassword({ newPassword: values.newPassword })
-      message.success(t('profile.msg_set_password_success'))
+      message.success('Đặt mật khẩu thành công')
       updateUser({ ...user!, hasPassword: true, password: 'set' })
       passwordForm.resetFields()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('profile.msg_set_password_failed'))
+      message.error(err.response?.data?.message || 'Đặt mật khẩu thất bại')
     } finally {
       setLoading(false)
     }
@@ -724,16 +720,16 @@ export default function AccountProfileModal({
     try {
       if (editAddress) {
         await updateAddress(editAddress._id, values)
-        message.success(t('profile.msg_address_update_success'))
+        message.success('Cập nhật địa chỉ thành công')
       } else {
         await createAddress({ ...values, isDefault: true })
-        message.success(t('profile.msg_address_created'))
+        message.success('Thêm địa chỉ thành công')
       }
       setAddressModalOpen(false)
       await loadAddresses()
     } catch (err: any) {
       console.error(err)
-      message.error(err.response?.data?.message || t('profile.msg_address_save_failed'))
+      message.error(err.response?.data?.message || 'Lưu địa chỉ thất bại')
     } finally {
       setLoading(false)
     }
@@ -743,11 +739,11 @@ export default function AccountProfileModal({
     setLoading(true)
     try {
       await deleteAddress(addressId)
-      message.success(t('profile.msg_address_deleted'))
+      message.success('Xóa địa chỉ thành công')
       await loadAddresses()
     } catch (err: any) {
       console.error(err)
-      message.error(err.response?.data?.message || t('profile.msg_address_delete_failed'))
+      message.error(err.response?.data?.message || 'Xóa địa chỉ thất bại')
     } finally {
       setLoading(false)
     }
@@ -757,11 +753,11 @@ export default function AccountProfileModal({
     setLoading(true)
     try {
       await setDefaultAddress(addressId)
-      message.success(t('profile.msg_default_set'))
+      message.success('Đặt làm mặc định thành công')
       await loadAddresses()
     } catch (err: any) {
       console.error(err)
-      message.error(err.response?.data?.message || t('profile.msg_default_failed'))
+      message.error(err.response?.data?.message || 'Đặt mặc định thất bại')
     } finally {
       setLoading(false)
     }
@@ -769,7 +765,7 @@ export default function AccountProfileModal({
 
   const handleChangePassword = async (values: any) => {
     if (values.newPassword !== values.confirm) {
-      message.error(t('profile.msg_password_mismatch'))
+      message.error('Mật khẩu xác nhận không khớp')
       return
     }
     setLoading(true)
@@ -778,10 +774,10 @@ export default function AccountProfileModal({
         currentPassword: values.currentPassword,
         newPassword: values.newPassword,
       })
-      message.success(t('profile.msg_change_password_success'))
+      message.success('Đổi mật khẩu thành công')
       passwordForm.resetFields()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('profile.msg_change_password_failed'))
+      message.error(err.response?.data?.message || 'Đổi mật khẩu thất bại')
     } finally {
       setLoading(false)
     }
@@ -804,7 +800,7 @@ export default function AccountProfileModal({
   const handleCopyContact = async () => {
     if (!user?.email && !user?.phone) return
     await navigator.clipboard?.writeText(user.email || user.phone || '')
-    message.success(t('profile.msg_contact_copied'))
+    message.success('Đã sao chép thông tin liên hệ')
   }
 
   const isProfileMobile = !screens.md
@@ -819,10 +815,10 @@ export default function AccountProfileModal({
     boxSizing: 'border-box',
   } as CSSProperties
   const tabs: ProfileTabItem[] = [
-    { key: 'profile', label: t('profile.info'), icon: <UserOutlined /> },
-    { key: 'address', label: t('profile.address'), icon: <EnvironmentOutlined /> },
-    { key: 'password', label: hasPassword ? t('profile.change_password') : t('profile.set_password'), icon: <LockOutlined /> },
-    { key: 'appearance', label: t('profile.appearance'), icon: <BgColorsOutlined /> },
+    { key: 'profile', label: 'Thông tin', icon: <UserOutlined /> },
+    { key: 'address', label: 'Địa chỉ', icon: <EnvironmentOutlined /> },
+    { key: 'password', label: hasPassword ? 'Đổi mật khẩu' : 'Đặt mật khẩu', icon: <LockOutlined /> },
+    { key: 'appearance', label: 'Giao diện', icon: <BgColorsOutlined /> },
   ]
 
   const renderSectionHeader = (icon: ReactNode, title: string, subtitle: string) => (
@@ -850,7 +846,6 @@ export default function AccountProfileModal({
         onCoverRemove={handleCoverRemove}
         mediaUploading={mediaUploading}
         isMobile={isProfileCompact}
-        t={t}
       />
 
       <div className="profile-modal-main">
@@ -886,34 +881,34 @@ export default function AccountProfileModal({
             {activeTab === 'profile' && (
               <div>
                 <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<UserOutlined />, t('profile.info_title'), t('profile.info_subtitle'))}
+                  {renderSectionHeader(<UserOutlined />, 'Thông tin cá nhân', 'Cập nhật thông tin cơ bản của bạn')}
 
                   <Form layout="vertical" form={form} onFinish={handleSave} className={profileFormClass}>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                      <Form.Item label={t('profile.name')} name="name" rules={[{ required: true, message: t('profile.name_placeholder') }]}>
-                        <Input prefix={<UserOutlined />} placeholder={t('profile.your_name')} style={profileInputStyle} />
+                      <Form.Item label={'Tên'} name="name" rules={[{ required: true, message: 'Nhập tên' }]}>
+                        <Input prefix={<UserOutlined />} placeholder={'Tên của bạn'} style={profileInputStyle} />
                       </Form.Item>
 
-                      <Form.Item label={t('profile.phone')} name="phone">
-                        <Input prefix={<PhoneOutlined />} placeholder={t('profile.phone_placeholder')} style={profileInputStyle} />
+                      <Form.Item label={'Số điện thoại'} name="phone">
+                        <Input prefix={<PhoneOutlined />} placeholder={'Nhập số điện thoại'} style={profileInputStyle} />
                       </Form.Item>
 
                       <Form.Item
                         label="Email"
                         name="email"
                         rules={[
-                          { type: 'email', message: t('profile.invalid_email') },
-                          { required: !user.email, message: t('profile.email_placeholder') },
+                          { type: 'email', message: 'Email không hợp lệ' },
+                          { required: !user.email, message: 'example@email.com' },
                         ]}
                       >
-                        <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder={user.email ? t('profile.email_placeholder') : t('profile.add_email_placeholder')} style={user.email ? profileDisabledInputStyle : profileInputStyle} />
+                        <Input disabled={!!user.email} suffix={user.email ? <LockOutlined /> : null} placeholder={user.email ? 'example@email.com' : 'Thêm email'} style={user.email ? profileDisabledInputStyle : profileInputStyle} />
                       </Form.Item>
 
                       <Form.Item label="Username">
                         <Input disabled suffix={<LockOutlined />} value={getUsernameFromEmail(watchedEmail || user.email)} style={profileDisabledInputStyle} />
                       </Form.Item>
 
-                      <Form.Item label={t('profile.dob')} name="dateOfBirth" className="col-span-full">
+                      <Form.Item label={'Ngày sinh'} name="dateOfBirth" className="col-span-full">
                         <Input
                           type="date"
                           style={{
@@ -928,7 +923,7 @@ export default function AccountProfileModal({
                     </div>
 
                     <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !mt-1 !h-12 !rounded-2xl !text-[15px]`}>
-                      {t('profile.save_changes')}
+                      {'Lưu thay đổi'}
                     </Button>
                   </Form>
                 </div>
@@ -949,7 +944,7 @@ export default function AccountProfileModal({
                       fontSize: 14,
                     }}
                   >
-                    {t('profile.logout')}
+                    {'Đăng xuất'}
                   </Button>
                 </div>
               </div>
@@ -957,17 +952,17 @@ export default function AccountProfileModal({
 
             {activeTab === 'appearance' && (
               <div style={responsiveSectionCardStyle}>
-                {renderSectionHeader(<BgColorsOutlined />, t('profile.appearance_title'), t('profile.appearance_subtitle'))}
+                {renderSectionHeader(<BgColorsOutlined />, 'Giao diện', 'Tùy chỉnh giao diện cá nhân của bạn')}
                 <div className="mb-6 border-b border-[var(--theme-border)] pb-5">
-                  <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.personal_theme')}</div>
+                  <div className="font-extrabold" style={{ color: token.colorText }}>{'Giao diện cá nhân'}</div>
                   <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                    {t('profile.personal_theme_subtitle')}
+                    {'Chọn chế độ giao diện bạn muốn'}
                   </div>
                   <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
                     {([
-                      { value: 'system', label: t('profile.theme_system') },
-                      { value: 'light', label: t('profile.theme_light') },
-                      { value: 'dark', label: t('profile.theme_dark') },
+                      { value: 'system', label: 'Theo hệ thống' },
+                      { value: 'light', label: 'Sáng' },
+                      { value: 'dark', label: 'Tối' },
                     ] as Array<{ value: 'system' | 'light' | 'dark'; label: string }>).map((item) => {
                       const active = (user.themePreference || 'system') === item.value
                       return (
@@ -992,14 +987,14 @@ export default function AccountProfileModal({
                 </div>
                 <div className="flex items-start justify-between gap-4 max-[560px]:flex-col">
                   <div>
-                    <div className="font-extrabold" style={{ color: token.colorText }}>{t('profile.accent_color')}</div>
+                    <div className="font-extrabold" style={{ color: token.colorText }}>{'Màu nhấn'}</div>
                     <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                      {t('profile.accent_subtitle')}
+                      {'Tùy chỉnh màu nhấn cho giao diện'}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {[
-                      { label: t('profile.bg_mode'), color: previewTheme.bg },
+                      { label: 'Nền', color: previewTheme.bg },
                       { label: 'Card', color: previewTheme.card },
                       { label: 'Text', color: previewTheme.text },
                     ].map((item) => (
@@ -1032,7 +1027,7 @@ export default function AccountProfileModal({
                       onTouchEnd={(event) => handleAccentCommit(event.currentTarget.value)}
                       className="h-11 w-16 cursor-pointer rounded-xl border bg-transparent p-1"
                       style={{ borderColor: 'var(--theme-border-strong)' }}
-                      aria-label={t('profile.choose_accent')}
+                      aria-label={'Chọn màu nhấn'}
                     />
                   </div>
                   <div className="font-semibold" style={{ color: token.colorText }}>{accentColor.toUpperCase()}</div>
@@ -1047,7 +1042,7 @@ export default function AccountProfileModal({
                       color: !user?.accentColor ? 'var(--theme-button-text)' : 'var(--gs-text)',
                     }}
                   >
-                    {t('profile.accent_system')}
+                    {'Mặc định'}
                   </button>
                 </div>
 
@@ -1062,62 +1057,13 @@ export default function AccountProfileModal({
                         backgroundColor: item.color,
                         borderColor: accentColor.toLowerCase() === item.color.toLowerCase() ? '#ffffff' : token.colorBorder,
                       }}
-                      aria-label={t('profile.choose_color', { label: item.label })}
+                      aria-label={'Chọn màu'}
                       title={item.label}
                     />
                   ))}
                 </div>
 
-                <div className="mt-6 border-t border-[var(--theme-border)] pt-6">
-                  <div className="font-extrabold" style={{ color: token.colorText }}>Ngôn ngữ / Language</div>
-                  <div className="mt-[3px] text-[13px]" style={{ color: token.colorTextSecondary }}>
-                    Chuyển đổi giữa Tiếng Việt và English
-                  </div>
-                  <div className="mt-4 flex items-center gap-3">
-                    <button
-                      onClick={() => i18n.changeLanguage('vi')}
-                      title="Tiếng Việt"
-                      style={{
-                        background: i18n.language === 'vi' ? 'var(--theme-active-bg)' : 'transparent',
-                        border: i18n.language === 'vi' ? '1px solid var(--theme-active-bg)' : '1px solid var(--theme-border-strong)',
-                        borderRadius: 10,
-                        cursor: 'pointer',
-                        padding: '8px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        opacity: i18n.language === 'vi' ? 1 : 0.5,
-                        transition: 'all 0.2s',
-                        fontWeight: i18n.language === 'vi' ? 600 : 400,
-                        color: i18n.language === 'vi' ? 'var(--theme-active-text)' : 'var(--theme-text)',
-                      }}
-                    >
-                      <img src="https://flagcdn.com/16x12/vn.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />
-                      Tiếng Việt
-                    </button>
-                    <button
-                      onClick={() => i18n.changeLanguage('en')}
-                      title="English"
-                      style={{
-                        background: i18n.language === 'en' ? 'var(--theme-active-bg)' : 'transparent',
-                        border: i18n.language === 'en' ? '1px solid var(--theme-active-bg)' : '1px solid var(--theme-border-strong)',
-                        borderRadius: 10,
-                        cursor: 'pointer',
-                        padding: '8px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        opacity: i18n.language === 'en' ? 1 : 0.5,
-                        transition: 'all 0.2s',
-                        fontWeight: i18n.language === 'en' ? 600 : 400,
-                        color: i18n.language === 'en' ? 'var(--theme-active-text)' : 'var(--theme-text)',
-                      }}
-                    >
-                      <img src="https://flagcdn.com/16x12/us.png" alt="" style={{ height: 16, width: 'auto', display: 'block' }} />
-                      English
-                    </button>
-                  </div>
-                </div>
+                
               </div>
             )}
 
@@ -1126,16 +1072,16 @@ export default function AccountProfileModal({
                 className={profileFormClass}
                 style={responsiveSectionCardStyle}
               >
-                {renderSectionHeader(<EnvironmentOutlined />, t('profile.address_title'), t('profile.address_subtitle'))}
+                {renderSectionHeader(<EnvironmentOutlined />, 'Sổ địa chỉ', 'Quản lý địa chỉ giao hàng')}
                 <div className="flex items-center justify-between gap-4 max-[768px]:flex-col max-[768px]:items-start">
                   <Button type="primary" icon={<PlusOutlined />} onClick={openCreateAddress} loading={loading} className="!rounded-lg !border-0 !bg-[var(--profile-accent)] !font-bold !text-[var(--theme-button-text)] hover:!bg-[var(--profile-accent-hover)]">
-                    {t('profile.add_address')}
+                    {'Thêm địa chỉ'}
                   </Button>
                 </div>
 
                 <div className="mt-4">
                   {addresses.length === 0 ? (
-                    <Empty description={t('profile.no_address')} />
+                    <Empty description={'Chưa có địa chỉ'} />
                   ) : addresses.map((address) => {
                     const fullAddress = [
                       address.street,
@@ -1169,7 +1115,7 @@ export default function AccountProfileModal({
                                 }}
                               >
                                 <StarFilled />
-                                {t('profile.default')}
+                                {'Mặc định'}
                               </span>
                             )}
                           </div>
@@ -1184,7 +1130,7 @@ export default function AccountProfileModal({
                             <button
                               className={addressActionButtonClass}
                               type="button"
-                              title={t('profile.set_default')}
+                              title={'Đặt làm mặc định'}
                               onClick={() => handleSetDefault(address._id)}
                             >
                               <StarOutlined />
@@ -1193,7 +1139,7 @@ export default function AccountProfileModal({
                           <button
                             className={addressActionButtonClass}
                             type="button"
-                            title={t('profile.edit_address')}
+                            title={'Sửa địa chỉ'}
                             onClick={() => openEditAddress(address)}
                           >
                             <EditOutlined />
@@ -1201,7 +1147,7 @@ export default function AccountProfileModal({
                           <button
                             className={`${addressActionButtonClass} hover:!border-[var(--profile-accent-border)] hover:!bg-[var(--profile-accent-bg)] hover:!text-[var(--profile-accent)]`}
                             type="button"
-                            title={t('profile.delete_address')}
+                            title={'Xóa địa chỉ'}
                             onClick={() => handleDeleteAddress(address._id)}
                           >
                             <DeleteOutlined />
@@ -1213,40 +1159,40 @@ export default function AccountProfileModal({
                 </div>
 
                 <Modal
-                  title={editAddress ? t('profile.address_modal_edit') : t('profile.address_modal_create')}
+                  title={editAddress ? 'Sửa địa chỉ' : 'Thêm địa chỉ mới'}
                   open={addressModalOpen}
                   onCancel={() => setAddressModalOpen(false)}
                   footer={null}
-                  destroyOnClose
+                  destroyOnHidden
                   className={addressEditModalClass}
                   style={profileThemeStyle}
                 >
                   <Form form={addressForm} layout="vertical" onFinish={handleSaveAddress} initialValues={{ isDefault: false }} className={profileFormClass}>
-                    <Form.Item name="fullName" label={t('profile.form_recipient')} rules={[{ required: true, message: t('profile.form_recipient_required') }]}>
+                    <Form.Item name="fullName" label={'Người nhận'} rules={[{ required: true, message: 'Vui lòng nhập tên người nhận' }]}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
-                    <Form.Item name="phone" label={t('profile.form_phone')} rules={[{ required: true, message: t('profile.form_phone_required') }, { pattern: /^0\d{9,10}$/, message: t('profile.form_phone_invalid') }]}>
+                    <Form.Item name="phone" label={'Số điện thoại'} rules={[{ required: true, message: 'Vui lòng nhập số điện thoại' }, { pattern: /^0\d{9,10}$/, message: 'Số điện thoại không hợp lệ' }]}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
-                    <Form.Item name="street" label={t('profile.form_street')} rules={[{ required: true, message: t('profile.form_street_required') }]}>
+                    <Form.Item name="street" label={'Địa chỉ'} rules={[{ required: true, message: 'Vui lòng nhập địa chỉ' }]}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
-                    <Form.Item name="ward" label={t('profile.form_ward')}>
+                    <Form.Item name="ward" label={'Phường / Xã'}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
-                    <Form.Item name="district" label={t('profile.form_district')} rules={[{ required: true, message: t('profile.form_district_required') }]}>
+                    <Form.Item name="district" label={'Quận / Huyện'} rules={[{ required: true, message: 'Vui lòng nhập quận/huyện' }]}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
-                    <Form.Item name="city" label={t('profile.form_city')} rules={[{ required: true, message: t('profile.form_city_required') }]}>
+                    <Form.Item name="city" label={'Tỉnh / Thành phố'} rules={[{ required: true, message: 'Vui lòng nhập tỉnh/thành phố' }]}>
                       <Input style={profileInputStyle} />
                     </Form.Item>
                     <Form.Item name="isDefault" valuePropName="checked">
-                      <Checkbox>{t('profile.form_is_default')}</Checkbox>
+                      <Checkbox>{'Đặt làm địa chỉ mặc định'}</Checkbox>
                     </Form.Item>
                     <Form.Item>
                       <Space>
-                        <Button type="primary" htmlType="submit" loading={loading}>{t('profile.form_save')}</Button>
-                        <Button onClick={() => setAddressModalOpen(false)}>{t('profile.form_cancel')}</Button>
+                        <Button type="primary" htmlType="submit" loading={loading}>{'Lưu'}</Button>
+                        <Button onClick={() => setAddressModalOpen(false)}>{'Hủy'}</Button>
                       </Space>
                     </Form.Item>
                   </Form>
@@ -1256,19 +1202,19 @@ export default function AccountProfileModal({
 
             {activeTab === 'password' && !hasPassword && (
               <div style={responsiveSectionCardStyle}>
-                {renderSectionHeader(<LockOutlined />, t('profile.set_password_title'), t('profile.set_password_subtitle'))}
+                {renderSectionHeader(<LockOutlined />, 'Đặt mật khẩu', 'Tạo mật khẩu cho tài khoản của bạn')}
 
                 <Form layout="vertical" form={passwordForm} onFinish={handleSetPassword} className={profileFormClass}>
-                  <Form.Item label={t('profile.new_password')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
+                  <Form.Item label={'Mật khẩu mới'} name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu mới' }]}>
+                    <Input.Password placeholder={'Ít nhất 6 ký tự'} style={profilePasswordInputStyle} />
                   </Form.Item>
 
-                  <Form.Item label={t('profile.confirm_password')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.confirm_password_hint')} style={profilePasswordInputStyle} />
+                  <Form.Item label={'Xác nhận mật khẩu'} name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu mới' }]}>
+                    <Input.Password placeholder={'Nhập lại mật khẩu mới'} style={profilePasswordInputStyle} />
                   </Form.Item>
 
                   <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                    {t('profile.set_password_btn')}
+                    {'Đặt mật khẩu'}
                   </Button>
                 </Form>
               </div>
@@ -1276,23 +1222,23 @@ export default function AccountProfileModal({
 
             {activeTab === 'password' && hasPassword && (
               <div style={responsiveSectionCardStyle}>
-                {renderSectionHeader(<LockOutlined />, t('profile.change_password_title'), t('profile.change_password_subtitle'))}
+                {renderSectionHeader(<LockOutlined />, 'Đổi mật khẩu', 'Cập nhật mật khẩu tài khoản')}
 
                 <Form layout="vertical" form={passwordForm} onFinish={handleChangePassword} className={profileFormClass}>
-                  <Form.Item label={t('profile.current_password')} name="currentPassword" rules={[{ required: true, message: t('profile.current_password_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.current_password_hint')} style={profilePasswordInputStyle} />
+                  <Form.Item label={'Mật khẩu hiện tại'} name="currentPassword" rules={[{ required: true, message: 'Nhập mật khẩu hiện tại' }]}>
+                    <Input.Password placeholder={'Nhập mật khẩu hiện tại của bạn'} style={profilePasswordInputStyle} />
                   </Form.Item>
 
-                  <Form.Item label={t('profile.new_password_change')} name="newPassword" rules={[{ required: true, message: t('profile.new_password_change_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.new_password_hint')} style={profilePasswordInputStyle} />
+                  <Form.Item label={'Mật khẩu mới'} name="newPassword" rules={[{ required: true, message: 'Nhập mật khẩu mới' }]}>
+                    <Input.Password placeholder={'Ít nhất 6 ký tự'} style={profilePasswordInputStyle} />
                   </Form.Item>
 
-                  <Form.Item label={t('profile.confirm_password_change')} name="confirm" rules={[{ required: true, message: t('profile.confirm_password_change_placeholder') }]}>
-                    <Input.Password placeholder={t('profile.confirm_password_change_hint')} style={profilePasswordInputStyle} />
+                  <Form.Item label={'Xác nhận mật khẩu mới'} name="confirm" rules={[{ required: true, message: 'Xác nhận mật khẩu mới' }]}>
+                    <Input.Password placeholder={'Nhập lại mật khẩu mới'} style={profilePasswordInputStyle} />
                   </Form.Item>
 
                   <Button type="primary" htmlType="submit" block loading={loading} className={`${primaryButtonClass} !h-12 !rounded-2xl !text-[15px]`}>
-                    {t('profile.change_password_btn')}
+                    {'Đổi mật khẩu'}
                   </Button>
                 </Form>
               </div>

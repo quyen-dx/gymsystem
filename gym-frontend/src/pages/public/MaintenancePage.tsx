@@ -1,6 +1,5 @@
 import { ClockCircleOutlined, CustomerServiceOutlined, ToolOutlined } from '@ant-design/icons'
 import { Button, Card, Typography } from 'antd'
-import { useTranslation } from 'react-i18next'
 import { useSystemSettings } from '../../context/SystemSettingsContext'
 
 const { Text, Title } = Typography
@@ -11,13 +10,12 @@ const pickMaintenanceMessage = (message: any, language: string, fallback: string
 }
 
 export default function MaintenancePage() {
-  const { t, i18n } = useTranslation()
   const { settings } = useSystemSettings()
   const siteName = settings.general.siteName || 'GymPro'
   const message = pickMaintenanceMessage(
     settings.general.maintenanceMessage,
-    i18n.language,
-    t('system_settings.maintenance.default_message'),
+    'vi',
+    'Hệ thống đang được bảo trì. Vui lòng quay lại sau.',
   )
 
   return (
@@ -40,7 +38,7 @@ export default function MaintenancePage() {
         </div>
 
         <Title level={1} className="!mb-4 !text-3xl !font-black !text-[var(--theme-text)] sm:!text-4xl">
-          {t('system_settings.maintenance.title')}
+          {'Đang bảo trì'}
         </Title>
 
         <Text className="mx-auto block max-w-xl text-base leading-7 text-[var(--theme-muted)] sm:text-lg">
@@ -51,16 +49,16 @@ export default function MaintenancePage() {
           <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4 text-left">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--theme-text)]">
               <ClockCircleOutlined className="text-[var(--theme-accent)]" />
-              {t('system_settings.maintenance.estimate_label')}
+              {'Thời gian dự kiến'}
             </div>
-            <Text className="text-sm text-[var(--theme-muted)]">{t('system_settings.maintenance.estimate_value')}</Text>
+            <Text className="text-sm text-[var(--theme-muted)]">{'Vài giờ tới'}</Text>
           </div>
           <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4 text-left">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--theme-text)]">
               <ToolOutlined className="text-[var(--theme-accent)]" />
-              {t('system_settings.maintenance.reason_label')}
+              {'Lý do'}
             </div>
-            <Text className="text-sm text-[var(--theme-muted)]">{t('system_settings.maintenance.reason_value')}</Text>
+            <Text className="text-sm text-[var(--theme-muted)]">{'Nâng cấp hệ thống'}</Text>
           </div>
         </div>
 
@@ -71,7 +69,7 @@ export default function MaintenancePage() {
           className="mt-8 !h-12 !rounded-full !px-7 !font-bold"
           href="mailto:support@gympro.vn"
         >
-          {t('system_settings.maintenance.contact_support')}
+          {'Liên hệ hỗ trợ'}
         </Button>
       </Card>
     </main>

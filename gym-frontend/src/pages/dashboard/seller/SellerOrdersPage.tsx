@@ -1,6 +1,5 @@
 import { Avatar, Card, Select, Space, Table, Tag, Typography, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { getSellerOrders, updateSellerOrderStatus } from '../../../services/orderService'
 import { getUserDisplayName } from '../../../utils/userDisplay'
@@ -15,7 +14,6 @@ const getItemName = (item: any, fallback: string) => item.productName || item.na
 const getItemVariant = (item: any) => item.variant?.weight || item.weight || ''
 
 export default function SellerOrdersPage() {
-    const { t } = useTranslation()
     const [orders, setOrders] = useState<any[]>([])
     const [statusFilter, setStatusFilter] = useState<string>()
     const [updatingId, setUpdatingId] = useState('')
@@ -37,9 +35,9 @@ export default function SellerOrdersPage() {
     )
 
     const statusLabelMap: Record<string, string> = {
-        'CHỜ XÁC NHẬN': t('seller_orders.status_pending'),
-        'ĐANG GIAO HÀNG': t('seller_orders.status_shipping'),
-        'GIAO THÀNH CÔNG': t('seller_orders.status_delivered'),
+        'CHỜ XÁC NHẬN': 'Chờ xác nhận',
+        'ĐANG GIAO HÀNG': 'Đang giao hàng',
+        'GIAO THÀNH CÔNG': 'Giao thành công',
     }
     const statusOptions = ORDER_STATUSES.map((status) => ({ label: statusLabelMap[status] || status, value: status }))
 
@@ -50,30 +48,30 @@ export default function SellerOrdersPage() {
         try {
             const response = await updateSellerOrderStatus(orderId, status)
             setOrders((current) => current.map((order) => order._id === orderId ? response.data.data : order))
-            message.success(t('seller_orders.update_success'))
+            message.success('Cập nhật trạng thái thành công')
         } catch (error: any) {
             setOrders(previous)
-            message.error(error?.response?.data?.message || t('seller_orders.update_failed'))
+            message.error(error?.response?.data?.message || 'Cập nhật thất bại')
         } finally {
             setUpdatingId('')
         }
     }
 
     const columns = [
-        { title: t('seller_orders.order_id'), dataIndex: '_id', key: '_id' },
+        { title: 'Mã đơn', dataIndex: '_id', key: '_id' },
         {
-            title: t('seller_orders.buyer'),
+            title: 'Người mua',
             dataIndex: 'userId',
             key: 'userId',
             render: (user: any) => (
                 <Space direction="vertical" size={0}>
-                    <Text strong>{getUserDisplayName(user, t('seller_orders.customer_fallback'))}</Text>
-                    <Text type="secondary">{user?.phone || user?.email || t('seller_orders.no_contact')}</Text>
+                    <Text strong>{getUserDisplayName(user, 'Khách hàng')}</Text>
+                    <Text type="secondary">{user?.phone || user?.email || 'Không có liên hệ'}</Text>
                 </Space>
             ),
         },
         {
-            title: t('seller_orders.products'),
+            title: 'Sản phẩm',
             dataIndex: 'items',
             key: 'items',
             render: (items: any[]) => (
@@ -83,13 +81,13 @@ export default function SellerOrdersPage() {
                         return (
                             <Space key={`${item.productId?._id || item.productId || index}-${getItemVariant(item)}`} align="start">
                                 <Avatar shape="square" src={image || undefined} size={48}>
-                                    {!image && getItemName(item, t('seller_dashboard.product_fallback')).charAt(0)}
+                                    {!image && getItemName(item, 'Sản phẩm').charAt(0)}
                                 </Avatar>
                                 <div>
-                                    <Text strong>{getItemName(item, t('seller_dashboard.product_fallback'))}</Text>
+                                    <Text strong>{getItemName(item, 'Sản phẩm')}</Text>
                                     <div>
                                         {getItemVariant(item) && <Tag color="orange">{getItemVariant(item)}</Tag>}
-                                        <Tag>{t('seller_orders.quantity')}: {item.quantity}</Tag>
+                                        <Tag>Số lượng: {item.quantity}</Tag>
                                         <Tag>{formatMoney(item.price)} / 1</Tag>
                                     </div>
                                 </div>
@@ -99,9 +97,9 @@ export default function SellerOrdersPage() {
                 </Space>
             ),
         },
-        { title: t('seller_orders.total'), dataIndex: 'totalAmount', key: 'totalAmount', render: (value: number) => formatMoney(value) },
+        { title: 'Tổng tiền', dataIndex: 'totalAmount', key: 'totalAmount', render: (value: number) => formatMoney(value) },
         {
-            title: t('seller_orders.status'),
+            title: 'Trạng thái',
             dataIndex: 'status',
             key: 'status',
             render: (status: string, record: any) => (
@@ -121,10 +119,10 @@ export default function SellerOrdersPage() {
             <div className="p-4 max-[640px]:p-0">
                 <Card className="max-[640px]:border-0 max-[640px]:bg-transparent">
                     <div className="dashboard-filter-bar">
-                        <Title level={4} style={{ margin: 0 }}>{t('seller_orders.title')}</Title>
+                        <Title level={4} style={{ margin: 0 }}>Đơn hàng của tôi</Title>
                         <Select
                             allowClear
-                            placeholder={t('seller_orders.status_filter')}
+                            placeholder="Lọc theo trạng thái"
                             options={statusOptions}
                             value={statusFilter}
                             onChange={setStatusFilter}

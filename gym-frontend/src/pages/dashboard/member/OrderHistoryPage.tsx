@@ -1,6 +1,5 @@
 import { Button, Card, Empty, Image, Popconfirm, Space, Tag, Typography, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { deleteMyOrderHistory, getMyOrders } from '../../../services/orderService'
@@ -32,7 +31,6 @@ const getOrderItemVariant = (item: any) => item.variant?.weight || item.weight |
 const hasOrderItems = (order: any) => Array.isArray(order.items) && order.items.length > 0
 
 export default function OrderHistoryPage() {
-    const { t } = useTranslation()
     const [orders, setOrders] = useState<any[]>([])
     const [deletingId, setDeletingId] = useState('')
 
@@ -56,10 +54,10 @@ export default function OrderHistoryPage() {
         setOrders((current) => current.filter((order) => order._id !== orderId))
         try {
             await deleteMyOrderHistory(orderId)
-            message.success(t('order_history.msg_deleted'))
+            message.success('Đã xóa lịch sử đơn hàng')
         } catch (error: any) {
             setOrders(previous)
-            message.error(error?.response?.data?.message || t('order_history.msg_delete_failed'))
+            message.error(error?.response?.data?.message || 'Xóa lịch sử thất bại')
         } finally {
             setDeletingId('')
         }
@@ -69,9 +67,9 @@ export default function OrderHistoryPage() {
         <MemberLayout>
             <div className="member-page">
                 <Card>
-                    <Title level={4}>{t('order_history.title')}</Title>
+                    <Title level={4}>Lịch sử đơn hàng</Title>
                     {visibleOrders.length === 0 ? (
-                        <Empty description={t('order_history.empty')} />
+                        <Empty description="Không có đơn hàng nào" />
                     ) : (
                         <div style={{ display: 'grid', gap: 16 }}>
                             {visibleOrders.map((order) => (
@@ -80,23 +78,23 @@ export default function OrderHistoryPage() {
                                     size="small"
                                     title={
                                         <Space wrap>
-                                            <Text strong>{t('order_history.order_id', { id: String(order._id).slice(-8).toUpperCase() })}</Text>
+                                            <Text strong>{`Đơn hàng #${String(order._id).slice(-8).toUpperCase()}`}</Text>
                                             <Tag color="blue">{order.shopId?.name || 'Shop'}</Tag>
                                         </Space>
                                     }
                                     extra={
                                         <Space>
                                             <Link to={`/track/${order._id}`}>
-                                                <Button type="link">{t('order_history.track')}</Button>
+                                                <Button type="link">Theo dõi</Button>
                                             </Link>
                                             <Popconfirm
-                                                title={t('order_history.confirm_delete_title')}
-                                                description={t('order_history.confirm_delete_desc')}
-                                                okText={t('order_history.confirm_delete_ok')}
-                                                cancelText={t('order_history.confirm_delete_cancel')}
+                                                title="Xóa lịch sử đơn hàng?"
+                                                description="Hành động này không thể hoàn tác"
+                                                okText="Xóa"
+                                                cancelText="Hủy"
                                                 onConfirm={() => handleDeleteHistory(order._id)}
                                             >
-                                                <Button danger type="text" loading={deletingId === order._id}>{t('order_history.delete')}</Button>
+                                                <Button danger type="text" loading={deletingId === order._id}>Xóa</Button>
                                             </Popconfirm>
                                         </Space>
                                     }
@@ -126,7 +124,7 @@ export default function OrderHistoryPage() {
                                                         <div style={{ width: 72, height: 72, borderRadius: 8, background: 'var(--theme-card)' }} />
                                                     )}
                                                     <div>
-                                                        <Text strong>{getOrderItemName(item, t('order_history.product_fallback'))}</Text>
+                                                        <Text strong>{getOrderItemName(item, 'Sản phẩm')}</Text>
                                                         <div style={{ marginTop: 6 }}>
                                                             <Text type="secondary">
                                                                 x{item.quantity} - {formatMoney(item.price)}
@@ -142,15 +140,15 @@ export default function OrderHistoryPage() {
                                     <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', marginTop: 14, paddingTop: 12 }}>
                                         <Space direction="vertical" size={4} style={{ width: '100%' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                <Text>{t('order_history.total')}</Text>
+                                                <Text>Tổng tiền</Text>
                                                 <Text strong>{formatMoney(order.totalAmount)}</Text>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                <Text>{t('order_history.shipping_fee')}</Text>
+                                                <Text>Phí vận chuyển</Text>
                                                 <Text>{formatMoney(order.shippingFee)}</Text>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                <Text>{t('order_history.status')}</Text>
+                                                <Text>Trạng thái</Text>
                                                 <Tag color={statusColor[order.status] || statusColor[statusVi[order.status]] || 'default'}>
                                                     {statusVi[order.status] || order.status}
                                                 </Tag>

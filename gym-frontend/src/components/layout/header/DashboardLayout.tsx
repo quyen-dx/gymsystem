@@ -23,12 +23,10 @@ import {
   Typography,
 } from 'antd'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
 import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
-import LanguageSelect from '../../common/LanguageSelect'
 import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
 import { getUserDisplayName, getUserInitialName } from '../../../utils/userDisplay'
 
@@ -46,7 +44,6 @@ const getViewRoleFromPath = (pathname: string, actualRole?: string) => {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
-  const { t } = useTranslation()
   const { settings, isEnabled } = useSystemSettings()
   const navigate = useNavigate()
   const [pendingCount, setPendingCount] = useState(0)
@@ -56,7 +53,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const actualRole = user?.role
   const viewRole = getViewRoleFromPath(location.pathname, actualRole)
-  const displayName = getUserDisplayName(user, t('profile.account_name'))
+  const roleLabel: Record<string, string> = { admin: 'Quản trị', staff: 'Nhân viên', pt: 'PT', seller: 'Người bán', member: 'Thành viên' }
+  const displayName = getUserDisplayName(user, 'Tài khoản')
   const avatarName = getUserInitialName(user, 'U')
 
   useEffect(() => {
@@ -69,15 +67,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const roleMenus: Record<string, any[]> = {
     admin: [
-      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
-      { key: '/admin', label: t('nav.overview'), icon: <DashboardOutlined /> },
-      { key: '/admin/users', label: t('nav.users'), icon: <UserOutlined /> },
-      ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/admin/plans', label: t('nav.plans'), icon: <CalendarOutlined /> }] : []),
+      { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
+      { key: '/admin', label: 'Tổng quan', icon: <DashboardOutlined /> },
+      { key: '/admin/users', label: 'Người dùng', icon: <UserOutlined /> },
+      ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/admin/plans', label: 'Gói tập', icon: <CalendarOutlined /> }] : []),
       {
         key: '/admin/partnerships',
         label: (
           <span style={{ position: 'relative', display: 'inline-block', paddingRight: 22 }}>
-            <span>{t('nav.partnerships')}</span>
+            <span>{'Đối tác'}</span>
             {pendingCount > 0 && (
               <span
                 style={{
@@ -105,36 +103,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         icon: <TeamOutlined />,
       },
 
-      { key: '/admin/members', label: t('nav.members'), icon: <TeamOutlined /> },
-      ...(isEnabled('pt.moduleEnabled') ? [{ key: '/admin/trainers', label: `${t('nav.trainers')} (PT)`, icon: <UserOutlined /> }] : []),
-      ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: t('nav.reports'), icon: <BarChartOutlined /> }] : []),
-      { key: '/admin/faqs', label: t('nav.faq_manager'), icon: <QuestionCircleOutlined /> },
-      { key: '/admin/feedback', label: t('nav.feedback_manager'), icon: <CommentOutlined /> },
-      { key: '/admin/policies', label: t('nav.policies'), icon: <FileTextOutlined /> },
-      { key: '/admin/system-settings', label: t('nav.system_settings'), icon: <SettingOutlined /> },
+      { key: '/admin/members', label: 'Hội viên', icon: <TeamOutlined /> },
+      ...(isEnabled('pt.moduleEnabled') ? [{ key: '/admin/trainers', label: `${'Huấn luyện viên'} (PT)`, icon: <UserOutlined /> }] : []),
+      ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: 'Báo cáo', icon: <BarChartOutlined /> }] : []),
+      { key: '/admin/faqs', label: 'Quản lý FAQ', icon: <QuestionCircleOutlined /> },
+      { key: '/admin/feedback', label: 'Quản lý phản hồi', icon: <CommentOutlined /> },
+      { key: '/admin/policies', label: 'Chính sách', icon: <FileTextOutlined /> },
+      { key: '/admin/system-settings', label: 'Cài đặt hệ thống', icon: <SettingOutlined /> },
     ],
     staff: [
-      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
-      ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/staff/checkin', label: t('nav.checkin'), icon: <DashboardOutlined /> }] : []),
-      { key: '/staff/members', label: t('nav.members'), icon: <TeamOutlined /> },
-      { key: '/staff/payments', label: t('nav.payments'), icon: <CreditCardOutlined /> },
-      { key: '/staff/notifications', label: t('nav.notifications'), icon: <CommentOutlined /> },
+      { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
+      ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/staff/checkin', label: 'Check-in', icon: <DashboardOutlined /> }] : []),
+      { key: '/staff/members', label: 'Hội viên', icon: <TeamOutlined /> },
+      { key: '/staff/payments', label: 'Thanh toán', icon: <CreditCardOutlined /> },
+      { key: '/staff/notifications', label: 'Thông báo', icon: <CommentOutlined /> },
     ],
     pt: [
-      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
-      ...(isEnabled('pt.scheduleEnabled') ? [{ key: '/pt/schedule', label: t('nav.schedule'), icon: <CalendarOutlined /> }] : []),
+      { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
+      ...(isEnabled('pt.scheduleEnabled') ? [{ key: '/pt/schedule', label: 'Lịch trình', icon: <CalendarOutlined /> }] : []),
       ...(isEnabled('pt.moduleEnabled') ? [
-        { key: '/pt/clients', label: t('nav.clients'), icon: <TeamOutlined /> },
-        { key: '/pt/workouts', label: t('nav.workout'), icon: <FileTextOutlined /> },
+        { key: '/pt/clients', label: 'Khách hàng', icon: <TeamOutlined /> },
+        { key: '/pt/workouts', label: 'Bài tập', icon: <FileTextOutlined /> },
       ] : []),
     ],
     seller: [
-      { key: '/', label: t('nav.website'), icon: <HomeOutlined /> },
+      { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
       ...(isEnabled('shop.productStoreEnabled') ? [
-        { key: '/seller/products', label: t('nav.my_products'), icon: <ShopOutlined /> },
-        { key: '/seller/orders', label: t('nav.orders'), icon: <ShoppingCartOutlined /> },
-        { key: '/seller/shop', label: t('nav.shop'), icon: <ShopOutlined /> },
-        { key: '/seller/revenue', label: t('nav.revenue'), icon: <BarChartOutlined /> },
+        { key: '/seller/products', label: 'Sản phẩm của tôi', icon: <ShopOutlined /> },
+        { key: '/seller/orders', label: 'Đơn hàng', icon: <ShoppingCartOutlined /> },
+        { key: '/seller/shop', label: 'Cửa hàng', icon: <ShopOutlined /> },
+        { key: '/seller/revenue', label: 'Doanh thu', icon: <BarChartOutlined /> },
       ] : []),
     ],
     member: []
@@ -154,7 +152,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         color: 'var(--theme-text)',
       }}
     >
-      {settings.general.logoUrl ? <img src={settings.general.logoUrl} alt={settings.general.siteName} style={{ maxHeight: 30 }} /> : `${t(`role.${viewRole}`)} Dashboard`}
+      {settings.general.logoUrl ? <img src={settings.general.logoUrl} alt={settings.general.siteName} style={{ maxHeight: 30 }} /> : `${roleLabel[viewRole] || viewRole} Dashboard`}
     </div>
   )
 
@@ -183,15 +181,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           style={{ margin: '4px 0' }}
         >
           <span className="dashboard-sidebar-icon"><DashboardOutlined /></span>
-          <span className="dashboard-sidebar-label">{t('admin.backToAdmin')}</span>
+          <span className="dashboard-sidebar-label">{'Quay lại Admin'}</span>
         </NavLink>
       )}
 
       <Divider />
-
-      <div style={{ padding: '0 16px 12px' }}>
-        <LanguageSelect />
-      </div>
 
       <div style={{ padding: 16 }}>
         <div
@@ -223,7 +217,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <Button icon={<LogoutOutlined />} danger block onClick={logout}>
-          {t('nav.logout')}
+          {'Đăng xuất'}
         </Button>
       </div>
     </>

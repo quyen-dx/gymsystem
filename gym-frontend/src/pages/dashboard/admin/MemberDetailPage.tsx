@@ -26,7 +26,6 @@ import {
   message,
 } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { memberService } from '../../../services/memberService'
@@ -38,7 +37,6 @@ import MemberRenewPlanModal from './MemberRenewPlanModal'
 const { Text, Title } = Typography
 
 export default function MemberDetailPage() {
-  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [member, setMember] = useState<MemberDetail | null>(null)
@@ -62,11 +60,11 @@ export default function MemberDetailPage() {
       setTimeline(timelineRes.data.timeline)
       setHealthScore(healthRes.data.healthScore)
     } catch {
-      message.error(t('admin.members.messages.fetch_detail_failed'))
+      message.error('Không thể tải thông tin thành viên')
     } finally {
       setLoading(false)
     }
-  }, [id, t])
+  }, [id])
 
   useEffect(() => {
     fetchMember()
@@ -76,10 +74,10 @@ export default function MemberDetailPage() {
     if (!member) return
     try {
       await memberService.toggleMemberStatus(member._id)
-      message.success(t('admin.members.toggle_success'))
+      message.success('Cập nhật trạng thái thành công')
       fetchMember()
     } catch {
-      message.error(t('admin.members.messages.action_failed'))
+      message.error('Thao tác thất bại')
     }
   }
 
@@ -97,7 +95,7 @@ export default function MemberDetailPage() {
     return (
       <DashboardLayout>
         <div style={{ textAlign: 'center', padding: 80, color: 'var(--gs-text-muted)' }}>
-          {t('admin.members.messages.fetch_detail_failed')}
+          Không thể tải thông tin thành viên
         </div>
       </DashboardLayout>
     )
@@ -105,7 +103,7 @@ export default function MemberDetailPage() {
 
   const membershipColumns = [
     {
-      title: t('admin.members.detail.plan_name'),
+      title: 'Gói tập',
       render: (_: unknown, record: MemberMembership) => (
         <Space size={4}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: record.planId?.color || '#3B82F6' }} />
@@ -114,17 +112,17 @@ export default function MemberDetailPage() {
       ),
     },
     {
-      title: t('admin.members.detail.start_date'),
+      title: 'Ngày bắt đầu',
       dataIndex: 'startDate',
       render: (date: string) => new Date(date).toLocaleDateString('vi-VN'),
     },
     {
-      title: t('admin.members.detail.end_date'),
+      title: 'Ngày kết thúc',
       dataIndex: 'endDate',
       render: (date: string) => new Date(date).toLocaleDateString('vi-VN'),
     },
     {
-      title: t('admin.members.detail.status'),
+      title: 'Trạng thái',
       dataIndex: 'status',
       render: (status: string) => {
         const color = status === 'active' ? 'success' : status === 'expired' ? 'error' : 'default'
@@ -132,7 +130,7 @@ export default function MemberDetailPage() {
       },
     },
     {
-      title: t('admin.members.detail.price'),
+      title: 'Giá',
       dataIndex: 'planId',
       render: (plan: { price?: number }) =>
         plan?.price ? `${plan.price.toLocaleString('vi-VN')}đ` : '—',
@@ -180,11 +178,11 @@ export default function MemberDetailPage() {
           onClick={() => navigate('/admin/members')}
           style={{ color: 'var(--gs-text)', fontSize: 15 }}
         >
-          {t('admin.members.detail.back')}
+          Quay lại danh sách
         </Button>
         <Space>
           <Button icon={<EditOutlined />} onClick={() => navigate(`/admin/members/${member._id}/edit`)}>
-            {t('admin.members.edit')}
+            Chỉnh sửa
           </Button>
           <Button
             icon={member.isActive ? <LockOutlined /> : <UnlockOutlined />}
@@ -193,7 +191,7 @@ export default function MemberDetailPage() {
           >
             {member.isActive ? 'Khóa' : 'Mở khóa'}
           </Button>
-          <Button type="primary" onClick={() => setRegisterModalOpen(true)}>
+          <Button type="primary" onClick={() => setRegisterModalOpen(true)} disabled={!!activeMembership}>
             Đăng ký gói tập
           </Button>
           <Button onClick={() => setRenewModalOpen(true)} disabled={!activeMembership}>
@@ -203,8 +201,8 @@ export default function MemberDetailPage() {
       </div>
 
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('admin.members.module')}</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.members.detail.title')}</h1>
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Thành viên</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Chi tiết thành viên</h1>
       </div>
 
       <Row gutter={[16, 16]}>
@@ -228,7 +226,7 @@ export default function MemberDetailPage() {
             <Text type="secondary">{member.email || member.phone}</Text>
             <div style={{ marginTop: 12 }}>
               <Tag color={member.isActive ? 'success' : 'error'} icon={member.isActive ? <CheckCircleOutlined /> : <CloseCircleOutlined />}>
-                {member.isActive ? t('admin.members.status.active') : t('admin.members.status.locked')}
+                {member.isActive ? 'Đang hoạt động' : 'Đã khóa'}
               </Tag>
             </div>
 
@@ -262,7 +260,7 @@ export default function MemberDetailPage() {
 
             {activeMembership ? (
               <div style={{ marginTop: 16, padding: '12px 0', borderTop: '1px solid var(--gs-border)' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>{t('admin.members.detail.membership_info')}</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>Thông tin gói tập</Text>
                 <div style={{ marginTop: 8 }}>
                   <div style={{ fontWeight: 600, fontSize: 16 }}>
                     {activeMembership.planId?.nameVi || activeMembership.planId?.nameEn}
@@ -276,31 +274,31 @@ export default function MemberDetailPage() {
                       style={{ backgroundColor: member.remainingDays <= 7 ? '#EF4444' : '#10B981' }}
                     />
                     <Text style={{ marginLeft: 8, fontSize: 13 }}>
-                      {t('admin.members.days_left', { days: member.remainingDays })}
+                      ngày còn lại
                     </Text>
                   </div>
                 </div>
               </div>
             ) : (
               <div style={{ marginTop: 16, padding: '12px 0', borderTop: '1px solid var(--gs-border)' }}>
-                <Text type="secondary">{t('admin.members.detail.no_membership')}</Text>
+                <Text type="secondary">Chưa đăng ký gói tập</Text>
               </div>
             )}
           </Card>
         </Col>
 
         <Col xs={24} lg={16}>
-          <Card className="rounded-[24px]" title={<><UserOutlined /> {t('admin.members.detail.basic_info')}</>} style={{ marginBottom: 16 }}>
+          <Card className="rounded-[24px]" title={<><UserOutlined /> Thông tin cơ bản</>} style={{ marginBottom: 16 }}>
             <Descriptions column={{ xs: 1, sm: 2 }} size="small">
-              <Descriptions.Item label={t('admin.members.form.name')}>{getUserDisplayName(member, 'Thành viên')}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.members.form.email')}>{member.email || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.members.form.phone')}>{member.phone || '—'}</Descriptions.Item>
-              <Descriptions.Item label={t('admin.members.form.dateOfBirth')}>
+              <Descriptions.Item label="Họ và tên">{getUserDisplayName(member, 'Thành viên')}</Descriptions.Item>
+              <Descriptions.Item label="Email">{member.email || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Số điện thoại">{member.phone || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Ngày sinh">
                 {member.dateOfBirth ? new Date(member.dateOfBirth).toLocaleDateString('vi-VN') : '—'}
               </Descriptions.Item>
-              <Descriptions.Item label={t('admin.members.columns.status')}>
+              <Descriptions.Item label="Trạng thái">
                 <Tag color={member.isActive ? 'success' : 'error'}>
-                  {member.isActive ? t('admin.members.status.active') : t('admin.members.status.locked')}
+                  {member.isActive ? 'Đang hoạt động' : 'Đã khóa'}
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="ID">{member._id}</Descriptions.Item>
@@ -312,7 +310,7 @@ export default function MemberDetailPage() {
               items={[
                 {
                   key: 'membership',
-                  label: <><OrderedListOutlined /> {t('admin.members.detail.membership_history')}</>,
+                  label: <><OrderedListOutlined /> Lịch sử gói tập</>,
                   children: (
                     <Table
                       dataSource={member.membershipHistory}
@@ -325,11 +323,11 @@ export default function MemberDetailPage() {
                 },
                 {
                   key: 'timeline',
-                  label: <><CalendarOutlined /> {t('admin.members.detail.timeline')}</>,
+                  label: <><CalendarOutlined /> Dòng thời gian</>,
                   children: timelineItems.length > 0 ? (
                     <Timeline items={timelineItems} />
                   ) : (
-                    <Text type="secondary">{t('admin.members.detail.no_membership')}</Text>
+                    <Text type="secondary">Chưa có dữ liệu</Text>
                   ),
                 },
               ]}
@@ -351,6 +349,9 @@ export default function MemberDetailPage() {
         memberId={member._id}
         memberName={getUserDisplayName(member, member.memberCode)}
         currentEndDate={activeMembership?.endDate || ''}
+        currentStartDate={activeMembership?.startDate || ''}
+        currentPlanName={activeMembership?.planId?.nameVi || activeMembership?.planId?.nameEn || ''}
+        currentPlanId={activeMembership?.planId?._id || ''}
         onClose={() => setRenewModalOpen(false)}
         onSuccess={() => { setRenewModalOpen(false); fetchMember() }}
       />

@@ -1,7 +1,6 @@
 import { ArrowLeftOutlined, ShopOutlined } from '@ant-design/icons'
 import { Avatar, Button, Card, Col, Divider, Empty, Input, InputNumber, Modal, Rate, Row, Select, Space, Spin, Tabs, Tag, message } from 'antd'
 import { useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import SellerFooter from '../../../components/layout/footer/SellerFooter'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
@@ -13,7 +12,6 @@ import { addShopReview, getShop, getShops } from '../../../services/shopService'
 import type { MemberProduct, ProductShop } from '../../../types/member/product'
 
 export default function MemberStorePage() {
-  const { t } = useTranslation()
   const { dark } = useTheme()
   const { storeId } = useParams()
   const [shops, setShops] = useState<ProductShop[]>([])
@@ -44,7 +42,7 @@ export default function MemberStorePage() {
     setLoading(true)
     getShops()
       .then((res) => setShops(res.data.shops || res.data || []))
-      .catch(() => message.error(t('store.msg_shop_not_loaded')))
+      .catch(() => message.error('Không thể tải danh sách cửa hàng'))
       .finally(() => setLoading(false))
   }, [storeId])
 
@@ -96,7 +94,7 @@ export default function MemberStorePage() {
     }
     getShopProducts(storeId, params)
       .then((res) => setProducts(res.data.products || res.data))
-      .catch(() => message.error(t('store.msg_products_not_loaded')))
+      .catch(() => message.error('Không thể tải danh sách sản phẩm'))
       .finally(() => setLoading(false))
   }, [storeId, category, sortPrice, minPrice, maxPrice, priceMode])
 
@@ -156,7 +154,7 @@ export default function MemberStorePage() {
     }
     getShop(storeId)
       .then((res) => setShopDetail(res.data.shop))
-      .catch(() => message.error(t('store.msg_shop_detail_not_loaded')))
+      .catch(() => message.error('Không thể tải thông tin cửa hàng'))
   }, [storeId])
 
   const containerStyle: React.CSSProperties = {
@@ -169,7 +167,7 @@ export default function MemberStorePage() {
     .map((product) => product.shop_id)
     .find((shop): shop is ProductShop => typeof shop === 'object' && !!shop)
   const shopOwner = shopDetail?.user_id || firstShop?.user_id
-  const shopName = shopDetail?.name || firstShop?.name || shopOwner?.name || t('store.shop_fallback')
+  const shopName = shopDetail?.name || firstShop?.name || shopOwner?.name || 'Cửa hàng'
   const shopAvatar = shopOwner?.avatar || shopDetail?.avatar || firstShop?.avatar
   const shopDescription = shopDetail?.description || firstShop?.description
   const shopRating = shopDetail?.rating ?? firstShop?.rating ?? 0
@@ -187,18 +185,18 @@ export default function MemberStorePage() {
       p.category?.toLowerCase().includes(search.toLowerCase()))
   )
   const categorySelectOptions = categoryOptions.length > 0
-    ? [{ label: t('store.all_products'), value: '' }, ...categoryOptions]
+    ? [{ label: 'Tất cả sản phẩm', value: '' }, ...categoryOptions]
     : []
   const categoryPlaceholder = categoryLoading
-    ? t('store.loading')
+    ? 'Đang tải...'
     : categoryOptions.length === 0
-      ? t('store.no_category')
-      : t('store.all_products')
+      ? 'Không có danh mục'
+      : 'Tất cả sản phẩm'
   const getProductImage = (product: MemberProduct) => product.image || product.images?.[0] || ''
   const formatProductPrice = (price?: number) =>
     typeof price === 'number' && Number.isFinite(price)
       ? `${price.toLocaleString('vi-VN')}đ`
-      : t('store.contact')
+      : 'Liên hệ'
   const featuredShopSections = shops
     .map((shop) => ({
       shop,
@@ -218,7 +216,7 @@ export default function MemberStorePage() {
     <div className="mb-6 rounded-2xl border border-[var(--gs-border)] bg-[var(--gs-panel)] p-4">
       <div className="member-responsive-actions">
         <Input.Search
-          placeholder={t('store.search_placeholder')}
+          placeholder="Tìm kiếm sản phẩm..."
           allowClear
           style={{ flex: '1 1 240px', minWidth: 0 }}
           onChange={(e) => setSearch(e.target.value)}
@@ -236,9 +234,9 @@ export default function MemberStorePage() {
           value={sortPrice}
           onChange={(value) => setSortPrice(value || '')}
           options={[
-            { label: t('store.all_prices'), value: '' },
-            { label: t('store.price_asc'), value: 'asc' },
-            { label: t('store.price_desc'), value: 'desc' },
+            { label: 'Tất cả mức giá', value: '' },
+            { label: 'Giá tăng dần', value: 'asc' },
+            { label: 'Giá giảm dần', value: 'desc' },
           ]}
         />
       </div>
@@ -252,14 +250,14 @@ export default function MemberStorePage() {
             if (value === 'above') setMaxPrice(null)
           }}
           options={[
-            { label: t('store.price_range'), value: 'range' },
-            { label: t('store.price_above'), value: 'above' },
+            { label: 'Khoảng giá', value: 'range' },
+            { label: 'Trên', value: 'above' },
           ]}
         />
         <InputNumber
           min={0}
           value={minPrice}
-          placeholder={priceMode === 'above' ? t('store.price_above_placeholder') : t('store.price_from')}
+          placeholder={priceMode === 'above' ? 'Giá từ...' : 'Từ'}
           formatter={(value) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : ''}
           parser={(value) => Number(value?.replace(/\./g, '') || 0)}
           onChange={(value) => setMinPrice(typeof value === 'number' ? value : null)}
@@ -269,7 +267,7 @@ export default function MemberStorePage() {
           <InputNumber
             min={0}
             value={maxPrice}
-            placeholder={t('store.price_to')}
+            placeholder="Đến"
             formatter={(value) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : ''}
             parser={(value) => Number(value?.replace(/\./g, '') || 0)}
             onChange={(value) => setMaxPrice(typeof value === 'number' ? value : null)}
@@ -277,7 +275,7 @@ export default function MemberStorePage() {
           />
         )}
         <Space>
-          <Button onClick={resetPriceFilters}>{t('store.clear_price_filter')}</Button>
+          <Button onClick={resetPriceFilters}>Xóa bộ lọc</Button>
         </Space>
       </div>
     </div>
@@ -290,9 +288,9 @@ export default function MemberStorePage() {
       const res = await addShopReview(storeId, reviewForm)
       setShopDetail(res.data.shop)
       setReviewForm({ rating: 5, comment: '' })
-      message.success(t('store.msg_review_submitted'))
+      message.success('Đã gửi đánh giá')
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('store.msg_review_failed'))
+      message.error(err.response?.data?.message || 'Gửi đánh giá thất bại')
     } finally {
       setSubmittingReview(false)
     }
@@ -312,7 +310,7 @@ export default function MemberStorePage() {
       {loading ? (
         <div className="text-center my-10"><Spin size="large" /></div>
       ) : filtered.length === 0 ? (
-        <Empty description={t('store.no_products')} />
+        <Empty description="Không có sản phẩm" />
       ) : (
         <Row gutter={[16, 16]}>
           {filtered.map((product) => (
@@ -330,7 +328,7 @@ export default function MemberStorePage() {
                     <img src={product.image} className="h-[200px] w-full object-cover flex-none" alt={product.name} />
                   ) : (
                     <div className="h-[200px] flex-none flex items-center justify-center" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--gs-text-muted)' }}>
-                      {t('store.no_image')}
+                      {'Không có ảnh'}
                     </div>
                   )
                 }
@@ -351,7 +349,7 @@ export default function MemberStorePage() {
                   </div>
                 ) : (
                   <div className="text-xs mt-1" style={{ color: 'var(--gs-text-muted)' }}>
-                    {t('store.no_reviews')}
+                    Chưa có đánh giá
                   </div>
                 )}
 
@@ -360,7 +358,7 @@ export default function MemberStorePage() {
                     {product.price?.toLocaleString('vi-VN')}đ
                   </span>
                   <Tag color={product.stock && product.stock > 0 ? 'green' : 'red'}>
-                    {product.stock && product.stock > 0 ? t('store.in_stock', { stock: product.stock }) : t('store.out_of_stock')}
+                    {product.stock && product.stock > 0 ? 'Còn hàng' : 'Hết hàng'}
                   </Tag>
                 </div>
 
@@ -377,7 +375,7 @@ export default function MemberStorePage() {
 
   const reviewPanel = (
     <div ref={reviewInputRef} className="rounded-2xl border border-[var(--gs-border)] bg-[rgba(23,23,23,0.92)] p-6">
-      <h2 className="text-xl font-bold">{t('store.review_shop_title')}</h2>
+      <h2 className="text-xl font-bold">Đánh giá cửa hàng</h2>
       {user && user._id !== shopOwner?._id && (
         <div className="mt-4 flex flex-col gap-3">
           <Rate value={reviewForm.rating} onChange={(rating) => setReviewForm((prev) => ({ ...prev, rating }))} />
@@ -385,7 +383,7 @@ export default function MemberStorePage() {
             rows={3}
             value={reviewForm.comment}
             onChange={(event) => setReviewForm((prev) => ({ ...prev, comment: event.target.value }))}
-            placeholder={t('store.review_placeholder')}
+            placeholder="Viết đánh giá của bạn..."
           />
           <Button
             type="primary"
@@ -393,13 +391,13 @@ export default function MemberStorePage() {
             onClick={handleSubmitShopReview}
             className="w-fit !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] border-none"
           >
-            {t('store.submit_review')}
+            Gửi đánh giá
           </Button>
         </div>
       )}
       <Divider />
       {shopReviews.length === 0 ? (
-        <Empty description={t('store.no_shop_reviews')} />
+        <Empty description="Chưa có đánh giá" />
       ) : (
         <div className="flex flex-col gap-4">
           {shopReviews.map((review: any) => (
@@ -425,7 +423,7 @@ export default function MemberStorePage() {
         <div className="flex min-w-0 items-center gap-5 max-[640px]:gap-4">
           <div className="h-14 w-1.5 rounded-full bg-[var(--theme-accent)] max-[640px]:h-9 max-[640px]:w-1" />
           <h1 className="m-0 text-5xl font-medium leading-tight text-[var(--theme-text)] max-[1024px]:text-4xl max-[640px]:text-2xl">
-            {t('store.brand_title')}
+            Cửa hàng
           </h1>
         </div>
         <Button
@@ -433,20 +431,20 @@ export default function MemberStorePage() {
           onClick={() => setPartnershipModalOpen(true)}
           className="shrink-0 !border-[var(--theme-accent)] !text-[var(--theme-accent)] hover:!bg-[var(--theme-accent-muted)]"
         >
-          {t('store.register_partnership')}
+          Đăng ký cộng tác
         </Button>
       </div>
 
       {loading ? (
         <div className="text-center my-10"><Spin size="large" /></div>
       ) : shops.length === 0 ? (
-        <Empty description={t('store.no_shops')} />
+        <Empty description="Không có cửa hàng" />
       ) : (
         <>
           <Row gutter={[16, 16]}>
             {shops.map((shop) => {
               const owner = shop.user_id
-              const name = shop.name || owner?.name || t('store.shop_fallback')
+              const name = shop.name || owner?.name || 'Cửa hàng'
               const avatar = owner?.avatar || shop.avatar
               const productCount = featuredProductCountsByShop[shop._id] ?? 0
               const openStore = () => navigate(`/store/${shop._id}`)
@@ -476,7 +474,7 @@ export default function MemberStorePage() {
                         border: `1px solid ${dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)'}`,
                       }}
                     >
-                      {t('store.product_count', { count: productCount })}
+                      {productCount + ' sản phẩm'}
                     </div>
                     <Avatar size={72} src={avatar} icon={<ShopOutlined />} className="mb-4 shrink-0">
                       {name.charAt(0)}
@@ -485,7 +483,7 @@ export default function MemberStorePage() {
                     <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
                       <Rate disabled allowHalf value={shop.rating || 0} style={{ fontSize: 13 }} />
                       <span className="text-xs text-[var(--gs-text-muted)]">
-                        {t('store.reviews_count', { count: shop.reviewCount || 0 })}
+                        {(shop.reviewCount || 0) + ' đánh giá'}
                       </span>
                     </div>
                   </Card>
@@ -498,7 +496,7 @@ export default function MemberStorePage() {
             <div className="mt-14">
               {featuredShopSections.map(({ shop, products }) => {
                 const owner = shop.user_id
-                const name = shop.name || owner?.name || t('store.shop_fallback')
+                const name = shop.name || owner?.name || 'Cửa hàng'
 
                 return (
                   <section
@@ -515,7 +513,7 @@ export default function MemberStorePage() {
                         onClick={() => navigate(`/store/${shop._id}`)}
                         className="shrink-0 border-0 bg-transparent p-0 text-sm font-medium text-[var(--theme-accent)] transition-opacity hover:opacity-80"
                       >
-                        {t('store.view_all')}
+                        Xem tất cả
                       </button>
                     </div>
 
@@ -538,7 +536,7 @@ export default function MemberStorePage() {
                               />
                             ) : (
                               <div className="flex aspect-square w-full items-center justify-center bg-[var(--theme-bg)] text-xs text-[var(--gs-text-muted)]">
-                                {t('store.no_image')}
+                                {'Không có ảnh'}
                               </div>
                             )}
                             <div className="p-3 max-[640px]:p-2">
@@ -562,7 +560,7 @@ export default function MemberStorePage() {
       )}
 
       <Modal
-        title={t('store.register_partnership_modal')}
+        title="Đăng ký cộng tác"
         open={partnershipModalOpen}
         onCancel={() => setPartnershipModalOpen(false)}
         footer={null}
@@ -583,7 +581,7 @@ export default function MemberStorePage() {
             onClick={() => navigate('/store')}
             className="!px-0"
           >
-            {t('store.back_to_store')}
+            Quay lại danh sách
           </Button>
         </div>
 
@@ -595,7 +593,7 @@ export default function MemberStorePage() {
           <div className="min-w-0 flex-1">
             <h1 className="m-0 text-3xl font-bold leading-tight max-[640px]:text-2xl">{shopName}</h1>
             <div className="mt-1 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--theme-accent)]">
-              {t('store.featured')}
+              Nổi bật
             </div>
             <button
               type="button"
@@ -605,12 +603,12 @@ export default function MemberStorePage() {
             >
               <Rate disabled allowHalf value={shopRating} style={{ fontSize: 14 }} />
               <span className="text-sm text-[var(--gs-text-muted)]">
-                {shopRating.toFixed(1)} ({t('store.review_tab', { rating: shopRating.toFixed(1) }).replace(/^[^(]+/, '').trim()})
+                {shopRating.toFixed(1)} ({shopRating.toFixed(1)} đánh giá)
               </span>
             </button>
 
             <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--gs-text-muted)]">
-              {shopDescription || t('store.all_products_of', { name: shopName })}
+              {shopDescription || ('Tất cả sản phẩm của ' + shopName)}
             </p>
             {(shopAddress?.street || shopAddress?.district || shopAddress?.city) && (
               <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
@@ -625,8 +623,8 @@ export default function MemberStorePage() {
         activeKey={activeTab}
         onChange={setActiveTab}
         items={[
-          { key: 'products', label: t('store.product_tab'), children: productPanel },
-          { key: 'reviews', label: t('store.review_tab', { rating: shopRating.toFixed(1) }), children: reviewPanel },
+          { key: 'products', label: 'Sản phẩm', children: productPanel },
+          { key: 'reviews', label: shopRating.toFixed(1) + ' đánh giá', children: reviewPanel },
         ]}
       />
     </>

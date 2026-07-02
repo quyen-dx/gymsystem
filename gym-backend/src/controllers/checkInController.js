@@ -192,6 +192,25 @@ export const generateQRToken = async (req, res) => {
       throw new AppError('Gói tập của bạn đã hết hạn hoặc không còn hiệu lực', 403)
     }
 
+    const today = getVietnamDateString()
+    const todayStart = new Date(`${today}T00:00:00${VIETNAM_UTC_OFFSET}`)
+    const todayEnd = new Date(`${today}T23:59:59.999${VIETNAM_UTC_OFFSET}`)
+
+    const todayCheckin = await CheckIn.findOne({
+      memberId,
+      checkinTime: { $gte: todayStart, $lte: todayEnd },
+      status: 'success',
+    }).lean()
+
+    if (todayCheckin) {
+      const streak = await calculateStreak(memberId)
+      return res.json({
+        checkedInToday: true,
+        streak,
+        memberId: memberId.toString(),
+      })
+    }
+
     const now = new Date()
     const expiredAt = new Date(now.getTime() + QR_TOKEN_TTL * 1000)
 
@@ -210,151 +229,6 @@ export const generateQRToken = async (req, res) => {
       expiredAt,
       ttl: QR_TOKEN_TTL,
       memberId: memberId.toString(),
-    })
-  } catch (error) {
-    return sendError(res, error)
-  }
-}
-
-export const verifyQRToken = async (req, res) => {
-  try {
-    const { token } = req.body
-    if (!token) throw new AppError('Token là bắt buộc', 400)
-
-    let decoded
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET)
-    } catch {
-      throw new AppError('Mã QR không hợp lệ hoặc đã hết hạn', 401)
-    }
-
-    if (decoded.purpose !== 'checkin' || !decoded.memberId) {
-      throw new AppError('Mã QR không hợp lệ', 401)
-    }
-
-    const existingCheckin = await CheckIn.findOne({ qrToken: token }).lean()
-    if (existingCheckin) {
-      throw new AppError('Mã QR này đã được sử dụng', 409)
-    }
-
-    const member = await User.findById(decoded.memberId).lean()
-    if (!member || member.role !== 'member') {
-      throw new AppError('Hội viên không tồn tại', 404)
-    }
-
-    if (!member.isActive || member.status === 'locked') {
-      throw new AppError('Tài khoản hội viên đã bị khóa', 403)
-    }
-
-    const activeMembership = await Membership.findOne({
-      memberId: member._id,
-      status: 'active',
-      endDate: { $gte: new Date() },
-    })
-      .populate('planId', 'nameVi nameEn durationDays price color')
-      .sort({ endDate: -1 })
-      .lean()
-
-    if (!activeMembership) {
-      throw new AppError('Gói tập đã hết hạn. Vui lòng gia hạn để tiếp tục.', 403)
-    }
-
-    const oneHourAgo = new Date(Date.now() - DUPLICATE_WINDOW_MS)
-    const recentCheckin = await CheckIn.findOne({
-      memberId: member._id,
-      checkinTime: { $gte: oneHourAgo },
-      status: 'success',
-    }).lean()
-
-    if (recentCheckin) {
-      throw new AppError('Hội viên này đã check-in thành công trước đó!', 429, 'ALREADY_CHECKED_IN')
-    }
-
-    res.json({
-      member: {
-        _id: member._id,
-        name: member.name,
-        fullName: member.fullName,
-        email: member.email,
-        phone: member.phone,
-        avatar: member.avatar,
-      },
-      membership: {
-        planName: activeMembership.planId?.nameVi || activeMembership.planId?.nameEn,
-        planColor: activeMembership.planId?.color,
-        startDate: activeMembership.startDate,
-        endDate: activeMembership.endDate,
-      },
-    })
-  } catch (error) {
-    return sendError(res, error)
-  }
-}
-
-export const confirmCheckin = async (req, res) => {
-  try {
-    const { token } = req.body
-    const staffId = req.user._id
-
-    if (!token) throw new AppError('Token là bắt buộc', 400)
-
-    let decoded
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET)
-    } catch {
-      throw new AppError('Mã QR không hợp lệ hoặc đã hết hạn', 401)
-    }
-
-    if (decoded.purpose !== 'checkin' || !decoded.memberId) {
-      throw new AppError('Mã QR không hợp lệ', 401)
-    }
-
-    const alreadyUsed = await CheckIn.findOne({ qrToken: token }).lean()
-    if (alreadyUsed) {
-      throw new AppError('Check-in này đã được thực hiện trước đó', 409)
-    }
-
-    const member = await User.findById(decoded.memberId)
-    if (!member || member.role !== 'member') {
-      throw new AppError('Hội viên không tồn tại', 404)
-    }
-
-    const activeMembership = await Membership.findOne({
-      memberId: member._id,
-      status: 'active',
-      endDate: { $gte: new Date() },
-    }).lean()
-
-    if (!activeMembership) {
-      throw new AppError('Gói tập đã hết hạn. Vui lòng gia hạn để tiếp tục.', 403)
-    }
-
-    const streaKDay = await calculateStreak(member._id)
-
-    const checkin = await CheckIn.create({
-      memberId: member._id,
-      staffId,
-      checkinTime: new Date(),
-      status: 'success',
-      qrToken: token,
-      streakDay: streaKDay,
-    })
-
-    await recordUserActivity({
-      userId: member._id,
-      type: 'checkin',
-      title: 'Điểm danh',
-      description: `Check-in thành công tại quầy (staff: ${getUserDisplayName(req.user, staffId)})`,
-      metadata: { checkinId: checkin._id, staffId },
-    })
-
-    res.json({
-      message: 'Check-in thành công',
-      checkin: {
-        _id: checkin._id,
-        checkinTime: checkin.checkinTime,
-        streakDay: checkin.streakDay,
-      },
     })
   } catch (error) {
     return sendError(res, error)
@@ -380,10 +254,12 @@ export const staffVerifyCheckin = async (req, res) => {
       throw new AppError('Gói tập đã hết hạn. Vui lòng gia hạn để tiếp tục.', 403)
     }
 
-    const oneHourAgo = new Date(Date.now() - DUPLICATE_WINDOW_MS)
+    const today = getVietnamDateString()
+    const todayStart = new Date(`${today}T00:00:00${VIETNAM_UTC_OFFSET}`)
+    const todayEnd = new Date(`${today}T23:59:59.999${VIETNAM_UTC_OFFSET}`)
     const recentCheckin = await CheckIn.findOne({
       memberId: member._id,
-      checkinTime: { $gte: oneHourAgo },
+      checkinTime: { $gte: todayStart, $lte: todayEnd },
       status: 'success',
     }).lean()
 
@@ -528,27 +404,6 @@ export const getStaffCheckinHistory = async (req, res) => {
         keyword: normalizedKeyword,
       },
     })
-  } catch (error) {
-    return sendError(res, error)
-  }
-}
-
-export const uploadSelfie = async (req, res) => {
-  try {
-    const { checkinId } = req.body
-
-    const checkin = await CheckIn.findById(checkinId)
-    if (!checkin) {
-      throw new AppError('Không tìm thấy check-in', 404)
-    }
-
-    const selfieFile = req.files?.selfie?.[0]
-    if (selfieFile?.path) {
-      checkin.selfieUrl = selfieFile.path
-      await checkin.save()
-    }
-
-    res.json({ message: 'Đã lưu ảnh selfie', selfieUrl: checkin.selfieUrl })
   } catch (error) {
     return sendError(res, error)
   }

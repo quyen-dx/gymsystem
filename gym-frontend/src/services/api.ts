@@ -1,7 +1,6 @@
 import axios from 'axios'
 import { message } from 'antd'
 import { API_URL } from '../config/env'
-import i18n from '../i18n'
 
 const api = axios.create({
   baseURL: API_URL,
@@ -75,14 +74,13 @@ api.interceptors.response.use(
     }
 
     if (errorCode === 'FEATURE_DISABLED' || errorCode === 'MAINTENANCE_MODE') {
-      const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en'
       const translatedMessage = errorCode === 'MAINTENANCE_MODE'
         ? (
-          error.response?.data?.maintenanceMessage?.[lang] ||
-          (typeof error.response?.data?.message === 'object' ? error.response?.data?.message?.[lang] : '') ||
-          i18n.t('system_settings.maintenance.default_message')
+          error.response?.data?.maintenanceMessage?.vi ||
+          (typeof error.response?.data?.message === 'object' ? error.response?.data?.message?.vi : '') ||
+          'Hệ thống đang bảo trì. Vui lòng quay lại sau.'
         )
-        : i18n.t('system_settings.disabled_message')
+        : 'Tính năng này hiện đã bị tắt.'
       error.response.data.message = translatedMessage
       const now = Date.now()
       if (now - lastFeatureDisabledToastAt > 1200) {

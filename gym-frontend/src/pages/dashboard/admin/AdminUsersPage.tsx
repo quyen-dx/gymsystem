@@ -22,7 +22,6 @@ import {
   message
 } from 'antd'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { useAuth } from '../../../hooks/useAuth'
@@ -43,7 +42,6 @@ const roleColors: Record<string, string> = {
 const PROTECTED_ADMIN_EMAIL = 'daoxuanquyen333@gmail.com'
 
 export default function AdminUsersPage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -62,7 +60,7 @@ export default function AdminUsersPage() {
       const { data } = await api.get('/auth/users')
       setUsers(data.users)
     } catch {
-      message.error(t('admin.users.messages.fetch_failed'))
+      message.error('Không thể tải danh sách người dùng')
     } finally {
       setLoading(false)
     }
@@ -75,36 +73,36 @@ export default function AdminUsersPage() {
   const handleToggleStatus = async (id: string) => {
     try {
       await api.patch(`/auth/users/${id}/toggle-status`)
-      message.success(t('admin.users.messages.toggle_success'))
+      message.success('Cập nhật trạng thái thành công')
       fetchUsers()
     } catch {
-      message.error(t('admin.users.messages.action_failed'))
+      message.error('Thao tác thất bại')
     }
   }
 
   const handleDelete = async (id: string) => {
     try {
       await api.delete(`/auth/users/${id}`)
-      message.success(t('admin.users.messages.delete_success'))
+      message.success('Xóa người dùng thành công')
       fetchUsers()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('admin.users.messages.delete_failed'))
+      message.error(err.response?.data?.message || 'Không thể xóa người dùng')
     }
   }
 
   const openEdit = (user: AdminUser) => {
     if (user._id === currentUser?._id) {
-      message.warning(t('admin.users.messages.no_self_edit'))
+      message.warning('Không thể tự chỉnh sửa tài khoản của chính mình')
       return
     }
 
     if (currentUser?.role !== 'super_admin' && (user.role === 'super_admin' || user.role === 'admin')) {
-      message.warning(t('admin.users.messages.no_edit_admin'))
+      message.warning('Không có quyền chỉnh sửa quản trị viên')
       return
     }
 
     if (user.email?.toLowerCase() === PROTECTED_ADMIN_EMAIL) {
-      message.warning(t('admin.users.messages.no_edit_protected'))
+      message.warning('Không thể chỉnh sửa tài khoản được bảo vệ')
       return
     }
 
@@ -117,11 +115,11 @@ export default function AdminUsersPage() {
     setSubmitLoading(true)
     try {
       await api.patch(`/auth/users/${editingUser._id}/role`, { role: values.role })
-      message.success(t('admin.users.messages.role_updated'))
+      message.success('Cập nhật vai trò thành công')
       setEditingUser(null)
       fetchUsers()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('admin.users.messages.update_failed'))
+      message.error(err.response?.data?.message || 'Cập nhật thất bại')
     } finally {
       setSubmitLoading(false)
     }
@@ -146,19 +144,19 @@ export default function AdminUsersPage() {
 
   const columns = [
     {
-      title: t('admin.table_no'),
+      title: 'STT',
       width: 70,
       align: 'center' as const,
       render: (_: any, __: AdminUser, index: number) => (page - 1) * 10 + index + 1,
     },
     {
-      title: t('admin.users.columns.member_code'),
+      title: 'Mã thành viên',
       dataIndex: 'memberCode',
       width: 120,
       render: (code: string) => code || '—',
     },
     {
-      title: t('admin.users.columns.user'),
+      title: 'Người dùng',
       width: 200,
       render: (_: any, u: AdminUser) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -179,7 +177,7 @@ export default function AdminUsersPage() {
       ),
     },
     {
-      title: t('admin.users.columns.contact'),
+      title: 'Liên hệ',
       width: 260,
       render: (_: any, u: AdminUser) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -190,7 +188,7 @@ export default function AdminUsersPage() {
             </div>
           ) : (
             <div style={{ fontSize: 12, color: '#555' }}>
-              <MailOutlined style={{ color: '#555' }} /> {t('admin.users.contact.no_email')}
+              <MailOutlined style={{ color: '#555' }} /> Không có email
             </div>
           )}
 
@@ -201,7 +199,7 @@ export default function AdminUsersPage() {
             </div>
           ) : (
             <div style={{ fontSize: 12, color: '#555' }}>
-              <PhoneOutlined style={{ color: '#555' }} /> {t('admin.users.contact.no_phone')}
+              <PhoneOutlined style={{ color: '#555' }} /> Không có số điện thoại
             </div>
           )}
 
@@ -214,19 +212,19 @@ export default function AdminUsersPage() {
                 rel="noreferrer"
                 style={{ color: '#1877F2', textDecoration: 'underline' }}
               >
-                {t('admin.users.contact.facebook_profile')}
+                Facebook
               </a>
             </div>
           ) : (
             <div style={{ fontSize: 12, color: '#555' }}>
-              <FacebookOutlined style={{ color: '#555' }} /> {t('admin.users.contact.no_facebook')}
+              <FacebookOutlined style={{ color: '#555' }} /> Không có Facebook
             </div>
           )}
         </div>
       ),
     },
     {
-      title: t('admin.users.columns.provider'),
+      title: 'Nhà cung cấp',
       dataIndex: 'provider',
       width: 100,
       render: (p: string) => {
@@ -239,27 +237,27 @@ export default function AdminUsersPage() {
       },
     },
     {
-      title: t('admin.users.columns.status'),
+      title: 'Trạng thái',
       width: 130,
       render: (_: any, u: AdminUser) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <Tag color={u.isActive ? 'success' : 'error'}>
-            {u.isActive ? t('admin.users.status.active') : t('admin.users.status.locked')}
+            {u.isActive ? 'Đang hoạt động' : 'Đã khóa'}
           </Tag>
           <Tag color={u.isVerified ? 'blue' : 'default'}>
-            {u.isVerified ? t('admin.users.status.verified') : t('admin.users.status.unverified')}
+            {u.isVerified ? 'Đã xác thực' : 'Chưa xác thực'}
           </Tag>
         </div>
       ),
     },
     {
-      title: t('admin.users.columns.created_at'),
+      title: 'Ngày tạo',
       dataIndex: 'createdAt',
       width: 110,
       render: (d: string) => new Date(d).toLocaleDateString('vi-VN'),
     },
     {
-      title: t('admin.users.columns.actions'),
+      title: 'Thao tác',
       width: 160,
       render: (_: any, u: AdminUser) => {
         const selfAccount = isSelf(u._id)
@@ -267,16 +265,16 @@ export default function AdminUsersPage() {
         const noAdminPermission = cannotManageAdmin(u)
         const disabledActions = selfAccount || protectedAccount || noAdminPermission
         const disabledTooltip = selfAccount
-          ? t('admin.users.tooltips.no_self_action')
+          ? 'Không thể thao tác trên chính mình'
           : protectedAccount
-          ? t('admin.users.tooltips.protected_admin')
+          ? 'Tài khoản được bảo vệ'
           : noAdminPermission
-          ? t('admin.users.tooltips.no_admin_action')
+          ? 'Không có quyền thao tác với quản trị viên'
           : ''
 
         return (
           <Space>
-            <Tooltip title={disabledActions && (u.role === 'admin' || u.role === 'super_admin') ? disabledTooltip : t('admin.users.tooltips.view_detail')}>
+            <Tooltip title={disabledActions && (u.role === 'admin' || u.role === 'super_admin') ? disabledTooltip : 'Xem chi tiết'}>
               <span>
                 <Button
                   size="small"
@@ -286,7 +284,7 @@ export default function AdminUsersPage() {
                 />
               </span>
             </Tooltip>
-            <Tooltip title={disabledActions ? disabledTooltip : t('admin.users.tooltips.change_role')}>
+            <Tooltip title={disabledActions ? disabledTooltip : 'Đổi vai trò'}>
               <span>
                 <Button
                   size="small"
@@ -296,7 +294,7 @@ export default function AdminUsersPage() {
                 />
               </span>
             </Tooltip>
-            <Tooltip title={disabledActions ? disabledTooltip : (u.isActive ? t('admin.users.tooltips.lock') : t('admin.users.tooltips.unlock'))}>
+            <Tooltip title={disabledActions ? disabledTooltip : (u.isActive ? 'Khóa' : 'Mở khóa')}>
               <span>
                 <Button
                   size="small"
@@ -307,14 +305,14 @@ export default function AdminUsersPage() {
               </span>
             </Tooltip>
             <Popconfirm
-              title={t('admin.users.popconfirm.delete_title')}
-              description={t('admin.users.popconfirm.delete_description')}
+              title="Xác nhận xóa"
+              description="Bạn có chắc chắn muốn xóa người dùng này?"
               onConfirm={() => handleDelete(u._id)}
-              okText={t('admin.users.popconfirm.ok_text')}
-              cancelText={t('admin.users.popconfirm.cancel_text')}
+              okText="Xóa"
+              cancelText="Hủy"
               disabled={disabledActions}
             >
-              <Tooltip title={disabledActions ? disabledTooltip : t('admin.users.tooltips.delete')}>
+              <Tooltip title={disabledActions ? disabledTooltip : 'Xóa'}>
                 <span>
                   <Button size="small" danger icon={<DeleteOutlined />} disabled={disabledActions} />
                 </span>
@@ -330,9 +328,9 @@ export default function AdminUsersPage() {
     <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Admin</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.users.title')}</h1>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý người dùng</h1>
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
-          {t('admin.users.total', { count: users.length })}
+          Tổng số người dùng: {users.length}
         </p>
       </div>
 
@@ -340,7 +338,7 @@ export default function AdminUsersPage() {
         <div className="dashboard-filter-bar">
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', flex: 1 }}>
             <Input.Search
-              placeholder={t('admin.users.search_placeholder')}
+              placeholder="Tìm kiếm người dùng..."
               allowClear
               className="dashboard-search-input"
               onChange={(e) => {
@@ -349,7 +347,7 @@ export default function AdminUsersPage() {
               }}
             />
             <Select
-              placeholder={t('admin.users.filter_role')}
+              placeholder="Lọc theo vai trò"
               allowClear
               style={{ minWidth: 160 }}
               onChange={(val) => {
@@ -366,7 +364,7 @@ export default function AdminUsersPage() {
               ]}
             />
             <Select
-              placeholder={t('admin.users.status.filter_all')}
+              placeholder="Tất cả trạng thái"
               allowClear
               style={{ minWidth: 160 }}
               onChange={(val) => {
@@ -374,8 +372,8 @@ export default function AdminUsersPage() {
                 setPage(1)
               }}
               options={[
-                { label: t('admin.users.status.active'), value: 'active' },
-                { label: t('admin.users.status.locked'), value: 'locked' },
+                { label: 'Đang hoạt động', value: 'active' },
+                { label: 'Đã khóa', value: 'locked' },
               ]}
             />
           </div>
@@ -399,11 +397,11 @@ export default function AdminUsersPage() {
       </div>
 
       <Modal
-        title={t('admin.users.edit_role_title', { name: editingUser?.name })}
+        title={`Chỉnh sửa vai trò: ${editingUser?.name}`}
         open={!!editingUser}
         onCancel={() => setEditingUser(null)}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form layout="vertical" form={form} onFinish={handleUpdateRole}>
           <Form.Item label="Role" name="role" rules={[{ required: true }]}>
@@ -428,7 +426,7 @@ export default function AdminUsersPage() {
             />
           </Form.Item>
           <Button type="primary" htmlType="submit" block loading={submitLoading}>
-            {t('admin.users.update')}
+            Cập nhật
           </Button>
         </Form>
       </Modal>

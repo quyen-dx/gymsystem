@@ -1,7 +1,6 @@
 import { Avatar, Button, Card, Select, Statistic, Table, Typography, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
@@ -131,7 +130,6 @@ const getImageFormat = (dataUrl: string) => {
 }
 
 export default function SellerRevenuePage() {
-  const { t, i18n } = useTranslation()
   const { user } = useAuth()
   const { settings } = useSystemSettings()
   const [orders, setOrders] = useState<SellerOrder[]>([])
@@ -188,7 +186,7 @@ export default function SellerRevenuePage() {
 
         map.set(key, {
           key,
-          name: getItemName(item, t('seller_dashboard.product_fallback')),
+          name: getItemName(item, 'Sản phẩm'),
           image: getItemImage(item),
           variant,
           price: Number(item.price || 0),
@@ -200,7 +198,7 @@ export default function SellerRevenuePage() {
     })
 
     return Array.from(map.values()).sort((a, b) => b.quantity - a.quantity)
-  }, [filteredOrders, t])
+  }, [filteredOrders])
 
   const yearOptions = useMemo(() => {
     const years = new Set([currentYear, selectedYear, reportYear])
@@ -216,16 +214,16 @@ export default function SellerRevenuePage() {
   const totalSold = soldProducts.reduce((sum, item) => sum + item.quantity, 0)
   const totalRevenue = soldProducts.reduce((sum, item) => sum + item.revenue, 0)
   const totalOrderLines = soldProducts.reduce((sum, item) => sum + item.orderCount, 0)
-  const sellerName = getUserDisplayName(user, t('seller_dashboard.seller_fallback'))
+  const sellerName = getUserDisplayName(user, 'Người bán')
   const reportPeriod = `${pad2(reportMonth)}/${reportYear}`
   const hasReportData = soldProducts.length > 0
 
   const getExportContext = () => {
-    const lang: ExportLanguage = i18n.resolvedLanguage?.startsWith('en') || i18n.language?.startsWith('en') ? 'en' : 'vi'
+    const lang: ExportLanguage = 'vi'
     return {
       lang,
       labels: exportLabels[lang],
-      reportDate: new Date().toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN'),
+      reportDate: new Date().toLocaleString('vi-VN'),
     }
   }
 
@@ -341,10 +339,10 @@ export default function SellerRevenuePage() {
       link.download = `GymPro-Revenue-${getReportFileStamp(reportMonth, reportYear)}.xlsx`
       link.click()
       URL.revokeObjectURL(link.href)
-      message.success(t('seller_dashboard.export_success'))
+      message.success('Xuất Excel thành công')
     } catch (error) {
       console.error(error)
-      message.error(t('seller_dashboard.export_failed'))
+      message.error('Xuất Excel thất bại')
     } finally {
       setExporting('')
     }
@@ -419,10 +417,10 @@ export default function SellerRevenuePage() {
       }
 
       doc.save(`GymPro-Revenue-${getReportFileStamp(reportMonth, reportYear)}.pdf`)
-      message.success(t('seller_dashboard.export_success'))
+      message.success('Xuất PDF thành công')
     } catch (error) {
       console.error(error)
-      message.error(t('seller_dashboard.export_failed'))
+      message.error('Xuất PDF thất bại')
     } finally {
       setExporting('')
     }
@@ -431,17 +429,17 @@ export default function SellerRevenuePage() {
   const columns: ColumnsType<SoldProduct> = [
     { title: 'STT', width: 70, render: (_value, _record, index) => index + 1 },
     {
-      title: t('seller_dashboard.product_image'),
+      title: 'Ảnh sản phẩm',
       dataIndex: 'image',
       width: 110,
       render: (image: string, item) => <Avatar shape="square" size={48} src={image || undefined}>{!image && item.name.charAt(0)}</Avatar>,
     },
-    { title: t('seller_dashboard.product_name'), dataIndex: 'name', render: (value: string) => <Text strong>{value}</Text> },
-    { title: t('seller_dashboard.variant'), dataIndex: 'variant', render: (value: string) => value || '-' },
-    { title: t('seller_dashboard.unit_price'), dataIndex: 'price', render: (value: number) => formatMoney(value) },
-    { title: t('seller_dashboard.quantity_sold'), dataIndex: 'quantity', sorter: (a, b) => a.quantity - b.quantity },
-    { title: t('seller_dashboard.order_lines'), dataIndex: 'orderCount' },
-    { title: t('seller_dashboard.revenue'), dataIndex: 'revenue', render: (value: number) => formatMoney(value), sorter: (a, b) => a.revenue - b.revenue },
+    { title: 'Tên sản phẩm', dataIndex: 'name', render: (value: string) => <Text strong>{value}</Text> },
+    { title: 'Phân loại', dataIndex: 'variant', render: (value: string) => value || '-' },
+    { title: 'Đơn giá', dataIndex: 'price', render: (value: number) => formatMoney(value) },
+    { title: 'SL bán', dataIndex: 'quantity', sorter: (a, b) => a.quantity - b.quantity },
+    { title: 'Số dòng đơn', dataIndex: 'orderCount' },
+    { title: 'Doanh thu', dataIndex: 'revenue', render: (value: number) => formatMoney(value), sorter: (a, b) => a.revenue - b.revenue },
   ]
 
   return (
@@ -449,31 +447,31 @@ export default function SellerRevenuePage() {
       <div className="space-y-4 p-4 max-[640px]:p-0">
         <div className="dashboard-hero rounded-[28px] border border-[var(--gs-border)]" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--theme-accent, #b6462f) 14%, transparent), transparent)' }}>
           <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Seller</p>
-          <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">{t('seller_dashboard.revenue_report')}</h1>
+          <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">Báo cáo doanh thu</h1>
         </div>
         <Card className="max-[640px]:border-0 max-[640px]:bg-transparent">
           <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto_auto_auto]">
             <div className="space-y-1">
-              <Text type="secondary">{t('seller_dashboard.month')}</Text>
+              <Text type="secondary">Tháng</Text>
               <Select className="w-full" value={selectedMonth} options={monthOptions} onChange={setSelectedMonth} />
             </div>
             <div className="space-y-1">
-              <Text type="secondary">{t('seller_dashboard.year')}</Text>
+              <Text type="secondary">Năm</Text>
               <Select className="w-full" value={selectedYear} options={yearOptions} onChange={setSelectedYear} />
             </div>
-            <Button className="self-end" type="primary" onClick={handleApply}>{t('seller_dashboard.apply')}</Button>
-            <Button className="self-end" onClick={handleExportExcel} loading={exporting === 'excel'} disabled={loading || !hasReportData || Boolean(exporting)}>{t('seller_dashboard.export_excel')}</Button>
-            <Button className="self-end" onClick={handleExportPdf} loading={exporting === 'pdf'} disabled={loading || !hasReportData || Boolean(exporting)}>{t('seller_dashboard.export_pdf')}</Button>
+            <Button className="self-end" type="primary" onClick={handleApply}>Áp dụng</Button>
+            <Button className="self-end" onClick={handleExportExcel} loading={exporting === 'excel'} disabled={loading || !hasReportData || Boolean(exporting)}>Xuất Excel</Button>
+            <Button className="self-end" onClick={handleExportPdf} loading={exporting === 'pdf'} disabled={loading || !hasReportData || Boolean(exporting)}>Xuất PDF</Button>
           </div>
         </Card>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Card><Statistic title={t('seller_dashboard.total_revenue')} value={formatMoney(totalRevenue)} /></Card>
-          <Card><Statistic title={t('seller_dashboard.total_sold')} value={totalSold} /></Card>
-          <Card><Statistic title={t('seller_dashboard.product_variants_sold')} value={soldProducts.length} /></Card>
-          <Card><Statistic title={t('seller_dashboard.order_lines')} value={totalOrderLines} /></Card>
+          <Card><Statistic title="Tổng doanh thu" value={formatMoney(totalRevenue)} /></Card>
+          <Card><Statistic title="Đã bán" value={totalSold} /></Card>
+          <Card><Statistic title="Mẫu SP có doanh số" value={soldProducts.length} /></Card>
+          <Card><Statistic title="Số dòng đơn" value={totalOrderLines} /></Card>
         </div>
         <Card className="max-[640px]:border-0 max-[640px]:bg-transparent">
-          <Title level={4} style={{ marginTop: 0 }}>{t('seller_dashboard.sold_products_title')} - {reportPeriod}</Title>
+          <Title level={4} style={{ marginTop: 0 }}>Sản phẩm đã bán - {reportPeriod}</Title>
           <div className="member-scroll-x">
             <Table rowKey="key" loading={loading} dataSource={soldProducts} columns={columns} pagination={{ pageSize: 10 }} scroll={{ x: 980 }} />
           </div>

@@ -1,23 +1,22 @@
 import { CheckOutlined, CloseOutlined, FilterOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { Button, DatePicker, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Tooltip, message } from 'antd'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { membershipService } from '../../../services/membershipService'
-import { staffListAllPayments, staffListAllTransactions } from '../../../services/walletService'
+import { staffListAllPayments } from '../../../services/walletService'
 
 const { RangePicker } = DatePicker
 
 const formatMoney = (value: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 const formatDate = (value?: string) => value ? new Date(value).toLocaleString('vi-VN') : '-'
 
-function getPaymentTypeLabel(record: any, lang: string) {
-  if (record.metadata?.purpose === 'WALLET_DEPOSIT') return lang === 'vi' ? 'Nạp ví' : 'Wallet Topup'
-  if (record.source === 'OFFLINE' && record.planId) return lang === 'vi' ? 'Mua gói tại quầy' : 'Offline Plan Purchase'
-  if (record.source === 'ONLINE' && record.planId) return lang === 'vi' ? 'Mua gói online' : 'Online Plan Purchase'
-  if (record.status === 'REFUNDED' || record.status === 'refunded') return lang === 'vi' ? 'Hoàn tiền' : 'Refund'
-  if (record.paymentMethod === 'WALLET') return lang === 'vi' ? 'Thanh toán ví' : 'Wallet Payment'
-  return lang === 'vi' ? 'Thanh toán' : 'Payment'
+function getPaymentTypeLabel(record: any) {
+  if (record.metadata?.purpose === 'WALLET_DEPOSIT') return 'Nạp ví'
+  if (record.source === 'OFFLINE' && record.planId) return 'Mua gói tại quầy'
+  if (record.source === 'ONLINE' && record.planId) return 'Mua gói online'
+  if (record.status === 'REFUNDED' || record.status === 'refunded') return 'Hoàn tiền'
+  if (record.paymentMethod === 'WALLET') return 'Thanh toán ví'
+  return 'Thanh toán'
 }
 
 function getPaymentTypeColor(record: any) {
@@ -38,23 +37,7 @@ function getPaymentStatusMeta(status: string) {
   return { color: 'default' as const, label: status || '-' }
 }
 
-function getTransactionTypeLabel(type: string, metadata?: any) {
-  if (metadata?.source === 'system') return 'Nạp ví (HT)'
-  if (type === 'REFUND_TO_WALLET') return 'Hoàn ví GymPro'
-  if (type === 'deposit') return 'Nạp ví'
-  if (type === 'payment') return 'Thanh toán'
-  if (type === 'refund') return 'Hoàn tiền'
-  if (type === 'transfer') return 'Chuyển tiền'
-  if (type === 'payout') return 'Rút tiền'
-  return type || '-'
-}
-
-const errorStatuses = ['FAILED', 'CANCELLED', 'failed', 'cancelled']
-const pendingStatuses = ['PENDING', 'pending']
-
 export default function StaffPaymentsPage() {
-  const { t, i18n } = useTranslation()
-  const lang = i18n.language
 
   const [activeTab, setActiveTab] = useState('history')
 
@@ -82,13 +65,6 @@ export default function StaffPaymentsPage() {
   const [approveNote, setApproveNote] = useState('')
   const [rejectingCancel, setRejectingCancel] = useState<any | null>(null)
   const [rejectCancelReason, setRejectCancelReason] = useState('')
-
-  // --- Tab 3: Failed Transactions ---
-  const [errorTxns, setErrorTxns] = useState<any[]>([])
-  const [loadingErrorTxns, setLoadingErrorTxns] = useState(false)
-  const [errorPagination, setErrorPagination] = useState({ total: 0, page: 1, limit: 50, totalPages: 0 })
-  const [errorSearch, setErrorSearch] = useState('')
-  const [errorStatusFilter, setErrorStatusFilter] = useState('')
 
   // --- History ---
   const fetchPayments = async (page = 1) => {
@@ -162,29 +138,10 @@ export default function StaffPaymentsPage() {
     } finally { setActionLoadingId(null) }
   }
 
-  // --- Failed Transactions ---
-  const fetchErrorTransactions = async (page = 1) => {
-    setLoadingErrorTxns(true)
-    try {
-      const params: Record<string, any> = { page, limit: 50 }
-      if (errorSearch.trim()) params.search = errorSearch.trim()
-      if (errorStatusFilter) params.status = errorStatusFilter
-      const res = await staffListAllTransactions(params)
-      const all = res.data.data?.transactions || []
-      const filtered = all.filter((t: any) =>
-        errorStatuses.includes(t.status) || pendingStatuses.includes(t.status)
-      )
-      setErrorTxns(filtered)
-      setErrorPagination((prev) => ({ ...prev, page, total: res.data.data?.pagination?.total || 0 }))
-    } catch { message.error('Không thể tải giao dịch lỗi') }
-    setLoadingErrorTxns(false)
-  }
-
   useEffect(() => {
     fetchPayments()
 
     fetchCancellations()
-    fetchErrorTransactions()
   }, [])
 
   // --- Columns ---
@@ -200,7 +157,7 @@ export default function StaffPaymentsPage() {
     },
     {
       title: 'Loại giao dịch', width: 150,
-      render: (_: any, r: any) => <Tag color={getPaymentTypeColor(r)}>{getPaymentTypeLabel(r, lang)}</Tag>,
+      render: (_: any, r: any) => <Tag color={getPaymentTypeColor(r)}>{getPaymentTypeLabel(r)}</Tag>,
     },
     { title: 'Số tiền', dataIndex: 'amount', width: 140, render: formatMoney },
     {
@@ -237,10 +194,10 @@ export default function StaffPaymentsPage() {
   }
 
   const renderRefundPolicy = (record: any) => {
-    const code = record.policyCode || (record.refundEligible ? 'REFUND_50' : 'NO_REFUND')
-    const color = code === 'REFUND_100' ? 'success' : code === 'REFUND_50' ? 'processing' : 'default'
-    const label = code === 'REFUND_100' ? 'Hoàn 100%' : code === 'REFUND_50' ? 'Hoàn 50%' : 'Không hoàn'
-    return <Tag color={color}>{label}</Tag>
+    const eligible = record.currentRefundEligible ?? record.refundEligible
+    if (!eligible) return <Tag>Không đủ điều kiện hoàn tiền</Tag>
+    const color = record.policyCode === 'REFUND_100' ? 'success' : record.policyCode === 'REFUND_50' ? 'processing' : 'default'
+    return <Tag color={color}>{record.policyLabel || 'Hoàn tiền'}</Tag>
   }
 
   const cancellationColumns = [
@@ -261,14 +218,30 @@ export default function StaffPaymentsPage() {
       render: (_: any, r: any) => formatMoney(r.planId?.price || 0),
     },
     {
+      title: 'Điều kiện', width: 90,
+      render: (_: any, r: any) => {
+        const eligible = r.currentRefundEligible ?? r.refundEligible
+        return eligible
+          ? <Tag color="success">✅ Đủ điều kiện</Tag>
+          : <Tag color="error">❌ {r.ineligibilityReason?.includes('7 ngày') ? 'Quá hạn' : 'Không đủ'}</Tag>
+      },
+    },
+    {
       title: 'Đã dùng', width: 80,
-      render: (_: any, r: any) => `${r.usedDays || 0}/${r.totalDays || '-'} ngày`,
+      render: (_: any, r: any) => (
+        <Tooltip title={`Ngày mua: ${formatDate(r.registeredAt)} | Đã qua: ${r.daysSincePurchase ?? '-'} ngày | Check-in: ${r.checkInCount ?? '?'} | Booking: ${r.bookingCount ?? '?'}`}>
+          <span>{r.usedDays || 0}/{r.totalDays || '-'} ngày</span>
+        </Tooltip>
+      ),
     },
     {
       title: 'Hoàn dự kiến', width: 130,
-      render: (_: any, r: any) => r.refundEligible
-        ? <span className="font-medium text-green-600">{formatMoney(r.estimatedRefundAmount)}</span>
-        : <Tag>Không hoàn</Tag>,
+      render: (_: any, r: any) => {
+        const eligible = r.currentRefundEligible ?? r.refundEligible
+        return eligible
+          ? <span className="font-medium text-green-600">{formatMoney(r.estimatedRefundAmount)}</span>
+          : <Tag>0đ</Tag>
+      },
     },
     {
       title: 'Phương thức hoàn', width: 140,
@@ -299,7 +272,8 @@ export default function StaffPaymentsPage() {
     {
       title: 'Refund status', width: 120,
       render: (_: any, r: any) => {
-        if (!r.refundEligible || r.refundMethod === 'NONE') return <Tag>N/A</Tag>
+        const eligible = r.currentRefundEligible ?? r.refundEligible
+        if (!eligible || r.refundMethod === 'NONE') return <Tag>N/A</Tag>
         const meta = refundStatusMeta(r.refundStatus)
         return <Tag color={meta.color}>{meta.label}</Tag>
       },
@@ -309,13 +283,17 @@ export default function StaffPaymentsPage() {
       title: 'Thao tác', width: 200, fixed: 'right' as const,
       render: (_: any, r: any) => {
         if (r.status === 'pending') {
+          const eligible = r.currentRefundEligible ?? r.refundEligible
           return (
             <Space>
-              <Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => {
-                setApproving(r)
-                setApproveRefund(r.refundEligible ? r.estimatedRefundAmount : 0)
-                setApproveNote('')
-              }}>Xác nhận</Button>
+              <Button size="small" type="primary" icon={<CheckOutlined />}
+                disabled={!eligible}
+                onClick={() => {
+                  setApproving(r)
+                  setApproveRefund(eligible ? r.estimatedRefundAmount : 0)
+                  setApproveNote('')
+                }}
+              >Xác nhận</Button>
               <Button size="small" danger icon={<CloseOutlined />} onClick={() => {
                 setRejectingCancel(r)
                 setRejectCancelReason('')
@@ -328,96 +306,111 @@ export default function StaffPaymentsPage() {
     },
   ]
 
-  const errorColumns = [
-    { title: 'Mã GD', dataIndex: '_id', width: 100, render: (id: string) => <span className="font-mono text-xs">{id.slice(-8)}</span> },
-    {
-      title: 'Member ID', width: 100,
-      render: (_: any, r: any) => r.userInfo?.memberCode || r.userId?.toString().slice(-6) || '-',
-    },
-    {
-      title: 'Loại GD', width: 120,
-      render: (_: any, r: any) => <Tag>{getTransactionTypeLabel(r.type, r.metadata)}</Tag>,
-    },
-    { title: 'Số tiền', dataIndex: 'amount', width: 130, render: formatMoney },
-    {
-      title: 'Phương thức', width: 120,
-      render: (_: any, r: any) => r.metadata?.paymentMethod || r.provider || '-',
-    },
-    {
-      title: 'Trạng thái', width: 110,
-      render: (_: any, r: any) => {
-        const upper = (r.status || '').toUpperCase()
-        const color = upper === 'FAILED' ? 'error' : upper === 'CANCELLED' ? 'default' : 'warning'
-        const label = upper === 'FAILED' ? 'Thất bại' : upper === 'CANCELLED' ? 'Đã hủy' : upper === 'PENDING' ? 'Chờ xử lý' : r.status
-        return <Tag color={color}>{label}</Tag>
-      },
-    },
-    { title: 'Thời gian', dataIndex: 'createdAt', width: 160, render: formatDate },
-    {
-      title: 'Lỗi / Ghi chú', width: 180,
-      render: (_: any, r: any) => (
-        <Tooltip title={r.metadata?.error || r.metadata?.staffNote || r.description || '-'}>
-          <span className="line-clamp-1 max-w-[170px] inline-block">{r.metadata?.error || r.metadata?.staffNote || r.description || '-'}</span>
-        </Tooltip>
-      ),
-    },
-  ]
+  const renderRefundDetail = (record: any) => {
+    const eligible = record.currentRefundEligible ?? record.refundEligible
 
-  const renderRefundDetail = (record: any) => (
-    <div className="space-y-5">
-      <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-5">
-        <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Hội viên</div>
-            <div className="mt-0.5 text-base font-semibold">{record.memberId?.fullName || record.memberId?.name || '-'}</div>
-          </div>
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Gói tập</div>
-            <div className="mt-0.5 text-base font-semibold">{record.planId?.nameVi || record.planId?.nameEn || '-'}</div>
-          </div>
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Đã dùng</div>
-            <div className="mt-0.5 text-base font-semibold">{record.usedDays || 0} / {record.totalDays || '-'} ngày ({record.usedPercent || 0}%)</div>
-          </div>
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Chính sách hoàn</div>
-            <div className="mt-0.5">{renderRefundPolicy(record)}</div>
-          </div>
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Phương thức hoàn</div>
-            <div className="mt-0.5 text-base font-semibold">{refundMethodLabels[record.refundMethod] || record.refundMethod || '-'}</div>
-          </div>
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Hoàn dự kiến</div>
-            <div className={`mt-0.5 text-base font-semibold ${record.refundEligible ? 'text-green-600' : 'text-gray-400'}`}>
-              {record.refundEligible ? formatMoney(record.estimatedRefundAmount) : 'Không hoàn'}
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-5">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Hội viên</div>
+              <div className="mt-0.5 text-base font-semibold">{record.memberId?.fullName || record.memberId?.name || '-'}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Gói tập</div>
+              <div className="mt-0.5 text-base font-semibold">{record.planId?.nameVi || record.planId?.nameEn || '-'}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Ngày mua</div>
+              <div className="mt-0.5 text-base font-semibold">{formatDate(record.registeredAt)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Số ngày đã trôi qua</div>
+              <div className="mt-0.5 text-base font-semibold">{record.daysSincePurchase ?? '-'} ngày</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Số lần check-in</div>
+              <div className="mt-0.5 text-base font-semibold">{record.checkInCount ?? '...'}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Số booking / PT đã dùng</div>
+              <div className="mt-0.5 text-base font-semibold">{record.bookingCount ?? '...'}</div>
             </div>
           </div>
         </div>
-      </div>
-      {record.reason && (
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Lý do hủy</p>
-          <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-3 text-sm">{record.reason}</div>
+
+        <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-5">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Trạng thái</div>
+              <div className="mt-0.5">
+                {eligible
+                  ? <span className="text-base font-semibold text-green-600">✅ Đủ điều kiện hoàn tiền</span>
+                  : <span className="text-base font-semibold text-red-500">❌ {record.ineligibilityReason || 'Không đủ điều kiện hoàn tiền'}</span>
+                }
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Chính sách hoàn</div>
+              <div className="mt-0.5">{renderRefundPolicy(record)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Phương thức hoàn</div>
+              <div className="mt-0.5 text-base font-semibold">
+                {eligible
+                  ? (refundMethodLabels[record.refundMethod] || record.refundMethod || '-')
+                  : 'Không áp dụng'
+                }
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Hoàn dự kiến</div>
+              <div className={`mt-0.5 text-base font-semibold ${eligible ? 'text-green-600' : 'text-gray-400'}`}>
+                {eligible ? formatMoney(record.estimatedRefundAmount) : '0đ'}
+              </div>
+            </div>
+          </div>
         </div>
-      )}
-      <div>
-        <label className="mb-1.5 block text-sm font-medium">Số tiền hoàn thực tế</label>
-        <InputNumber
-          style={{ width: '100%' }} size="large"
-          min={0} value={approveRefund}
-          onChange={(v) => setApproveRefund(v || 0)}
-          formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-          parser={(v) => Number(v?.replace(/,/g, '')) || 0}
-          addonAfter="đ"
-        />
+
+        {record.reason && (
+          <div>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Lý do hủy</p>
+            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-3 text-sm">{record.reason}</div>
+          </div>
+        )}
+
+        {eligible ? (
+          <>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Số tiền hoàn thực tế</label>
+              <InputNumber
+                style={{ width: '100%' }} size="large"
+                min={0} max={record.estimatedRefundAmount || 0}
+                value={approveRefund}
+                onChange={(v) => setApproveRefund(v || 0)}
+                formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                parser={(v) => Number(v?.replace(/,/g, '')) || 0}
+                addonAfter="đ"
+              />
+              <div className="mt-1 text-xs text-[var(--theme-muted)]">
+                Số tiền hoàn không vượt quá {formatMoney(record.estimatedRefundAmount || 0)}
+              </div>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Ghi chú xử lý</label>
+              <Input.TextArea rows={4} value={approveNote} onChange={(e) => setApproveNote(e.target.value)} placeholder="Nhập ghi chú..." />
+            </div>
+          </>
+        ) : (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <p className="font-semibold">Không thể xác nhận hoàn tiền</p>
+            <p className="mt-1">{record.ineligibilityReason || 'Yêu cầu không đủ điều kiện hoàn tiền theo chính sách.'}</p>
+          </div>
+        )}
       </div>
-      <div>
-        <label className="mb-1.5 block text-sm font-medium">Ghi chú xử lý</label>
-        <Input.TextArea rows={4} value={approveNote} onChange={(e) => setApproveNote(e.target.value)} placeholder="Nhập ghi chú..." />
-      </div>
-    </div>
-  )
+    )
+  }
 
   const handleCancelResetFilter = () => {
     setCancelSearch('')
@@ -432,9 +425,9 @@ export default function StaffPaymentsPage() {
       <div className="w-full" style={{ padding: '32px 40px' }}>
         <div className="mx-auto w-full" style={{ maxWidth: '1600px' }}>
           <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
-            <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('staff_payments.page_subtitle')}</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">THANH TOÁN</p>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <h1 className="m-0 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">{t('staff_payments.title')}</h1>
+              <h1 className="m-0 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">Quản lý thanh toán</h1>
             </div>
           </div>
 
@@ -445,7 +438,6 @@ export default function StaffPaymentsPage() {
                 setActiveTab(key)
                 if (key === 'history') { fetchPayments() }
                 if (key === 'refunds') fetchCancellations(cancelPagination.page)
-                if (key === 'errors') fetchErrorTransactions()
               }}
               items={[
                 // ====== TAB 1: HISTORY ======
@@ -583,62 +575,6 @@ export default function StaffPaymentsPage() {
                     </>
                   ),
                 },
-
-                // ====== TAB 3: ERROR TRANSACTIONS ======
-                {
-                  key: 'errors',
-                  label: 'Giao dịch lỗi',
-                  children: (
-                    <>
-                      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
-                        <div className="min-w-[200px] flex-1">
-                          <div className="mb-1 text-xs font-medium text-[var(--gs-text-soft)]">Tìm kiếm</div>
-                          <Input prefix={<SearchOutlined />} placeholder="Mã HV, họ tên..." value={errorSearch}
-                            onChange={(e) => setErrorSearch(e.target.value)}
-                            onPressEnter={() => fetchErrorTransactions(1)}
-                          />
-                        </div>
-                        <div className="min-w-[140px]">
-                          <div className="mb-1 text-xs font-medium text-[var(--gs-text-soft)]">Trạng thái</div>
-                          <Select className="w-full" value={errorStatusFilter} onChange={(v) => setErrorStatusFilter(v)}
-                            options={[
-                              { value: '', label: 'Tất cả' },
-                              { value: 'PENDING', label: 'Chờ quá lâu' },
-                              { value: 'FAILED', label: 'Thất bại' },
-                              { value: 'CANCELLED', label: 'Đã hủy' },
-                            ]}
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <Button type="primary" icon={<FilterOutlined />} onClick={() => fetchErrorTransactions(1)}>Lọc</Button>
-                          <Button icon={<ReloadOutlined />} onClick={() => {
-                            setErrorSearch(''); setErrorStatusFilter(''); fetchErrorTransactions(1)
-                          }}>Reset</Button>
-                        </div>
-                      </div>
-                      <div className="mb-4 flex justify-end">
-                        <Button icon={<ReloadOutlined />} onClick={() => fetchErrorTransactions()}>Tải lại</Button>
-                      </div>
-                      <div className="member-scroll-x">
-                        <Table
-                          rowKey="_id"
-                          dataSource={errorTxns}
-                          columns={errorColumns}
-                          loading={loadingErrorTxns}
-                          pagination={{
-                            current: errorPagination.page,
-                            pageSize: 50,
-                            total: errorPagination.total,
-                            showSizeChanger: false,
-                            showTotal: (total) => `Tổng: ${total}`,
-                          }}
-                          onChange={(pag) => fetchErrorTransactions(pag.current)}
-                          scroll={{ x: 1000 }}
-                        />
-                      </div>
-                    </>
-                  ),
-                },
               ]}
             />
           </div>
@@ -651,7 +587,10 @@ export default function StaffPaymentsPage() {
             onOk={submitApproveCancellation}
             confirmLoading={Boolean(actionLoadingId)}
             okText="Xác nhận hoàn"
-            okButtonProps={{ danger: true }}
+            okButtonProps={{
+              danger: approving?.currentRefundEligible ?? approving?.refundEligible,
+              disabled: !(approving?.currentRefundEligible ?? approving?.refundEligible),
+            }}
             width={720}
             style={{ maxWidth: 'calc(100vw - 32px)' }}
           >

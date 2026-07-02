@@ -10,7 +10,6 @@ import {
 } from 'antd'
 import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { memberService } from '../../../services/memberService'
 import type { MemberFormData, MemberListItem } from '../../../types/admin/member'
 import { UploadOutlined } from '@ant-design/icons'
@@ -25,7 +24,6 @@ interface Props {
 }
 
 export default function MemberFormModal({ open, member, onClose, onSuccess }: Props) {
-  const { t } = useTranslation()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -74,16 +72,16 @@ export default function MemberFormModal({ open, member, onClose, onSuccess }: Pr
 
       if (isEdit) {
         await memberService.updateMember(member!._id, payload)
-        message.success(t('admin.members.update_success'))
+        message.success('Cập nhật thành viên thành công')
       } else {
         ;(payload as unknown as MemberFormData).password = (values.password as string) || undefined
         await memberService.createMember(payload as unknown as MemberFormData)
-        message.success(t('admin.members.create_success'))
+        message.success('Thêm thành viên thành công')
       }
       onSuccess()
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } }
-      message.error(apiError?.response?.data?.message || t('admin.members.messages.action_failed'))
+      message.error(apiError?.response?.data?.message || 'Thao tác thất bại')
     } finally {
       setLoading(false)
     }
@@ -91,70 +89,70 @@ export default function MemberFormModal({ open, member, onClose, onSuccess }: Pr
 
   return (
     <Modal
-      title={isEdit ? t('admin.members.edit') : t('admin.members.add')}
+      title={isEdit ? 'Chỉnh sửa thành viên' : 'Thêm thành viên'}
       open={open}
       onCancel={onClose}
       onOk={() => form.submit()}
       confirmLoading={loading}
-      okText={isEdit ? t('admin.members.form.submit_edit') : t('admin.members.form.submit_add')}
-      cancelText={t('admin.members.form.cancel')}
-      destroyOnClose
+      okText={isEdit ? 'Cập nhật' : 'Thêm'}
+      cancelText="Hủy"
+      destroyOnHidden
       width={520}
     >
       <Form layout="vertical" form={form} onFinish={handleSubmit}>
         <Form.Item
-          label={t('admin.members.form.name')}
+          label="Họ và tên"
           name="name"
-          rules={[{ required: true, message: t('admin.members.form.name_required') }]}
+          rules={[{ required: true, message: 'Vui lòng nhập tên thành viên' }]}
         >
-          <Input placeholder={t('admin.members.form.name_placeholder')} />
+          <Input placeholder="Nhập tên thành viên" />
         </Form.Item>
 
         <Form.Item
-          label={t('admin.members.form.email')}
+          label="Email"
           name="email"
           rules={[
             { type: 'email', message: 'Email không hợp lệ' },
           ]}
         >
-          <Input placeholder={t('admin.members.form.email_placeholder')} type="email" />
+          <Input placeholder="Nhập email" type="email" />
         </Form.Item>
 
         <Form.Item
-          label={t('admin.members.form.phone')}
+          label="Số điện thoại"
           name="phone"
           rules={[
             { pattern: PHONE_REGEX, message: 'Số điện thoại không hợp lệ (VD: 0912345678)' },
           ]}
         >
-          <Input placeholder={t('admin.members.form.phone_placeholder')} />
+          <Input placeholder="Nhập số điện thoại" />
         </Form.Item>
 
-        <Form.Item label={t('admin.members.form.gender')} name="gender">
+        <Form.Item label="Giới tính" name="gender">
           <Select
             allowClear
-            placeholder={t('admin.members.form.gender')}
+            placeholder="Giới tính"
             options={[
-              { value: 'male', label: t('admin.members.form.gender_male') },
-              { value: 'female', label: t('admin.members.form.gender_female') },
-              { value: 'other', label: t('admin.members.form.gender_other') },
+              { value: 'male', label: 'Nam' },
+              { value: 'female', label: 'Nữ' },
+              { value: 'other', label: 'Khác' },
             ]}
           />
         </Form.Item>
 
-        <Form.Item label={t('admin.members.form.dateOfBirth')} name="dateOfBirth">
+        <Form.Item label="Ngày sinh" name="dateOfBirth">
           <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" placeholder="DD/MM/YYYY" />
         </Form.Item>
 
         {!isEdit && (
           <Form.Item
-            label={t('admin.members.form.password')}
+            label="Mật khẩu"
             name="password"
             rules={[
               { min: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự' },
             ]}
           >
-            <Input.Password placeholder={t('admin.members.form.password_placeholder')} />
+            <Input.Password placeholder="Nhập mật khẩu" />
           </Form.Item>
         )}
 
@@ -169,7 +167,7 @@ export default function MemberFormModal({ open, member, onClose, onSuccess }: Pr
               }}
             >
               <Button icon={<UploadOutlined />}>
-                {avatarFile ? avatarFile.name : t('admin.members.form.avatar_upload')}
+                {avatarFile ? avatarFile.name : 'Tải lên ảnh đại diện'}
               </Button>
             </Upload>
           </Form.Item>

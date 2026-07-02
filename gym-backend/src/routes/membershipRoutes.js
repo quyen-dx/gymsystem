@@ -10,7 +10,6 @@ import {
   renewMembershipByWalletWithDuration,
   renewMyMembership,
   subscribeMembership,
-  toggleAutoRenew,
 } from '../controllers/membershipController.js'
 import {
   approveCancellationRequest,
@@ -31,7 +30,6 @@ router.post('/', requireFeature('billing.allowPlanPurchase'), createMembership)
 router.post('/my/renew', requireFeature('billing.allowPlanRenewal'), renewMyMembership)
 router.post('/my/renew-wallet', requireFeature('billing.allowPlanRenewal'), renewMembershipByWallet)
 router.post('/my/renew-plan', requireFeature('billing.allowPlanRenewal'), renewMembershipByWalletWithDuration)
-router.post('/my/auto-renew', toggleAutoRenew)
 
 router.get('/registrations', adminOrStaff, getMembershipRegistrations)
 router.patch('/registrations/:id/confirm', adminOrStaff, confirmMembershipRegistration)

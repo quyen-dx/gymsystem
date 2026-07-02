@@ -44,7 +44,7 @@ export const SYSTEM_SETTINGS_DEFAULTS = {
     onlinePaymentEnabled: false,
     allowAssignPlanToMember: true,
     allowPlanRenewal: true,
-    allowAutoRenewal: true,
+    renewalThresholdDays: 7,
     discountCodesEnabled: true,
     qrPaymentEnabled: true,
     planMemberCountEnabled: true,

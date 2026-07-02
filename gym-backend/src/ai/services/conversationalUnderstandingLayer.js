@@ -288,7 +288,7 @@ export const conversationalUnderstand = ({ query, userMessage = '', context = {}
   if (resolvedSubject === 'general' && resolvedAction === 'unclear' && input.length > 15) confidence = Math.max(0.25, confidence)
 
   // Handle introduction queries
-  if (resolvedSubject === 'general' && /\b(gympro|ban la ai|la gi|what is|who are you)\b/.test(normalized) && confidence < 0.5) {
+  if (resolvedSubject === 'general' && /\b(ban la ai|what is|who are you)\b/.test(normalized) && confidence < 0.5) {
     confidence = 0.8
   }
 
@@ -384,7 +384,7 @@ function mapSubjectActionToIntent(subject, action, questionType, { hasBudget, ha
   if (hasBudget || hasGoal || hasFrequency) return 'membership_advice'
 
   // Introduction / about
-  const introPattern = /\b(introduce|about|gympro|ban la ai|who are you|la gi)\b/
+  const introPattern = /\b(introduce|about|ban la ai|who are you)\b/
   if (introPattern.test(normalized) || introPattern.test(normalizeForIntent(context?.lastQuery || ''))) {
     return 'introduction'
   }

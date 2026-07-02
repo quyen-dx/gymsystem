@@ -1,6 +1,5 @@
 import { Checkbox, Spin } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { systemExperienceService } from '../../services/systemExperienceService'
 
@@ -16,7 +15,6 @@ interface PolicyConsentCardProps {
 }
 
 export default function PolicyConsentCard({ policies, context, onTickedChange }: PolicyConsentCardProps) {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const [ticked, setTicked] = useState<Record<string, boolean>>({})
   const [versions, setVersions] = useState<Record<string, string>>({})
@@ -86,7 +84,7 @@ export default function PolicyConsentCard({ policies, context, onTickedChange }:
   return (
     <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4">
       <h4 className="mb-3 text-sm font-semibold text-[var(--theme-text)]">
-        {t('deposit.policy.consent_card_title') || 'Xác nhận điều khoản'}
+        {'Xác nhận điều khoản'}
       </h4>
       <div className="space-y-2">
         {policies.map((policy) => {
@@ -114,7 +112,7 @@ export default function PolicyConsentCard({ policies, context, onTickedChange }:
                 onClick={() => navigate('/policies')}
                 className="text-xs font-medium text-[var(--theme-accent)] hover:underline"
               >
-                {t('deposit.policy.view_link') || 'Xem'}
+                {'Xem'}
               </button>
             </div>
           )
@@ -122,7 +120,7 @@ export default function PolicyConsentCard({ policies, context, onTickedChange }:
       </div>
       {!allTicked && (
         <p className="mt-3 text-xs text-[var(--theme-accent)]">
-          {t('deposit.policy.consent_warning') || 'Bạn cần xác nhận đủ các chính sách bắt buộc trước khi tiếp tục.'}
+          {'Bạn cần xác nhận đủ các chính sách bắt buộc trước khi tiếp tục.'}
         </p>
       )}
     </div>

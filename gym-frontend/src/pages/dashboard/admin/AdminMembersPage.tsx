@@ -18,7 +18,6 @@ import {
   message,
 } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import api from '../../../services/api'
@@ -37,7 +36,6 @@ interface PlanOption {
 }
 
 export default function AdminMembersPage() {
-  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const [members, setMembers] = useState<MemberListItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -58,6 +56,9 @@ export default function AdminMembersPage() {
   const [renewMemberId, setRenewMemberId] = useState('')
   const [renewMemberName, setRenewMemberName] = useState('')
   const [renewEndDate, setRenewEndDate] = useState('')
+  const [renewStartDate, setRenewStartDate] = useState('')
+  const [renewPlanName, setRenewPlanName] = useState('')
+  const [renewCurrentPlanId, setRenewCurrentPlanId] = useState('')
   useEffect(() => {
     api.get<{ plans: PlanOption[] }>('/plans', { params: { limit: 100 } }).then(({ data }) => {
       setPlans(data.plans || [])
@@ -76,11 +77,11 @@ export default function AdminMembersPage() {
       setMembers(data.members)
       setTotal(data.pagination.total)
     } catch {
-      message.error(t('admin.members.messages.fetch_failed'))
+      message.error('Không thể tải danh sách thành viên')
     } finally {
       setLoading(false)
     }
-  }, [page, search, planFilter, statusFilter, remainingFilter, t])
+  }, [page, search, planFilter, statusFilter, remainingFilter])
 
   useEffect(() => {
     fetchMembers()
@@ -129,10 +130,10 @@ export default function AdminMembersPage() {
   const toggleStatus = async (member: MemberListItem) => {
     try {
       await memberService.toggleMemberStatus(member._id)
-      message.success(t('admin.members.toggle_success'))
+      message.success('Cập nhật trạng thái thành công')
       fetchMembers()
     } catch {
-      message.error(t('admin.members.messages.action_failed'))
+      message.error('Thao tác thất bại')
     }
   }
 
@@ -146,12 +147,15 @@ export default function AdminMembersPage() {
     setRenewMemberId(member._id)
     setRenewMemberName(getUserDisplayName(member, member.memberCode))
     setRenewEndDate(member.activeMembership?.endDate || '')
+    setRenewStartDate(member.activeMembership?.startDate || '')
+    setRenewPlanName(member.activeMembership?.planId?.nameVi || member.activeMembership?.planId?.nameEn || '')
+    setRenewCurrentPlanId(member.activeMembership?.planId?._id || '')
     setRenewModalOpen(true)
   }
 
   const columns = [
     {
-      title: t('admin.members.columns.member'),
+      title: 'Thành viên',
       width: 250,
       render: (_: unknown, record: MemberListItem) => (
         <Space>
@@ -177,22 +181,22 @@ export default function AdminMembersPage() {
       ),
     },
     {
-      title: t('admin.members.columns.plan'),
+      title: 'Gói tập',
       render: (_: unknown, record: MemberListItem) => {
         if (!record.activeMembership) {
-          return <Tag style={{ opacity: 0.5 }}>{t('admin.members.no_plan')}</Tag>
+          return <Tag style={{ opacity: 0.5 }}>Chưa có gói</Tag>
         }
         const plan = record.activeMembership.planId
         return (
           <Space size={4}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: plan?.color || '#3B82F6', flexShrink: 0 }} />
-            <span>{i18n.language?.startsWith('vi') ? (plan?.nameVi || plan?.nameEn || '—') : (plan?.nameEn || plan?.nameVi || '—')}</span>
+            <span>{plan?.nameVi || plan?.nameEn || '—'}</span>
           </Space>
         )
       },
     },
     {
-      title: t('admin.members.columns.remaining_days'),
+      title: 'Ngày còn lại',
       width: 90,
       align: 'center' as const,
       render: (_: unknown, record: MemberListItem) => {
@@ -210,38 +214,38 @@ export default function AdminMembersPage() {
       ),
     },
     {
-      title: t('admin.members.columns.status'),
+      title: 'Trạng thái',
       width: 100,
       render: (_: unknown, record: MemberListItem) => (
         <Tag color={record.isActive ? 'success' : 'error'}>
-          {record.isActive ? t('admin.members.status.active') : t('admin.members.status.locked')}
+          {record.isActive ? 'Hoạt động' : 'Đã khóa'}
         </Tag>
       ),
     },
     {
-      title: t('admin.members.columns.actions'),
+      title: 'Thao tác',
       width: 200,
       render: (_: unknown, record: MemberListItem) => (
         <Space size={4}>
-          <Tooltip title={t('admin.members.detail.title')}>
+          <Tooltip title="Chi tiết">
             <Button size="small" icon={<EyeOutlined />} onClick={() => navigate(`/admin/members/${record._id}`)} />
           </Tooltip>
-          <Tooltip title={t('admin.members.edit')}>
+          <Tooltip title="Chỉnh sửa">
             <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
           </Tooltip>
-          <Tooltip title={record.isActive ? t('admin.members.lock') : t('admin.members.unlock')}>
+          <Tooltip title={record.isActive ? 'Khóa' : 'Mở khóa'}>
             <Button size="small" icon={record.isActive ? <LockOutlined /> : <UnlockOutlined />} onClick={() => toggleStatus(record)} />
           </Tooltip>
           <Dropdown
             menu={{
               items: [
-                { key: 'register', label: t('admin.members.detail.register_plan'), onClick: () => openRegisterPlan(record) },
-                { key: 'renew', label: t('admin.members.detail.renew_plan'), onClick: () => openRenewPlan(record), disabled: !record.activeMembership },
+                { key: 'register', label: 'Đăng ký gói tập', onClick: () => openRegisterPlan(record), disabled: !!record.activeMembership },
+                { key: 'renew', label: 'Gia hạn gói tập', onClick: () => openRenewPlan(record), disabled: !record.activeMembership },
               ],
             }}
             trigger={['click']}
           >
-            <Button size="small">{t('admin.members.plan_actions')}</Button>
+            <Button size="small">Gói tập</Button>
           </Dropdown>
         </Space>
       ),
@@ -251,14 +255,14 @@ export default function AdminMembersPage() {
   return (
     <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('admin.members.module')}</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.members.title')}</h1>
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Quản lý</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý thành viên</h1>
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
         <div className="dashboard-filter-bar">
           <Input.Search
-            placeholder={t('admin.members.search_placeholder')}
+            placeholder="Tìm kiếm thành viên..."
             allowClear
             onSearch={handleSearch}
             style={{ maxWidth: 300 }}
@@ -266,7 +270,7 @@ export default function AdminMembersPage() {
           <Select
             allowClear
             showSearch
-            placeholder={t('admin.members.filter_plan')}
+            placeholder="Lọc theo gói tập"
             style={{ minWidth: 160 }}
             onChange={handlePlanFilter}
             optionFilterProp="label"
@@ -274,28 +278,28 @@ export default function AdminMembersPage() {
           />
           <Select
             allowClear
-            placeholder={t('admin.members.filter_status')}
+            placeholder="Lọc theo trạng thái"
             style={{ minWidth: 130 }}
             onChange={handleStatusFilter}
             options={[
-              { value: 'active', label: t('admin.members.filter_status_active') },
-              { value: 'locked', label: t('admin.members.filter_status_locked') },
+              { value: 'active', label: 'Đang hoạt động' },
+              { value: 'locked', label: 'Đã khóa' },
             ]}
           />
           <Select
             allowClear
-            placeholder={t('admin.members.filter_remaining_days')}
+            placeholder="Lọc theo ngày còn lại"
             style={{ minWidth: 140 }}
             onChange={handleRemainingFilter}
             options={[
-              { value: '0', label: t('admin.members.filter_remaining_expired') },
-              { value: '1-7', label: t('admin.members.filter_remaining_soon') },
-              { value: '8-30', label: t('admin.members.filter_remaining_month') },
-              { value: '30+', label: t('admin.members.filter_remaining_over30') },
+              { value: '0', label: 'Đã hết hạn' },
+              { value: '1-7', label: 'Sắp hết hạn (1-7 ngày)' },
+              { value: '8-30', label: '8-30 ngày' },
+              { value: '30+', label: 'Trên 30 ngày' },
             ]}
           />
           <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
-            {t('admin.members.add')}
+            Thêm thành viên
           </Button>
         </div>
 
@@ -338,6 +342,9 @@ export default function AdminMembersPage() {
         memberId={renewMemberId}
         memberName={renewMemberName}
         currentEndDate={renewEndDate}
+        currentStartDate={renewStartDate}
+        currentPlanName={renewPlanName}
+        currentPlanId={renewCurrentPlanId}
         onClose={() => setRenewModalOpen(false)}
         onSuccess={() => { setRenewModalOpen(false); fetchMembers() }}
       />

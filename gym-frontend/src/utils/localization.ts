@@ -1,61 +1,26 @@
-/**
- * Safe localization helper
- * Converts { vi, en } objects or strings to the correct language
- * Never returns an object that can't be rendered
- */
 export function getLocalizedText(
     value: any,
-    language: string = 'vi',
+    _language: string = 'vi',
     fallback: string = ''
 ): string {
-    // Handle null/undefined
-    if (value === null || value === undefined) {
-        return fallback
-    }
-
-    // Handle string
-    if (typeof value === 'string') {
-        return value || fallback
-    }
-
-    // Handle object with language keys
+    if (value === null || value === undefined) return fallback
+    if (typeof value === 'string') return value || fallback
     if (typeof value === 'object' && !Array.isArray(value)) {
-        const normalized = value as Record<string, string>
-        const lang = language?.startsWith('en') ? 'en' : 'vi'
-        return normalized[lang] || normalized.vi || normalized.en || fallback
+        return value.vi || value.en || fallback
     }
-
-    // Fallback for any other type
-    try {
-        return String(value) || fallback
-    } catch {
-        return fallback
-    }
+    try { return String(value) || fallback }
+    catch { return fallback }
 }
 
-/**
- * Normalize data for rendering - ensures no objects are passed to JSX
- */
 export function normalizeForRender(data: any, language: string = 'vi'): string {
     return getLocalizedText(data, language, '')
 }
 
-/**
- * Normalize an object's text fields before saving
- * Ensures strings are converted to { vi, en } format
- */
-export function normalizeForStorage(value: any): { vi: string; en: string } {
-    if (!value) return { vi: '', en: '' }
-    if (typeof value === 'string') {
-        return { vi: value, en: '' }
-    }
-    if (typeof value === 'object' && !Array.isArray(value)) {
-        return {
-            vi: String(value.vi ?? value.en ?? ''),
-            en: String(value.en ?? ''),
-        }
-    }
-    return { vi: String(value), en: '' }
+export function normalizeForStorage(value: any): string {
+    if (!value) return ''
+    if (typeof value === 'string') return value
+    if (typeof value === 'object' && !Array.isArray(value)) return value.vi || value.en || ''
+    return String(value)
 }
 
 const LOCALIZED_LANDING_KEYS = [
@@ -65,9 +30,6 @@ const LOCALIZED_LANDING_KEYS = [
     'aboutTitle', 'aboutContent',
 ] as const
 
-/**
- * Ensure landing CMS data has a stable schema after load (strings -> { vi, en })
- */
 export function normalizeLandingData(data: any = {}) {
     const next: any = { ...data }
     LOCALIZED_LANDING_KEYS.forEach((key) => {
@@ -76,7 +38,7 @@ export function normalizeLandingData(data: any = {}) {
     next.stats = Array.isArray(next.stats)
         ? next.stats.map((item: any) => ({
             value: typeof item?.value === 'object' && item?.value !== null
-                ? getLocalizedText(item.value, 'vi', '')
+                ? item.value.vi || item.value.en || ''
                 : String(item?.value ?? ''),
             label: normalizeForStorage(item?.label),
             order: item?.order ?? 0,
@@ -113,9 +75,6 @@ export function normalizeLandingData(data: any = {}) {
     return next
 }
 
-/**
- * Normalize landing CMS data before persisting to API
- */
 export function normalizeLandingForStorage(data: any = {}) {
     return normalizeLandingData(data)
 }

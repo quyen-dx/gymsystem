@@ -10,7 +10,6 @@ import {
   renewMembershipWithDuration,
   renewMembershipWithWallet,
   subscribeWithWallet,
-  toggleAutoRenew as toggleAutoRenewService,
 } from '../services/membershipService.js'
 
 const sendServiceError = (res, error, next) => {
@@ -80,21 +79,8 @@ export const renewMembershipByWallet = async (req, res, next) => {
 
 export const renewMembershipByWalletWithDuration = async (req, res, next) => {
   try {
-    const { durationMultiplier } = req.body
-    if (!durationMultiplier || ![1, 2, 3].includes(durationMultiplier)) {
-      return res.status(400).json({ message: 'Thời gian gia hạn không hợp lệ.' })
-    }
-    const payload = await renewMembershipWithDuration({ userId: req.user._id, durationMultiplier })
+    const payload = await renewMembershipWithDuration({ userId: req.user._id })
     return res.status(201).json(payload)
-  } catch (error) {
-    return sendServiceError(res, error, next)
-  }
-}
-
-export const toggleAutoRenew = async (req, res, next) => {
-  try {
-    const payload = await toggleAutoRenewService({ userId: req.user._id })
-    return res.json(payload)
   } catch (error) {
     return sendServiceError(res, error, next)
   }
