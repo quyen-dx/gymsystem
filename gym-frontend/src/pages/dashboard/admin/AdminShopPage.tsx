@@ -10,7 +10,6 @@ import {
   Typography
 } from 'antd'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { getAdminShopProducts } from '../../../services/productService'
 import { deleteShop, getAdminShops } from '../../../services/shopService'
@@ -21,7 +20,6 @@ import AdminHistoryButton from './AdminHistoryButton'
 const { Text } = Typography
 
 export default function AdminProductsPage() {
-  const { t } = useTranslation()
   const [shops, setShops] = useState<AdminShop[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -42,7 +40,7 @@ export default function AdminProductsPage() {
       const res = await getAdminShops()
       setShops(res.data)
     } catch {
-      message.error(t('admin.shops.messages.fetch_failed'))
+      message.error('Không thể tải danh sách cửa hàng')
     } finally {
       setLoading(false)
     }
@@ -58,7 +56,7 @@ export default function AdminProductsPage() {
       const res = await getAdminShopProducts(shop._id)
       setViewingProducts(res.data.products || res.data)
     } catch {
-      message.error(t('admin.shops.messages.products_failed'))
+      message.error('Không thể tải sản phẩm')
     } finally {
       setProductsLoading(false)
     }
@@ -73,18 +71,18 @@ export default function AdminProductsPage() {
   const handleDeleteShop = async () => {
     if (!deletingShop) return
     if (!deleteReason.trim()) {
-      message.warning(t('admin.shops.messages.reason_required'))
+      message.warning('Vui lòng nhập lý do xóa')
       return
     }
 
     setDeleteLoading(true)
     try {
       await deleteShop(deletingShop._id, deleteReason)
-      message.success(t('admin.shops.messages.delete_success', { name: deletingShop.name }))
+      message.success(`Đã xóa cửa hàng "${deletingShop.name}"`)
       setIsDeleteModalVisible(false)
       fetchShops()
     } catch (err: any) {
-      message.error(err.response?.data?.message || t('admin.shops.messages.delete_failed'))
+      message.error(err.response?.data?.message || 'Không thể xóa cửa hàng')
     } finally {
       setDeleteLoading(false)
     }
@@ -98,7 +96,7 @@ export default function AdminProductsPage() {
 
   const columns = [
     {
-      title: t('admin.shops.columns.shop'),
+      title: 'Cửa hàng',
       render: (_: any, s: AdminShop) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Image
@@ -115,7 +113,7 @@ export default function AdminProductsPage() {
       ),
     },
     {
-      title: t('admin.shops.columns.owner'),
+      title: 'Chủ cửa hàng',
       render: (_: any, s: AdminShop) => (
         <div>
           <div>{s.user_id?.name}</div>
@@ -124,24 +122,24 @@ export default function AdminProductsPage() {
       ),
     },
     {
-      title: t('admin.shops.columns.created_at'),
+      title: 'Ngày tạo',
       dataIndex: 'createdAt',
       render: (d: string) => new Date(d).toLocaleDateString('vi-VN'),
     },
     {
-      title: t('admin.shops.columns.status'),
+      title: 'Trạng thái',
       render: (_: any, s: AdminShop) => (
         <Tag color={s.isActive ? 'green' : 'red'}>
-          {s.isActive ? t('admin.shops.status.active') : t('admin.shops.status.inactive')}
+          {s.isActive ? 'Đang hoạt động' : 'Ngừng hoạt động'}
         </Tag>
       ),
     },
     {
-      title: t('admin.shops.columns.actions'),
+      title: 'Thao tác',
       render: (_: any, s: AdminShop) => (
         <Space>
-          <Button type="link" onClick={() => handleViewProducts(s)}>{t('admin.shops.actions.products')}</Button>
-          <Button type="link" danger onClick={() => showDeleteModal(s)}>{t('admin.shops.actions.delete')}</Button>
+          <Button type="link" onClick={() => handleViewProducts(s)}>Sản phẩm</Button>
+          <Button type="link" danger onClick={() => showDeleteModal(s)}>Xóa</Button>
         </Space>
       ),
     },
@@ -149,7 +147,7 @@ export default function AdminProductsPage() {
 
   const productColumns = [
     {
-      title: t('admin.shops.products_columns.product'),
+      title: 'Sản phẩm',
       render: (_: any, p: AdminProduct) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Image src={p.image} width={40} height={40} style={{ borderRadius: 4 }} />
@@ -157,23 +155,23 @@ export default function AdminProductsPage() {
         </div>
       )
     },
-    { title: t('admin.shops.products_columns.category'), dataIndex: 'category' },
-    { title: t('admin.shops.products_columns.price'), dataIndex: 'price', render: (v: number) => v.toLocaleString() + 'đ' },
-    { title: t('admin.shops.products_columns.stock'), dataIndex: 'stock' },
+    { title: 'Danh mục', dataIndex: 'category' },
+    { title: 'Giá', dataIndex: 'price', render: (v: number) => v.toLocaleString() + 'đ' },
+    { title: 'Tồn kho', dataIndex: 'stock' },
   ]
 
   return (
     <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Admin</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.shops.title')}</h1>
-        <p className="mt-2 text-sm text-[var(--gs-text-muted)]">{t('admin.shops.total', { count: shops.length })}</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý cửa hàng</h1>
+        <p className="mt-2 text-sm text-[var(--gs-text-muted)]">Tổng số cửa hàng: {shops.length}</p>
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
         <div className="dashboard-filter-bar">
           <Input.Search
-            placeholder={t('admin.shops.search_placeholder')}
+            placeholder="Tìm kiếm cửa hàng..."
             allowClear
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -192,7 +190,7 @@ export default function AdminProductsPage() {
       </div>
 
       <Modal
-        title={t('admin.shops.products_modal_title', { name: viewingShopName })}
+        title={`Sản phẩm của ${viewingShopName}`}
         open={isProductsModalVisible}
         onCancel={() => setIsProductsModalVisible(false)}
         footer={null}
@@ -208,22 +206,22 @@ export default function AdminProductsPage() {
       </Modal>
 
       <Modal
-        title={t('admin.shops.delete_modal.title')}
+        title="Xác nhận xóa cửa hàng"
         open={isDeleteModalVisible}
         onOk={handleDeleteShop}
         onCancel={() => setIsDeleteModalVisible(false)}
         confirmLoading={deleteLoading}
-        okText={t('admin.shops.delete_modal.ok_text')}
-        cancelText={t('admin.shops.delete_modal.cancel_text')}
+        okText="Xóa"
+        cancelText="Hủy"
         okButtonProps={{ danger: true }}
       >
-        <p>{t('admin.shops.delete_modal.confirm', { name: deletingShop?.name })}</p>
-        <p>{t('admin.shops.delete_modal.warning')}</p>
+        <p>Bạn có chắc chắn muốn xóa cửa hàng <strong>{deletingShop?.name}</strong>?</p>
+        <p>Hành động này không thể hoàn tác và toàn bộ dữ liệu liên quan sẽ bị xóa.</p>
         <div className="mt-4">
-          <Text strong>{t('admin.shops.delete_modal.reason_label')}</Text>
+          <Text strong>Lý do xóa</Text>
           <Input.TextArea
             rows={4}
-            placeholder={t('admin.shops.delete_modal.reason_placeholder')}
+            placeholder="Nhập lý do xóa cửa hàng..."
             value={deleteReason}
             onChange={e => setDeleteReason(e.target.value)}
             className="mt-2"

@@ -1,56 +1,54 @@
-import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import MemberLayout from '../../components/layout/header/MemberLayout'
 
 const sections = [
   {
-    titleKey: 'deposit_policy_page.section_1_title',
+    title: '1. Điều Kiện Đặt Cọc',
     items: [
-      'deposit_policy_page.section_1_item_1',
-      'deposit_policy_page.section_1_item_2',
-      'deposit_policy_page.section_1_item_3',
+      'Khách hàng có thể đặt cọc để giữ chỗ đăng ký gói tập.',
+      'Số tiền đặt cọc tối thiểu là 20% giá trị gói tập.',
+      'Thời gian giữ chỗ tối đa là 30 ngày kể từ ngày đặt cọc.',
     ],
   },
   {
-    titleKey: 'deposit_policy_page.section_2_title',
-    descKey: 'deposit_policy_page.section_2_desc',
+    title: '2. Quy Trình Đặt Cọc',
+    desc: 'Quy trình đặt cọc bao gồm các bước sau:',
     items: [
-      'deposit_policy_page.section_2_item_1',
-      'deposit_policy_page.section_2_item_2',
-      'deposit_policy_page.section_2_item_3',
+      'Chọn gói tập mong muốn và tiến hành đặt cọc.',
+      'Hệ thống sẽ gửi xác nhận qua email và SMS.',
+      'Đến trung tâm để hoàn tất thủ tục đăng ký.',
     ],
   },
   {
-    titleKey: 'deposit_policy_page.section_3_title',
-    descKey: 'deposit_policy_page.section_3_desc',
+    title: '3. Chính Sách Hủy Cọc',
+    desc: 'Khách hàng có quyền hủy cọc trong các trường hợp:',
     items: [
-      'deposit_policy_page.section_3_item_1',
-      'deposit_policy_page.section_3_item_2',
-      'deposit_policy_page.section_3_item_3',
+      'Hủy cọc trong vòng 7 ngày: được hoàn lại 100% tiền cọc.',
+      'Hủy cọc sau 7 ngày: được hoàn lại 70% tiền cọc.',
+      'Hủy cọc do lý do sức khỏe: hoàn lại 100% tiền cọc (có giấy tờ y tế).',
     ],
   },
   {
-    titleKey: 'deposit_policy_page.section_4_title',
-    descKey: 'deposit_policy_page.section_4_desc',
+    title: '4. Chuyển Nhượng Cọc',
+    desc: 'Khách hàng có thể chuyển nhượng cọc cho người khác:',
     items: [
-      'deposit_policy_page.section_4_item_1',
-      'deposit_policy_page.section_4_item_2',
-      'deposit_policy_page.section_4_item_3',
+      'Được chuyển nhượng miễn phí nếu thông báo trước 3 ngày.',
+      'Người nhận chuyển nhượng phải đáp ứng điều kiện đăng ký gói tập.',
+      'Chuyển nhượng chỉ được thực hiện một lần cho mỗi cọc.',
     ],
   },
   {
-    titleKey: 'deposit_policy_page.section_5_title',
-    descKey: 'deposit_policy_page.section_5_desc',
+    title: '5. Liên Hệ Hỗ Trợ',
+    desc: 'Mọi thắc mắc về chính sách đặt cọc, vui lòng liên hệ:',
     items: [
-      'deposit_policy_page.section_5_item_1',
-      'deposit_policy_page.section_5_item_2',
-      'deposit_policy_page.section_5_item_3',
+      'Hotline: 1900 xxx xxx (8:00 - 22:00 hàng ngày)',
+      'Email: support@gymsystem.vn',
+      'Địa chỉ: Tầng 1, Tòa nhà ABC, 123 Đường XYZ, Quận 1, TP. Hồ Chí Minh',
     ],
   },
 ]
 
 export default function DepositPolicyPage() {
-  const { t } = useTranslation()
 
   return (
     <MemberLayout>
@@ -59,22 +57,22 @@ export default function DepositPolicyPage() {
           to="/deposit"
           className="mb-6 inline-flex items-center gap-1 text-sm text-[var(--theme-muted)] transition-colors hover:text-[var(--theme-text)]"
         >
-          &larr; {t('deposit_policy_page.back')}
+          &larr; {'Quay lại'}
         </Link>
 
-        <h1 className="mb-2 text-2xl font-bold text-[var(--theme-text)]">{t('deposit_policy_page.title')}</h1>
-        <p className="mb-8 text-sm leading-6 text-[var(--theme-muted)]">{t('deposit_policy_page.description')}</p>
+        <h1 className="mb-2 text-2xl font-bold text-[var(--theme-text)]">{'Chính Sách Đặt Cọc'}</h1>
+        <p className="mb-8 text-sm leading-6 text-[var(--theme-muted)]">{'Chính sách đặt cọc của trung tâm thể hình.'}</p>
 
         <div className="space-y-6">
           {sections.map((section, idx) => (
             <div key={idx} className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-5">
-              <h2 className="mb-3 text-sm font-semibold text-[var(--theme-text)]">{t(section.titleKey)}</h2>
-              {section.descKey && (
-                <p className="mb-3 text-sm leading-6 text-[var(--theme-text)]">{t(section.descKey)}</p>
+              <h2 className="mb-3 text-sm font-semibold text-[var(--theme-text)]">{section.title}</h2>
+              {section.desc && (
+                <p className="mb-3 text-sm leading-6 text-[var(--theme-text)]">{section.desc}</p>
               )}
               <ul className="m-0 space-y-2 pl-5 text-sm leading-6 text-[var(--theme-text)]">
                 {section.items.map((item, i) => (
-                  <li key={i}>{t(item)}</li>
+                  <li key={i}>{item}</li>
                 ))}
               </ul>
             </div>

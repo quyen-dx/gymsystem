@@ -1,7 +1,6 @@
 import { Button, DatePicker, Form, Input, InputNumber, Select, Upload, message } from 'antd'
 import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { trainerService } from '../../../services/trainerService'
 import type { PT } from '../../../types/admin/trainer'
@@ -22,7 +21,6 @@ interface Props {
 }
 
 export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pageTitle, pageDescription }: Props) {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
@@ -87,15 +85,15 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
 
       if (isEdit) {
         await trainerService.updatePT(pt!._id, payload)
-        message.success(t('admin.trainers.messages.update_success'))
+        message.success('Cập nhật PT thành công')
       } else {
         await trainerService.createPT(payload)
-        message.success(t('admin.trainers.messages.create_success'))
+        message.success('Tạo PT mới thành công')
       }
       onSuccess?.()
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } }
-      message.error(apiError?.response?.data?.message || t('admin.trainers.messages.action_failed'))
+      message.error(apiError?.response?.data?.message || 'Thao tác thất bại')
     } finally {
       setLoading(false)
     }
@@ -123,7 +121,7 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
           onClick={() => navigate('/admin/trainers')}
           style={{ color: 'var(--gs-text)', fontSize: 15 }}
         >
-          {isEdit ? '← ' + t('admin.trainers.detail.back') : '← ' + t('admin.trainers.detail.back')}
+          ← Quay lại
         </Button>
       </div>
 
@@ -141,74 +139,74 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
       <Form layout="vertical" form={form} onFinish={handleSubmit}>
         <div className="grid gap-6">
           <div style={cardStyle} className="p-6 max-[640px]:p-4">
-            <h2 style={sectionTitleStyle}>{t('admin.trainers.detail.basic_info')}</h2>
+            <h2 style={sectionTitleStyle}>Thông tin cơ bản</h2>
 
             <Form.Item
-              label={t('admin.trainers.form.name')}
+              label="Họ và tên"
               name="name"
-              rules={[{ required: true, message: t('admin.trainers.form.name_required') }]}
+              rules={[{ required: true, message: 'Vui lòng nhập tên PT' }]}
             >
-              <Input placeholder={t('admin.trainers.form.name_placeholder')} size="large" />
+              <Input placeholder="Nhập tên PT" size="large" />
             </Form.Item>
 
             <Form.Item
-              label={t('admin.trainers.form.email')}
+              label="Email"
               name="email"
               rules={[
                 { type: 'email', message: 'Email không hợp lệ' },
               ]}
             >
-              <Input placeholder={t('admin.trainers.form.email_placeholder')} size="large" />
+              <Input placeholder="Nhập email" size="large" />
             </Form.Item>
 
             <Form.Item
-              label={t('admin.trainers.form.phone')}
+              label="Số điện thoại"
               name="phone"
               rules={[
                 { pattern: PHONE_REGEX, message: 'Số điện thoại không hợp lệ (VD: 0912345678)' },
               ]}
             >
-              <Input placeholder={t('admin.trainers.form.phone_placeholder')} size="large" />
+              <Input placeholder="Nhập số điện thoại" size="large" />
             </Form.Item>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <Form.Item label={t('admin.trainers.form.gender')} name="gender">
+              <Form.Item label="Giới tính" name="gender">
                 <Select
                   allowClear
-                  placeholder={t('admin.trainers.form.gender')}
+                  placeholder="Giới tính"
                   size="large"
                   options={[
-                    { value: 'male', label: t('admin.trainers.form.gender_male') },
-                    { value: 'female', label: t('admin.trainers.form.gender_female') },
-                    { value: 'other', label: t('admin.trainers.form.gender_other') },
+                    { value: 'male', label: 'Nam' },
+                    { value: 'female', label: 'Nữ' },
+                    { value: 'other', label: 'Khác' },
                   ]}
                 />
               </Form.Item>
 
-              <Form.Item label={t('admin.trainers.form.dateOfBirth')} name="dateOfBirth">
+              <Form.Item label="Ngày sinh" name="dateOfBirth">
                 <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" placeholder="DD/MM/YYYY" size="large" />
               </Form.Item>
             </div>
           </div>
 
           <div style={cardStyle} className="p-6 max-[640px]:p-4">
-            <h2 style={sectionTitleStyle}>{t('admin.trainers.form.specialties')} & {t('admin.trainers.form.bio')}</h2>
+            <h2 style={sectionTitleStyle}>Chuyên môn & Tiểu sử</h2>
 
-            <Form.Item label={t('admin.trainers.form.specialties')} name="specialties">
+            <Form.Item label="Chuyên môn" name="specialties">
               <Select
                 mode="tags"
-                placeholder={t('admin.trainers.form.specialties_placeholder')}
+                placeholder="Chọn chuyên môn"
                 size="large"
                 options={SPECIALTY_OPTIONS.map((s) => ({ value: s, label: s }))}
               />
             </Form.Item>
 
-            <Form.Item label={t('admin.trainers.form.bio')} name="bio">
-              <Input.TextArea rows={4} placeholder={t('admin.trainers.form.bio_placeholder')} size="large" />
+            <Form.Item label="Tiểu sử" name="bio">
+              <Input.TextArea rows={4} placeholder="Nhập tiểu sử" size="large" />
             </Form.Item>
 
-            <Form.Item label={t('admin.trainers.form.experienceYears')} name="experienceYears">
-              <InputNumber min={0} style={{ width: '100%' }} placeholder={t('admin.trainers.form.experienceYears_placeholder')} size="large" />
+            <Form.Item label="Số năm kinh nghiệm" name="experienceYears">
+              <InputNumber min={0} style={{ width: '100%' }} placeholder="Nhập số năm kinh nghiệm" size="large" />
             </Form.Item>
           </div>
 
@@ -225,7 +223,7 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
                 }}
               >
                 <Button icon={<UploadOutlined />} size="large">
-                  {avatarFile ? avatarFile.name : t('admin.trainers.form.avatar_upload')}
+                  {avatarFile ? avatarFile.name : 'Tải lên ảnh đại diện'}
                 </Button>
               </Upload>
             </Form.Item>
@@ -233,27 +231,27 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
 
           {!isEdit && (
             <div style={cardStyle} className="p-6 max-[640px]:p-4">
-              <h2 style={sectionTitleStyle}>{t('admin.trainers.form.password')}</h2>
+              <h2 style={sectionTitleStyle}>Mật khẩu</h2>
 
               <Form.Item
-                label={t('admin.trainers.form.password')}
+                label="Mật khẩu"
                 name="password"
                 rules={[
                   { required: true, message: 'Vui lòng nhập mật khẩu' },
                   { min: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự' },
                 ]}
               >
-                <Input.Password placeholder={t('admin.trainers.form.password_placeholder')} size="large" />
+                <Input.Password placeholder="Nhập mật khẩu" size="large" />
               </Form.Item>
             </div>
           )}
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
             <Button size="large" onClick={() => navigate('/admin/trainers')}>
-              {t('admin.trainers.form.cancel')}
+              Hủy
             </Button>
             <Button type="primary" htmlType="submit" size="large" loading={loading}>
-              {isEdit ? t('admin.trainers.form.submit_edit') : t('admin.trainers.form.submit_add')}
+              {isEdit ? 'Cập nhật PT' : 'Thêm PT'}
             </Button>
           </div>
         </div>

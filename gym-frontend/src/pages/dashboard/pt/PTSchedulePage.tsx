@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { BellOutlined, RightOutlined } from '@ant-design/icons'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
@@ -36,7 +35,6 @@ const statusLabels: Record<string, string> = {
 }
 
 export default function PTSchedulePage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const { dark } = useTheme()
   const [bookings, setBookings] = useState<PTBooking[]>([])
@@ -122,10 +120,10 @@ export default function PTSchedulePage() {
       <div className="space-y-6">
         <div className="rounded-[28px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-8 max-[640px]:p-5">
           <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">
-            {t('pt.schedule.overline') || 'PT Schedule'}
+            'PT Schedule'
           </p>
           <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">
-            {t('pt.schedule.title') || 'Lịch làm việc & Bookings'}
+            'Lịch làm việc &amp; Bookings'
           </h1>
           <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
             Quản lý lịch làm việc hàng tuần và xem các buổi tập được đặt lịch

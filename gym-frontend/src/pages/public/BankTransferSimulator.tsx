@@ -1,6 +1,5 @@
 import { Button, Card, Result, Tag } from 'antd'
 import type { ReactNode } from 'react'
-import i18n from '../../i18n'
 
 export const SIMULATED_BANK_ACCOUNT = {
   bankName: 'NCB',
@@ -24,7 +23,7 @@ type BankTransferSimulatorProps = {
 }
 
 function formatVND(amount: number) {
-  return new Intl.NumberFormat(i18n.language === 'vi' ? 'vi-VN' : 'en-US', {
+  return new Intl.NumberFormat('vi-VN', {
     style: 'currency',
     currency: 'VND',
   }).format(amount)

@@ -5,6 +5,13 @@ import { SEPARATOR, bulletList, compactList, formatDaysText, formatEmailText, fo
 // Handles empty data gracefully, provides follow-up-friendly answers.
 
 const normalizeLanguage = (language) => language === 'en' ? 'en' : 'vi'
+const normalizeText = (value = '') => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/đ/g, 'd')
+  .replace(/Đ/g, 'd')
+  .toLowerCase()
+  .trim()
 
 const planName = (plan, lang = 'vi') => {
   if (!plan) return ''
@@ -68,6 +75,57 @@ export const buildPlanListResponse = ({ plans, lang = 'vi' }) => {
 
   lines.push('', lang === 'en' ? 'Which plan catches your eye? I can help you compare and pick the best fit.' : 'Bạn thấy gói nào ổn? Mình sẽ phân tích chi tiết và tư vấn gói phù hợp nhất với bạn.')
   return lines.join('\n')
+}
+
+export const buildPlanSpecializationOverviewResponse = ({ plans, lang = 'vi' }) => {
+  if (!Array.isArray(plans) || plans.length === 0) {
+    return lang === 'en'
+      ? 'GymPro currently does not have membership plans available for display.'
+      : 'Hiện tại GymPro chưa có gói tập nào để hiển thị.'
+  }
+
+  const allSpecializations = plans
+    .flatMap((plan) => Array.isArray(plan?.applicableSpecializations) ? plan.applicableSpecializations : [])
+    .map((name) => String(name || '').trim())
+    .filter(Boolean)
+  const uniqueSpecializations = [...new Set(allSpecializations)]
+
+  if (uniqueSpecializations.length <= 1) {
+    return buildPlanListResponse({ plans, lang })
+  }
+
+  const lines = []
+  if (lang === 'en') {
+    lines.push('GymPro currently has the following training specializations:')
+    lines.push('', ...bulletList(uniqueSpecializations))
+    lines.push('', 'Which specialization would you like to view first? I will show all plans in that specialization.')
+  } else {
+    lines.push('GymPro hiện có các chuyên môn tập luyện sau:')
+    lines.push('', ...bulletList(uniqueSpecializations))
+    lines.push('', 'Bạn muốn xem gói thuộc chuyên môn nào trước? Mình sẽ hiển thị đầy đủ các gói của chuyên môn đó.')
+  }
+  return lines.join('\n')
+}
+
+export const shouldUsePlanSpecializationOverview = ({ plans, query = '' }) => {
+  if (!Array.isArray(plans) || plans.length === 0) return false
+  const uniqueSpecializations = new Set(
+    plans
+      .flatMap((plan) => Array.isArray(plan?.applicableSpecializations) ? plan.applicableSpecializations : [])
+      .map((name) => normalizeText(name))
+      .filter(Boolean),
+  )
+  if (uniqueSpecializations.size < 2) return false
+
+  const normalizedQuery = normalizeText(query)
+  if (!normalizedQuery) return false
+
+  const isGenericPlanAsk = /\b(co|hien co|gom|danh sach|bao nhieu)\b/.test(normalizedQuery)
+    && /\b(goi|goi tap|membership|plan)\b/.test(normalizedQuery)
+    && !/\b(gia|re|dat|so sanh|compare|chi tiet|detail|vip|pro|basic|renew|gia han)\b/.test(normalizedQuery)
+  const isSuggestWhichPlan = /\b(nen chon goi nao|chon goi nao|goi nao phu hop|which plan)\b/.test(normalizedQuery)
+
+  return isGenericPlanAsk || isSuggestWhichPlan
 }
 
 export const buildPlanRecommendResponse = ({ plan, reason, alternatives, userProfile, lang = 'vi' }) => {

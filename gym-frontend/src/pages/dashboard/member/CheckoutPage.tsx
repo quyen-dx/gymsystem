@@ -1,6 +1,5 @@
 import { Alert, Button, Card, Col, Form, Input, message, Modal, Radio, Row, Space, Tag, Typography } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import CartItemRow from '../../../components/checkout/CartItemRow'
@@ -22,7 +21,6 @@ const parseWeightKg = (weight: any): number => {
 }
 
 export default function CheckoutPage() {
-  const { t } = useTranslation()
   const [form] = Form.useForm()
   const { cart, setCart } = useCart()
   const { refreshWallet } = useWallet()
@@ -110,15 +108,15 @@ export default function CheckoutPage() {
 
   const handleApplyDiscount = async () => {
     const code = discountInput.trim().toUpperCase()
-    if (!code) return message.error(t('checkout.discount_required'))
+    if (!code) return message.error('Vui lòng nhập mã giảm giá')
     try {
       const res = await validateDiscountCode({ code, subtotal, shippingFee: shippingInfo.shippingFee })
       setAppliedDiscountCode(code)
       setDiscountInput(code)
       setDiscountAmount(Number(res.data.data.amount || 0))
-      message.success(t('checkout.discount_applied'))
+      message.success('Đã áp dụng mã giảm giá')
     } catch (error: any) {
-      message.error(error?.response?.data?.message || t('checkout.discount_invalid'))
+      message.error(error?.response?.data?.message || 'Mã giảm giá không hợp lệ')
     }
   }
 
@@ -132,21 +130,21 @@ export default function CheckoutPage() {
     setAddingAddress(true)
     try {
       await createAddress({ ...values, isDefault: true })
-      message.success(t('checkout.msg_address_saved'))
+      message.success('Đã lưu địa chỉ')
       setAddressModalOpen(false)
       await loadAddresses()
     } catch (error: any) {
-      message.error(error?.response?.data?.message || t('checkout.msg_address_save_failed'))
+      message.error(error?.response?.data?.message || 'Lưu địa chỉ thất bại')
     } finally {
       setAddingAddress(false)
     }
   }
 
   const handleSubmit = async () => {
-    if (cart.length === 0) return message.error(t('checkout.msg_empty_cart'))
-    if (!selectedAddress) return message.error(t('checkout.msg_no_address'))
+    if (cart.length === 0) return message.error('Giỏ hàng trống')
+    if (!selectedAddress) return message.error('Vui lòng chọn địa chỉ giao hàng')
     if (walletBalance !== null && walletBalance < grandTotal) {
-      return message.error(t('checkout.msg_insufficient_balance'))
+      return message.error('Số dư không đủ để thanh toán')
     }
 
     setLoading(true)
@@ -180,14 +178,14 @@ export default function CheckoutPage() {
       await createOrder(orderPayload)
       await refreshWallet()
       setCart([])
-      message.success(t('checkout.msg_payment_success'))
+      message.success('Thanh toán thành công')
       navigate('/cart?tab=orders')
     } catch (error: any) {
       const originalMessage = error?.response?.data?.message || ''
-      let errorMessage = t('checkout.msg_payment_failed')
+      let errorMessage = 'Thanh toán thất bại'
       if (originalMessage) {
         if (/insufficient|not enough|không đủ|balance/i.test(originalMessage)) {
-          errorMessage = t('checkout.msg_insufficient_balance_short')
+          errorMessage = 'Số dư không đủ'
         } else {
           errorMessage = originalMessage
         }
@@ -204,7 +202,7 @@ export default function CheckoutPage() {
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Text strong>{address.fullName}</Text>
-          {address.isDefault && <Tag color="green">{t('checkout.default')}</Tag>}
+          {address.isDefault && <Tag color="green">Mặc định</Tag>}
         </div>
         <div style={{ marginTop: 4 }}><Text>{address.phone}</Text></div>
         <div style={{ marginTop: 8, color: 'var(--theme-muted)' }}>
@@ -222,20 +220,20 @@ export default function CheckoutPage() {
       <div className="member-page">
         <Row gutter={[24, 24]}>
           <Col xs={24} md={16}>
-            <Card title={t('checkout.delivery_address')} style={{ marginBottom: 24 }}>
+            <Card title="Địa chỉ nhận hàng" style={{ marginBottom: 24 }}>
               {selectedAddress ? renderAddressLine(selectedAddress) : (
                 <div style={{ marginBottom: 16 }}>
-                  <Text type="danger">{t('checkout.no_address')}</Text>
+                  <Text type="danger">Chưa có địa chỉ giao hàng</Text>
                 </div>
               )}
               <Space wrap>
                 <Button type="primary" onClick={() => setAddressModalOpen(true)}>
-                  {selectedAddress ? t('checkout.change_address') : t('checkout.add_address')}
+                  {selectedAddress ? 'Đổi địa chỉ' : 'Thêm địa chỉ'}
                 </Button>
               </Space>
               {addresses.length > 0 && (
                 <div style={{ marginTop: 16 }}>
-                  <Text type="secondary">{t('checkout.select_address')}</Text>
+                  <Text type="secondary">Chọn địa chỉ</Text>
                   <Radio.Group
                     style={{ display: 'block', marginTop: 12 }}
                     value={selectedAddressId}
@@ -250,7 +248,7 @@ export default function CheckoutPage() {
                             <div>
                               {address.street}{address.ward ? `, ${address.ward}` : ''}, {address.district}, {address.city}
                             </div>
-                            {address.isDefault && <Tag color="green">{t('checkout.default')}</Tag>}
+                            {address.isDefault && <Tag color="green">Mặc định</Tag>}
                           </div>
                         </Radio>
                       ))}
@@ -260,10 +258,10 @@ export default function CheckoutPage() {
               )}
             </Card>
 
-            <Card title={t('checkout.order_info')}>
+            <Card title="Thông tin đơn hàng">
               <div style={{ maxHeight: 420, overflowY: 'auto', marginBottom: 4 }}>
                 {cart.length === 0 ? (
-                  <Text style={{ color: 'var(--theme-muted)' }}>{t('checkout.empty_cart')}</Text>
+                  <Text style={{ color: 'var(--theme-muted)' }}>Giỏ hàng trống</Text>
                 ) : (
                   cart.map((item) => (
                     <CartItemRow
@@ -279,7 +277,7 @@ export default function CheckoutPage() {
                   paddingTop: 12,
                 }}>
                   <Row>
-                    <Col span={12}><Text>{t('checkout.subtotal')}</Text></Col>
+                    <Col span={12}><Text>Tạm tính</Text></Col>
                     <Col span={12} style={{ textAlign: 'right' }}>
                       <Text strong>{subtotal.toLocaleString('vi-VN')}đ</Text>
                     </Col>
@@ -290,56 +288,56 @@ export default function CheckoutPage() {
           </Col>
 
           <Col xs={24} md={8}>
-            <Card title={t('checkout.payment_summary')}>
+            <Card title="Tổng thanh toán">
               <Row style={{ marginBottom: 8 }}>
-                <Col span={14}><Text>{t('checkout.goods_total')}</Text></Col>
+                <Col span={14}><Text>Tổng tiền hàng</Text></Col>
                 <Col span={10} style={{ textAlign: 'right' }}>
                   <Text>{subtotal.toLocaleString('vi-VN')}đ</Text>
                 </Col>
               </Row>
               <Row style={{ marginBottom: 8 }}>
-                <Col span={14}><Text>{t('checkout.shipping_fee')}</Text></Col>
+                <Col span={14}><Text>Phí vận chuyển</Text></Col>
                 <Col span={10} style={{ textAlign: 'right' }}>
                   {isShippingLoading ? '...' : <Text>{shippingInfo.shippingFee.toLocaleString('vi-VN')}đ</Text>}
                 </Col>
               </Row>
               <Row style={{ marginBottom: 12 }}>
-                <Col span={12}><Text>{t('checkout.estimated_delivery')}</Text></Col>
+                <Col span={12}><Text>Dự kiến giao</Text></Col>
                 <Col span={12} style={{ textAlign: 'right' }}>
                   {isShippingLoading ? '...' : (
                     <Text strong style={{ color: 'var(--theme-accent)' }}>
-                      {shippingInfo.estimatedDays === 1 ? t('checkout.tomorrow') : t('checkout.days', { days: shippingInfo.estimatedDays })}
+                      {shippingInfo.estimatedDays === 1 ? 'Ngày mai' : `${shippingInfo.estimatedDays} ngày`}
                       {shippingInfo.estimatedDeliveryDate ? ` (${shippingInfo.estimatedDeliveryDate})` : ''}
                     </Text>
                   )}
                 </Col>
               </Row>
               <div style={{ marginBottom: 12 }}>
-                <Text>{t('checkout.discount_code')}</Text>
+                <Text>Mã giảm giá</Text>
                 <Space.Compact style={{ width: '100%', marginTop: 8 }}>
                   <Input
                     value={discountInput}
                     onChange={(event) => setDiscountInput(event.target.value.toUpperCase())}
-                    placeholder={t('checkout.discount_placeholder')}
+                    placeholder="Nhập mã giảm giá"
                     disabled={!!appliedDiscountCode}
                   />
                   {appliedDiscountCode ? (
-                    <Button onClick={handleRemoveDiscount}>{t('checkout.discount_remove')}</Button>
+                    <Button onClick={handleRemoveDiscount}>Bỏ</Button>
                   ) : (
-                    <Button onClick={handleApplyDiscount}>{t('checkout.discount_apply')}</Button>
+                    <Button onClick={handleApplyDiscount}>Áp dụng</Button>
                   )}
                 </Space.Compact>
               </div>
               {discountAmount > 0 && (
                 <Row style={{ marginBottom: 12 }}>
-                  <Col span={14}><Text>{t('checkout.discount')}</Text></Col>
+                  <Col span={14}><Text>Giảm giá</Text></Col>
                   <Col span={10} style={{ textAlign: 'right' }}>
                     <Text style={{ color: '#52c41a' }}>-{discountAmount.toLocaleString('vi-VN')}đ</Text>
                   </Col>
                 </Row>
               )}
               <Row style={{ marginBottom: 16, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12 }}>
-                <Col span={14}><Text strong>{t('checkout.grand_total')}</Text></Col>
+                <Col span={14}><Text strong>Tổng cộng</Text></Col>
                 <Col span={10} style={{ textAlign: 'right' }}>
                   <Text strong style={{ color: 'var(--theme-accent)', fontSize: 20 }}>
                     {grandTotal.toLocaleString('vi-VN')}đ
@@ -347,7 +345,7 @@ export default function CheckoutPage() {
                 </Col>
               </Row>
               <Row style={{ marginBottom: 8 }}>
-                <Col span={14}><Text>{t('checkout.current_wallet')}</Text></Col>
+                <Col span={14}><Text>Số dư ví</Text></Col>
                 <Col span={10} style={{ textAlign: 'right' }}>
                   <Text strong style={{ color: notEnough ? '#ff4d4f' : '#52c41a', fontSize: '150%' }}>
                     {walletBalance !== null ? walletBalance.toLocaleString('vi-VN') + 'đ' : '...'}
@@ -359,15 +357,15 @@ export default function CheckoutPage() {
                 <Alert
                   type="error"
                   showIcon
-                  message={t('checkout.insufficient_balance')}
-                  description={t('checkout.needs_more', { amount: (grandTotal - (walletBalance || 0)).toLocaleString('vi-VN') })}
+                  message="Số dư không đủ"
+                  description={`Cần thêm ${(grandTotal - (walletBalance || 0)).toLocaleString('vi-VN')}đ để thanh toán`}
                   style={{ marginBottom: 12 }}
                 />
               )}
 
               <div style={{ marginBottom: 12 }}>
                 <Text type={notEnough ? 'danger' : 'secondary'}>
-                  {t('checkout.pay_with_wallet')}
+                  Thanh toán qua ví
                 </Text>
               </div>
               <div className="member-responsive-actions" style={{ display: 'flex' }}>
@@ -385,11 +383,11 @@ export default function CheckoutPage() {
                     flex: '1 1 180px',
                   }}
                 >
-                  {t('checkout.pay_now')}
+                  Thanh toán ngay
                 </Button>
                 <Button type="default" size="large" block style={{ flex: '1 1 140px' }}
                   onClick={() => navigate('/deposit')}>
-                  {t('checkout.deposit')}
+                  Nạp tiền
                 </Button>
               </div>
 
@@ -398,39 +396,39 @@ export default function CheckoutPage() {
         </Row>
 
         <Modal
-          title={t('checkout.address_modal_title')}
+          title="Thêm địa chỉ mới"
           open={addressModalOpen}
           onCancel={() => setAddressModalOpen(false)}
           footer={null}
         >
           <Form form={form} layout="vertical" onFinish={handleCreateAddress}>
-            <Form.Item name="fullName" label={t('checkout.form_full_name')}
-              rules={[{ required: true, message: t('checkout.form_full_name_required') }]}>
+            <Form.Item name="fullName" label="Họ và tên"
+              rules={[{ required: true, message: 'Vui lòng nhập họ và tên' }]}>
               <Input />
             </Form.Item>
-            <Form.Item name="phone" label={t('checkout.form_phone')}
-              rules={[{ required: true }, { pattern: /^0\d{9,10}$/, message: t('checkout.form_phone_invalid') }]}>
+            <Form.Item name="phone" label="Số điện thoại"
+              rules={[{ required: true }, { pattern: /^0\d{9,10}$/, message: 'Số điện thoại không hợp lệ' }]}>
               <Input />
             </Form.Item>
-            <Form.Item name="street" label={t('checkout.form_street')}
-              rules={[{ required: true, message: t('checkout.form_street_required') }]}>
+            <Form.Item name="street" label="Địa chỉ"
+              rules={[{ required: true, message: 'Vui lòng nhập địa chỉ' }]}>
               <Input />
             </Form.Item>
-            <Form.Item name="ward" label={t('checkout.form_ward')}>
+            <Form.Item name="ward" label="Phường/Xã">
               <Input />
             </Form.Item>
-            <Form.Item name="district" label={t('checkout.form_district')}
-              rules={[{ required: true, message: t('checkout.form_district_required') }]}>
+            <Form.Item name="district" label="Quận/Huyện"
+              rules={[{ required: true, message: 'Vui lòng nhập quận/huyện' }]}>
               <Input />
             </Form.Item>
-            <Form.Item name="city" label={t('checkout.form_city')}
-              rules={[{ required: true, message: t('checkout.form_city_required') }]}>
+            <Form.Item name="city" label="Tỉnh/Thành phố"
+              rules={[{ required: true, message: 'Vui lòng nhập tỉnh/thành phố' }]}>
               <Input />
             </Form.Item>
             <Form.Item>
               <Space>
-                <Button type="primary" htmlType="submit" loading={addingAddress}>{t('checkout.form_save')}</Button>
-                <Button onClick={() => setAddressModalOpen(false)}>{t('checkout.form_cancel')}</Button>
+                <Button type="primary" htmlType="submit" loading={addingAddress}>Lưu</Button>
+                <Button onClick={() => setAddressModalOpen(false)}>Hủy</Button>
               </Space>
             </Form.Item>
           </Form>

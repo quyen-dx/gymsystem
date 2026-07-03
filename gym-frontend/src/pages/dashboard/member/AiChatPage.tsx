@@ -7,14 +7,15 @@ export default function AiChatPage() {
       <style>{`
         .member-shell-content:has(.ai-chat-layout-root) {
           padding: 0;
-          height: calc(100dvh - 64px);
-          min-height: calc(100dvh - 64px);
+          height: 100dvh;
+          min-height: 100dvh;
           overflow: hidden;
         }
 
         .ai-chat-layout-root {
           width: 100%;
           height: 100%;
+          padding-top: 72px;
           display: flex;
           flex-direction: column;
           overflow-x: hidden;
@@ -41,15 +42,15 @@ export default function AiChatPage() {
 
         @media (max-width: 768px) {
           .member-shell-content:has(.ai-chat-layout-root) {
-            height: calc(100dvh - 64px);
-            min-height: calc(100dvh - 64px);
+            height: 100dvh;
+            min-height: 100dvh;
           }
         }
 
         @media (max-width: 520px) {
           .member-shell-content:has(.ai-chat-layout-root) {
-            height: calc(100dvh - 64px);
-            min-height: calc(100dvh - 64px);
+            height: 100dvh;
+            min-height: 100dvh;
           }
         }
       `}</style>

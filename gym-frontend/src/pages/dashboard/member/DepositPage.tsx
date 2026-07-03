@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, Grid, Select, Table, Tag, Tooltip, Typography, message } from 'antd'
 import { CardCvcElement, CardExpiryElement, CardNumberElement, Elements, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import { useSearchParams } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
-import i18n from '../../../i18n'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useWallet } from '../../../context/WalletProvider'
 import { createManualQrDeposit, createStripePaymentIntent, createVnpayDeposit, getDepositPayments, getStripeExchangeRate } from '../../../services/walletService'
@@ -51,7 +49,7 @@ type PendingQrPayment = {
 }
 
 function formatVND(amount: number) {
-  return new Intl.NumberFormat(i18n.language === 'vi' ? 'vi-VN' : 'en-US', {
+  return new Intl.NumberFormat('vi-VN', {
     style: 'currency',
     currency: 'VND',
   }).format(amount)
@@ -93,7 +91,6 @@ function StripeCardDepositForm({
   onPaid: () => void
   onBeforePay?: () => Promise<void>
 }) {
-  const { t } = useTranslation()
   const stripe = useStripe()
   const elements = useElements()
   const [paying, setPaying] = useState(false)
@@ -114,14 +111,14 @@ function StripeCardDepositForm({
       })
 
       if (result.error) {
-        message.error(result.error.message || t('deposit.card.payment_failed'))
+        message.error(result.error.message || 'Thanh toán thất bại')
         return
       }
 
-      message.success(t('deposit.card.success'))
+      message.success('Thanh toán thành công')
       onPaid()
     } catch (error: any) {
-      message.error(error?.response?.data?.message || t('deposit.card.process_failed'))
+      message.error(error?.response?.data?.message || 'Xử lý thanh toán thất bại')
     } finally {
       setPaying(false)
     }
@@ -131,12 +128,12 @@ function StripeCardDepositForm({
     <div className="space-y-4">
       {!stripePublishableKey && (
         <p className="rounded-lg border border-[#ef444433] bg-[#ef44440f] px-3 py-2 text-xs text-[#ef4444]">
-          {t('deposit.card.missing_key')}
+          {'Thiếu khóa cấu hình thanh toán thẻ'}
         </p>
       )}
       <div className="space-y-3">
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">{t('deposit.card.card_number')}</span>
+          <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">Số thẻ</span>
           <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3">
             <CardNumberElement
               options={{
@@ -156,7 +153,7 @@ function StripeCardDepositForm({
         </label>
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="block">
-          <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">{t('deposit.card.expiration_date')}</span>
+          <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">Ngày hết hạn</span>
             <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3">
               <CardExpiryElement
                 options={{
@@ -174,7 +171,7 @@ function StripeCardDepositForm({
             </div>
           </label>
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">{t('deposit.card.security_code')}</span>
+            <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">Mã bảo mật</span>
             <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-3">
               <CardCvcElement
                 options={{
@@ -192,7 +189,7 @@ function StripeCardDepositForm({
             </div>
           </label>
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">{t('deposit.card.postal_code')}</span>
+            <span className="mb-2 block text-sm font-medium text-[var(--theme-text)]">Mã bưu điện</span>
             <input
               value="10000"
               readOnly
@@ -203,7 +200,7 @@ function StripeCardDepositForm({
       </div>
       {exchangeRate && (
         <p className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-elevated)] px-3 py-2 text-xs text-[var(--theme-muted)]">
-          {t('deposit.card.exchange_rate', { rate: Math.round(exchangeRate).toLocaleString('vi-VN') })}
+          {'Tỷ giá: 1 USD = ' + Math.round(exchangeRate).toLocaleString('vi-VN') + ' VND'}
         </p>
       )}
       <Button
@@ -215,14 +212,13 @@ function StripeCardDepositForm({
         onClick={handlePay}
         className="!h-11 !bg-[var(--theme-button-bg)] !text-[var(--theme-button-text)] !font-semibold !shadow-none hover:!bg-[var(--theme-accent-hover)]"
       >
-        {t('deposit.card.pay_button', { amount: displayAmount })}
+        {'Thanh toán ' + displayAmount}
       </Button>
     </div>
   )
 }
 
 export default function DepositPage() {
-  const { t } = useTranslation()
   const screens = useBreakpoint()
   const [searchParams, setSearchParams] = useSearchParams()
   const { wallet, refreshWallet } = useWallet()
@@ -235,6 +231,7 @@ export default function DepositPage() {
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'PENDING' | 'PAID' | 'FAILED'>('all')
   const [paymentMethod, setPaymentMethod] = useState<'vnpay' | 'card'>('vnpay')
   const [pendingPayment, setPendingPayment] = useState<PendingQrPayment | null>(null)
+  const notifiedFromUrl = useRef(false)
   const [loading, setLoading] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [tickedPolicies, setTickedPolicies] = useState<Record<string, { type: string; version: string }> | null>(null)
@@ -249,11 +246,11 @@ export default function DepositPage() {
   }, [amount, cardUsesUsd, cardUsdAmount, exchangeRate])
 
   const amountError = useMemo(() => {
-    if (cardUsesUsd && cardUsdAmount < 0.5) return t('deposit.card.min_usd')
-    if (effectiveAmount < 10000) return t('deposit.min_amount')
-    if (effectiveAmount > 100000000) return t('deposit.max_amount')
+    if (cardUsesUsd && cardUsdAmount < 0.5) return 'Số tiền tối thiểu là 0.5 USD'
+    if (effectiveAmount < 10000) return 'Số tiền tối thiểu là 10.000đ'
+    if (effectiveAmount > 100000000) return 'Số tiền tối đa là 100.000.000đ'
     return null
-  }, [cardUsesUsd, cardUsdAmount, effectiveAmount, t])
+  }, [cardUsesUsd, cardUsdAmount, effectiveAmount])
 
   const depositCredit = useMemo(() => getDepositCredit(effectiveAmount), [effectiveAmount])
 
@@ -270,7 +267,7 @@ export default function DepositPage() {
         setPayments(nextPayments)
         return nextPayments as DepositPayment[]
       })
-      .catch(() => message.error(t('deposit.msg_load_history_failed')))
+      .catch(() => message.error('Không thể tải lịch sử giao dịch'))
       .finally(() => setHistoryLoading(false))
   }
 
@@ -308,7 +305,7 @@ export default function DepositPage() {
             amount: payment.amount,
             status: payment.status,
             method: payment.method || payment.paymentMethod || 'MANUAL_QR',
-            note: t('deposit.qr_prefilled_note'),
+            note: 'Vui lòng chuyển khoản đúng nội dung để hệ thống tự động cập nhật',
           })
         }
       })
@@ -327,13 +324,17 @@ export default function DepositPage() {
           const status = normalizeStatus(current?.status)
 
           if (status === 'PAID') {
-            message.success(t('deposit.msg_payment_success'))
+            if (!notifiedFromUrl.current) {
+              message.success('Nạp tiền thành công')
+            }
             setPendingPayment(null)
             refreshWallet()
           }
 
           if (status === 'FAILED') {
-            message.error(t('deposit.msg_vnpay_failed'))
+            if (!notifiedFromUrl.current) {
+              message.error('Nạp tiền thất bại')
+            }
             setPendingPayment(null)
           }
         })
@@ -343,18 +344,45 @@ export default function DepositPage() {
     return () => window.clearInterval(intervalId)
   }, [pendingPayment?.txnRef, pendingPayment?.type, refreshWallet])
 
+  const processedPaymentRef = useRef<string | null>(null)
+
   useEffect(() => {
     const result = searchParams.get('payment')
+    const txnRef = searchParams.get('txnRef')
     if (!result) return
+    if (processedPaymentRef.current === result) return
+    processedPaymentRef.current = result
 
     if (result === 'success') {
-      message.success(t('deposit.msg_vnpay_success'))
+      message.success('Nạp tiền VNPAY thành công')
       refreshWallet()
     } else {
-      message.error(t('deposit.msg_vnpay_failed'))
+      message.error('Nạp tiền VNPAY thất bại')
     }
 
-    refreshPayments()
+    notifiedFromUrl.current = true
+
+    if (txnRef) {
+      getDepositPayments()
+        .then((res) => {
+          const data = res.data.data || []
+          setPayments(data)
+          const payment = data.find((p: DepositPayment) => p.txnRef === txnRef)
+          if (payment) {
+            setPendingPayment({
+              type: 'vnpay',
+              paymentId: payment._id,
+              txnRef,
+              qrDataUrl: '',
+              amount: payment.amount,
+              status: payment.status,
+              method: 'VNPAY',
+            })
+          }
+        })
+        .catch(() => {})
+    }
+
     setSearchParams({}, { replace: true })
   }, [refreshWallet, searchParams, setSearchParams])
 
@@ -383,6 +411,7 @@ export default function DepositPage() {
 
   const handlePayWithVnpay = async () => {
     if (!consentReady || amountError) return
+    notifiedFromUrl.current = false
     setLoading(true)
     try {
       if (!consentSubmitted) {
@@ -403,12 +432,12 @@ export default function DepositPage() {
         ...manualPayment,
         type: 'vnpay',
         method: 'VNPAY',
-        qrLabel: t('deposit.qr_title'),
+        qrLabel: 'Mã QR nạp tiền',
       })
       refreshPayments()
-      message.success(t('deposit.msg_qr_created'))
+      message.success('Mã QR đã được tạo')
     } catch (error: any) {
-      message.error(error?.response?.data?.message || t('deposit.msg_create_vnpay_failed'))
+      message.error(error?.response?.data?.message || 'Tạo mã QR thất bại')
     } finally {
       setLoading(false)
     }
@@ -433,6 +462,7 @@ export default function DepositPage() {
   const handleOpenVnpayPage = async () => {
     const targetAmount = pendingPayment?.amount || effectiveAmount
     if (!consentReady || !targetAmount || amountError) return
+    notifiedFromUrl.current = false
     setLoading(true)
     try {
       if (!consentSubmitted) {
@@ -446,12 +476,23 @@ export default function DepositPage() {
         setConsentSubmitted(true)
       }
       const res = await createVnpayDeposit({ amount: targetAmount })
-      const paymentUrl = res.data?.data?.paymentUrl
-      if (!paymentUrl) throw new Error('Missing VNPAY payment URL')
-      window.open(paymentUrl, '_blank', 'noopener,noreferrer')
-      refreshPayments()
+      const data = res.data?.data
+      if (!data?.paymentUrl) throw new Error('Missing VNPAY payment URL')
+
+      setPendingPayment({
+        paymentId: data.paymentId,
+        txnRef: data.txnRef,
+        amount: data.amount,
+        status: data.status,
+        type: 'vnpay',
+        method: 'VNPAY',
+        qrDataUrl: data.qrDataUrl || '',
+        qrLabel: '',
+      })
+
+      window.location.href = data.paymentUrl
     } catch (error: any) {
-      message.error(error?.response?.data?.message || t('deposit.msg_open_vnpay_failed'))
+      message.error(error?.response?.data?.message || 'Mở VNPAY thất bại')
     } finally {
       setLoading(false)
     }
@@ -462,10 +503,10 @@ export default function DepositPage() {
       <div className="member-page">
         <div className="mx-auto max-w-5xl">
           <div className="mb-6">
-            <h1 className="text-xl font-bold text-[var(--theme-text)]">{t('deposit.title')}</h1>
+            <h1 className="text-xl font-bold text-[var(--theme-text)]">Nạp tiền</h1>
             {wallet && (
               <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                {t('deposit.current_balance')}{' '}
+                {'Số dư hiện tại: '}
                 <span className="font-semibold text-[var(--theme-accent)]">{formatVND(wallet.balance)}</span>
               </p>
             )}
@@ -488,7 +529,7 @@ export default function DepositPage() {
                         : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
                     }`}
                   >
-                    {t('deposit.vnpay_tab')}
+                    Chuyển khoản
                   </button>
                   <button
                     onClick={() => {
@@ -503,13 +544,13 @@ export default function DepositPage() {
                         : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
                     }`}
                   >
-                    {t('deposit.card_tab')}
+                    Thẻ quốc tế
                   </button>
                 </div>
 
                 <div className="space-y-3">
                   <Text className="block text-sm font-medium text-[var(--theme-text)]">
-                    {cardUsesUsd ? t('deposit.card.select_usd_amount') : t('deposit.select_amount')}
+                    {cardUsesUsd ? 'Chọn số tiền (USD)' : 'Chọn số tiền nạp'}
                   </Text>
                   {cardUsesUsd ? (
                     <>
@@ -534,7 +575,7 @@ export default function DepositPage() {
                           inputMode="decimal"
                           value={customUsdInput}
                           onChange={handleUsdCustomChange}
-                          placeholder={t('deposit.card.placeholder_custom_usd')}
+                          placeholder={'Nhập số tiền USD...'}
                           className="w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-2.5 text-sm text-[var(--theme-text)] placeholder:text-[var(--theme-placeholder)] outline-none transition-colors focus:border-[var(--theme-accent)]"
                         />
                         {customUsdInput && (
@@ -545,12 +586,8 @@ export default function DepositPage() {
                       </div>
                       <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-3 text-xs text-[var(--theme-muted)]">
                         {exchangeRate
-                          ? t('deposit.card.usd_to_vnd', {
-                            usd: formatUSD(cardUsdAmount),
-                            vnd: formatVND(effectiveAmount),
-                            rate: Math.round(exchangeRate).toLocaleString('vi-VN'),
-                          })
-                          : t('deposit.card.exchange_loading')}
+                          ? formatUSD(cardUsdAmount) + ' = ' + formatVND(effectiveAmount) + ' (Tỷ giá: 1 USD = ' + Math.round(exchangeRate).toLocaleString('vi-VN') + ' VND)'
+                          : 'Đang tải tỷ giá...'}
                       </div>
                     </>
                   ) : (
@@ -576,7 +613,7 @@ export default function DepositPage() {
                           inputMode="numeric"
                           value={customInput}
                           onChange={handleCustomChange}
-                          placeholder={t('deposit.placeholder_custom')}
+                          placeholder={'Nhập số tiền khác...'}
                           className="w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-4 py-2.5 text-sm text-[var(--theme-text)] placeholder:text-[var(--theme-placeholder)] outline-none transition-colors focus:border-[var(--theme-accent)]"
                         />
                         {customInput && (
@@ -592,8 +629,8 @@ export default function DepositPage() {
 
                 <PolicyConsentCard
                   policies={[
-                    { type: 'payment', label: t('deposit.policy.link_payment') || 'Chính sách thanh toán' },
-                    { type: 'refund', label: t('deposit.policy.link_refund') || 'Chính sách hoàn tiền' },
+                    { type: 'payment', label: 'Chính sách thanh toán' },
+                    { type: 'refund', label: 'Chính sách hoàn tiền' },
                   ]}
                   context="deposit"
                   onTickedChange={(ticked) => {
@@ -602,7 +639,7 @@ export default function DepositPage() {
                 />
 
                 {paymentMethod === 'vnpay' ? (
-                  <Tooltip title={!consentReady ? (t('deposit.policy.tooltip_accept_required')) : undefined}>
+                  <Tooltip title={!consentReady ? 'Vui lòng đồng ý với chính sách trước khi nạp tiền' : undefined}>
                     <Button
                       type="primary"
                       size="large"
@@ -612,7 +649,7 @@ export default function DepositPage() {
                       onClick={handlePayWithVnpay}
                       className="h-11 bg-[var(--theme-button-bg)] text-[var(--theme-button-text)] font-semibold shadow-none hover:bg-[var(--theme-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      {t('deposit.create_qr')}
+                      Tạo mã QR
                     </Button>
                   </Tooltip>
                 ) : (
@@ -655,12 +692,12 @@ export default function DepositPage() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-base font-semibold text-[var(--theme-text)]">
-                      {pendingPayment.qrLabel || t('deposit.qr_title')}
+                      {pendingPayment.qrLabel || 'Mã QR nạp tiền'}
                     </p>
                     <p className="mt-1 text-xs text-[var(--theme-muted)]">
                       {pendingPayment.type === 'vnpay'
-                        ? t('deposit.qr_description')
-                        : t('deposit.bank_qr_description')}
+                        ? 'Quét mã QR bằng ứng dụng ngân hàng để thanh toán'
+                        : 'Quét mã QR để chuyển khoản ngân hàng'}
                     </p>
                   </div>
                   {pendingPayment.qrDataUrl && (
@@ -670,19 +707,19 @@ export default function DepositPage() {
                   )}
                   <div className="space-y-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4">
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-sm text-[var(--theme-muted)]">{t('deposit.txn_ref')}</span>
+                      <span className="text-sm text-[var(--theme-muted)]">Mã giao dịch</span>
                       <span className="text-sm font-semibold text-[var(--theme-text)]">{pendingPayment.txnRef}</span>
                     </div>
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-sm text-[var(--theme-muted)]">{t('deposit.deposit_amount')}</span>
+                      <span className="text-sm text-[var(--theme-muted)]">Số tiền nạp</span>
                       <span className="text-sm font-semibold text-[var(--theme-text)]">{formatVND(pendingPayment.amount)}</span>
                     </div>
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-sm text-[var(--theme-muted)]">{t('deposit.table_status')}</span>
+                      <span className="text-sm text-[var(--theme-muted)]">Trạng thái</span>
                       {renderStatus(pendingPayment.status)}
                     </div>
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-sm text-[var(--theme-muted)]">{t('deposit.method')}</span>
+                      <span className="text-sm text-[var(--theme-muted)]">Phương thức</span>
                       <span className="text-sm font-semibold text-[var(--theme-text)]">
                         {pendingPayment.method || (pendingPayment.type === 'vnpay' ? 'VNPAY' : 'MANUAL_QR')}
                       </span>
@@ -697,36 +734,36 @@ export default function DepositPage() {
                     {showMobileQrActions && (
                       <>
                         <Button onClick={handleDownloadQr}>
-                          {t('deposit.download_qr')}
+                          Tải QR
                         </Button>
                         <Button onClick={() => pendingPayment.manualUrl && window.open(pendingPayment.manualUrl, '_blank', 'noopener,noreferrer')}>
-                          {t('deposit.open_bank')}
+                          Mở ngân hàng
                         </Button>
                       </>
                     )}
                     <Button loading={loading} onClick={handleOpenVnpayPage}>
-                      {t('deposit.open_vnpay')}
+                      Mở VNPAY
                     </Button>
                     <Button loading={loading} onClick={handlePayWithVnpay}>
-                      {t('deposit.create_another')}
+                      Tạo mã QR khác
                     </Button>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-[var(--theme-muted)]">{t('deposit.deposit_amount')}</span>
+                    <span className="text-sm text-[var(--theme-muted)]">Số tiền nạp</span>
                     <span className="text-base font-semibold text-[var(--theme-text)]">
                       {cardUsesUsd ? `${formatUSD(cardUsdAmount)} / ${formatVND(effectiveAmount)}` : formatVND(effectiveAmount)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-[var(--theme-muted)]">{t('deposit.bonus_amount')}</span>
+                    <span className="text-sm text-[var(--theme-muted)]">Tiền thưởng</span>
                     <span className="text-base font-semibold text-[var(--theme-accent)]">+{formatVND(depositCredit.bonus)}</span>
                   </div>
                   <div className="border-t border-[var(--theme-border)] pt-3">
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-sm text-[var(--theme-muted)]">{t('deposit.total_credit')}</span>
+                      <span className="text-sm text-[var(--theme-muted)]">Tổng cộng</span>
                       <span className="text-lg font-bold text-[var(--theme-accent)]">{formatVND(depositCredit.total)}</span>
                     </div>
                   </div>
@@ -737,14 +774,14 @@ export default function DepositPage() {
 
           <div className="mt-10">
             <Card
-              title={t('deposit.transaction_history')}
+              title="Lịch sử giao dịch"
               extra={(
                 <Select
                   value={paymentFilter}
                   onChange={setPaymentFilter}
                   className="min-w-40"
                   options={[
-                    { label: t('deposit.filter_all'), value: 'all' },
+                    { label: 'Tất cả', value: 'all' },
                     { label: 'PENDING', value: 'PENDING' },
                     { label: 'PAID', value: 'PAID' },
                     { label: 'FAILED', value: 'FAILED' },
@@ -757,23 +794,23 @@ export default function DepositPage() {
                 loading={historyLoading}
                 dataSource={filteredPayments}
                 columns={[
-                  { title: t('deposit.table_time'), dataIndex: 'createdAt', key: 'createdAt', render: (value: string) => new Date(value).toLocaleString() },
-                  { title: t('deposit.txn_ref'), dataIndex: 'txnRef', key: 'txnRef' },
+                  { title: 'Thời gian', dataIndex: 'createdAt', key: 'createdAt', render: (value: string) => new Date(value).toLocaleString() },
+                  { title: 'Mã giao dịch', dataIndex: 'txnRef', key: 'txnRef' },
                   {
-                    title: t('deposit.table_amount'),
+                    title: 'Số tiền',
                     dataIndex: 'amount',
                     key: 'amount',
                     render: (value: number) => formatVND(value),
                   },
                   {
-                    title: t('deposit.method'),
+                    title: 'Phương thức',
                     key: 'method',
                     render: (_: unknown, record: DepositPayment) => {
                       const method = record.method || record.paymentMethod || 'VNPAY'
                       return method === 'MANUAL_QR' ? 'VNPAY' : method
                     },
                   },
-                  { title: t('deposit.table_status'), dataIndex: 'status', key: 'status', render: renderStatus },
+                  { title: 'Trạng thái', dataIndex: 'status', key: 'status', render: renderStatus },
                 ]}
                 pagination={{ pageSize: 8 }}
                 scroll={{ x: 760 }}

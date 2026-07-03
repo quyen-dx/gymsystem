@@ -1,7 +1,6 @@
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Button, Form, Input, Select, Switch, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { systemExperienceService } from '../../../services/systemExperienceService'
@@ -14,7 +13,6 @@ interface CategoryPair {
 }
 
 export default function PolicyCreatePage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const { policyId } = useParams()
   const isEdit = Boolean(policyId)
@@ -48,11 +46,11 @@ export default function PolicyCreatePage() {
         }
       })
       .catch((error) => {
-        message.error(error.response?.data?.message || t('system_experience.admin.save_failed'))
+        message.error(error.response?.data?.message || 'Lưu thất bại')
         navigate('/admin/policies', { replace: true })
       })
       .finally(() => setInitialLoading(false))
-  }, [policyId, form, navigate, t])
+  }, [policyId, form, navigate])
 
   const existingCategoryPairs = useMemo(() => {
     const map = new Map<string, CategoryPair>()
@@ -131,14 +129,14 @@ export default function PolicyCreatePage() {
     } else if (hasAnyNew) {
       const existing = findExistingPair(newCategoryVi, newCategoryEn)
       if (!hasCompleteNew && !existing) {
-        message.error(t('system_experience.admin.category_required'))
+        message.error('Vui lòng chọn hoặc nhập danh mục')
         return
       }
       const pair = getCanonicalPair(newCategoryVi, newCategoryEn)
       values.categoryVi = pair.vi
       values.categoryEn = pair.en
     } else {
-      message.error(t('system_experience.admin.category_required'))
+      message.error('Vui lòng chọn hoặc nhập danh mục')
       return
     }
 
@@ -146,10 +144,10 @@ export default function PolicyCreatePage() {
     try {
       if (policyId) await systemExperienceService.updatePolicy(policyId, values)
       else await systemExperienceService.createPolicy(values)
-      message.success(t('system_experience.admin.save_success'))
+      message.success('Lưu thành công')
       navigate('/admin/policies')
     } catch (error: any) {
-      message.error(error.response?.data?.message || t('system_experience.admin.save_failed'))
+      message.error(error.response?.data?.message || 'Lưu thất bại')
     } finally {
       setLoading(false)
     }
@@ -179,31 +177,31 @@ export default function PolicyCreatePage() {
         style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--theme-accent, #b6462f) 14%, transparent), transparent)' }}
       >
         <h1 className="text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">
-          {isEdit ? t('system_experience.admin.edit_policy') : t('system_experience.admin.add_policy')}
+          {isEdit ? 'Chỉnh sửa chính sách' : 'Thêm chính sách'}
         </h1>
         <p className="mt-1 text-sm text-[var(--gs-text-muted)]">{isEdit ? 'Cập nhật nội dung chính sách' : 'Tạo chính sách mới'}</p>
       </div>
 
       <div style={cardStyle} className="p-6 max-[640px]:p-4">
         <Form form={form} layout="vertical" initialValues={{ isPublished: true }} disabled={initialLoading}>
-          <Form.Item name="titleVi" label={t('system_experience.admin.title_vi')} rules={[{ required: true }]}>
+          <Form.Item name="titleVi" label='Tiêu đề (Tiếng Việt)' rules={[{ required: true }]}>
             <Input size="large" />
           </Form.Item>
-          <Form.Item name="titleEn" label={t('system_experience.admin.title_en')} rules={[{ required: true }]}>
+          <Form.Item name="titleEn" label='Tiêu đề (Tiếng Anh)' rules={[{ required: true }]}>
             <Input size="large" />
           </Form.Item>
-          <Form.Item name="slug" label={t('system_experience.admin.slug')}>
+          <Form.Item name="slug" label='Slug'>
             <Input size="large" />
           </Form.Item>
-          <Form.Item name="contentVi" label={t('system_experience.admin.content_vi')} rules={[{ required: true }]}>
+          <Form.Item name="contentVi" label='Nội dung (Tiếng Việt)' rules={[{ required: true }]}>
             <Input.TextArea rows={6} size="large" />
           </Form.Item>
-          <Form.Item name="contentEn" label={t('system_experience.admin.content_en')} rules={[{ required: true }]}>
+          <Form.Item name="contentEn" label='Nội dung (Tiếng Anh)' rules={[{ required: true }]}>
             <Input.TextArea rows={6} size="large" />
           </Form.Item>
-          <Form.Item label={t('system_experience.admin.category')}>
+          <Form.Item label='Danh mục'>
             <div className="grid gap-3">
-              <div className="text-sm font-medium text-[var(--gs-text-soft)]">{t('system_experience.admin.category_existing_label')}</div>
+              <div className="text-sm font-medium text-[var(--gs-text-soft)]">Chọn danh mục có sẵn</div>
               <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
                 <Select
                   placeholder="Tiếng Việt"
@@ -222,16 +220,16 @@ export default function PolicyCreatePage() {
                   size="large"
                 />
               </div>
-              <div className="text-sm font-medium text-[var(--gs-text-soft)]">{t('system_experience.admin.category_new_label')}</div>
+              <div className="text-sm font-medium text-[var(--gs-text-soft)]">Hoặc thêm danh mục mới</div>
               <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
                 <Input
-                  placeholder={t('system_experience.admin.category_new_vi_placeholder')}
+                  placeholder='Nhập tên danh mục (Tiếng Việt)'
                   value={newCategoryVi}
                   onChange={(e) => { setNewCategoryVi(e.target.value); if (e.target.value) { setSelectedCategoryVi(undefined); setSelectedCategoryEn(undefined) } }}
                   size="large"
                 />
                 <Input
-                  placeholder={t('system_experience.admin.category_new_en_placeholder')}
+                  placeholder='Nhập tên danh mục (Tiếng Anh)'
                   value={newCategoryEn}
                   onChange={(e) => { setNewCategoryEn(e.target.value); if (e.target.value) { setSelectedCategoryVi(undefined); setSelectedCategoryEn(undefined) } }}
                   size="large"
@@ -239,7 +237,7 @@ export default function PolicyCreatePage() {
               </div>
             </div>
           </Form.Item>
-          <Form.Item name="isPublished" label={t('system_experience.admin.publish')} valuePropName="checked">
+          <Form.Item name="isPublished" label='Xuất bản' valuePropName="checked">
             <Switch />
           </Form.Item>
         </Form>

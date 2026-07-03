@@ -1,6 +1,5 @@
-import { Button, ConfigProvider, theme } from 'antd'
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { App as AntdApp, Button, ConfigProvider, theme } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import FeatureDisabled from './components/system/FeatureDisabled'
 import { getAuthToken } from './services/api'
@@ -17,6 +16,7 @@ import AdminMembersPage from './pages/dashboard/admin/AdminMembersPage'
 import AdminMembersEditPage from './pages/dashboard/admin/AdminMembersEditPage'
 import MemberDetailPage from './pages/dashboard/admin/MemberDetailPage'
 import AdminPartnershipRequestsPage from './pages/dashboard/admin/AdminPartnershipRequestsPage'
+import AdminPlanCreatePage from './pages/dashboard/admin/AdminPlanCreatePage'
 import AdminPlansPage from './pages/dashboard/admin/AdminPlansPage'
 import AdminReports from './pages/dashboard/admin/AdminReports'
 import AdminTrainersPage from './pages/dashboard/admin/AdminTrainersPage'
@@ -81,7 +81,6 @@ import AccountProfilePage from './pages/auth/AccountProfilePage'
 
 
 function LoadingScreen() {
-  const { t } = useTranslation()
   const [timedOut, setTimedOut] = useState(false)
 
   useEffect(() => {
@@ -91,8 +90,8 @@ function LoadingScreen() {
 
   return (
     <div className="app-loading-screen">
-      <div>{timedOut ? t('common.server_unavailable') : t('common.loading')}</div>
-      {timedOut && <Button type="primary" onClick={() => window.location.reload()}>{t('common.retry')}</Button>}
+      <div>{timedOut ? 'Máy chủ không khả dụng' : 'Đang tải...'}</div>
+      {timedOut && <Button type="primary" onClick={() => window.location.reload()}>{'Thử lại'}</Button>}
     </div>
   )
 }
@@ -143,103 +142,113 @@ function AppWithTheme() {
   const { user, loading } = useAuth()
   const { settings, loading: settingsLoading } = useSystemSettings()
   const location = useLocation()
+  const antdTheme = useMemo(() => ({
+    algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
+    token: {
+      colorBgBase: tokens.bg,
+      colorBgContainer: tokens.card,
+      colorBgElevated: tokens.elevated,
+      colorBgLayout: tokens.bg,
+      colorBorder: tokens.border,
+      colorBorderSecondary: tokens.border,
+      colorFillTertiary: tokens.inputBg,
+      colorText: tokens.text,
+      colorTextBase: tokens.text,
+      colorTextHeading: tokens.text,
+      colorTextLabel: tokens.text,
+      colorTextSecondary: tokens.muted,
+      colorTextTertiary: tokens.muted,
+      colorTextDescription: tokens.muted,
+      colorTextDisabled: tokens.muted,
+      colorTextPlaceholder: tokens.placeholder,
+      colorIcon: tokens.text,
+      colorIconHover: tokens.accent,
+      colorPrimary: tokens.buttonBg,
+      colorPrimaryHover: tokens.accentHover,
+      colorPrimaryText: tokens.buttonText,
+    },
+    components: {
+      Layout: {
+        headerBg: tokens.card,
+        bodyBg: tokens.bg,
+        siderBg: tokens.card,
+        footerBg: tokens.card,
+      },
+      Menu: {
+        itemBg: tokens.card,
+        itemColor: tokens.text,
+        itemHoverColor: tokens.text,
+        colorBgContainer: tokens.card,
+        itemSelectedBg: tokens.activeBg,
+        itemSelectedColor: tokens.activeText,
+        itemHoverBg: tokens.outlineHoverBg,
+        itemActiveBg: tokens.elevated,
+        subMenuItemBg: tokens.card,
+        groupTitleColor: tokens.muted,
+        colorText: tokens.text,
+        darkItemColor: tokens.text,
+        darkItemBg: tokens.card,
+        darkItemHoverBg: tokens.elevated,
+        darkItemSelectedBg: tokens.activeBg,
+        darkItemSelectedColor: tokens.activeText,
+        darkItemHoverColor: tokens.text,
+        activeBarHeight: 0,
+        activeBarBorderWidth: 0,
+      },
+      Card: { colorBgContainer: tokens.card },
+      Modal: { contentBg: tokens.elevated, headerBg: tokens.elevated },
+      Table: { colorBgContainer: tokens.card, headerBg: tokens.elevated },
+      Select: { colorBgContainer: tokens.inputBg, colorBorder: tokens.border },
+      Input: {
+        colorBgContainer: tokens.inputBg,
+        colorBorder: tokens.border,
+        colorText: tokens.text,
+        colorTextPlaceholder: tokens.placeholder,
+        activeBorderColor: tokens.accent,
+        hoverBorderColor: tokens.accent,
+      },
+      Button: {
+        colorBgContainer: tokens.elevated,
+        colorBorder: tokens.border,
+        colorText: tokens.text,
+        primaryColor: tokens.buttonText,
+        defaultBg: 'transparent',
+        defaultBorderColor: tokens.safeAccent,
+        defaultColor: tokens.safeAccent,
+        defaultHoverBg: tokens.accentMuted,
+        defaultHoverBorderColor: tokens.safeAccent,
+        defaultHoverColor: tokens.safeAccent,
+      },
+      DatePicker: { colorBgContainer: tokens.inputBg, colorBorder: tokens.border },
+      Drawer: { colorBgElevated: tokens.elevated },
+      Tabs: {
+        itemColor: tokens.text,
+        itemHoverColor: tokens.text,
+        itemSelectedColor: tokens.accent,
+        inkBarColor: tokens.accent,
+        colorText: tokens.text,
+      },
+    },
+  }), [dark, tokens])
+
+  useEffect(() => {
+    ConfigProvider.config({
+      holderRender: (children) => (
+        <ConfigProvider theme={antdTheme}>
+          <AntdApp>{children}</AntdApp>
+        </ConfigProvider>
+      ),
+    })
+  }, [antdTheme])
 
   if (!loading && !settingsLoading && user && user.role !== 'super_admin' && user.role !== 'admin' && settings.general.maintenanceMode && location.pathname !== '/maintenance') {
     return <Navigate to="/maintenance" replace />
   }
 
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        token: {
-          colorBgBase: tokens.bg,
-          colorBgContainer: tokens.card,
-          colorBgElevated: tokens.elevated,
-          colorBgLayout: tokens.bg,
-          colorBorder: tokens.border,
-          colorBorderSecondary: tokens.border,
-          colorFillTertiary: tokens.inputBg,
-          colorText: tokens.text,
-          colorTextBase: tokens.text,
-          colorTextHeading: tokens.text,
-          colorTextLabel: tokens.text,
-          colorTextSecondary: tokens.muted,
-          colorTextTertiary: tokens.muted,
-          colorTextDescription: tokens.muted,
-          colorTextDisabled: tokens.muted,
-          colorTextPlaceholder: tokens.placeholder,
-          colorIcon: tokens.text,
-          colorIconHover: tokens.accent,
-          colorPrimary: tokens.buttonBg,
-          colorPrimaryHover: tokens.accentHover,
-          colorPrimaryText: tokens.buttonText,
-        },
-        components: {
-          Layout: {
-            headerBg: tokens.card,
-            bodyBg: tokens.bg,
-            siderBg: tokens.card,
-            footerBg: tokens.card,
-          },
-          Menu: {
-            itemBg: tokens.card,
-            itemColor: tokens.text,
-            itemHoverColor: tokens.text,
-            colorBgContainer: tokens.card,
-            itemSelectedBg: tokens.activeBg,
-            itemSelectedColor: tokens.activeText,
-            itemHoverBg: tokens.outlineHoverBg,
-            itemActiveBg: tokens.elevated,
-            subMenuItemBg: tokens.card,
-            groupTitleColor: tokens.muted,
-            colorText: tokens.text,
-            darkItemColor: tokens.text,
-            darkItemBg: tokens.card,
-            darkItemHoverBg: tokens.elevated,
-            darkItemSelectedBg: tokens.activeBg,
-            darkItemSelectedColor: tokens.activeText,
-            darkItemHoverColor: tokens.text,
-            activeBarHeight: 0,
-            activeBarBorderWidth: 0,
-          },
-          Card: { colorBgContainer: tokens.card },
-          Modal: { contentBg: tokens.elevated, headerBg: tokens.elevated },
-          Table: { colorBgContainer: tokens.card, headerBg: tokens.elevated },
-          Select: { colorBgContainer: tokens.inputBg, colorBorder: tokens.border },
-          Input: {
-            colorBgContainer: tokens.inputBg,
-            colorBorder: tokens.border,
-            colorText: tokens.text,
-            colorTextPlaceholder: tokens.placeholder,
-            activeBorderColor: tokens.accent,
-            hoverBorderColor: tokens.accent,
-          },
-          Button: {
-            colorBgContainer: tokens.elevated,
-            colorBorder: tokens.border,
-            colorText: tokens.text,
-            primaryColor: tokens.buttonText,
-            defaultBg: 'transparent',
-            defaultBorderColor: tokens.safeAccent,
-            defaultColor: tokens.safeAccent,
-            defaultHoverBg: tokens.accentMuted,
-            defaultHoverBorderColor: tokens.safeAccent,
-            defaultHoverColor: tokens.safeAccent,
-          },
-          DatePicker: { colorBgContainer: tokens.inputBg, colorBorder: tokens.border },
-          Drawer: { colorBgElevated: tokens.elevated },
-          Tabs: {
-            itemColor: tokens.text,
-            itemHoverColor: tokens.text,
-            itemSelectedColor: tokens.accent,
-            inkBarColor: tokens.accent,
-            colorText: tokens.text,
-          },
-        },
-      }}
-    >
-      <Routes>
+    <ConfigProvider theme={antdTheme}>
+      <AntdApp>
+        <Routes>
 
         {/* AUTH */}
         <Route path="/login" element={<LoginPage />} />
@@ -258,6 +267,7 @@ function AppWithTheme() {
 
         {/* ADMIN */}
         <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
+        <Route path="/admin/plans/create" element={<PrivateRoute feature="billing.allowPlanPurchase"><AdminPlanCreatePage /></PrivateRoute>} />
         <Route path="/admin/plans" element={<PrivateRoute feature="billing.allowPlanPurchase"><AdminPlansPage /></PrivateRoute>} />
         <Route path="/admin/partnerships" element={<PrivateRoute><AdminPartnershipRequestsPage /></PrivateRoute>} />
         <Route path="/admin/shop" element={<Navigate to="/admin/partnerships" />} />
@@ -334,7 +344,8 @@ function AppWithTheme() {
         <Route path="/feedback" element={<PrivateRoute><MyFeedbackPage /></PrivateRoute>} />
         <Route path="/my-feedback" element={<PrivateRoute><MyFeedbackPage /></PrivateRoute>} />
         <Route path="/my-activity" element={<PrivateRoute><MyActivityPage /></PrivateRoute>} />
-      </Routes>
+        </Routes>
+      </AntdApp>
     </ConfigProvider>
   )
 }

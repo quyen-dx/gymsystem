@@ -15,7 +15,6 @@ import {
   UserRound,
   UsersRound,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../hooks/useAuth'
 
@@ -40,22 +39,21 @@ const isRouteActive = (pathname: string, item: FooterLink, isActive: boolean) =>
 }
 
 function MemberFooter() {
-  const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
   const { logout } = useAuth()
 
   const serviceLinks: FooterLink[] = [
-    { label: t('footer.member.services.packages'), to: '/health', icon: Dumbbell },
-    { label: t('footer.member.services.pt_list'), to: '/booking', icon: UsersRound },
-    { label: t('footer.member.services.group_classes'), to: '/workout', icon: CalendarDays },
-    { label: t('footer.member.services.store'), to: '/store', icon: Store },
+    { label: 'Gói tập', to: '/health', icon: Dumbbell },
+    { label: 'Huấn luyện viên', to: '/booking', icon: UsersRound },
+    { label: 'Lớp nhóm', to: '/workout', icon: CalendarDays },
+    { label: 'Cửa hàng', to: '/store', icon: Store },
   ]
 
   const accountLinks: FooterLink[] = [
-    { label: t('footer.member.account.profile'), to: '/profile', icon: UserRound },
-    { label: t('footer.member.account.orders'), to: '/cart?tab=orders', icon: ShoppingBag, match: ['/cart'] },
-    { label: t('footer.member.account.notifications'), to: '/notifications', icon: Bell },
+    { label: 'Hồ sơ', to: '/profile', icon: UserRound },
+    { label: 'Đơn hàng', to: '/cart?tab=orders', icon: ShoppingBag, match: ['/cart'] },
+    { label: 'Thông báo', to: '/notifications', icon: Bell },
   ]
 
   const handleLogout = () => {
@@ -103,19 +101,19 @@ function MemberFooter() {
               <span>
                 <span className="block text-lg font-bold leading-tight" style={{ color: 'var(--theme-accent)' }}>GymPro</span>
                 <span className="block text-sm" style={{ color: 'var(--gs-muted)' }}>
-                  {t('footer.member.tagline')}
+                  {'Phòng tập thông minh'}
                 </span>
               </span>
             </button>
             <p className="mt-5 max-w-full text-sm leading-6 lg:max-w-xs" style={{ color: 'var(--gs-muted)' }}>
-              {t('footer.member.description')}
+              {'Hệ thống quản lý phòng gym toàn diện, giúp bạn đạt được mục tiêu thể hình.'}
             </p>
             <div className="mt-5 flex items-start gap-2 text-sm" style={{ color: 'var(--gs-muted)' }}>
               <Clock3 className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--gs-muted)' }} />
               <span>
-                {t('footer.member.hours_label')}
+                {'Giờ mở cửa'}
                 <span className="block font-medium" style={{ color: 'var(--gs-text)' }}>
-                  {t('footer.member.hours_value')}
+                  {'6:00 - 22:00 · Tất cả các ngày'}
                 </span>
               </span>
             </div>
@@ -123,14 +121,14 @@ function MemberFooter() {
 
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--gs-text)' }}>
-              {t('footer.member.section.services')}
+              {'Dịch vụ'}
             </h2>
             <div className="mt-5 space-y-3">{serviceLinks.map(renderDesktopLink)}</div>
           </div>
 
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--gs-text)' }}>
-              {t('footer.member.section.account')}
+              {'Tài khoản'}
             </h2>
             <div className="mt-5 space-y-3">
               {accountLinks.map(renderDesktopLink)}
@@ -141,14 +139,14 @@ function MemberFooter() {
                 style={{ color: 'var(--gs-muted)' }}
               >
                 <LogOut className="h-4 w-4 transition-colors group-hover:text-[var(--gs-text)]" style={{ color: 'var(--gs-muted)' }} />
-                <span>{t('footer.member.logout')}</span>
+                <span>{'Đăng xuất'}</span>
               </button>
             </div>
           </div>
 
           <div className="col-span-2 lg:col-span-1">
             <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--gs-text)' }}>
-              {t('footer.member.section.contact')}
+              {'Liên hệ'}
             </h2>
             <div className="mt-5 space-y-3 text-sm" style={{ color: 'var(--gs-muted)' }}>
               <a
@@ -211,9 +209,9 @@ function MemberFooter() {
                 >
                   <Smartphone className="h-5 w-5" style={{ color: 'var(--gs-muted)' }} />
                   <span>
-                    <span className="block text-[10px]" style={{ color: 'var(--gs-muted)' }}>{t('footer.member.download.download_on')}</span>
+                    <span className="block text-[10px]" style={{ color: 'var(--gs-muted)' }}>{'Tải xuống trên'}</span>
                     <span className="block text-sm font-semibold" style={{ color: 'var(--gs-text)' }}>
-                      {t('footer.member.download.app_store')}
+                      {'App Store'}
                     </span>
                   </span>
                 </a>
@@ -224,9 +222,9 @@ function MemberFooter() {
                 >
                   <PlayCircle className="h-5 w-5" style={{ color: 'var(--gs-muted)' }} />
                   <span>
-                    <span className="block text-[10px]" style={{ color: 'var(--gs-muted)' }}>{t('footer.member.download.download_on')}</span>
+                    <span className="block text-[10px]" style={{ color: 'var(--gs-muted)' }}>{'Tải xuống trên'}</span>
                     <span className="block text-sm font-semibold" style={{ color: 'var(--gs-text)' }}>
-                      {t('footer.member.download.ch_play')}
+                      {'CH Play'}
                     </span>
                   </span>
                 </a>
@@ -248,7 +246,7 @@ function MemberFooter() {
                   }}
                 >
                   <MonitorDown className="h-5 w-5 shrink-0" />
-                  <span className="text-sm font-semibold leading-5">{t('footer.member.download.desktop')}</span>
+                  <span className="text-sm font-semibold leading-5">{'Tải ứng dụng Desktop'}</span>
                 </a>
               </div>
             </div>
@@ -260,7 +258,7 @@ function MemberFooter() {
           style={{ borderColor: 'var(--theme-border)' }}
         >
           <p className="mx-auto max-w-7xl text-sm" style={{ color: 'var(--gs-muted)' }}>
-            {t('footer.member.copyright', { year: new Date().getFullYear() })}
+            {`© ${new Date().getFullYear()} GymPro. Đã đăng ký bản quyền.`}
           </p>
         </div>
       </footer>

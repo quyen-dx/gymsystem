@@ -45,6 +45,14 @@ export interface CancellationRequest {
   handledBy: any
   handledAt: string | null
   createdAt: string
+  daysSincePurchase?: number
+  refundDeadline?: string
+  isPastRefundDeadline?: boolean
+  checkInCount?: number
+  bookingCount?: number
+  hasUsedBenefits?: boolean
+  currentRefundEligible?: boolean
+  ineligibilityReason?: string | null
 }
 
 export interface MyMembership {
@@ -61,15 +69,13 @@ export interface MyMembership {
   remainingDays: number
   status: 'active' | 'pending_cancel' | 'expired' | 'cancelled'
   displayStatus: 'active' | 'expiring_soon' | 'expired'
-  autoRenew?: boolean
 }
 
 export const membershipService = {
-  getPlans: () => api.get<{ plans: MembershipPlan[] }>('/plans', { params: { limit: 100 } }),
+  getPlans: (params?: Record<string, any>) => api.get<{ plans: MembershipPlan[] }>('/plans', { params: { limit: 100, ...params } }),
   registerPlan: (planId: string) => api.post('/memberships', { planId }),
   subscribePlan: (planId: string) => api.post('/memberships/subscribe', { planId }),
-  getMyMembership: () => api.get<{ membership: MyMembership | null; canRenew: boolean; autoRenew?: boolean; autoRenewResult?: any; cancellationRequests?: CancellationRequest[] }>('/memberships/my'),
-  toggleAutoRenew: () => api.post<{ autoRenew: boolean; message: string }>('/memberships/my/auto-renew'),
+  getMyMembership: () => api.get<{ membership: MyMembership | null; canRenew: boolean; renewalThresholdDays: number }>('/memberships/my'),
   renewMyMembership: () => api.post('/memberships/my/renew'),
   renewPlanWithWallet: () => api.post('/memberships/my/renew-wallet'),
   renewPlanWithDuration: (durationMultiplier: number) =>

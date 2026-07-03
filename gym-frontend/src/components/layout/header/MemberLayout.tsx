@@ -22,7 +22,6 @@ import {
   Typography,
 } from 'antd'
 import { useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useCart } from '../../../context/useCart'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
@@ -59,7 +58,6 @@ export default function MemberLayout({
   children: React.ReactNode
   hideFooter?: boolean
 }) {
-  const { t } = useTranslation()
   const { user } = useAuth()
   const { settings, isEnabled } = useSystemSettings()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -75,18 +73,18 @@ export default function MemberLayout({
   const navigate = useNavigate()
   const location = useLocation()
   const navItems = [
-    { key: '/', label: t('nav.home'), icon: <HomeOutlined /> },
-    ...(isEnabled('shop.productStoreEnabled') ? [{ key: '/store', label: t('nav.store'), icon: <ShopOutlined /> }] : []),
-    ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/my-membership', label: t('nav.plans'), icon: <CalendarOutlined /> }] : []),
-    ...(isEnabled('pt.memberBookingEnabled') ? [{ key: '/booking', label: t('nav.book_pt'), icon: <CalendarOutlined /> }] : []),
-    ...(isEnabled('workout.healthLogEnabled') ? [{ key: '/health', label: t('nav.health'), icon: <HeartOutlined /> }] : []),
-    ...(isEnabled('workout.workoutPlanEnabled') ? [{ key: '/workout', label: t('nav.workout'), icon: <FundOutlined /> }] : []),
-    ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/checkin', label: t('nav.checkin'), icon: <CreditCardOutlined /> }] : []),
+    { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
+    ...(isEnabled('shop.productStoreEnabled') ? [{ key: '/store', label: 'Cửa hàng', icon: <ShopOutlined /> }] : []),
+    ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/my-membership', label: 'Gói tập', icon: <CalendarOutlined /> }] : []),
+    ...(isEnabled('pt.memberBookingEnabled') ? [{ key: '/booking', label: 'Đặt PT', icon: <CalendarOutlined /> }] : []),
+    ...(isEnabled('workout.healthLogEnabled') ? [{ key: '/health', label: 'Sức khỏe', icon: <HeartOutlined /> }] : []),
+    ...(isEnabled('workout.workoutPlanEnabled') ? [{ key: '/workout', label: 'Tập luyện', icon: <FundOutlined /> }] : []),
+    ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/checkin', label: 'Check-in', icon: <CreditCardOutlined /> }] : []),
   ]
   const moreNavItems = [
-    { key: '/feedback', label: t('nav.feedback'), icon: <CommentOutlined /> },
-    { key: '/policies', label: t('nav.policies'), icon: <FileTextOutlined /> },
-    { key: '/help', label: t('nav.help'), icon: <QuestionCircleOutlined /> },
+    { key: '/feedback', label: 'Phản hồi', icon: <CommentOutlined /> },
+    { key: '/policies', label: 'Chính sách', icon: <FileTextOutlined /> },
+    { key: '/help', label: 'Trợ giúp', icon: <QuestionCircleOutlined /> },
   ]
   const drawerNavItems = [...navItems, ...moreNavItems]
 
@@ -123,7 +121,7 @@ export default function MemberLayout({
   }
 
   const walletText = wallet ? `${wallet.balance.toLocaleString('vi-VN')}đ` : '0đ'
-  const displayName = getUserDisplayName(user, t('profile.account_name'))
+  const displayName = getUserDisplayName(user, 'Tài khoản')
   const avatarName = getUserInitialName(user, 'U')
   const avatarUrl =
     user?.avatar ||
@@ -251,7 +249,7 @@ export default function MemberLayout({
                           <div className="member-store-dropdown-list">
                             {storeDropdownShops.map((shop) => {
                               const owner = shop.user_id
-                              const name = shop.name || owner?.name || t('store_fallback')
+                              const name = shop.name || owner?.name || 'Cửa hàng'
                               const avatar = owner?.avatar || shop.avatar
 
                               return (
@@ -295,7 +293,7 @@ export default function MemberLayout({
               className={`member-shell-nav-item${moreActive ? ' is-active' : ''}`}
               onClick={() => setMoreDropdownOpen((open) => !open)}
             >
-              <span>{t('nav.more')}</span>
+              <span>Thêm</span>
               <span aria-hidden="true">▾</span>
             </button>
 
@@ -328,7 +326,7 @@ export default function MemberLayout({
             style={{ marginLeft: 8 }}
           >
             <DashboardOutlined />
-            <span>{t('admin.backToAdmin')}</span>
+            <span>Quay lại Admin</span>
           </button>
         )}
 
@@ -339,7 +337,7 @@ export default function MemberLayout({
               className="member-shell-wallet-pill"
               style={{ background: 'var(--theme-elevated)', color: 'var(--theme-text)' }}
             >
-              <Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>{t('wallet.label')}</Text>
+              <Text style={{ fontSize: 12, color: 'var(--theme-muted)' }}>Ví</Text>
               <Text strong style={{ fontSize: 14 }}>
                 {walletText}
               </Text>
@@ -349,7 +347,7 @@ export default function MemberLayout({
                 onClick={() => goTo('/deposit')}
                 style={{ padding: 0, height: 'auto', fontSize: 12, marginLeft: 4 }}
               >
-                {t('wallet.deposit')}
+                Nạp tiền
               </Button>
             </div>
           )}
@@ -442,7 +440,7 @@ export default function MemberLayout({
           <img className="h-10 w-10 rounded-full object-cover" src={avatarUrl} alt={displayName} />
           <div className="min-w-0 flex-1">
             <p className="m-0 truncate text-sm font-medium" style={{ color: 'var(--theme-text)' }}>{displayName}</p>
-            <p className="m-0 truncate text-xs" style={{ color: 'var(--gs-text-muted)' }}>{t('role.' + (user?.role || 'member'))}</p>
+            <p className="m-0 truncate text-xs" style={{ color: 'var(--gs-text-muted)' }}>{(user?.role === 'admin' || user?.role === 'super_admin') ? 'Quản trị viên' : user?.role === 'pt' ? 'Huấn luyện viên' : user?.role === 'seller' ? 'Người bán' : user?.role === 'staff' ? 'Nhân viên' : 'Hội viên'}</p>
           </div>
           <button
             onClick={openProfilePage}
@@ -450,18 +448,18 @@ export default function MemberLayout({
             style={{ borderColor: 'var(--theme-border)', backgroundColor: 'var(--theme-card)', color: 'var(--theme-text)' }}
             type="button"
           >
-            {t('account')}
+            Tài khoản
           </button>
         </div>
 
         {isEnabled('billing.qrPaymentEnabled') && (
           <div className="member-shell-drawer-wallet">
-            <Text type="secondary">{t('wallet.current')}</Text>
+            <Text type="secondary">Số dư</Text>
             <Text strong style={{ fontSize: 18 }}>
               {walletText}
             </Text>
             <Button type="primary" block onClick={() => goTo('/deposit')}>
-              {t('wallet.deposit')}
+              Nạp tiền
             </Button>
           </div>
         )}
@@ -495,7 +493,7 @@ export default function MemberLayout({
                 onClick={() => goTo('/admin')}
               >
                 <DashboardOutlined />
-                <span>{t('admin.backToAdmin')}</span>
+                <span>Quay lại Admin</span>
               </button>
             </nav>
           </>

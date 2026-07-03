@@ -16,7 +16,6 @@ import {
   message,
 } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { trainerService } from '../../../services/trainerService'
@@ -24,7 +23,6 @@ import type { PT } from '../../../types/admin/trainer'
 import { getUserDisplayName } from '../../../utils/userDisplay'
 
 export default function AdminTrainersPage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const [pts, setPts] = useState<PT[]>([])
   const [loading, setLoading] = useState(false)
@@ -43,11 +41,11 @@ export default function AdminTrainersPage() {
       setPts(data.pts)
       setTotal(data.pagination.total)
     } catch {
-      message.error(t('admin.trainers.messages.fetch_failed'))
+      message.error('Không thể tải danh sách huấn luyện viên')
     } finally {
       setLoading(false)
     }
-  }, [page, search, specialtyFilter, t])
+  }, [page, search, specialtyFilter])
 
   useEffect(() => {
     fetchPTs()
@@ -67,7 +65,7 @@ export default function AdminTrainersPage() {
 
   const columns = [
     {
-      title: t('admin.trainers.columns.name'),
+      title: 'Huấn luyện viên',
       width: 220,
       render: (_: unknown, record: PT) => (
         <Space>
@@ -93,7 +91,7 @@ export default function AdminTrainersPage() {
       ),
     },
     {
-      title: t('admin.trainers.columns.specialties'),
+      title: 'Chuyên môn',
       render: (_: unknown, record: PT) => (
         <Space size={4} wrap>
           {record.specialties?.length > 0
@@ -104,7 +102,7 @@ export default function AdminTrainersPage() {
       ),
     },
     {
-      title: t('admin.trainers.columns.rating'),
+      title: 'Đánh giá',
       width: 140,
       render: (_: unknown, record: PT) => (
         <span>
@@ -114,7 +112,7 @@ export default function AdminTrainersPage() {
       ),
     },
     {
-      title: t('admin.trainers.columns.experience'),
+      title: 'Kinh nghiệm',
       width: 100,
       align: 'center' as const,
       render: (_: unknown, record: PT) => (
@@ -122,7 +120,7 @@ export default function AdminTrainersPage() {
       ),
     },
     {
-      title: t('admin.trainers.columns.bookings'),
+      title: 'Lượt đặt',
       width: 80,
       align: 'center' as const,
       render: (_: unknown, record: PT) => (
@@ -130,23 +128,23 @@ export default function AdminTrainersPage() {
       ),
     },
     {
-      title: t('admin.trainers.columns.status'),
+      title: 'Trạng thái',
       width: 100,
       render: (_: unknown, record: PT) => (
         <Tag color={record.isActive ? 'success' : 'error'}>
-          {record.isActive ? t('admin.members.status.active') : t('admin.members.status.locked')}
+          {record.isActive ? 'Hoạt động' : 'Đã khóa'}
         </Tag>
       ),
     },
     {
-      title: t('admin.trainers.columns.actions'),
+      title: 'Thao tác',
       width: 130,
       render: (_: unknown, record: PT) => (
         <Space size={4}>
-          <Tooltip title={t('admin.trainers.view_detail')}>
+          <Tooltip title="Xem chi tiết">
             <Button size="small" icon={<EyeOutlined />} onClick={() => navigate(`/admin/trainers/${record._id}`)} />
           </Tooltip>
-          <Tooltip title={t('admin.trainers.edit')}>
+          <Tooltip title="Chỉnh sửa">
             <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/admin/trainers/${record._id}/edit`)} />
           </Tooltip>
         </Space>
@@ -157,21 +155,21 @@ export default function AdminTrainersPage() {
   return (
     <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">{t('admin.trainers.module')}</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">{t('admin.trainers.title')}</h1>
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Quản lý</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý huấn luyện viên</h1>
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
         <div className="dashboard-filter-bar">
           <Input.Search
-            placeholder={t('admin.trainers.search_placeholder')}
+            placeholder="Tìm kiếm huấn luyện viên..."
             allowClear
             onSearch={handleSearch}
             style={{ maxWidth: 300 }}
           />
           <Select
             allowClear
-            placeholder={t('admin.trainers.filter_specialty')}
+            placeholder="Lọc theo chuyên môn"
             style={{ minWidth: 160 }}
             onChange={handleSpecialtyFilter}
             options={[
@@ -185,7 +183,7 @@ export default function AdminTrainersPage() {
             ]}
           />
           <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/admin/trainers/create')}>
-            {t('admin.trainers.add')}
+            Thêm huấn luyện viên
           </Button>
         </div>
 

@@ -4,7 +4,7 @@ import { constitutionalReview } from '../services/constitutionalReviewer.js'
 import { chooseRecommendedPlan } from '../services/dbResponder.js'
 import { buildFaqPolicyAnswer } from '../services/faqPolicySearchService.js'
 import { buildNavigationAnswer, resolveNavigation } from '../services/navigationResolver.js'
-import { buildCheckinSummaryResponse, buildEmptyDataResponse, buildPlanListResponse, buildPlanRecommendResponse, buildPtListResponse, buildWorkoutAdviceResponse, makeIntroduction } from '../services/naturalResponseBuilder.js'
+import { buildCheckinSummaryResponse, buildEmptyDataResponse, buildPlanListResponse, buildPlanRecommendResponse, buildPlanSpecializationOverviewResponse, buildPtListResponse, buildWorkoutAdviceResponse, makeIntroduction, shouldUsePlanSpecializationOverview } from '../services/naturalResponseBuilder.js'
 import { buildGoalAnswer, buildNutritionAnswer, buildWorkoutDomainAnswer, buildBookingAnswer } from '../services/domainAnswerBuilders.js'
 import { buildContextualSuggestions } from '../services/contextualSuggestions.js'
 import { naturalResponseRewrite } from '../services/naturalResponseRewrite.js'
@@ -458,6 +458,16 @@ const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, la
         payload: { type: 'text_advice', plans },
       }
     }
+    if (shouldUsePlanSpecializationOverview({ plans, query })) {
+      return {
+        answer: buildPlanSpecializationOverviewResponse({ plans, lang }),
+        responseType: 'text_advice',
+        payload: {
+          type: 'text_advice',
+          planSpecializations: [...new Set(plans.flatMap((plan) => Array.isArray(plan?.applicableSpecializations) ? plan.applicableSpecializations : []).filter(Boolean))],
+        },
+      }
+    }
     return {
       answer: buildPlanListResponse({ plans, lang }),
       responseType: 'plan_list',
@@ -564,11 +574,14 @@ const buildAgentAnswer = async ({
   plan, query, plans, memberships, pts, workoutData, smartRec, targetPlan, memory, lang, hasBudget, hasFrequency, goal, subject, action,
 }) => {
   const n = normalizeQuery(query)
-  const introMatch = /\b(gympro|ban la ai|who are you|gioi thieu)\b/.test(n)
+  const introMatch = /\b(ban la ai|who are you|gioi thieu)\b/.test(n)
   if (introMatch) return makeIntroduction(lang)
 
   if (subject === 'plan' || (subject === 'workout' && action === 'list')) {
     if ((countPlanFromQuery(query) || action === 'list') && plans && plans.length > 0) {
+      if (shouldUsePlanSpecializationOverview({ plans, query })) {
+        return buildPlanSpecializationOverviewResponse({ plans, lang })
+      }
       return buildPlanListResponse({ plans, lang })
     }
     if (plans && plans.length > 0) {
@@ -589,6 +602,9 @@ const buildAgentAnswer = async ({
       }
       if (targetPlan) {
         return formatPlanDetailResponse(targetPlan, lang)
+      }
+      if (shouldUsePlanSpecializationOverview({ plans, query })) {
+        return buildPlanSpecializationOverviewResponse({ plans, lang })
       }
       return buildPlanListResponse({ plans, lang })
     }
@@ -718,7 +734,7 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     }, audit)
   }
 
-  const introPattern = /\b(gympro|ban la ai|who are you|gioi thieu|introduce)\b/
+  const introPattern = /\b(ban la ai|who are you|gioi thieu|introduce)\b/
   if (introPattern.test(n)) {
     agentMemory.update(userId, conversationId, { lastSubject: 'general', lastAction: 'introduce', lastQuery: queryText, lastAnswer: makeIntroduction(lang) })
     const audit = buildAudit({ source: 'local_fallback', usedTools: [], aiUsed: false, startedAt })
@@ -1315,18 +1331,34 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   })
 
   const audit = buildAudit({ source: smartRec ? 'smart_recommend' : analysis.source === 'llm' ? 'ai_reasoning' : 'tool', optimizer, usedTools: analysis.needsTools, aiUsed: analysis.source === 'llm', startedAt })
+  const shouldOverviewPlanFirst = analysis.subject === 'plan'
+    && analysis.action === 'list'
+    && shouldUsePlanSpecializationOverview({ plans, query: queryText })
+
   return withAudit({
     answer,
     usedTools: analysis.needsTools,
-    responseType: analysis.subject === 'plan' && analysis.action === 'list' ? 'plan_list' : 'text_advice',
-    payload: { type: analysis.subject === 'plan' && analysis.action === 'list' ? 'plan_list' : 'text_advice', plans, data: toolResults },
+    responseType: analysis.subject === 'plan' && analysis.action === 'list' && !shouldOverviewPlanFirst ? 'plan_list' : 'text_advice',
+    payload: shouldOverviewPlanFirst
+      ? {
+        type: 'text_advice',
+        planSpecializations: [...new Set(plans.flatMap((plan) => Array.isArray(plan?.applicableSpecializations) ? plan.applicableSpecializations : []).filter(Boolean))],
+        data: toolResults,
+      }
+      : { type: analysis.subject === 'plan' && analysis.action === 'list' ? 'plan_list' : 'text_advice', plans, data: toolResults },
     suggestions: makeSuggestions({
       query: queryText,
       answer,
       intent: analysis.intent,
       subject: analysis.subject,
-      responseType: analysis.subject === 'plan' && analysis.action === 'list' ? 'plan_list' : 'text_advice',
-      payload: { type: analysis.subject === 'plan' && analysis.action === 'list' ? 'plan_list' : 'text_advice', plans, data: toolResults },
+        responseType: analysis.subject === 'plan' && analysis.action === 'list' && !shouldOverviewPlanFirst ? 'plan_list' : 'text_advice',
+        payload: shouldOverviewPlanFirst
+          ? {
+            type: 'text_advice',
+            planSpecializations: [...new Set(plans.flatMap((plan) => Array.isArray(plan?.applicableSpecializations) ? plan.applicableSpecializations : []).filter(Boolean))],
+            data: toolResults,
+          }
+          : { type: analysis.subject === 'plan' && analysis.action === 'list' ? 'plan_list' : 'text_advice', plans, data: toolResults },
       toolData: {
         ...toolResults,
         checkinStats: toolResults.getCheckinStats?.stats || toolResults.checkinStats || toolResults.checkin?.checkinStats,

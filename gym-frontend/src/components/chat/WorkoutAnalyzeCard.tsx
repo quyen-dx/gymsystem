@@ -1,5 +1,4 @@
 import type { WorkoutAnalysisData, WorkoutPlanData } from '../../types/aichat/aichat'
-import { useTranslation } from 'react-i18next'
 
 interface AnalysisProps {
   data: WorkoutAnalysisData
@@ -26,8 +25,7 @@ function StatBadge({ label, value, unit = '', score }: { label: string; value: s
 }
 
 export function WorkoutAnalyzeCard({ data, lang: propLang }: AnalysisProps) {
-  const { i18n } = useTranslation()
-  const lang = propLang || (i18n.language?.startsWith('en') ? 'en' : 'vi')
+  const lang = propLang || 'vi'
 
   return (
     <div className="smart-recommend-card" style={{ marginTop: 12 }}>
@@ -94,8 +92,7 @@ export function WorkoutAnalyzeCard({ data, lang: propLang }: AnalysisProps) {
 }
 
 export function WorkoutPlanCard({ data, lang: propLang }: PlanProps) {
-  const { i18n } = useTranslation()
-  const lang = propLang || (i18n.language?.startsWith('en') ? 'en' : 'vi')
+  const lang = propLang || 'vi'
 
   return (
     <div className="smart-recommend-card" style={{ marginTop: 12 }}>

@@ -1,5 +1,4 @@
 import type { SmartRecommendPayload, PlanPayloadPlan } from '../../types/aichat/aichat'
-import { useTranslation } from 'react-i18next'
 
 interface Props {
   data: SmartRecommendPayload
@@ -15,8 +14,7 @@ const GOAL_EMOJI: Record<string, string> = {
 }
 
 export function ComboRecommendCard({ data, lang: propLang }: Props) {
-  const { i18n } = useTranslation()
-  const lang = propLang || (i18n.language?.startsWith('en') ? 'en' : 'vi')
+  const lang = propLang || 'vi'
 
   const fmtPrice = (price: number) => `${price.toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')}₫`
 

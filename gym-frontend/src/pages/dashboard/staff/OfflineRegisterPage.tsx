@@ -2,14 +2,12 @@ import { ArrowLeftOutlined, CheckCircleOutlined, CreditCardOutlined, MoneyCollec
 import { Avatar, Button, Card, Descriptions, Empty, Input, List, Radio, Spin, Statistic, Tag, message } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { membershipService, type MembershipPlan } from '../../../services/membershipService'
 
 const formatMoney = (value: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 
 export default function OfflineRegisterPage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchKeyword, setSearchKeyword] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
@@ -211,7 +209,7 @@ export default function OfflineRegisterPage() {
                     <QrcodeOutlined className="mr-1" /> Chuyển khoản tại quầy
                   </Radio.Button>
                     <Radio.Button value="POS" className="w-full text-left">
-                      <CreditCardOutlined className="mr-1" /> {t('staff.members.plan.pos')}
+                      <CreditCardOutlined className="mr-1" /> Quẹt thẻ
                   </Radio.Button>
                 </Radio.Group>
               </div>
