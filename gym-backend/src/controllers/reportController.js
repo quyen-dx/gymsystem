@@ -106,7 +106,7 @@ export const getChurnRisk = async (req, res) => {
   }
 }
 
-export const exportExcelReport = async (req, res) => {
+export const exportMonthlyReport = async (req, res) => {
   try {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', 'attachment; filename=report.xlsx')
