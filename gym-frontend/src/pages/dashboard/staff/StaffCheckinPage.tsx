@@ -7,7 +7,7 @@ import {
   SearchOutlined,
   StopOutlined,
 } from '@ant-design/icons'
-import { BrowserQRCodeReader } from '@zxing/browser'
+import { Html5Qrcode } from 'html5-qrcode'
 import { Button, Card, Col, DatePicker, Input, Row, Select, Space, Table, Tag, TimePicker, Typography, message } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useEffect, useRef, useState } from 'react'
@@ -22,8 +22,8 @@ type Step = 'scan' | 'success' | 'error' | 'already_checked'
 type TimeMode = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'all' | 'custom'
 
 export default function StaffCheckinPage() {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const controlsRef = useRef<{ stop: () => void } | null>(null)
+  const cameraContainerRef = useRef<HTMLDivElement>(null)
+  const cameraRef = useRef<Html5Qrcode | null>(null)
 
   const [step, setStep] = useState<Step>('scan')
   const [cameraActive, setCameraActive] = useState(false)
@@ -40,31 +40,39 @@ export default function StaffCheckinPage() {
   const [endTime, setEndTime] = useState<Dayjs | null>(null)
   const [keyword, setKeyword] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+  const isProcessingRef = useRef(false)
 
   const startCamera = async () => {
     try {
-      const reader = new BrowserQRCodeReader()
-      const controls = await reader.decodeFromVideoDevice(
-        undefined,
-        videoRef.current ?? undefined,
-        (result) => {
-          if (result?.getText()) {
-            controls.stop()
-            processQR(result.getText())
-          }
-        },
-      )
-      controlsRef.current = controls
+      const qrCode = new Html5Qrcode('camera-container')
       setCameraActive(true)
-    } catch {
+      await qrCode.start(
+        { facingMode: 'environment' },
+        { fps: 5 },
+        (decodedText) => {
+          if (isProcessingRef.current) return
+          console.log('[qr] decoded:', decodedText)
+          isProcessingRef.current = true
+          cameraRef.current = null
+          setCameraActive(false)
+          processQR(decodedText.trim())
+        },
+        (err) => { console.log('[qr] scan error:', err) },
+      )
+      cameraRef.current = qrCode
+      message.success('Camera đã sẵn sàng, hãy đưa QR vào khung hình')
+      console.log('[camera] started')
+    } catch (err) {
+      console.error('[camera] error:', err)
+      setCameraActive(false)
       message.error('Không thể mở camera')
     }
   }
 
   const stopCamera = () => {
-    if (controlsRef.current) {
-      controlsRef.current.stop()
-      controlsRef.current = null
+    if (cameraRef.current) {
+      cameraRef.current.stop().catch(() => {})
+      cameraRef.current = null
     }
     setCameraActive(false)
   }
@@ -142,6 +150,7 @@ export default function StaffCheckinPage() {
     setStreakDay(0)
     setErrorMsg('')
     setStep('scan')
+    isProcessingRef.current = false
   }
 
   const loadCheckinHistory = async (page = historyPage) => {
@@ -197,12 +206,14 @@ export default function StaffCheckinPage() {
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={9}>
           <Card className="rounded-[24px]" style={{ textAlign: 'center' }}>
-            <div style={{ position: 'relative', aspectRatio: '4/3', background: '#000', borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
-              <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', display: cameraActive ? 'block' : 'none' }} />
-              <div style={{ display: cameraActive ? 'none' : 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 300, color: 'var(--gs-text-muted)' }}>
+            <div className="staff-checkin-camera-shell">
+              <div id="camera-container" ref={cameraContainerRef} className={cameraActive ? 'staff-checkin-camera is-active' : 'staff-checkin-camera'} />
+              {!cameraActive && (
+              <div className="staff-checkin-camera-empty">
                 <CameraOutlined style={{ fontSize: 48, marginBottom: 12 }} />
                 <Text>Bấm "Mở camera" để bắt đầu quét QR</Text>
               </div>
+              )}
             </div>
             <Space>
               {!cameraActive ? (
