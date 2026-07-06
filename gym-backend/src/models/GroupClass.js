@@ -7,7 +7,6 @@ const waitlistSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-
     joinedAt: {
       type: Date,
       default: Date.now,
@@ -16,7 +15,7 @@ const waitlistSchema = new mongoose.Schema(
   { _id: false }
 );
 
-const classSchema = new mongoose.Schema(
+const groupClassSchema = new mongoose.Schema(
   {
     name: {
       type: String,
@@ -27,49 +26,43 @@ const classSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: ["yoga", "zumba", "boxing"],
-      default: "yoga",
+      required: true,
     },
 
     ptId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
 
-    schedule: [
-      {
-        dayOfWeek: {
-          type: Number,
-          min: 0,
-          max: 6,
-        },
-
-        startTime: String,
-
-        endTime: String,
-      },
-    ],
-
-    maxSlots: {
-      type: Number,
+    schedule: {
+      type: Date,
       required: true,
-      min: 1,
     },
 
-    members: [
+    maxSlot: {
+      type: Number,
+      default: 15,
+    },
+
+    enrolledMembers: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
       },
     ],
 
-    waitlist: [waitlistSchema],
+    enrolledCount: {
+      type: Number,
+      default: 0,
+    },
 
     checkedInCount: {
       type: Number,
       default: 0,
     },
+
+    waitlist: [waitlistSchema],
 
     status: {
       type: String,
@@ -82,12 +75,10 @@ const classSchema = new mongoose.Schema(
   }
 );
 
-classSchema.virtual("slotLeft").get(function () {
-  return this.maxSlots - this.members.length;
-});
+groupClassSchema.pre("save", function (next) {
+  this.enrolledCount = this.enrolledMembers.length;
 
-classSchema.pre("save", function (next) {
-  if (this.members.length >= this.maxSlots) {
+  if (this.enrolledCount >= this.maxSlot) {
     this.status = "FULL";
   } else {
     this.status = "OPEN";
@@ -96,4 +87,4 @@ classSchema.pre("save", function (next) {
   next();
 });
 
-export default mongoose.model("Class", classSchema);
+export default mongoose.model("GroupClass", groupClassSchema);
