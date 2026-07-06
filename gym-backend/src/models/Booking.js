@@ -8,17 +8,20 @@ const bookingSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+
     ptId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
       index: true,
     },
+
     date: {
       type: Date,
       required: true,
       index: true,
     },
+
     slot: {
       type: String,
       required: true,
@@ -30,12 +33,51 @@ const bookingSchema = new mongoose.Schema(
       trim: true,
       maxlength: 500,
     },
+
+    trainingType: {
+      type: String,
+      enum: ['one_to_one', 'group'],
+      default: 'one_to_one',
+    },
+
+    priceAtBooking: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    totalAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    paymentStatus: {
+      type: String,
+      enum: ['unpaid', 'paid', 'refunded'],
+      default: 'unpaid',
+      index: true,
+    },
+
+    paymentMethod: {
+      type: String,
+      enum: ['wallet'],
+      default: 'wallet',
+    },
+
+    walletTransactionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Transaction',
+      default: null,
+    },
+
     status: {
       type: String,
-      enum: ['pending', 'confirmed', 'cancelled', 'completed'],
+      enum: ['pending', 'awaiting_payment', 'confirmed', 'cancelled', 'completed'],
       default: 'pending',
       index: true,
     },
+
     cancelReason: {
       type: String,
       default: '',

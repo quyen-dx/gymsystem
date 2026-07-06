@@ -77,6 +77,7 @@ import DepositScanPage from './pages/public/DepositScanPage'
 import BankTransferDemoPage from './pages/public/BankTransferDemoPage'
 import BankTransferPage from './pages/public/BankTransferPage'
 import AccountProfilePage from './pages/auth/AccountProfilePage'
+import BookingDetailPage from './pages/dashboard/member/BookingDetailPage'
 
 
 
@@ -337,6 +338,7 @@ function AppWithTheme() {
         <Route path="/cart" element={<PrivateRoute feature="shop.cartEnabled"><CartPage /></PrivateRoute>} />
         <Route path="/product/:id" element={<PrivateRoute feature={['shop.productStoreEnabled', 'shop.productDetailPageEnabled']}><ProductDetailPage /></PrivateRoute>} />
         <Route path="/booking" element={<PrivateRoute feature="pt.memberBookingEnabled"><BookingPage /></PrivateRoute>} />
+        <Route path="/booking/:ptId" element={<BookingDetailPage />} />
         <Route path="/health" element={<PrivateRoute feature="workout.healthLogEnabled"><HealthPage /></PrivateRoute>} />
         <Route path="/workout" element={<PrivateRoute feature="workout.workoutPlanEnabled"><WorkoutPage /></PrivateRoute>} />
         <Route path="/checkin" element={<PrivateRoute feature="checkin.qrCheckinEnabled"><MemberCheckinPage /></PrivateRoute>} />

@@ -7,38 +7,16 @@ import { membershipService } from '../../../services/membershipService'
 import { trainerService } from '../../../services/trainerService'
 import type { PT } from '../../../types/admin/trainer'
 
-const SLOTS = [
-  '06:00-07:00',
-  '07:00-08:00',
-  '08:00-09:00',
-  '09:00-10:00',
-  '10:00-11:00',
-  '14:00-15:00',
-  '15:00-16:00',
-  '16:00-17:00',
-  '17:00-18:00',
-  '18:00-19:00',
-]
-
 export default function BookingPage() {
   const navigate = useNavigate()
 
   const [pts, setPts] = useState<PT[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
-  const [waitlist, setWaitlist] = useState<string[]>([])
 
-  const [ptId, setPtId] = useState('')
-  const [date, setDate] = useState('')
-  const [slot, setSlot] = useState('')
-  const [note, setNote] = useState('')
-  
-  // Recurring booking
-  const [isRecurring, setIsRecurring] = useState(false)
-  const [weeks, setWeeks] = useState(1)
-
-  // PT schedule
-  const [ptSchedule, setPtSchedule] = useState<Record<string, boolean>>({})
-  const [showSchedule, setShowSchedule] = useState(false)
+  const [search, setSearch] = useState('')
+  const [specialtyFilter, setSpecialtyFilter] = useState('')
+  const [minExperience, setMinExperience] = useState('')
+  const [detailPT, setDetailPT] = useState<PT | null>(null)
 
   // Review
   const [reviewingId, setReviewingId] = useState<string | null>(null)
@@ -49,13 +27,39 @@ export default function BookingPage() {
   const [membershipLoading, setMembershipLoading] = useState(true)
   const [canBook, setCanBook] = useState(false)
   const [message, setMessage] = useState('')
-  const [conflictMessage, setConflictMessage] = useState('')
   const [activeTab, setActiveTab] = useState<'create' | 'list'>('create')
 
-  const selectedPT = useMemo(
-    () => pts.find((pt) => pt._id === ptId),
-    [pts, ptId],
-  )
+  const specialtyOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        pts.flatMap((pt) => pt.specialties || []).filter(Boolean),
+      ),
+    )
+  }, [pts])
+
+  const filteredPTs = useMemo(() => {
+    return pts.filter((pt) => {
+      const keyword = search.trim().toLowerCase()
+
+      const matchSearch =
+        !keyword ||
+        pt.name?.toLowerCase().includes(keyword) ||
+        pt.email?.toLowerCase().includes(keyword) ||
+        pt.specialties?.some((s) => s.toLowerCase().includes(keyword))
+
+      const matchSpecialty =
+        !specialtyFilter ||
+        pt.specialties?.some((s) =>
+          s.toLowerCase().includes(specialtyFilter.toLowerCase()),
+        )
+
+      const matchExperience =
+        !minExperience ||
+        Number(pt.experienceYears || 0) >= Number(minExperience)
+
+      return matchSearch && matchSpecialty && matchExperience
+    })
+  }, [pts, search, specialtyFilter, minExperience])
 
   const loadPTs = async () => {
     try {
@@ -77,92 +81,6 @@ export default function BookingPage() {
     }
   }
 
-  const loadPTSchedule = async (ptUserId: string) => {
-    if (!date) return
-    try {
-      const res = await trainerService.getPTAvailability(ptUserId, date)
-      setPtSchedule(res.data?.availability || {})
-    } catch (error) {
-      console.error(error)
-      setPtSchedule({})
-    }
-  }
-
-  const checkConflict = async () => {
-    if (!ptId || !date || !slot) return
-
-    try {
-      const res = await bookingService.checkConflicts({
-        ptId,
-        date,
-        slot,
-      })
-
-      const hasConflict =
-        res.data?.hasConflict ||
-        res.data?.conflict ||
-        res.data?.data?.hasConflict
-
-      if (hasConflict) {
-        setConflictMessage('Đã xảy ra xung đột lịch')
-      } else {
-        setConflictMessage('')
-      }
-    } catch (error) {
-      console.error(error)
-      setConflictMessage('')
-    }
-  }
-
-  const handleCreateBooking = async () => {
-    if (!ptId || !date || !slot) {
-      setMessage('Vui lòng chọn đầy đủ thông tin')
-      return
-    }
-
-    if (conflictMessage) {
-      setMessage('Đã xảy ra xung đột lịch')
-      return
-    }
-
-    try {
-      setLoading(true)
-      setMessage('')
-
-      if (isRecurring && weeks > 1) {
-        await bookingService.createRecurringBooking({
-          ptId,
-          date,
-          slot,
-          note,
-          weeks,
-        })
-        setMessage(`Đặt lịch định kỳ thành công trong ${weeks} tuần`)
-      } else {
-        await bookingService.createBooking({
-          ptId,
-          date,
-          slot,
-          note,
-        })
-        setMessage('Đặt lịch thành công')
-      }
-
-      setSlot('')
-      setNote('')
-      setIsRecurring(false)
-      setWeeks(1)
-      await loadMyBookings()
-    } catch (error: any) {
-      console.error(error)
-      setMessage(
-        error?.response?.data?.message || 'Đặt lịch thất bại',
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleCancelBooking = async (id: string) => {
     const reason = window.prompt('Nhập lý do hủy:')
 
@@ -177,17 +95,6 @@ export default function BookingPage() {
       setMessage(
         error?.response?.data?.message || 'Hủy lịch thất bại',
       )
-    }
-  }
-
-  const handleJoinWaitlist = async (slotId: string) => {
-    try {
-      await bookingService.joinWaitlist(slotId)
-      setMessage('Đã thêm vào danh sách chờ')
-      setWaitlist([...waitlist, slotId])
-    } catch (error: any) {
-      console.error(error)
-      setMessage(error?.response?.data?.message || 'Thêm danh sách chờ thất bại')
     }
   }
 
@@ -213,10 +120,33 @@ export default function BookingPage() {
     }
   }
 
+  const handlePayBooking = async (id: string) => {
+    try {
+      setLoading(true)
+
+      await bookingService.payBooking(id)
+
+      setMessage('Thanh toán thành công')
+
+      await loadMyBookings()
+    } catch (error: any) {
+      console.error(error)
+
+      setMessage(
+        error?.response?.data?.message ||
+        'Thanh toán thất bại',
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const getStatusText = (status: string) => {
     switch (status) {
       case 'pending':
         return 'Chờ xác nhận'
+      case 'awaiting_payment':
+        return 'Chờ thanh toán'
       case 'confirmed':
         return 'Đã xác nhận'
       case 'cancelled':
@@ -232,6 +162,8 @@ export default function BookingPage() {
     switch (status) {
       case 'pending':
         return 'bg-yellow-500/10 text-yellow-300'
+      case 'awaiting_payment':
+        return 'bg-orange-500/10 text-orange-300'
       case 'confirmed':
         return 'bg-green-500/10 text-green-300'
       case 'cancelled':
@@ -261,16 +193,6 @@ export default function BookingPage() {
       })
       .finally(() => setMembershipLoading(false))
   }, [])
-
-  useEffect(() => {
-    checkConflict()
-  }, [ptId, date, slot])
-
-  useEffect(() => {
-    if (ptId && date) {
-      loadPTSchedule(ptId)
-    }
-  }, [ptId, date])
 
   return (
     <MemberLayout>
@@ -320,6 +242,50 @@ export default function BookingPage() {
           </div>
         )}
 
+        <div className="grid gap-3 rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-5 md:grid-cols-3">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm PT theo tên, email, chuyên môn..."
+            className="rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)] outline-none"
+          />
+
+          <select
+            value={specialtyFilter}
+            onChange={(e) => setSpecialtyFilter(e.target.value)}
+            className="rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)]"
+          >
+            <option className="bg-white text-black" value="">
+              Tất cả chuyên môn
+            </option>
+
+            {specialtyOptions.map((specialty) => (
+              <option className="bg-white text-black" key={specialty} value={specialty}>
+                {specialty}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={minExperience}
+            onChange={(e) => setMinExperience(e.target.value)}
+            className="rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)]"
+          >
+            <option className="bg-white text-black" value="">
+              Tất cả kinh nghiệm
+            </option>
+            <option className="bg-white text-black" value="1">
+              Từ 1 năm trở lên
+            </option>
+            <option className="bg-white text-black" value="3">
+              Từ 3 năm trở lên
+            </option>
+            <option className="bg-white text-black" value="5">
+              Từ 5 năm trở lên
+            </option>
+          </select>
+        </div>
+
         {/* Tabs */}
         <div className="flex gap-4 border-b border-[var(--gs-border)]">
           <button
@@ -345,274 +311,199 @@ export default function BookingPage() {
         </div>
 
         {activeTab === 'create' && (
-          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-6">
-              <h2 className="text-xl font-semibold text-[var(--gs-text)]">
-                Tạo lịch đặt
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-[var(--gs-text)]">
+                Chọn huấn luyện viên PT
               </h2>
+              <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
+                Xem thông tin PT, chuyên môn, đánh giá và đặt lịch tập phù hợp với mục tiêu của bạn.
+              </p>
+            </div>
 
-              <div className="mt-5 space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Chọn PT
-                  </label>
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {filteredPTs.map((pt) => (
+                <div
+                  key={pt._id}
+                  className="rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-5 transition hover:-translate-y-1 hover:bg-white/10"
+                >
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={pt.avatar || '/default-avatar.png'}
+                      alt={pt.name || 'PT'}
+                      className="h-20 w-20 rounded-2xl object-cover"
+                    />
 
-                  <select
-                    value={ptId}
-                    onChange={(e) => setPtId(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)]"
-                  >
-                    <option className="bg-white text-black" value="">
-                      Chọn PT...
-                    </option>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-lg font-bold text-[var(--gs-text)]">
+                        {pt.name || pt.email || 'PT'}
+                      </h3>
 
-                    {pts.map((pt) => (
-                      <option className="bg-white text-black" key={pt._id} value={pt._id}>
-                        {pt.name || pt.email || 'PT'} {pt.rating && `(${pt.rating}⭐)`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                      <p className="mt-1 text-sm text-yellow-400">
+                        ⭐ {pt.rating || 0} / 5
+                      </p>
 
-                {ptId && (
-                  <button
-                    type="button"
-                    onClick={() => setShowSchedule(!showSchedule)}
-                    className="text-sm text-orange-400 hover:underline"
-                  >
-                    {showSchedule
-                      ? 'Ẩn lịch'
-                      : 'Xem lịch'}{' '}
-                    Lịch làm việc của PT
-                  </button>
-                )}
+                      <p className="mt-1 text-xs text-[var(--gs-text-muted)]">
+                        {pt.experienceYears || 0} năm kinh nghiệm
+                      </p>
+                    </div>
+                  </div>
 
-                {showSchedule && (
-                  <div className="rounded-xl border border-[var(--gs-border)] bg-black/20 p-4 text-sm">
-                    <p className="mb-2 font-semibold text-[var(--gs-text)]">
-                      Lịch làm việc của PT
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--gs-text-soft)]">
+                      Chuyên môn
                     </p>
-                    <div className="mt-3 grid grid-cols-4 gap-3">
-                      {Object.entries(ptSchedule).slice(0, 20).map(([slot, available]) => (
-                        <div
-                          key={slot}
-                          className={`rounded-xl border p-3 text-center ${
-                            available
-                              ? 'border-green-500/30 bg-green-500/10'
-                              : 'border-red-500/30 bg-red-500/10'
-                          }`}
-                        >
-                          <div className="font-medium text-[var(--gs-text)]">
-                            {slot}
-                          </div>
 
-                          <div
-                            className={`mt-2 text-xs font-semibold ${
-                              available
-                                ? 'text-green-300'
-                                : 'text-red-300'
-                            }`}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {pt.specialties && pt.specialties.length > 0 ? (
+                        pt.specialties.slice(0, 4).map((item) => (
+                          <span
+                            key={item}
+                            className="rounded-full bg-orange-500/10 px-3 py-1 text-xs text-orange-300"
                           >
-                            {available ? 'Trống' : 'Bận'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-3 grid grid-cols-5 gap-2">
-                      {Object.entries(ptSchedule).slice(0, 20).map(([slot, available]) => (
-                        <div
-                          key={slot}
-                          className={`rounded px-2 py-1 text-center text-xs ${
-                            available
-                              ? 'bg-green-500/20 text-green-300'
-                              : 'bg-red-500/20 text-red-300'
-                          }`}
-                        >
-                          {slot}
-                        </div>
-                      ))}
+                            {item}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-[var(--gs-text-muted)]">
+                          Chưa cập nhật
+                        </span>
+                      )}
                     </div>
                   </div>
-                )}
 
-                <div>
-                  <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Ngày tập
-                  </label>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-[var(--gs-border)] bg-black/20 p-3">
+                      <p className="text-xs text-[var(--gs-text-muted)]">1-1</p>
+                      <p className="mt-1 font-semibold text-orange-300">
+                        {(pt.oneToOnePrice || 0).toLocaleString('vi-VN')}đ/buổi
+                      </p>
+                    </div>
 
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)]"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Khung giờ
-                  </label>
-
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                    {SLOTS.map((item) => (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() => setSlot(item)}
-                        className={`rounded-xl border p-3 text-sm transition ${
-                          slot === item
-                            ? 'border-orange-500 bg-orange-500/20 text-orange-300'
-                            : 'border-[var(--gs-border)] text-[var(--gs-text-muted)] hover:bg-white/10'
-                        }`}
-                      >
-                        {item}
-                      </button>
-                    ))}
+                    <div className="rounded-2xl border border-[var(--gs-border)] bg-black/20 p-3">
+                      <p className="text-xs text-[var(--gs-text-muted)]">Nhóm</p>
+                      <p className="mt-1 font-semibold text-orange-300">
+                        {(pt.groupPrice || 0).toLocaleString('vi-VN')}đ/người
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                {conflictMessage && (
-                  <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
-                    {conflictMessage}
+                  <div className="mt-5 flex gap-3">
                     <button
                       type="button"
-                      onClick={() => handleJoinWaitlist(`${ptId}_${date}_${slot}`)}
-                      className="mt-2 block text-orange-400 hover:underline"
+                      onClick={() => setDetailPT(pt)}
+                      className="flex-1 rounded-xl border border-[var(--gs-border)] px-4 py-2 text-sm font-semibold text-[var(--gs-text)] transition hover:bg-white/10"
                     >
-                      Thêm vào danh sách chờ
+                      Xem chi tiết
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/booking/${pt._id}`)}
+                      className="flex-1 rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-700"
+                    >
+                      Đặt lịch
                     </button>
                   </div>
-                )}
-
-                <div className="rounded-xl border border-[var(--gs-border)] bg-black/20 p-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={isRecurring}
-                      onChange={(e) => setIsRecurring(e.target.checked)}
-                      className="h-4 w-4"
-                    />
-                    <span className="text-sm text-[var(--gs-text)]">Đặt lịch định kỳ hàng tuần</span>
-                  </label>
-
-                  {isRecurring && (
-                    <div className="mt-3">
-                      <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                        {`Số tuần: ${weeks}`}
-                      </label>
-                      <input
-                        type="range"
-                        min="1"
-                        max="12"
-                        value={weeks}
-                        onChange={(e) => setWeeks(Number(e.target.value))}
-                        className="w-full"
-                      />
-                      <p className="mt-2 text-xs text-[var(--gs-text-muted)]">
-                        {`Đặt trong ${weeks} tuần`}
-                      </p>
-                    </div>
-                  )}
                 </div>
-
-                <div>
-                  <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
-                    Ghi chú / Mục tiêu
-                  </label>
-
-                  <textarea
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    rows={4}
-                    placeholder="Nhập ghi chú hoặc mục tiêu buổi tập..."
-                    className="w-full rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)] outline-none"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleCreateBooking}
-                  disabled={loading || !!conflictMessage}
-                  className="w-full rounded-xl bg-orange-600 px-5 py-3 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {loading
-                    ? 'Đang đặt...'
-                    : isRecurring
-                    ? `Đặt ${weeks} tuần`
-                    : 'Đặt lịch'}
-                </button>
-              </div>
+              ))}
             </div>
 
-            <div className="rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-6">
-              <h2 className="text-xl font-semibold text-[var(--gs-text)]">
-                Thông tin đã chọn
-              </h2>
+            {detailPT && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+                <div className="w-full max-w-2xl rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-bg)] p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <img
+                        src={detailPT.avatar || '/default-avatar.png'}
+                        alt={detailPT.name || 'PT'}
+                        className="h-20 w-20 rounded-2xl object-cover"
+                      />
 
-              <div className="mt-5 space-y-3 text-sm text-[var(--gs-text-muted)]">
-                <p>
-                  PT:{' '}
-                  <span className="text-[var(--gs-text)]">
-                    {selectedPT
-                      ? selectedPT.name || selectedPT.email || 'PT'
-                      : 'Chưa chọn'}
-                  </span>
-                </p>
+                      <div>
+                        <h3 className="text-xl font-bold text-[var(--gs-text)]">
+                          {detailPT.name || detailPT.email || 'PT'}
+                        </h3>
+                        <p className="mt-1 text-sm text-yellow-400">
+                          ⭐ {detailPT.rating || 0} / 5
+                        </p>
+                      </div>
+                    </div>
 
-                {selectedPT && (
-                  <>
-                    <p>
-                      Đánh giá:{' '}
-                      <span className="text-yellow-400">
-                        {selectedPT.rating || 0} ⭐
-                      </span>
-                    </p>
-                    <p>
+                    <button
+                      type="button"
+                      onClick={() => setDetailPT(null)}
+                      className="rounded-xl border border-[var(--gs-border)] px-3 py-2 text-sm text-[var(--gs-text-muted)] hover:bg-white/10"
+                    >
+                      Đóng
+                    </button>
+                  </div>
+
+                  <div className="mt-5 space-y-4 text-sm">
+                    <p className="text-[var(--gs-text-muted)]">
                       Kinh nghiệm:{' '}
                       <span className="text-[var(--gs-text)]">
-                        {selectedPT.experienceYears || 0} năm
+                        {detailPT.experienceYears || 0} năm
                       </span>
                     </p>
-                    {selectedPT.specialties && selectedPT.specialties.length > 0 && (
-                      <p>
-                        Chuyên môn:{' '}
-                        <span className="text-[var(--gs-text)]">
-                          {selectedPT.specialties.join(', ')}
-                        </span>
+
+                    <p className="text-[var(--gs-text-muted)]">
+                      Chuyên môn:{' '}
+                      <span className="text-[var(--gs-text)]">
+                        {detailPT.specialties?.length
+                          ? detailPT.specialties.join(', ')
+                          : 'Chưa cập nhật'}
+                      </span>
+                    </p>
+
+                    <div className="rounded-2xl border border-[var(--gs-border)] bg-black/20 p-4">
+                      <p className="mb-3 font-semibold text-[var(--gs-text)]">Giá dịch vụ</p>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs text-[var(--gs-text-muted)]">PT 1-1</p>
+                          <p className="mt-1 font-semibold text-orange-300">
+                            {(detailPT.oneToOnePrice || 0).toLocaleString('vi-VN')}đ/buổi
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-[var(--gs-text-muted)]">PT nhóm</p>
+                          <p className="mt-1 font-semibold text-orange-300">
+                            {(detailPT.groupPrice || 0).toLocaleString('vi-VN')}đ/người
+                          </p>
+                        </div>
+                      </div>
+
+                      <p className="mt-3 text-xs text-[var(--gs-text-muted)]">
+                        Sức chứa nhóm: {detailPT.groupCapacity || 5} người
                       </p>
-                    )}
-                  </>
-                )}
+                    </div>
 
-                <p>
-Ngày:{' '}
-                   <span className="text-[var(--gs-text)]">
-                     {date ? new Date(date).toLocaleDateString('vi-VN') : 'Chưa chọn'}
-                  </span>
-                </p>
+                    <p className="leading-6 text-[var(--gs-text-muted)]">
+                      {detailPT.bio || 'PT chưa cập nhật giới thiệu.'}
+                    </p>
+                  </div>
 
-                <p>
-Giờ:{' '}
-                   <span className="text-[var(--gs-text)]">
-                     {slot || 'Chưa chọn'}
-                  </span>
-                </p>
+                  <div className="mt-6 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setDetailPT(null)}
+                      className="flex-1 rounded-xl border border-[var(--gs-border)] px-4 py-3 text-sm font-semibold text-[var(--gs-text)] hover:bg-white/10"
+                    >
+                      Đóng
+                    </button>
 
-                <p>
-Trạng thái:{' '}
-                   <span className="text-yellow-300">Chờ xác nhận</span>
-                </p>
-
-                {isRecurring && (
-                  <p>
-Định kỳ:{' '}
-                     <span className="text-orange-300">
-                       {`${weeks} tuần`}
-                    </span>
-                  </p>
-                )}
+                    <button
+                      onClick={() => navigate(`/booking/${detailPT._id}`)}
+                      className="flex-1 rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-700"
+                    >
+                      Đặt lịch
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -711,6 +602,18 @@ Trạng thái:{' '}
                             {'Giờ: ' + booking.slot}
                           </p>
 
+                          <p className="text-sm text-[var(--gs-text-muted)]">
+                            Hình thức:{' '}
+                            {booking.trainingType === 'group'
+                              ? 'PT nhóm'
+                              : 'PT 1-1'}
+                          </p>
+
+                          <p className="text-sm text-[var(--gs-text-muted)]">
+                            Chi phí:{' '}
+                            {booking.totalAmount?.toLocaleString('vi-VN')}đ
+                          </p>
+
                           {booking.note && (
                             <p className="text-sm text-[var(--gs-text-muted)]">
                               {'Ghi chú: ' + booking.note}
@@ -732,6 +635,12 @@ Trạng thái:{' '}
                           >
                             {getStatusText(booking.status)}
                           </p>
+
+                          {booking.status === 'awaiting_payment' && (
+                            <p className="max-w-[220px] text-xs text-orange-300">
+                              PT đã xác nhận lịch. Vui lòng thanh toán để hoàn tất đặt lịch.
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -743,6 +652,16 @@ Trạng thái:{' '}
                             className="rounded-xl border border-orange-500/40 px-4 py-2 text-sm text-orange-300 hover:bg-orange-500/10"
                           >
                             Đánh giá
+                          </button>
+                        )}
+
+                        {booking.status === 'awaiting_payment' && (
+                          <button
+                            type="button"
+                            onClick={() => handlePayBooking(booking._id)}
+                            className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700"
+                          >
+                            Thanh toán
                           </button>
                         )}
 

@@ -1,6 +1,11 @@
 import api from './api'
 
-export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed'
+export type BookingStatus =
+  | 'pending'
+  | 'awaiting_payment'
+  | 'confirmed'
+  | 'cancelled'
+  | 'completed'
 
 export type Booking = {
   _id: string
@@ -14,6 +19,10 @@ export type Booking = {
   slot: string
   note?: string
   status: BookingStatus
+  paymentStatus: 'unpaid' | 'paid' | 'refunded'
+  trainingType: 'one_to_one' | 'group'
+  priceAtBooking: number
+  totalAmount: number
   cancelReason?: string
   isViolation?: boolean
 }
@@ -23,6 +32,7 @@ export type CreateBookingPayload = {
   date: string
   slot: string
   note?: string
+  trainingType: 'one_to_one' | 'group'
 }
 
 export type CreateRecurringBookingPayload = {
@@ -31,6 +41,7 @@ export type CreateRecurringBookingPayload = {
   slot: string
   note?: string
   weeks: number
+  trainingType: 'one_to_one' | 'group'
 }
 
 export const bookingService = {
@@ -56,6 +67,10 @@ export const bookingService = {
 
   confirmBooking(id: string) {
     return api.patch(`/bookings/${id}/confirm`)
+  },
+
+  payBooking(id: string) {
+    return api.post(`/bookings/${id}/pay`)
   },
 
   rejectAllPendingBookings() {

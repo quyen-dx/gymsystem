@@ -1,8 +1,11 @@
 import Booking from '../models/Booking.js'
 import Membership from '../models/Membership.js'
 import Waitlist from '../models/Waitlist.js'
+import PT from '../models/PT.js'
+import mongoose from 'mongoose'
+import { applyWalletTransaction } from '../services/walletService.js'
 
-const activeStatus = ['pending', 'confirmed']
+const activeStatus = ['pending', 'awaiting_payment', 'confirmed']
 
 const normalizeDate = (date) => {
   const d = new Date(date)
@@ -19,7 +22,7 @@ const hasActiveMembershipForDate = async (memberId, date) => {
   const bookingDate = normalizeDate(date)
   const membership = await Membership.findOne({
     memberId,
-    status: 'active',
+    status: { $in: ['active', 'pending_cancel'] },
     endDate: { $gte: bookingDate },
   }).lean()
 
@@ -84,7 +87,18 @@ export const checkConflicts = async (req, res) => {
 
 export const createBooking = async (req, res) => {
   try {
-    const { ptId, date, slot, note } = req.body
+    const {
+      ptId,
+      date,
+      slot,
+      note,
+      trainingType,
+    } = req.body
+
+    const finalTrainingType =
+      trainingType === 'group'
+        ? 'group'
+        : 'one_to_one'
 
     if (!ptId || !date || !slot) {
       return res.status(400).json({
@@ -95,6 +109,25 @@ export const createBooking = async (req, res) => {
     if (!(await requireActiveMembershipForDate(req.user._id, date, res))) return
 
     const bookingDate = normalizeDate(date)
+
+    const pt = await PT.findOne({ userId: ptId })
+
+      if (!pt) {
+        return res.status(404).json({
+          message: 'Không tìm thấy PT',
+        })
+      }
+
+      const priceAtBooking =
+        finalTrainingType === 'group'
+          ? pt.groupPrice
+          : pt.oneToOnePrice
+
+      if (!priceAtBooking || priceAtBooking <= 0) {
+        return res.status(400).json({
+          message: 'PT chưa cấu hình giá dịch vụ',
+        })
+      }
 
     const memberConflict = await Booking.findOne({
       memberId: req.user._id,
@@ -128,6 +161,14 @@ export const createBooking = async (req, res) => {
       date: bookingDate,
       slot,
       note,
+
+      trainingType: finalTrainingType,
+
+      priceAtBooking,
+      totalAmount: priceAtBooking,
+
+      paymentStatus: 'unpaid',
+
       status: 'pending',
     })
 
@@ -326,11 +367,11 @@ export const confirmBooking = async (req, res) => {
       })
     }
 
-    booking.status = 'confirmed'
+    booking.status = 'awaiting_payment'
     await booking.save()
 
     return res.json({
-      message: 'Đã xác nhận lịch',
+      message: 'Đã xác nhận lịch. Chờ thành viên thanh toán',
       booking,
     })
   } catch (error) {
@@ -527,5 +568,81 @@ export const reviewPT = async (req, res) => {
       message: 'Lỗi đánh giá PT',
       error: error.message,
     })
+  }
+}
+
+export const payBooking = async (req, res) => {
+  const session = await mongoose.startSession()
+
+  try {
+    session.startTransaction()
+
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      memberId: req.user._id,
+    }).session(session)
+
+    if (!booking) {
+      return res.status(404).json({
+        message: 'Không tìm thấy lịch đặt',
+      })
+    }
+
+    if (booking.status !== 'awaiting_payment') {
+      return res.status(400).json({
+        message: 'Lịch này chưa được PT xác nhận hoặc không thể thanh toán',
+      })
+    }
+
+    if (booking.paymentStatus === 'paid') {
+      return res.status(400).json({
+        message: 'Lịch này đã được thanh toán',
+      })
+    }
+
+    if (!booking.totalAmount || booking.totalAmount <= 0) {
+      return res.status(400).json({
+        message: 'Số tiền thanh toán không hợp lệ',
+      })
+    }
+
+    const { transaction } = await applyWalletTransaction({
+      userId: req.user._id,
+      amount: -Number(booking.totalAmount),
+      type: 'payment',
+      provider: 'wallet',
+      source: 'pt_booking',
+      description: 'Thanh toán đặt lịch PT',
+      referenceId: booking._id.toString(),
+      status: 'completed',
+      metadata: {
+        bookingId: booking._id,
+        ptId: booking.ptId,
+        trainingType: booking.trainingType,
+      },
+      idempotencyKey: `pt_booking_${booking._id}`,
+      session,
+    })
+
+    booking.paymentStatus = 'paid'
+    booking.status = 'confirmed'
+    booking.walletTransactionId = transaction._id
+
+    await booking.save({ session })
+
+    await session.commitTransaction()
+
+    return res.json({
+      message: 'Thanh toán đặt lịch thành công',
+      booking,
+    })
+  } catch (error) {
+    await session.abortTransaction()
+
+    return res.status(error.statusCode || 500).json({
+      message: error.message || 'Lỗi thanh toán đặt lịch',
+    })
+  } finally {
+    session.endSession()
   }
 }

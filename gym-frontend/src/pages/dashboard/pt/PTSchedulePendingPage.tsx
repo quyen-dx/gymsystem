@@ -37,6 +37,7 @@ export default function PTSchedulePendingPage() {
       setLoading(true)
       const res = await bookingService.getPTBookings({ status: 'pending', from: 'today' })
       let data = res.data?.data || res.data || []
+      console.log(res.data)
       if (!Array.isArray(data)) data = []
 
       setBookings(

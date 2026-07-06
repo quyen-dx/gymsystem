@@ -99,6 +99,9 @@ export const getPTs = async (req, res) => {
           certificates: pt?.certificates || [],
           rating: pt?.rating || 0,
           introVideoUrl: pt?.introVideoUrl || '',
+          oneToOnePrice: pt?.oneToOnePrice || 0,
+          groupPrice: pt?.groupPrice || 0,
+          groupCapacity: pt?.groupCapacity || 5,
           totalSessions: pt?.totalSessions || 0,
           totalStudents: pt?.totalStudents || 0,
           ptId: ptId,
@@ -164,6 +167,9 @@ export const getPTById = async (req, res) => {
         certificates: pt?.certificates || [],
         rating: pt?.rating || 0,
         introVideoUrl: pt?.introVideoUrl || '',
+        oneToOnePrice: pt?.oneToOnePrice || 0,
+        groupPrice: pt?.groupPrice || 0,
+        groupCapacity: pt?.groupCapacity || 5,
         totalSessions: pt?.totalSessions || 0,
         totalStudents: pt?.totalStudents || 0,
         schedules,
@@ -224,8 +230,24 @@ export const getPTSchedule = async (req, res) => {
 
 export const createPT = async (req, res) => {
   try {
-    const { name, email, phone, password, dateOfBirth, gender, specialties, bio, experienceYears, certificates, introVideoUrl } = req.body
+    const {
+      name,
+      email,
+      phone,
+      password,
+      dateOfBirth,
+      gender,
+      specialties,
+      bio,
+      experienceYears,
+      certificates,
+      introVideoUrl,
 
+      oneToOnePrice,
+      groupPrice,
+      groupCapacity,
+
+    } = req.body
     if (!name?.trim()) throw new AppError('Họ tên là bắt buộc', 400)
 
     const userData = {
@@ -253,6 +275,9 @@ export const createPT = async (req, res) => {
       experienceYears: Number(experienceYears) || 0,
       certificates: typeof certificates === 'string' ? JSON.parse(certificates) : (certificates || []),
       introVideoUrl: introVideoUrl?.trim() || '',
+      oneToOnePrice: Number(oneToOnePrice) || 0,
+      groupPrice: Number(groupPrice) || 0,
+      groupCapacity: Number(groupCapacity) || 5,
     }
     const pt = await PT.create(ptData)
 
@@ -275,8 +300,21 @@ export const createPT = async (req, res) => {
 
 export const updatePT = async (req, res) => {
   try {
-    const { name, email, phone, dateOfBirth, gender, specialties, bio, experienceYears, certificates, introVideoUrl } = req.body
-
+    const {
+      name,
+      email,
+      phone,
+      dateOfBirth,
+      gender,
+      specialties,
+      bio,
+      experienceYears,
+      certificates,
+      introVideoUrl,
+      oneToOnePrice,
+      groupPrice,
+      groupCapacity,
+    } = req.body
     const user = await User.findById(req.params.id)
     if (!user || user.role !== 'pt') throw new AppError('Không tìm thấy PT', 404)
 
@@ -306,6 +344,9 @@ export const updatePT = async (req, res) => {
     if (experienceYears !== undefined) pt.experienceYears = Number(experienceYears)
     if (certificates !== undefined) pt.certificates = typeof certificates === 'string' ? JSON.parse(certificates) : certificates
     if (introVideoUrl !== undefined) pt.introVideoUrl = introVideoUrl.trim()
+    if (oneToOnePrice !== undefined) pt.oneToOnePrice = Number(oneToOnePrice) || 0
+    if (groupPrice !== undefined) pt.groupPrice = Number(groupPrice) || 0
+    if (groupCapacity !== undefined) pt.groupCapacity = Number(groupCapacity) || 5
 
     await pt.save()
 
@@ -368,7 +409,7 @@ export const updatePTSchedule = async (req, res) => {
 
     if (Array.isArray(schedules) && schedules.length > 0) {
       await PTSchedule.insertMany(
-        schedules.map((s) => ({ ptId: pt._id, dayOfWeek: s.dayOfWeek, shift: s.shift })),
+        schedules.map((s) => ({ ptId: userId, dayOfWeek: s.dayOfWeek, shift: s.shift })),
       )
     }
     invalidateContextCache('ptAvailability')
