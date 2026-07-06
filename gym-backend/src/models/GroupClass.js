@@ -1,90 +1,63 @@
-import mongoose from "mongoose";
-
-const waitlistSchema = new mongoose.Schema(
-  {
-    memberId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-    joinedAt: {
-      type: Date,
-      default: Date.now,
-    },
-  },
-  { _id: false }
-);
+import mongoose from 'mongoose'
 
 const groupClassSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: true,
+      required: [true, 'Tên lớp học là bắt buộc'],
       trim: true,
     },
-
     type: {
       type: String,
-      enum: ["yoga", "zumba", "boxing"],
-      required: true,
+      enum: {
+        values: ['yoga', 'zumba', 'boxing'],
+        message: 'Loại lớp học không hợp lệ',
+      },
+      required: [true, 'Loại lớp học là bắt buộc'],
     },
-
     ptId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+      ref: 'User',
+      required: [true, 'Huấn luyện viên là bắt buộc'],
     },
-
     schedule: {
       type: Date,
-      required: true,
+      required: [true, 'Lịch học là bắt buộc'],
     },
-
     maxSlot: {
       type: Number,
+      required: [true, 'Số lượng chỗ tối đa là bắt buộc'],
       default: 15,
+      min: [1, 'Số lượng chỗ tối đa phải lớn hơn 0'],
     },
-
     enrolledMembers: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: 'User',
       },
     ],
-
-    enrolledCount: {
-      type: Number,
-      default: 0,
-    },
-
+    waitlist: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
     checkedInCount: {
       type: Number,
       default: 0,
-    },
-
-    waitlist: [waitlistSchema],
-
-    status: {
-      type: String,
-      enum: ["OPEN", "FULL", "FINISHED"],
-      default: "OPEN",
+      min: 0,
     },
   },
-  {
-    timestamps: true,
-  }
-);
+  { timestamps: true }
+)
 
-groupClassSchema.pre("save", function (next) {
-  this.enrolledCount = this.enrolledMembers.length;
+groupClassSchema.virtual('enrolledCount').get(function () {
+  return this.enrolledMembers.length
+})
 
-  if (this.enrolledCount >= this.maxSlot) {
-    this.status = "FULL";
-  } else {
-    this.status = "OPEN";
-  }
+groupClassSchema.set('toJSON', { virtuals: true })
+groupClassSchema.set('toObject', { virtuals: true })
 
-  next();
-});
+const GroupClass = mongoose.model('GroupClass', groupClassSchema)
 
-export default mongoose.model("GroupClass", groupClassSchema);
+export default GroupClass
