@@ -96,7 +96,21 @@ export default function AdminCheckinPage() {
                   {Array.from({ length: 24 }, (_, hi) => {
                     const cell = heatmap[di * 24 + hi] || { count: 0, members: [] }
                     return (
-                      <Tooltip key={hi} title={`${day} ${hi}h: ${cell.count} check-ins`}>
+                      <Tooltip 
+                        key={hi} 
+                        title={
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{day} {hi}h: {cell.count} lượt</div>
+                            {cell.members && cell.members.length > 0 && (
+                              <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid rgba(255,255,255,0.2)', fontSize: '11px' }}>
+                                {cell.members.map((member: any, idx: number) => (
+                                  <div key={idx}>• {member.name || member}</div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        }
+                      >
                         <div style={{
                           aspectRatio: '1',
                           borderRadius: 4,

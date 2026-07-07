@@ -69,6 +69,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     admin: [
       { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
       { key: '/admin', label: 'Tổng quan', icon: <DashboardOutlined /> },
+      
+      { key: '/admin/checkin', label: 'Quản lý Check-in', icon: <CalendarOutlined /> },
+
       { key: '/admin/users', label: 'Người dùng', icon: <UserOutlined /> },
       ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/admin/plans', label: 'Gói tập', icon: <CalendarOutlined /> }] : []),
       {
