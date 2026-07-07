@@ -41,6 +41,14 @@ const aiChatStorage = new CloudinaryStorage({
     },
 });
 
+const healthPhotoStorage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+        folder: 'gympro/health-progress',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    },
+});
+
 export const productImageUpload = multer({
     storage: productStorage,
     limits: { fileSize: 10 * 1024 * 1024 },
@@ -58,6 +66,17 @@ export const aiChatImageUpload = multer({
     fileFilter: (_req, file, cb) => {
         if (!['image/png', 'image/jpg', 'image/jpeg', 'image/webp'].includes(file.mimetype)) {
             return cb(new Error('Chỉ hỗ trợ ảnh JPG, JPEG, PNG hoặc WEBP'));
+        }
+        return cb(null, true);
+    },
+});
+
+export const healthPhotoUpload = multer({
+    storage: healthPhotoStorage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        if (!['image/png', 'image/jpg', 'image/jpeg', 'image/webp'].includes(file.mimetype)) {
+            return cb(new Error('Chi ho tro anh JPG, JPEG, PNG hoac WEBP'));
         }
         return cb(null, true);
     },

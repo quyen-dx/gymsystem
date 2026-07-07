@@ -32,6 +32,8 @@ import systemSettingsRoutes from './src/routes/systemSettingsRoutes.js'
 import walletRoutes from './src/routes/walletRoutes.js'
 import bookingRoutes from './src/routes/bookingRoutes.js'
 import policyConsentRoutes from './src/routes/policyConsentRoutes.js'
+import healthRoutes from './src/routes/healthRoutes.js'
+import workoutRoutes from './src/routes/workoutRoutes.js'
 
 
 const app = express()
@@ -88,11 +90,8 @@ app.use('/api/system-experience', systemExperienceRoutes)
 app.use('/api/system-settings', systemSettingsRoutes)
 app.use('/api/bookings', bookingRoutes)
 app.use('/api/policy-consents', policyConsentRoutes)
-
-
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'OK', message: 'GymPro API is running' })
-})
+app.use('/api/workout', workoutRoutes)
+app.use('/api/health', healthRoutes)
 
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} không tồn tại` })
