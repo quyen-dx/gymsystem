@@ -267,7 +267,7 @@ export const staffVerifyCheckin = async (req, res) => {
       throw new AppError('Hội viên này đã check-in thành công trước đó!', 429, 'ALREADY_CHECKED_IN')
     }
 
-    const streakDay = await calculateStreak(member._id)
+    const streakDay = (await calculateStreak(member._id)) + 1
     const checkin = await CheckIn.create({
       memberId: member._id,
       staffId,

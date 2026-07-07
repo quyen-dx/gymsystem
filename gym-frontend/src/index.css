@@ -36,6 +36,56 @@ textarea {
   min-width: 0;
 }
 
+.staff-checkin-camera-shell {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  min-height: 300px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #000;
+}
+
+.staff-checkin-camera,
+.staff-checkin-camera>div {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.staff-checkin-camera [id$="__scan_region"] {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.staff-checkin-camera {
+  display: none;
+}
+
+.staff-checkin-camera.is-active {
+  display: block;
+}
+
+.staff-checkin-camera video,
+.staff-checkin-camera canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+.staff-checkin-camera-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--gs-text-muted);
+}
+
 :root {
   --sab: env(safe-area-inset-bottom, 0px);
   --sat: env(safe-area-inset-top, 0px);

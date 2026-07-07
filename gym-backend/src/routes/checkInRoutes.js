@@ -15,7 +15,7 @@ const router = express.Router()
 router.use(protect)
 
 router.get('/qr', generateQRToken)
-router.post('/staff/verify', adminOrStaff, staffVerifyCheckin)
+router.post('/verify', adminOrStaff, staffVerifyCheckin)
 router.get('/staff/history', adminOrStaff, getStaffCheckinHistory)
 router.get('/history', adminOrStaff, getStaffCheckinHistory)
 
