@@ -1,117 +1,94 @@
-import User from '../models/User.js'
-import Membership from '../models/Membership.js'
+import Order from '../models/Order.js'
 
-export const getOverviewStats = async (req, res) => {
+export const getOverviewStats = async (req, res) => {}
+export const getChartsData = async (req, res) => {}
+export const getHeatmap = async (req, res) => {}
+export const getForecast = async (req, res) => {}
+export const getChurnRisk = async (req, res) => {}
+export const exportMonthlyReport = async (req, res) => {}
+
+export const getRevenueReport = async (req, res) => {
   try {
-    const totalMembers = await User.countDocuments({ role: 'member' })
+    const { period } = req.query
     const now = new Date()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const newMembers = await User.countDocuments({ role: 'member', createdAt: { $gte: startOfMonth } })
+    let startDate
 
-    const sevenDaysLater = new Date()
-    sevenDaysLater.setDate(now.getDate() + 7)
-    const expiringMembers = await Membership.countDocuments({
-      endDate: { $gte: now, $lte: sevenDaysLater },
-      status: 'active',
-    })
+    if (period === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+    } else if (period === 'quarter') {
+      const currentQuarterMonth = Math.floor(now.getMonth() / 3) * 3
+      startDate = new Date(now.getFullYear(), currentQuarterMonth, 1)
+    } else if (period === 'year') {
+      startDate = new Date(now.getFullYear(), 0, 1)
+    } else {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+    }
 
-    res.status(200).json({
-      success: true,
-      data: {
-        totalMembers,
-        newMembersThisMonth: newMembers,
-        expiringIn7Days: expiringMembers,
-        revenueThisMonth: 150000000,
-        revenueLastMonth: 135000000,
+    const revenueStats = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate },
+          status: 'PAID'
+        }
       },
-    })
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message })
-  }
-}
-
-export const getChartsData = async (req, res) => {
-  try {
-    res.status(200).json({
-      success: true,
-      data: {
-        revenue6Months: [
-          { month: 'Tháng 2', revenue: 110000000 },
-          { month: 'Tháng 3', revenue: 125000000 },
-          { month: 'Tháng 4', revenue: 140000000 },
-          { month: 'Tháng 5', revenue: 130000000 },
-          { month: 'Tháng 6', revenue: 135000000 },
-          { month: 'Tháng 7', revenue: 150000000 },
-        ],
-        hourlyCheckIn: Array.from({ length: 24 }, (_, i) => ({ hour: `${i}h`, count: Math.floor(Math.random() * 50) })),
-        renewalRate: 78,
-        top5PT: [
-          { name: 'Nguyễn Văn A', classes: 45 },
-          { name: 'Trần Thị B', classes: 40 },
-          { name: 'Lê Văn C', classes: 38 },
-          { name: 'Phạm Minh D', classes: 35 },
-          { name: 'Hoàng Văn E', classes: 30 },
-        ],
-      },
-    })
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message })
-  }
-}
-
-export const getHeatmap = async (req, res) => {
-  try {
-    const days = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật']
-    const data = []
-    days.forEach((day) => {
-      for (let hour = 0; hour < 24; hour++) {
-        data.push({ day, hour, value: Math.floor(Math.random() * 30) })
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$amount' },
+          newOrdersCount: { $sum: 1 }
+        }
       }
-    })
-    res.status(200).json({ success: true, data })
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message })
-  }
-}
+    ])
 
-export const getForecast = async (req, res) => {
-  try {
-    res.status(200).json({
-      success: true,
-      data: {
-        nextMonthForecast: 165000000,
-        historicalAccuracy: 94,
-        trend: 'up',
+    const totalRevenue = revenueStats[0]?.totalRevenue || 0
+    const newOrdersCount = revenueStats[0]?.newOrdersCount || 0
+
+    const topPlansRaw = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate },
+          status: 'PAID'
+        }
       },
-    })
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message })
-  }
-}
+      {
+        $group: {
+          _id: '$planName',
+          quantity: { $sum: 1 },
+          revenue: { $sum: '$amount' }
+        }
+      },
+      { $sort: { revenue: -1 } },
+      { $limit: 5 }
+    ])
 
-export const getChurnRisk = async (req, res) => {
-  try {
-    const lowActivityMembers = await User.find({ role: 'member' }).limit(5).select('name email phone')
-    const data = lowActivityMembers.map((member) => ({
-      userId: member._id,
-      name: member.name,
-      email: member.email,
-      phone: member.phone,
-      lastCheckIn: '15 ngày trước',
-      daysToExpiry: Math.floor(Math.random() * 6) + 1,
+    const topPlans = topPlansRaw.map(item => ({
+      name: item._id || 'Gói không tên',
+      quantity: item.quantity,
+      revenue: item.revenue,
+      percentage: totalRevenue > 0 ? Math.round((item.revenue / totalRevenue) * 100) : 0
     }))
-    res.status(200).json({ success: true, data })
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message })
-  }
-}
 
-export const exportMonthlyReport = async (req, res) => {
-  try {
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    res.setHeader('Content-Disposition', 'attachment; filename=report.xlsx')
-    res.status(200).send(Buffer.from([]))
+    const recentTransactions = await Order.find({
+      createdAt: { $gte: startDate },
+      status: 'PAID'
+    })
+      .sort({ createdAt: -1 })
+      .limit(10)
+
+    return res.status(200).json({
+      totalRevenue,
+      newOrdersCount,
+      growthRate: 0,
+      targetPercentage: 0,
+      topPlans,
+      recentTransactions
+    })
+
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message })
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server khi lấy dữ liệu báo cáo doanh thu',
+      error: error.message
+    })
   }
 }

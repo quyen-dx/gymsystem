@@ -91,7 +91,7 @@ app.use('/api/system-settings', systemSettingsRoutes)
 app.use('/api/bookings', bookingRoutes)
 app.use('/api/policy-consents', policyConsentRoutes)
 app.use("/api/group-classes", groupClassRoutes)
-app.use("/api/reports", reportRoutes)
+app.use("/api/admin/reports", reportRoutes)
 app.use("/api/notifications", notificationRoutes)
 
 app.get('/api/health', (_req, res) => {
