@@ -42,8 +42,19 @@ import notificationRoutes from "./src/routes/notificationRoutes.js"
 import { startMembershipReminderScheduler } from './src/services/membershipReminderScheduler.js'
 
 const app = express()
+const allowedOrigins = [...new Set([
+    'http://localhost:5173',
+    ...getClientUrls()
+])]
+
 app.use(cors({
-    origin: 'http://localhost:5173', 
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true)
+        } else {
+            callback(new Error(`Origin ${origin} not allowed by CORS`))
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
