@@ -13,7 +13,6 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
-  Select,
   Space,
   Table,
   Tag,
@@ -45,7 +44,7 @@ export default function AdminPlansPage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
-  const [specializationFilter, setSpecializationFilter] = useState<string | undefined>(undefined)
+  const [specializationFilter] = useState<string | undefined>(undefined)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState<AdminPlan | null>(null)
   const [form] = Form.useForm()

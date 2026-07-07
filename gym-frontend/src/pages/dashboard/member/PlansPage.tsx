@@ -1,5 +1,5 @@
 import { CheckCircleOutlined, CreditCardOutlined } from '@ant-design/icons'
-import { Button, Card, Descriptions, Empty, Modal, Select, Spin, Tag, Tooltip, message } from 'antd'
+import { Button, Card, Descriptions, Empty, Modal, Spin, Tag, Tooltip, message } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
@@ -10,12 +10,10 @@ import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 
 const formatMoney = (value: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 
-const SPECIALIZATIONS = ['Yoga', 'GYM', 'Boxing', 'CrossFit', 'Pilates', 'Zumba', 'Personal Training', 'Cardio', 'Weight Loss', 'Muscle Gain']
-
 export default function PlansPage() {
   const [plans, setPlans] = useState<MembershipPlan[]>([])
   const [loading, setLoading] = useState(true)
-  const [specializationFilter, setSpecializationFilter] = useState<string | undefined>(undefined)
+  const [specializationFilter] = useState<string | undefined>(undefined)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [selectedPlan, setSelectedPlan] = useState<MembershipPlan | null>(null)
   const [tickedPolicies, setTickedPolicies] = useState<Record<string, { type: string; version: string }> | null>(null)

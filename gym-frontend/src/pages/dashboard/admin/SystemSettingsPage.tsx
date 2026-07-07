@@ -38,7 +38,7 @@ type SettingType = 'switch' | 'text' | 'select' | 'number' | 'slogans' | 'color'
 type SettingItem = {
   path: string
   type: SettingType
-  options?: { labelKey: string; value: string }[]
+  options?: { label: string; value: string }[]
   min?: number
   max?: number
 }
@@ -400,7 +400,7 @@ export default function SystemSettingsPage() {
         }),
       }))
       .filter((group) => group.items.length > 0)
-  }, [groupFilter, search, t])
+  }, [groupFilter, search])
 
   const save = async () => {
     const slogans = Array.isArray(draft?.general?.slogans) ? draft.general.slogans : []
