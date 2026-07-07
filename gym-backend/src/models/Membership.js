@@ -53,6 +53,10 @@ const membershipSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    remindersSent: {
+      type: [Number],
+      default: [],
+    },
   },
   { timestamps: true }
 );

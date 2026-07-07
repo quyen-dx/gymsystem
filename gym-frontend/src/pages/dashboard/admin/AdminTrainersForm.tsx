@@ -101,8 +101,8 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
       }
       onSuccess?.()
     } catch (err: unknown) {
-      const apiError = err as { response?: { data?: { message?: string } } }
-      message.error(apiError?.response?.data?.message || 'Thao tác thất bại')
+      const apiError = err as { response?: { data?: { message?: string } }; message?: string }
+      message.error(apiError?.response?.data?.message || apiError?.message || 'Thao tác thất bại')
     } finally {
       setLoading(false)
     }

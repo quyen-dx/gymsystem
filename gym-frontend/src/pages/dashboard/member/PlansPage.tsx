@@ -89,16 +89,6 @@ export default function PlansPage() {
             <h1 className="m-0 mt-2 text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Chọn gói tập</h1>
           </div>
           <div className="flex items-center gap-3">
-            <Select
-              placeholder="Chuyên môn"
-              style={{ minWidth: 160 }}
-              value={specializationFilter || ''}
-              onChange={(val) => setSpecializationFilter(val || undefined)}
-              options={[
-                { value: '', label: 'Tất cả chuyên môn' },
-                ...SPECIALIZATIONS.map((s) => ({ value: s, label: s })),
-              ]}
-            />
             <Button href="/my-membership">Gói của tôi</Button>
           </div>
         </div>
@@ -113,33 +103,40 @@ export default function PlansPage() {
               <Card
                 key={plan._id}
                 className="h-full"
-                style={{ borderTop: `4px solid ${plan.color || '#1677ff'}` }}
+                style={{
+                  borderTop: `4px solid ${plan.color || '#1677ff'}`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+                styles={{ body: { flex: 1 } }}
                 title={<span>{getName(plan)}</span>}
                 extra={<Tag color="blue">{plan.durationDays} ngày</Tag>}
               >
-                <div className="mb-4 text-2xl font-semibold">{formatMoney(plan.price)}</div>
-                <p className="min-h-[44px] text-sm text-[var(--gs-text-muted)]">{getDesc(plan) || 'Gói tập phù hợp với nhu cầu của bạn'}</p>
-                <div className="mb-5 space-y-2">
-                  {getFeatures(plan).slice(0, 5).map((feature) => (
-                    <div key={feature} className="flex items-center gap-2 text-sm">
-                      <CheckCircleOutlined style={{ color: plan.color || '#1677ff' }} />
-                      <span>{feature}</span>
-                    </div>
-                  ))}
+                <div className="flex h-full flex-col">
+                  <div className="mb-4 text-2xl font-semibold">{formatMoney(plan.price)}</div>
+                  <p className="min-h-[44px] text-sm text-[var(--gs-text-muted)]">{getDesc(plan) || 'Gói tập phù hợp với nhu cầu của bạn'}</p>
+                  <div className="mb-5 flex-1 space-y-2">
+                    {getFeatures(plan).map((feature) => (
+                      <div key={feature} className="flex items-center gap-2 text-sm">
+                        <CheckCircleOutlined style={{ color: plan.color || '#1677ff' }} />
+                        <span>{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="primary"
+                    icon={<CreditCardOutlined />}
+                    block
+                    loading={submittingId === plan._id}
+                    onClick={() => {
+                      setSelectedPlan(plan)
+                      setTickedPolicies(null)
+                      setConsentSubmitted(false)
+                    }}
+                  >
+                    Đăng ký
+                  </Button>
                 </div>
-                <Button
-                  type="primary"
-                  icon={<CreditCardOutlined />}
-                  block
-                  loading={submittingId === plan._id}
-                  onClick={() => {
-                    setSelectedPlan(plan)
-                    setTickedPolicies(null)
-                    setConsentSubmitted(false)
-                  }}
-                >
-                  Đăng ký
-                </Button>
               </Card>
             ))}
           </div>

@@ -5,7 +5,7 @@ import { loadStripe } from '@stripe/stripe-js'
 import { useSearchParams } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useWallet } from '../../../context/WalletProvider'
-import { createManualQrDeposit, createStripePaymentIntent, createVnpayDeposit, getDepositPayments, getStripeExchangeRate } from '../../../services/walletService'
+import { createStripePaymentIntent, createVnpayDeposit, getDepositPayments, getStripeExchangeRate } from '../../../services/walletService'
 import PolicyConsentCard from '../../../components/wallet/PolicyConsentCard'
 import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 import { PRESET_AMOUNTS } from '../../../types/member/wallet'
@@ -424,14 +424,19 @@ export default function DepositPage() {
         )
         setConsentSubmitted(true)
       }
-      const manualRes = await createManualQrDeposit({ amount: effectiveAmount })
-      const manualPayment = manualRes.data?.data
-      if (!manualPayment?.qrDataUrl || !manualPayment?.manualUrl) throw new Error('Missing manual QR data')
+      const res = await createVnpayDeposit({ amount: effectiveAmount })
+      const data = res.data?.data
+      if (!data?.paymentUrl) throw new Error('Missing VNPAY payment URL')
 
       setPendingPayment({
-        ...manualPayment,
+        paymentId: data.paymentId,
+        txnRef: data.txnRef,
+        amount: data.amount,
+        status: data.status,
         type: 'vnpay',
         method: 'VNPAY',
+        paymentUrl: data.paymentUrl,
+        qrDataUrl: data.qrDataUrl || '',
         qrLabel: 'Mã QR nạp tiền',
       })
       refreshPayments()
@@ -460,8 +465,16 @@ export default function DepositPage() {
   }
 
   const handleOpenVnpayPage = async () => {
+    if (!consentReady || amountError) return
+
+    // Nếu đã có paymentUrl từ lần tạo QR trước thì dùng luôn, không tạo mới
+    if (pendingPayment?.paymentUrl) {
+      window.location.href = pendingPayment.paymentUrl
+      return
+    }
+
     const targetAmount = pendingPayment?.amount || effectiveAmount
-    if (!consentReady || !targetAmount || amountError) return
+    if (!targetAmount) return
     notifiedFromUrl.current = false
     setLoading(true)
     try {
@@ -486,6 +499,7 @@ export default function DepositPage() {
         status: data.status,
         type: 'vnpay',
         method: 'VNPAY',
+        paymentUrl: data.paymentUrl,
         qrDataUrl: data.qrDataUrl || '',
         qrLabel: '',
       })

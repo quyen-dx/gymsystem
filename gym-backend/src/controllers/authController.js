@@ -16,6 +16,7 @@ import {
 } from '../services/otpService.js'
 import { assertFeatureEnabled, getSystemSettingsValue } from '../services/systemSettingsService.js'
 import AppError from '../utils/appError.js'
+import sendError from '../utils/sendError.js'
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -31,24 +32,6 @@ import {
   normalizePhone,
 } from '../utils/identifier.js'
 import { normalizeUserArrayMemberIdentity, normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
-
-const sendError = (res, error) => {
-  console.error(error)
-
-  if (error?.code === 11000) {
-    if (error.keyPattern?.email) {
-      return res.status(400).json({ message: 'Email đã được sử dụng' })
-    }
-    if (error.keyPattern?.phone) {
-      return res.status(400).json({ message: 'Số điện thoại đã được sử dụng' })
-    }
-  }
-
-  return res.status(error.statusCode || 500).json({
-    ...(error.code ? { code: error.code } : {}),
-    message: error.message || 'Lỗi máy chủ',
-  })
-}
 
 export const isAccountLocked = (user) =>
   user?.status === 'locked' || user?.isLocked === true || user?.isActive === false
@@ -542,10 +525,11 @@ export const updateProfile = async (req, res) => {
     const updateData = {}
 
     const normalizedFullName = fullName !== undefined ? fullName.trim() : undefined
-    if (name) updateData.name = name.trim()
     if (normalizedFullName !== undefined) {
       updateData.fullName = normalizedFullName
-      if (!name && normalizedFullName) updateData.name = normalizedFullName
+      updateData.name = normalizedFullName
+    } else if (name) {
+      updateData.name = name.trim()
     }
     if (gender !== undefined) updateData.gender = gender
     if (nationality !== undefined) updateData.nationality = nationality.trim()
@@ -663,7 +647,9 @@ export const updateProfile = async (req, res) => {
     // Invalidate AI cache if user is PT and profile was updated
     if (user.role === 'pt') {
       invalidateAiPTCache()
+      invalidateContextCache('ptList')
       invalidateContextCache('ptAvailability', { userId: String(user._id) })
+      invalidateAiDomainCache('pts')
     }
     return res.json({ message: 'Cập nhật thông tin thành công', user })
   } catch (error) {

@@ -6,7 +6,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Radio,
   Space,
   message
 } from 'antd'
@@ -14,25 +13,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import api from '../../../services/api'
-
-const PRESET_COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#10B981', '#EC4899', '#06B6D4', '#F97316']
-
-const DEFAULT_FEATURES = [
-  'Sử dụng phòng tập',
-  'Check-in QR',
-  'Theo dõi sức khỏe',
-  'Huấn luyện viên',
-  'Giáo án riêng',
-  'Dành cho doanh nghiệp',
-  'Quản lý nhóm nhân viên',
-  'Ưu tiên hỗ trợ',
-  'Lịch tập cá nhân hóa',
-  'Đo lường chỉ số cơ thể',
-  'Tư vấn dinh dưỡng',
-  'Thể dục nhóm',
-]
-
-const DEFAULT_SPECIALIZATIONS = ['Yoga', 'GYM', 'Boxing', 'CrossFit', 'Pilates', 'Zumba', 'Personal Training', 'Cardio', 'Weight Loss', 'Muscle Gain']
+import { DEFAULT_FEATURES, DEFAULT_SPECIALIZATIONS, PRESET_COLORS } from './plan/constants'
 
 export default function AdminPlanCreatePage() {
   const navigate = useNavigate()
@@ -72,7 +53,8 @@ export default function AdminPlanCreatePage() {
       return
     }
     setAllSpecializations((prev) => [...prev, val])
-    form.setFieldsValue({ applicableSpecializations: val })
+    const current = form.getFieldValue('applicableSpecializations') || []
+    form.setFieldsValue({ applicableSpecializations: [...current, val] })
     setNewSpecializationInput('')
   }
 
@@ -95,7 +77,7 @@ export default function AdminPlanCreatePage() {
         descriptionEn: values.descriptionVi || '',
         featuresVi: features,
         featuresEn: features,
-        applicableSpecializations: values.applicableSpecializations ? [values.applicableSpecializations] : [],
+        applicableSpecializations: values.applicableSpecializations || [],
         isActive: true,
         color: typeof values.color === 'string'
           ? values.color
@@ -121,7 +103,7 @@ export default function AdminPlanCreatePage() {
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
         <Form layout="vertical" form={form} onFinish={handleSubmit}
-          initialValues={{ color: '#3B82F6', featuresVi: [], applicableSpecializations: undefined }}
+          initialValues={{ color: '#3B82F6', featuresVi: [], applicableSpecializations: [] }}
         >
           <div className="grid grid-cols-2 gap-x-4">
             <Form.Item
@@ -220,13 +202,13 @@ export default function AdminPlanCreatePage() {
             name="applicableSpecializations"
             rules={[{ required: true, message: 'Vui lòng chọn chuyên môn' }]}
           >
-            <Radio.Group>
+            <Checkbox.Group>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                 {allSpecializations.map((s) => (
-                  <Radio key={s} value={s}>{s}</Radio>
+                  <Checkbox key={s} value={s}>{s}</Checkbox>
                 ))}
               </div>
-            </Radio.Group>
+            </Checkbox.Group>
           </Form.Item>
 
           <div className="flex items-center gap-2 mb-4">

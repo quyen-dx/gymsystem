@@ -11,6 +11,7 @@ import { handleStripeWebhook } from './src/controllers/walletController.js'
 import { stripeMembershipWebhook } from './src/controllers/membershipController.js'
 import { protect, sellerOnly } from './src/middlewares/authMiddleware.js'
 import { maintenanceModeGuard } from './src/middlewares/maintenanceMiddleware.js'
+import sendError from './src/utils/sendError.js'
 import addressRoutes from './src/routes/addressRoutes.js'
 import adminAiRoutes from './src/routes/adminAiRoutes.js'
 import aiRoutes from './src/routes/aiRoutes.js'
@@ -38,12 +39,13 @@ import workoutRoutes from './src/routes/workoutRoutes.js'
 import groupClassRoutes from "./src/routes/groupClassRoutes.js"
 import reportRoutes from "./src/routes/reportRoutes.js"
 import notificationRoutes from "./src/routes/notificationRoutes.js"
+import { startMembershipReminderScheduler } from './src/services/membershipReminderScheduler.js'
 
 const app = express()
 app.use(cors({
     origin: 'http://localhost:5173', 
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 
@@ -109,24 +111,7 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error(err.stack)
-
-  if (err.code === 11000 || err.code === 11001) {
-    const field = Object.keys(err.keyPattern || {}).join(', ')
-    return res.status(409).json({
-      success: false,
-      message: field === 'referenceId'
-        ? 'Dữ liệu bị trùng lặp. Vui lòng thử lại.'
-        : `Dữ liệu bị trùng lặp ở trường "${field}". Vui lòng kiểm tra lại.`,
-      code: 409,
-    })
-  }
-
-  const status = err.statusCode || err.status || 500
-  res.status(status).json({
-    success: false,
-    message: err.message || 'Lỗi server',
-    code: status,
-  })
+  sendError(res, err)
 })
 
 const PORT = process.env.PORT || 5000
@@ -139,6 +124,10 @@ app.listen(PORT, () => {
   console.log('Groq:', !!process.env.GROQ_API_KEY)
 })
 
-connectDB().catch((error) => {
-  console.error('Kết nối MongoDB thất bại:', error.message)
-})
+connectDB()
+  .then(() => {
+    startMembershipReminderScheduler()
+  })
+  .catch((error) => {
+    console.error('Kết nối MongoDB thất bại:', error.message)
+  })

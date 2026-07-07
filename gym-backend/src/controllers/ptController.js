@@ -7,15 +7,7 @@ import { invalidateContextCache } from '../services/conversationContextCache.js'
 import { invalidateAiDomainCache } from '../ai/services/aiService.js'
 import AppError from '../utils/appError.js'
 import { isValidEmail, normalizePhone } from '../utils/identifier.js'
-
-const sendError = (res, error) => {
-  console.error(error)
-  if (error?.code === 11000) {
-    if (error.keyPattern?.email) return res.status(400).json({ message: 'Email đã được sử dụng' })
-    if (error.keyPattern?.phone) return res.status(400).json({ message: 'Số điện thoại đã được sử dụng' })
-  }
-  return res.status(error.statusCode || 500).json({ message: error.message || 'Lỗi máy chủ' })
-}
+import sendError from '../utils/sendError.js'
 
 export const getPTs = async (req, res) => {
   try {
@@ -82,7 +74,7 @@ export const getPTs = async (req, res) => {
         const ptId = pt?._id?.toString()
         return {
           _id: u._id,
-          name: u.name,
+          name: u.fullName || u.name,
           fullName: u.fullName,
           email: u.email,
           phone: u.phone,
@@ -151,7 +143,7 @@ export const getPTById = async (req, res) => {
     res.json({
       pt: {
         _id: user._id,
-        name: user.name,
+        name: user.fullName || user.name,
         fullName: user.fullName,
         email: user.email,
         phone: user.phone,

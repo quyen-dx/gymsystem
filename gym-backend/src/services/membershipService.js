@@ -14,6 +14,7 @@ import { invalidatePersonalContextCache } from './conversationContextCache.js'
 import { recordUserActivity } from './userActivityService.js'
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
 import { assertPolicyConsent } from '../utils/policyConsent.js'
+import { sendRenewalSuccessEmail } from './emailService.js'
 import {
   startOfTodayVN,
   endOfDayVN,
@@ -300,6 +301,15 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
       console.error('Không thể ghi hoạt động đăng ký gói tập:', activityError.message)
     }
 
+    if (isRenew && user.email) {
+      sendRenewalSuccessEmail({
+        toEmail: user.email,
+        userName: user.fullName || user.name || user.email,
+        planName: plan.nameVi || plan.nameEn,
+        endDate: membership.endDate,
+      }).catch((e) => console.error('Gửi email gia hạn thất bại:', e.message))
+    }
+
     const populatedMembership = await Membership.findById(membership._id).populate('planId')
     return {
       message: 'Đăng ký gói tập thành công',
@@ -372,6 +382,15 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
     metadata: { membershipId: membership._id, planId: plan._id, source },
   })
   invalidatePersonalContextCache(user._id)
+
+  if (mode === 'renew' && user.email) {
+    sendRenewalSuccessEmail({
+      toEmail: user.email,
+      userName: user.fullName || user.name || user.email,
+      planName: plan.nameVi || plan.nameEn,
+      endDate: membership.endDate,
+    }).catch((e) => console.error('Gửi email gia hạn thất bại:', e.message))
+  }
 
   return serializeMembership({ ...membership.toObject(), planId: plan.toObject() })
 }

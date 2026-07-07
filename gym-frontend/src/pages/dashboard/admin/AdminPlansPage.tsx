@@ -13,7 +13,6 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
-  Radio,
   Select,
   Space,
   Table,
@@ -26,25 +25,7 @@ import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import api from '../../../services/api'
 import type { AdminPlan } from '../../../types/admin/plan'
 import AdminHistoryButton from './AdminHistoryButton'
-
-const PRESET_COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#10B981', '#EC4899', '#06B6D4', '#F97316']
-
-const DEFAULT_FEATURES = [
-  'Sử dụng phòng tập',
-  'Check-in QR',
-  'Theo dõi sức khỏe',
-  'Huấn luyện cá nhân',
-  'Giáo án riêng',
-  'Dành cho doanh nghiệp',
-  'Quản lý nhóm nhân viên',
-  'Ưu tiên hỗ trợ',
-  'Lịch tập cá nhân hóa',
-  'Đo lường chỉ số cơ thể',
-  'Dinh dưỡng',
-  'Thể dục nhóm',
-]
-
-const DEFAULT_SPECIALIZATIONS = ['Yoga', 'GYM', 'Boxing', 'CrossFit', 'Pilates', 'Zumba', 'Personal Training', 'Cardio', 'Weight Loss', 'Muscle Gain']
+import { DEFAULT_FEATURES, DEFAULT_SPECIALIZATIONS, PRESET_COLORS } from './plan/constants'
 
 function getPlanDisplayName(plan: AdminPlan, lang: string): string {
   if (lang.startsWith('vi')) return plan.nameVi || plan.nameEn
@@ -111,7 +92,7 @@ export default function AdminPlansPage() {
       durationDays: plan.durationDays,
       descriptionVi: plan.descriptionVi || '',
       featuresVi: plan.featuresVi || [],
-      applicableSpecializations: plan.applicableSpecializations?.[0] || undefined,
+      applicableSpecializations: plan.applicableSpecializations || [],
       color: plan.color,
       isActive: plan.isActive,
     })
@@ -137,7 +118,7 @@ export default function AdminPlansPage() {
         descriptionEn: values.descriptionVi || '',
         featuresVi: features,
         featuresEn: features,
-        applicableSpecializations: values.applicableSpecializations ? [values.applicableSpecializations] : [],
+        applicableSpecializations: values.applicableSpecializations || [],
         isActive: values.isActive ?? true,
         color: typeof values.color === 'string'
           ? values.color
@@ -215,8 +196,8 @@ export default function AdminPlansPage() {
         const feats = getPlanDisplayFeatures(record, lang)
         return feats.length > 0
           ? feats.slice(0, 3).map((f, i) => <Tag key={i} style={{ marginBottom: 2 }}>{f}</Tag>).concat(
-              feats.length > 3 ? <Tag key="more">+{feats.length - 3}</Tag> : []
-            )
+            feats.length > 3 ? <Tag key="more">+{feats.length - 3}</Tag> : []
+          )
           : <Tag>—</Tag>
       },
     },
@@ -288,7 +269,8 @@ export default function AdminPlansPage() {
       return
     }
     setAllSpecializations((prev) => [...prev, val])
-    form.setFieldsValue({ applicableSpecializations: val })
+    const current = form.getFieldValue('applicableSpecializations') || []
+    form.setFieldsValue({ applicableSpecializations: [...current, val] })
     setNewSpecializationInput('')
   }
 
@@ -309,21 +291,6 @@ export default function AdminPlansPage() {
               setPage(1)
               fetchPlans(1, val, specializationFilter)
             }}
-          />
-          <Select
-            placeholder="Chuyên môn"
-            style={{ minWidth: 160 }}
-            value={specializationFilter || ''}
-            onChange={(val) => {
-              const next = val || undefined
-              setSpecializationFilter(next)
-              setPage(1)
-              fetchPlans(1, search, val)
-            }}
-            options={[
-              { value: '', label: 'Tất cả' },
-              ...allSpecializations.map((s) => ({ value: s, label: s })),
-            ]}
           />
           <Space wrap>
             <AdminHistoryButton module="plans" title="gói tập" />
@@ -460,13 +427,13 @@ export default function AdminPlansPage() {
             name="applicableSpecializations"
             rules={[{ required: true, message: 'Vui lòng chọn chuyên môn' }]}
           >
-            <Radio.Group>
+            <Checkbox.Group>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                 {allSpecializations.map((s) => (
-                  <Radio key={s} value={s}>{s}</Radio>
+                  <Checkbox key={s} value={s}>{s}</Checkbox>
                 ))}
               </div>
-            </Radio.Group>
+            </Checkbox.Group>
           </Form.Item>
 
           <div className="flex items-center gap-2 mb-4">

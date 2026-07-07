@@ -7,7 +7,9 @@ import UserActivity from '../models/UserActivity.js'
 import { buildClientUrl } from '../config/appUrls.js'
 import { recordAuditLog } from '../services/auditLogService.js'
 import { recordUserActivity } from '../services/userActivityService.js'
+import { sendRenewalSuccessEmail } from '../services/emailService.js'
 import AppError from '../utils/appError.js'
+import sendError from '../utils/sendError.js'
 import { isValidEmail, isValidPhone, normalizePhone } from '../utils/identifier.js'
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
 
@@ -52,23 +54,6 @@ const sanitizeMember = (user) => {
   delete obj.password
   delete obj.refreshToken
   return obj
-}
-
-const sendError = (res, error) => {
-  console.error(error)
-  if (error?.code === 11000) {
-    if (error.keyPattern?.email) {
-      return res.status(400).json({ message: 'Email dang nhap da duoc su dung' })
-    }
-    if (error.keyPattern?.phone) {
-      return res.status(400).json({ message: 'So dien thoai da duoc su dung' })
-    }
-  }
-
-  return res.status(error.statusCode || 500).json({
-    ...(error.code ? { code: error.code } : {}),
-    message: error.message || 'Lỗi máy chủ',
-  })
 }
 
 export const getMembers = async (req, res) => {
@@ -724,6 +709,15 @@ export const renewPlanForMember = async (req, res) => {
       details: `Gia hạn gói "${plan.nameVi}" cho member (từ ${renewFrom === 'endDate' ? 'ngày hết hạn cũ' : 'hôm nay'})`,
     })
 
+    if (member.email) {
+      sendRenewalSuccessEmail({
+        toEmail: member.email,
+        userName: member.fullName || member.name || member.email,
+        planName: plan.nameVi || plan.nameEn,
+        endDate: membership.endDate,
+      }).catch((e) => console.error('Gửi email gia hạn thất bại:', e.message))
+    }
+
     res.json({
       message: 'Gia hạn gói tập thành công',
       membership: {
@@ -804,6 +798,15 @@ export const batchRenewMembers = async (req, res) => {
         endDate,
         status: 'active',
       })
+
+      if (member.email) {
+        sendRenewalSuccessEmail({
+          toEmail: member.email,
+          userName: member.fullName || member.name || member.email,
+          planName: plan.nameVi || plan.nameEn,
+          endDate: membership.endDate,
+        }).catch((e) => console.error('Gửi email gia hạn thất bại:', e.message))
+      }
 
       results.push({
         memberId: member._id,

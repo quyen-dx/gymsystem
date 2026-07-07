@@ -26,8 +26,10 @@ export default function BookingPage() {
   const [loading, setLoading] = useState(false)
   const [membershipLoading, setMembershipLoading] = useState(true)
   const [canBook, setCanBook] = useState(false)
+  const [planName, setPlanName] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [activeTab, setActiveTab] = useState<'create' | 'list'>('create')
+  const [expandedSpecs, setExpandedSpecs] = useState<string | null>(null)
 
   const specialtyOptions = useMemo(() => {
     return Array.from(
@@ -163,7 +165,7 @@ export default function BookingPage() {
       case 'pending':
         return 'bg-yellow-500/10 text-yellow-300'
       case 'awaiting_payment':
-        return 'bg-orange-500/10 text-orange-300'
+        return 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
       case 'confirmed':
         return 'bg-green-500/10 text-green-300'
       case 'cancelled':
@@ -181,55 +183,137 @@ export default function BookingPage() {
       .then((res) => {
         const membership = res.data.membership
         const allowed = membership?.status === 'active' && Number(membership.remainingDays || 0) > 0
-        setCanBook(allowed)
+
         if (allowed) {
-          loadPTs()
-          loadMyBookings()
+          const features = membership.plan?.featuresVi || membership.plan?.featuresEn || []
+          const hasPT = features.some((f: string) => /huấn luyện viên|personal training/i.test(f))
+          setPlanName(membership.planNameVi || membership.planNameEn || null)
+
+          if (hasPT) {
+            setCanBook(true)
+            loadPTs()
+            loadMyBookings()
+          } else {
+            setCanBook(false)
+          }
+        } else {
+          setPlanName(null)
+          setCanBook(false)
         }
       })
       .catch(() => {
         setCanBook(false)
+        setPlanName(null)
         setMessage('Không thể tải thông tin gói tập')
       })
       .finally(() => setMembershipLoading(false))
   }, [])
 
+  // Refresh PT list khi tab được focus lại
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && canBook) {
+        loadPTs()
+        loadMyBookings()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [canBook])
+
+  const handleRefresh = () => {
+    if (canBook) {
+      loadPTs()
+      loadMyBookings()
+    } else {
+      setMembershipLoading(true)
+      membershipService.getMyMembership()
+        .then((res) => {
+          const membership = res.data.membership
+          const allowed = membership?.status === 'active' && Number(membership.remainingDays || 0) > 0
+          if (allowed) {
+            const features = membership.plan?.featuresVi || membership.plan?.featuresEn || []
+            const hasPT = features.some((f: string) => /huấn luyện viên|personal training/i.test(f))
+            setPlanName(membership.planNameVi || membership.planNameEn || null)
+            setCanBook(hasPT)
+            if (hasPT) {
+              loadPTs()
+              loadMyBookings()
+            }
+          } else {
+            setPlanName(null)
+            setCanBook(false)
+          }
+        })
+        .catch(() => {
+          setCanBook(false)
+          setPlanName(null)
+        })
+        .finally(() => setMembershipLoading(false))
+    }
+  }
+
   return (
     <MemberLayout>
       <div className="member-page space-y-6">
         {membershipLoading && (
-          <div className="rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-6 text-sm text-[var(--gs-text-muted)]">
+          <div className="rounded-[24px] border border-[var(--theme-border)] bg-white/5 p-6 text-sm text-[var(--theme-muted)]">
             Đang kiểm tra thông tin gói tập...
           </div>
         )}
 
         {!membershipLoading && !canBook && (
-          <div className="mx-auto max-w-2xl rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-8 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-400">
-              CẦN GÓI TẬP
-            </p>
-            <h1 className="mt-3 text-2xl font-bold text-[var(--gs-text)]">
-              Bạn cần có gói tập để đặt lịch
-            </h1>
-            <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[var(--gs-text-muted)]">
-              Vui lòng chọn gói tập phù hợp để sử dụng dịch vụ đặt lịch với PT
-            </p>
-            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => navigate('/plans')}
-                className="rounded-xl bg-orange-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-orange-700"
-              >
-                Xem gói tập
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/my-membership')}
-                className="rounded-xl border border-[var(--gs-border)] px-5 py-3 text-sm font-semibold text-[var(--gs-text)] transition hover:bg-white/10"
-              >
-                Gói của tôi
-              </button>
-            </div>
+          <div className="mx-auto max-w-2xl rounded-[24px] border border-[var(--theme-border)] bg-white/5 p-8 text-center">
+            {planName ? (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--theme-accent)]">
+                  GÓI TẬP KHÔNG PHÙ HỢP
+                </p>
+                <h1 className="mt-3 text-2xl font-bold text-[var(--theme-text)]">
+                  Gói &ldquo;{planName}&rdquo; không bao gồm huấn luyện viên
+                </h1>
+                <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[var(--theme-muted)]">
+                  Vui lòng chọn gói tập có quyền lợi huấn luyện viên để đặt lịch với PT
+                </p>
+                <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/plans')}
+                    className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--theme-accent-hover)]"
+                  >
+                    Xem gói tập
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--theme-accent)]">
+                  CẦN GÓI TẬP
+                </p>
+                <h1 className="mt-3 text-2xl font-bold text-[var(--theme-text)]">
+                  Bạn cần có gói tập để đặt lịch
+                </h1>
+                <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[var(--theme-muted)]">
+                  Vui lòng chọn gói tập phù hợp để sử dụng dịch vụ đặt lịch với PT
+                </p>
+                <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/plans')}
+                    className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--theme-accent-hover)]"
+                  >
+                    Xem gói tập
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/my-membership')}
+                    className="rounded-xl border border-[var(--theme-border)] px-5 py-3 text-sm font-semibold text-[var(--theme-text)] transition hover:bg-white/10"
+                  >
+                    Gói của tôi
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -237,23 +321,23 @@ export default function BookingPage() {
           <>
 
         {message && (
-          <div className="rounded-2xl border border-[var(--gs-border)] bg-white/5 p-4 text-sm text-[var(--gs-text)]">
+          <div className="rounded-2xl border border-[var(--theme-border)] bg-white/5 p-4 text-sm text-[var(--theme-text)]">
             {message}
           </div>
         )}
 
-        <div className="grid gap-3 rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-5 md:grid-cols-3">
+        <div className="grid gap-3 rounded-[24px] border border-[var(--theme-border)] bg-white/5 p-5 md:grid-cols-3">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Tìm PT theo tên, email, chuyên môn..."
-            className="rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)] outline-none"
+            className="rounded-xl border border-[var(--theme-border)] bg-transparent p-3 text-[var(--theme-text)] outline-none"
           />
 
           <select
             value={specialtyFilter}
             onChange={(e) => setSpecialtyFilter(e.target.value)}
-            className="rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)]"
+            className="rounded-xl border border-[var(--theme-border)] bg-transparent p-3 text-[var(--theme-text)]"
           >
             <option className="bg-white text-black" value="">
               Tất cả chuyên môn
@@ -269,7 +353,7 @@ export default function BookingPage() {
           <select
             value={minExperience}
             onChange={(e) => setMinExperience(e.target.value)}
-            className="rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)]"
+            className="rounded-xl border border-[var(--theme-border)] bg-transparent p-3 text-[var(--theme-text)]"
           >
             <option className="bg-white text-black" value="">
               Tất cả kinh nghiệm
@@ -287,13 +371,13 @@ export default function BookingPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-4 border-b border-[var(--gs-border)]">
+        <div className="flex gap-4 border-b border-[var(--theme-border)]">
           <button
             onClick={() => setActiveTab('create')}
             className={`pb-3 font-semibold transition ${
               activeTab === 'create'
-                ? 'border-b-2 border-orange-500 text-orange-500'
-                : 'text-[var(--gs-text-muted)] hover:text-[var(--gs-text)]'
+                ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-accent)]'
+                : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
             }`}
           >
             Đặt lịch mới
@@ -302,8 +386,8 @@ export default function BookingPage() {
             onClick={() => setActiveTab('list')}
             className={`pb-3 font-semibold transition ${
               activeTab === 'list'
-                ? 'border-b-2 border-orange-500 text-orange-500'
-                : 'text-[var(--gs-text-muted)] hover:text-[var(--gs-text)]'
+                ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-accent)]'
+                : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
             }`}
           >
             {`Lịch của tôi (${bookings.length})`}
@@ -312,20 +396,29 @@ export default function BookingPage() {
 
         {activeTab === 'create' && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold text-[var(--gs-text)]">
-                Chọn huấn luyện viên PT
-              </h2>
-              <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
-                Xem thông tin PT, chuyên môn, đánh giá và đặt lịch tập phù hợp với mục tiêu của bạn.
-              </p>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-[var(--theme-text)]">
+                  Chọn huấn luyện viên PT
+                </h2>
+                <p className="mt-2 text-sm text-[var(--theme-muted)]">
+                  Xem thông tin PT, chuyên môn, đánh giá và đặt lịch tập phù hợp với mục tiêu của bạn.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRefresh}
+                className="shrink-0 rounded-xl border border-[var(--theme-border)] px-4 py-2 text-sm text-[var(--theme-text)] hover:bg-white/10"
+              >
+                Làm mới
+              </button>
             </div>
 
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {filteredPTs.map((pt) => (
                 <div
                   key={pt._id}
-                  className="rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-5 transition hover:-translate-y-1 hover:bg-white/10"
+                  className="rounded-[24px] border border-[var(--theme-border)] bg-white/5 p-5 transition hover:-translate-y-1 hover:bg-white/10"
                 >
                   <div className="flex items-center gap-4">
                     <img
@@ -335,7 +428,7 @@ export default function BookingPage() {
                     />
 
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-lg font-bold text-[var(--gs-text)]">
+                      <h3 className="truncate text-lg font-bold text-[var(--theme-text)]">
                         {pt.name || pt.email || 'PT'}
                       </h3>
 
@@ -343,29 +436,39 @@ export default function BookingPage() {
                         ⭐ {pt.rating || 0} / 5
                       </p>
 
-                      <p className="mt-1 text-xs text-[var(--gs-text-muted)]">
+                      <p className="mt-1 text-xs text-[var(--theme-muted)]">
                         {pt.experienceYears || 0} năm kinh nghiệm
                       </p>
                     </div>
                   </div>
 
                   <div className="mt-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--gs-text-soft)]">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--theme-muted)]">
                       Chuyên môn
                     </p>
 
                     <div className="mt-2 flex flex-wrap gap-2">
                       {pt.specialties && pt.specialties.length > 0 ? (
-                        pt.specialties.slice(0, 4).map((item) => (
-                          <span
-                            key={item}
-                            className="rounded-full bg-orange-500/10 px-3 py-1 text-xs text-orange-300"
-                          >
-                            {item}
-                          </span>
-                        ))
+                        <>
+                          {(expandedSpecs === pt._id ? pt.specialties : pt.specialties.slice(0, 4)).map((item) => (
+                            <span
+                              key={item}
+                              className="rounded-full bg-[var(--theme-accent-muted)] px-3 py-1 text-xs text-[var(--theme-accent)]"
+                            >
+                              {item}
+                            </span>
+                          ))}
+                          {pt.specialties.length > 4 && (
+                            <button
+                              onClick={() => setExpandedSpecs(expandedSpecs === pt._id ? null : pt._id)}
+                              className="rounded-full border border-dashed border-[var(--theme-accent-border)] px-3 py-1 text-xs text-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)]"
+                            >
+                              {expandedSpecs === pt._id ? 'Thu gọn' : `+${pt.specialties.length - 4}`}
+                            </button>
+                          )}
+                        </>
                       ) : (
-                        <span className="text-sm text-[var(--gs-text-muted)]">
+                        <span className="text-sm text-[var(--theme-muted)]">
                           Chưa cập nhật
                         </span>
                       )}
@@ -373,16 +476,16 @@ export default function BookingPage() {
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-[var(--gs-border)] bg-black/20 p-3">
-                      <p className="text-xs text-[var(--gs-text-muted)]">1-1</p>
-                      <p className="mt-1 font-semibold text-orange-300">
+                    <div className="rounded-2xl border border-[var(--theme-border)] bg-black/20 p-3">
+                      <p className="text-xs text-[var(--theme-muted)]">1-1</p>
+                      <p className="mt-1 font-semibold text-[var(--theme-accent)]">
                         {(pt.oneToOnePrice || 0).toLocaleString('vi-VN')}đ/buổi
                       </p>
                     </div>
 
-                    <div className="rounded-2xl border border-[var(--gs-border)] bg-black/20 p-3">
-                      <p className="text-xs text-[var(--gs-text-muted)]">Nhóm</p>
-                      <p className="mt-1 font-semibold text-orange-300">
+                    <div className="rounded-2xl border border-[var(--theme-border)] bg-black/20 p-3">
+                      <p className="text-xs text-[var(--theme-muted)]">Nhóm</p>
+                      <p className="mt-1 font-semibold text-[var(--theme-accent)]">
                         {(pt.groupPrice || 0).toLocaleString('vi-VN')}đ/người
                       </p>
                     </div>
@@ -392,7 +495,7 @@ export default function BookingPage() {
                     <button
                       type="button"
                       onClick={() => setDetailPT(pt)}
-                      className="flex-1 rounded-xl border border-[var(--gs-border)] px-4 py-2 text-sm font-semibold text-[var(--gs-text)] transition hover:bg-white/10"
+                      className="flex-1 rounded-xl border border-[var(--theme-border)] px-4 py-2 text-sm font-semibold text-[var(--theme-text)] transition hover:bg-white/10"
                     >
                       Xem chi tiết
                     </button>
@@ -400,7 +503,7 @@ export default function BookingPage() {
                     <button
                       type="button"
                       onClick={() => navigate(`/booking/${pt._id}`)}
-                      className="flex-1 rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-700"
+                      className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--theme-accent-hover)]"
                     >
                       Đặt lịch
                     </button>
@@ -411,7 +514,7 @@ export default function BookingPage() {
 
             {detailPT && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-                <div className="w-full max-w-2xl rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-bg)] p-6">
+                <div className="w-full max-w-2xl rounded-[24px] border border-[var(--theme-border)] bg-[var(--theme-bg)] p-6">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-center gap-4">
                       <img
@@ -421,7 +524,7 @@ export default function BookingPage() {
                       />
 
                       <div>
-                        <h3 className="text-xl font-bold text-[var(--gs-text)]">
+                        <h3 className="text-xl font-bold text-[var(--theme-text)]">
                           {detailPT.name || detailPT.email || 'PT'}
                         </h3>
                         <p className="mt-1 text-sm text-yellow-400">
@@ -433,54 +536,54 @@ export default function BookingPage() {
                     <button
                       type="button"
                       onClick={() => setDetailPT(null)}
-                      className="rounded-xl border border-[var(--gs-border)] px-3 py-2 text-sm text-[var(--gs-text-muted)] hover:bg-white/10"
+                      className="rounded-xl border border-[var(--theme-border)] px-3 py-2 text-sm text-[var(--theme-muted)] hover:bg-white/10"
                     >
                       Đóng
                     </button>
                   </div>
 
                   <div className="mt-5 space-y-4 text-sm">
-                    <p className="text-[var(--gs-text-muted)]">
+                    <p className="text-[var(--theme-muted)]">
                       Kinh nghiệm:{' '}
-                      <span className="text-[var(--gs-text)]">
+                      <span className="text-[var(--theme-text)]">
                         {detailPT.experienceYears || 0} năm
                       </span>
                     </p>
 
-                    <p className="text-[var(--gs-text-muted)]">
+                    <p className="text-[var(--theme-muted)]">
                       Chuyên môn:{' '}
-                      <span className="text-[var(--gs-text)]">
+                      <span className="text-[var(--theme-text)]">
                         {detailPT.specialties?.length
                           ? detailPT.specialties.join(', ')
                           : 'Chưa cập nhật'}
                       </span>
                     </p>
 
-                    <div className="rounded-2xl border border-[var(--gs-border)] bg-black/20 p-4">
-                      <p className="mb-3 font-semibold text-[var(--gs-text)]">Giá dịch vụ</p>
+                    <div className="rounded-2xl border border-[var(--theme-border)] bg-black/20 p-4">
+                      <p className="mb-3 font-semibold text-[var(--theme-text)]">Giá dịch vụ</p>
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <p className="text-xs text-[var(--gs-text-muted)]">PT 1-1</p>
-                          <p className="mt-1 font-semibold text-orange-300">
+                          <p className="text-xs text-[var(--theme-muted)]">PT 1-1</p>
+                          <p className="mt-1 font-semibold text-[var(--theme-accent)]">
                             {(detailPT.oneToOnePrice || 0).toLocaleString('vi-VN')}đ/buổi
                           </p>
                         </div>
 
                         <div>
-                          <p className="text-xs text-[var(--gs-text-muted)]">PT nhóm</p>
-                          <p className="mt-1 font-semibold text-orange-300">
+                          <p className="text-xs text-[var(--theme-muted)]">PT nhóm</p>
+                          <p className="mt-1 font-semibold text-[var(--theme-accent)]">
                             {(detailPT.groupPrice || 0).toLocaleString('vi-VN')}đ/người
                           </p>
                         </div>
                       </div>
 
-                      <p className="mt-3 text-xs text-[var(--gs-text-muted)]">
+                      <p className="mt-3 text-xs text-[var(--theme-muted)]">
                         Sức chứa nhóm: {detailPT.groupCapacity || 5} người
                       </p>
                     </div>
 
-                    <p className="leading-6 text-[var(--gs-text-muted)]">
+                    <p className="leading-6 text-[var(--theme-muted)]">
                       {detailPT.bio || 'PT chưa cập nhật giới thiệu.'}
                     </p>
                   </div>
@@ -489,14 +592,14 @@ export default function BookingPage() {
                     <button
                       type="button"
                       onClick={() => setDetailPT(null)}
-                      className="flex-1 rounded-xl border border-[var(--gs-border)] px-4 py-3 text-sm font-semibold text-[var(--gs-text)] hover:bg-white/10"
+                      className="flex-1 rounded-xl border border-[var(--theme-border)] px-4 py-3 text-sm font-semibold text-[var(--theme-text)] hover:bg-white/10"
                     >
                       Đóng
                     </button>
 
                     <button
                       onClick={() => navigate(`/booking/${detailPT._id}`)}
-                      className="flex-1 rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-700"
+                      className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-3 text-sm font-semibold text-white hover:bg-[var(--theme-accent-hover)]"
                     >
                       Đặt lịch
                     </button>
@@ -508,14 +611,14 @@ export default function BookingPage() {
         )}
 
         {activeTab === 'list' && (
-          <div className="rounded-[24px] border border-[var(--gs-border)] bg-white/5 p-6">
-            <h2 className="text-xl font-semibold text-[var(--gs-text)]">
+          <div className="rounded-[24px] border border-[var(--theme-border)] bg-white/5 p-6">
+            <h2 className="text-xl font-semibold text-[var(--theme-text)]">
               Lịch của tôi
             </h2>
 
             <div className="mt-5 space-y-4">
               {bookings.length === 0 && (
-                <p className="text-sm text-[var(--gs-text-muted)]">
+                <p className="text-sm text-[var(--theme-muted)]">
                   Chưa có lịch đặt nào
                 </p>
               )}
@@ -523,17 +626,17 @@ export default function BookingPage() {
               {bookings.map((booking) => (
                 <div
                   key={booking._id}
-                  className="rounded-2xl border border-[var(--gs-border)] bg-black/10 p-4"
+                  className="rounded-2xl border border-[var(--theme-border)] bg-black/10 p-4"
                 >
                   {reviewingId === booking._id ? (
                     // Review form
                     <div className="space-y-3">
-                      <h3 className="font-semibold text-[var(--gs-text)]">
+                      <h3 className="font-semibold text-[var(--theme-text)]">
                         Đánh giá buổi tập
                       </h3>
 
                       <div>
-                        <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
+                        <label className="mb-2 block text-sm text-[var(--theme-muted)]">
                           Đánh giá:
                         </label>
                         <div className="flex gap-2">
@@ -552,7 +655,7 @@ export default function BookingPage() {
                       </div>
 
                       <div>
-                        <label className="mb-2 block text-sm text-[var(--gs-text-muted)]">
+                        <label className="mb-2 block text-sm text-[var(--theme-muted)]">
                           Nhận xét:
                         </label>
                         <textarea
@@ -560,7 +663,7 @@ export default function BookingPage() {
                           onChange={(e) => setComment(e.target.value)}
                           rows={3}
                           placeholder="Nhập nhận xét của bạn..."
-                          className="w-full rounded-xl border border-[var(--gs-border)] bg-transparent p-3 text-[var(--gs-text)] outline-none"
+                          className="w-full rounded-xl border border-[var(--theme-border)] bg-transparent p-3 text-[var(--theme-text)] outline-none"
                         />
                       </div>
 
@@ -569,14 +672,14 @@ export default function BookingPage() {
                           type="button"
                           onClick={() => handleReviewBooking(booking._id)}
                           disabled={loading}
-                          className="flex-1 rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-60"
+                          className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--theme-accent-hover)] disabled:opacity-60"
                         >
                           {loading ? 'Đang xử lý...' : 'Gửi đánh giá'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setReviewingId(null)}
-                          className="flex-1 rounded-xl border border-[var(--gs-border)] px-4 py-2 text-sm text-[var(--gs-text-muted)] hover:bg-white/5"
+                          className="flex-1 rounded-xl border border-[var(--theme-border)] px-4 py-2 text-sm text-[var(--theme-muted)] hover:bg-white/5"
                         >
                           Hủy
                         </button>
@@ -587,35 +690,35 @@ export default function BookingPage() {
                     <>
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex-1">
-                          <p className="font-semibold text-[var(--gs-text)]">
+                          <p className="font-semibold text-[var(--theme-text)]">
                             PT:{' '}
                             {booking.ptId?.name ||
                               booking.ptId?.email ||
                               'PT'}
                           </p>
 
-                          <p className="mt-1 text-sm text-[var(--gs-text-muted)]">
+                          <p className="mt-1 text-sm text-[var(--theme-muted)]">
                             {'Ngày: ' + new Date(booking.date).toLocaleDateString('vi-VN')}
                           </p>
 
-                          <p className="text-sm text-[var(--gs-text-muted)]">
+                          <p className="text-sm text-[var(--theme-muted)]">
                             {'Giờ: ' + booking.slot}
                           </p>
 
-                          <p className="text-sm text-[var(--gs-text-muted)]">
+                          <p className="text-sm text-[var(--theme-muted)]">
                             Hình thức:{' '}
                             {booking.trainingType === 'group'
                               ? 'PT nhóm'
                               : 'PT 1-1'}
                           </p>
 
-                          <p className="text-sm text-[var(--gs-text-muted)]">
+                          <p className="text-sm text-[var(--theme-muted)]">
                             Chi phí:{' '}
                             {booking.totalAmount?.toLocaleString('vi-VN')}đ
                           </p>
 
                           {booking.note && (
-                            <p className="text-sm text-[var(--gs-text-muted)]">
+                            <p className="text-sm text-[var(--theme-muted)]">
                               {'Ghi chú: ' + booking.note}
                             </p>
                           )}
@@ -637,19 +740,19 @@ export default function BookingPage() {
                           </p>
 
                           {booking.status === 'awaiting_payment' && (
-                            <p className="max-w-[220px] text-xs text-orange-300">
+                            <p className="max-w-[220px] text-xs text-[var(--theme-accent)]">
                               PT đã xác nhận lịch. Vui lòng thanh toán để hoàn tất đặt lịch.
                             </p>
                           )}
                         </div>
                       </div>
 
-                      <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--gs-border)] pt-3">
+                      <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--theme-border)] pt-3">
                         {booking.status === 'completed' && (
                           <button
                             type="button"
                             onClick={() => setReviewingId(booking._id)}
-                            className="rounded-xl border border-orange-500/40 px-4 py-2 text-sm text-orange-300 hover:bg-orange-500/10"
+                            className="rounded-xl border border-[var(--theme-accent-border)] px-4 py-2 text-sm text-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)]"
                           >
                             Đánh giá
                           </button>
@@ -659,7 +762,7 @@ export default function BookingPage() {
                           <button
                             type="button"
                             onClick={() => handlePayBooking(booking._id)}
-                            className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700"
+                            className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--theme-accent-hover)]"
                           >
                             Thanh toán
                           </button>

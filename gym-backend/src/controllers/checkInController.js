@@ -4,10 +4,11 @@ import Membership from '../models/Membership.js'
 import User from '../models/User.js'
 import Plan from '../models/Plan.js'
 import { recordUserActivity } from '../services/userActivityService.js'
+import AppError from '../utils/appError.js'
+import sendError from '../utils/sendError.js'
 
 const getUserDisplayName = (user, fallback = '') =>
   String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
-import AppError from '../utils/appError.js'
 
 const QR_TOKEN_TTL = Number(process.env.QR_TOKEN_TTL) || 30
 const DUPLICATE_WINDOW_MS = 60 * 60 * 1000
@@ -168,14 +169,6 @@ const calculateStreak = async (memberId) => {
   }
 
   return streak
-}
-
-const sendError = (res, error) => {
-  console.error(error)
-  return res.status(error.statusCode || 500).json({
-    ...(error.code ? { code: error.code } : {}),
-    message: error.message || 'Lỗi máy chủ',
-  })
 }
 
 export const generateQRToken = async (req, res) => {

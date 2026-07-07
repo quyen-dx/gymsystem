@@ -22,7 +22,6 @@ import {
   message,
 } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { useAuth } from '../../../hooks/useAuth'
@@ -132,7 +131,6 @@ const sanitizePayload = (values: WorkoutFormValues): WorkoutPlanPayload => ({
 })
 
 export default function PTWorkoutsPage() {
-  const { t } = useTranslation()
   const { user } = useAuth()
   const [form] = Form.useForm<WorkoutFormValues>()
   const [workouts, setWorkouts] = useState<WorkoutPlan[]>([])
