@@ -35,15 +35,20 @@ import policyConsentRoutes from './src/routes/policyConsentRoutes.js'
 import healthRoutes from './src/routes/healthRoutes.js'
 import workoutRoutes from './src/routes/workoutRoutes.js'
 
+import groupClassRoutes from "./src/routes/groupClassRoutes.js"
+import reportRoutes from "./src/routes/reportRoutes.js"
+import notificationRoutes from "./src/routes/notificationRoutes.js"
 
 const app = express()
 
+// Cấu hình CORS chuẩn đặt ở đây là xong, ko thêm bớt gì ở dưới nữa
 app.use(
   cors({
     origin: getClientUrls(),
     credentials: true,
-  }),
+  })
 )
+
 app.post('/api/wallet/stripe-webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
 app.post('/api/memberships/stripe-webhook', express.raw({ type: 'application/json' }), stripeMembershipWebhook)
 app.use(express.json({ limit: '5mb' }))
@@ -92,6 +97,13 @@ app.use('/api/bookings', bookingRoutes)
 app.use('/api/policy-consents', policyConsentRoutes)
 app.use('/api/workout', workoutRoutes)
 app.use('/api/health', healthRoutes)
+app.use("/api/group-classes", groupClassRoutes)
+app.use("/api/reports", reportRoutes)
+app.use("/api/notifications", notificationRoutes)
+
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'OK', message: 'GymPro API is running' })
+})
 
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} không tồn tại` })
