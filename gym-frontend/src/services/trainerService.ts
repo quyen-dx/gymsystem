@@ -5,8 +5,11 @@ export const trainerService = {
   getPTs: (params?: Record<string, unknown>) =>
     api.get<{ pts: PT[]; pagination: { total: number; page: number; limit: number; totalPages: number } }>('/pts', { params }),
   
-   getAvailablePTs: (params?: Record<string, unknown>) =>
-  api.get<{ pts: PT[]; pagination: { total: number; page: number; limit: number; totalPages: number } }>('/pts/available', { params }),
+  getAvailablePTs: (params?: Record<string, unknown>) =>
+    api.get<{ pts: PT[]; pagination: { total: number; page: number; limit: number; totalPages: number } }>('/pts/available', { params }),
+
+  getAvailablePTById: (id: string) =>
+    api.get<{ pt: PT; bookings: PTBooking[] }>(`/pts/available/${id}`),
 
   getPTById: (id: string) =>
     api.get<{ pt: PT; bookings: PTBooking[] }>(`/pts/${id}`),

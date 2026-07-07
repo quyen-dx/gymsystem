@@ -16,12 +16,14 @@ const router = express.Router()
 
 router.use(protect)
 
+// Member routes
 router.get('/available', getPTs)
+router.get('/available/:id', getPTById)
 router.get('/:id/availability', getPTAvailability)
 
+// Admin / Staff routes
 router.get('/', adminOrStaff, getPTs)
 router.get('/schedule/:id', adminOrStaff, getPTSchedule)
-
 router.get('/:id', adminOrStaff, getPTById)
 router.post('/', adminOrStaff, upload.fields([{ name: 'avatar', maxCount: 1 }]), createPT)
 router.patch('/:id', adminOrStaff, upload.fields([{ name: 'avatar', maxCount: 1 }]), updatePT)

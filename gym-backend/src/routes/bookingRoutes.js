@@ -13,6 +13,7 @@ import {
   completeBooking,
   joinWaitlist,
   reviewPT,
+  payBooking,
 } from '../controllers/bookingController.js'
 
 import { protect, authorize } from '../middlewares/authMiddleware.js'
@@ -38,6 +39,8 @@ router.patch('/:id/reject', protect, authorize('pt'), rejectBooking)
 router.patch('/:id/cancel', protect, authorize('member'), cancelBooking)
 
 router.patch('/:id/complete', protect, authorize('pt'), completeBooking)
+
+router.post('/:id/pay', protect, authorize('member'), payBooking)
 
 router.post('/:slotId/waitlist', protect, authorize('member'), joinWaitlist)
 

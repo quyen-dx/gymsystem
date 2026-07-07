@@ -123,7 +123,7 @@ export default function PTSchedulePage() {
             'PT Schedule'
           </p>
           <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">
-            'Lịch làm việc &amp; Bookings'
+            Lịch làm việc
           </h1>
           <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
             Quản lý lịch làm việc hàng tuần và xem các buổi tập được đặt lịch

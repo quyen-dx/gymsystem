@@ -198,6 +198,26 @@ export default function TrainerDetailPage() {
             </Card>
           )}
 
+          <Card
+            className="rounded-[24px]"
+            title="Thông tin dịch vụ"
+            style={{ marginBottom: 16 }}
+          >
+            <Descriptions column={1} size="small">
+              <Descriptions.Item label="Giá PT 1-1">
+                {(pt.oneToOnePrice || 0).toLocaleString('vi-VN')} đ / buổi
+              </Descriptions.Item>
+
+              <Descriptions.Item label="Giá PT nhóm">
+                {(pt.groupPrice || 0).toLocaleString('vi-VN')} đ / người
+              </Descriptions.Item>
+
+              <Descriptions.Item label="Sức chứa nhóm">
+                {pt.groupCapacity || 5} người
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+
           <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
             {pt.introVideoUrl && (
               <Col xs={24} sm={12}>
