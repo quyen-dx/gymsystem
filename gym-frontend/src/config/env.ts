@@ -5,3 +5,4 @@ if (!apiUrl) {
 }
 
 export const API_URL = apiUrl.replace(/\/+$/, '')
+export const SOCKET_URL = API_URL.replace(/\/api\/?$/, '')

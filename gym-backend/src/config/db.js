@@ -1,6 +1,8 @@
-// db.js
-import mongoose from 'mongoose';
+import mongoose from 'mongoose'
 
+const FALLBACK_URI = 'mongodb://127.0.0.1:27017/gym'
+let _isFallback = false
+let _fallbackError = null
 
 const dropStaleIndexes = async (db) => {
   try {
@@ -20,14 +22,48 @@ const dropStaleIndexes = async (db) => {
 }
 
 const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI)
+    console.log(`✅ Atlas connected: ${mongoose.connection.host}`)
+    _isFallback = false
+    _fallbackError = null
+    await dropStaleIndexes(mongoose.connection.db)
+  } catch (error) {
+    console.error(`❌ Atlas failed: ${error.message}`)
+    console.log('↳ Falling back to local MongoDB (127.0.0.1:27017)...')
+    try { await mongoose.disconnect() } catch {}
     try {
-        const conn = await mongoose.connect(process.env.MONGO_URI);
-        console.log(`✅ MongoDB Atlas connected: ${conn.connection.host}`);
-        await dropStaleIndexes(conn.connection.db)
-    } catch (error) {
-        console.error(`❌ MongoDB error: ${error.message}`);
-        process.exit(1);
+      await mongoose.connect(FALLBACK_URI)
+      console.log(`✅ Local MongoDB connected (read-only mode)`)
+      _isFallback = true
+      _fallbackError = error.message
+    } catch (fallbackError) {
+      console.error(`❌ Local MongoDB also failed: ${fallbackError.message}`)
+      process.exit(1)
     }
-};
+  }
+}
 
-export default connectDB;
+export const isFallbackActive = () => _isFallback
+
+export const getFallbackError = () => _fallbackError
+
+export const reconnectToPrimary = async () => {
+  try {
+    await mongoose.disconnect()
+    await mongoose.connect(process.env.MONGO_URI)
+    console.log(`✅ Reconnected to Atlas: ${mongoose.connection.host}`)
+    _isFallback = false
+    _fallbackError = null
+    return { success: true }
+  } catch (error) {
+    _fallbackError = error.message
+    try {
+      await mongoose.disconnect()
+      await mongoose.connect(FALLBACK_URI)
+    } catch {}
+    return { success: false, message: error.message }
+  }
+}
+
+export default connectDB

@@ -28,6 +28,8 @@ import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
 import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
 import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
+import { membershipService } from '../../../services/membershipService'
+import { socketService } from '../../../services/socketService'
 import { getUserDisplayName, getUserInitialName } from '../../../utils/userDisplay'
 
 const { Text } = Typography
@@ -47,6 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { settings, isEnabled } = useSystemSettings()
   const navigate = useNavigate()
   const [pendingCount, setPendingCount] = useState(0)
+  const [pendingRefundCount, setPendingRefundCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const location = useLocation()
@@ -58,12 +61,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const avatarName = getUserInitialName(user, 'U')
 
   useEffect(() => {
-    if (user?.role === 'super_admin' || user?.role === 'admin') {
-      getPendingPartnershipRequestCount()
-        .then((res) => setPendingCount(res.data.count || 0))
-        .catch(() => { })
+    const loadCounts = async () => {
+      if (user?.role === 'super_admin' || user?.role === 'admin') {
+        getPendingPartnershipRequestCount()
+          .then((res) => setPendingCount(res.data.count || 0))
+          .catch(() => { })
+      }
+      if (user?.role === 'staff' || user?.role === 'super_admin' || user?.role === 'admin') {
+        membershipService.getPendingRefundRequestCount()
+          .then((res) => setPendingRefundCount(res.data.count || 0))
+          .catch(() => { })
+      }
     }
+    loadCounts()
   }, [user?.role])
+
+  useEffect(() => {
+    socketService.connect()
+    const handler = (data: { count: number }) => setPendingRefundCount(data.count)
+    socketService.on('refund_request_update', handler)
+    return () => {
+      socketService.off('refund_request_update', handler)
+    }
+  }, [])
 
   const roleMenus: Record<string, any[]> = {
     admin: [
@@ -106,6 +126,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         icon: <TeamOutlined />,
       },
 
+      {
+        key: '/staff/payments',
+        label: (
+          <span style={{ position: 'relative', display: 'inline-block', paddingRight: 22 }}>
+            <span>{'Thanh toán'}</span>
+            {pendingRefundCount > 0 && (
+              <span style={{
+              position: 'absolute', top: '50%', right: 0, transform: 'translateY(-50%)',
+              minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#f5222d',
+              color: '#fff', fontSize: 10, lineHeight: '18px', textAlign: 'center',
+              padding: '0 4px', fontWeight: 600,
+              }}>
+                {pendingRefundCount > 99 ? '99+' : pendingRefundCount}
+              </span>
+            )}
+          </span>
+        ),
+        icon: <CreditCardOutlined />,
+      },
       { key: '/admin/members', label: 'Hội viên', icon: <TeamOutlined /> },
       ...(isEnabled('pt.moduleEnabled') ? [{ key: '/admin/trainers', label: `${'Huấn luyện viên'} (PT)`, icon: <UserOutlined /> }] : []),
       ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: 'Báo cáo', icon: <BarChartOutlined /> }] : []),
@@ -118,7 +157,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
       ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/staff/checkin', label: 'Check-in', icon: <DashboardOutlined /> }] : []),
       { key: '/staff/members', label: 'Hội viên', icon: <TeamOutlined /> },
-      { key: '/staff/payments', label: 'Thanh toán', icon: <CreditCardOutlined /> },
+      {
+        key: '/staff/payments',
+        label: (
+          <span style={{ position: 'relative', display: 'inline-block', paddingRight: 22 }}>
+            <span>{'Thanh toán'}</span>
+            {pendingRefundCount > 0 && (
+              <span style={{
+              position: 'absolute', top: '50%', right: 0, transform: 'translateY(-50%)',
+              minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#f5222d',
+              color: '#fff', fontSize: 10, lineHeight: '18px', textAlign: 'center',
+              padding: '0 4px', fontWeight: 600,
+              }}>
+                {pendingRefundCount > 99 ? '99+' : pendingRefundCount}
+              </span>
+            )}
+          </span>
+        ),
+        icon: <CreditCardOutlined />,
+      },
       { key: '/staff/notifications', label: 'Thông báo', icon: <CommentOutlined /> },
     ],
     pt: [

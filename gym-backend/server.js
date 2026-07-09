@@ -1,16 +1,18 @@
 import 'dotenv/config'
+import http from 'http'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import express from 'express'
 import session from 'express-session'
 import { getClientUrls } from './src/config/appUrls.js'
-import connectDB from './src/config/db.js'
+import connectDB, { isFallbackActive, reconnectToPrimary, getFallbackError } from './src/config/db.js'
 import passport from './src/config/passport.js'
 import { getMyProducts } from './src/controllers/productController.js'
 import { handleStripeWebhook } from './src/controllers/walletController.js'
 import { stripeMembershipWebhook } from './src/controllers/membershipController.js'
 import { protect, sellerOnly } from './src/middlewares/authMiddleware.js'
 import { maintenanceModeGuard } from './src/middlewares/maintenanceMiddleware.js'
+import { blockWritesInFallback } from './src/middlewares/fallbackMiddleware.js'
 import sendError from './src/utils/sendError.js'
 import addressRoutes from './src/routes/addressRoutes.js'
 import adminAiRoutes from './src/routes/adminAiRoutes.js'
@@ -39,7 +41,9 @@ import workoutRoutes from './src/routes/workoutRoutes.js'
 import groupClassRoutes from "./src/routes/groupClassRoutes.js"
 import reportRoutes from "./src/routes/reportRoutes.js"
 import notificationRoutes from "./src/routes/notificationRoutes.js"
+import vectorStoreRoutes from './src/routes/vectorStoreRoutes.js'
 import { startMembershipReminderScheduler } from './src/services/membershipReminderScheduler.js'
+import { initSocketIO } from './src/services/socketService.js'
 
 const app = express()
 const allowedOrigins = [...new Set([
@@ -81,6 +85,7 @@ app.use(passport.initialize())
 app.use(passport.session())
 
 app.use(maintenanceModeGuard)
+app.use(blockWritesInFallback)
 
 app.use('/api/auth', authRoutes)
 app.use('/api/cms', cmsRoutes)
@@ -111,9 +116,24 @@ app.use('/api/health', healthRoutes)
 app.use("/api/group-classes", groupClassRoutes)
 app.use("/api/admin/reports", reportRoutes)
 app.use("/api/notifications", notificationRoutes)
+app.use('/api/admin/vector-store', vectorStoreRoutes)
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'OK', message: 'GymPro API is running' })
+app.get('/api/system/status', (_req, res) => {
+  res.json({
+    status: 'OK',
+    database: isFallbackActive() ? 'local_fallback' : 'atlas',
+    fallbackActive: isFallbackActive(),
+    fallbackError: getFallbackError(),
+  })
+})
+
+app.post('/api/system/reconnect', async (_req, res) => {
+  const result = await reconnectToPrimary()
+  if (result.success) {
+    res.json({ message: 'Đã kết nối lại Atlas', database: 'atlas' })
+  } else {
+    res.status(503).json({ message: 'Không thể kết nối Atlas', database: 'local_fallback' })
+  }
 })
 
 app.use((req, res) => {
@@ -127,7 +147,10 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000
 
-app.listen(PORT, () => {
+const httpServer = http.createServer(app)
+initSocketIO(httpServer)
+
+httpServer.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
   console.log('Gemini:', !!process.env.GEMINI_API_KEY)
   console.log('Gemini Admin:', !!process.env.GEMINI_API_KEY_ADMIN)
@@ -136,7 +159,30 @@ app.listen(PORT, () => {
 })
 
 connectDB()
-  .then(() => {
+  .then(async () => {
+    const { setupVectorHooks } = await import('./src/models/vectorHooks.js')
+    try {
+      setupVectorHooks()
+    } catch (hookErr) {
+      console.warn('[VECTOR_HOOKS] Failed to attach hooks:', hookErr.message)
+    }
+
+    const { moduleDiscovery } = await import('./src/ai/services/moduleDiscoveryService.js')
+    const modules = await moduleDiscovery.discoverAll()
+    ;(async () => {
+      try {
+        const { startupSync } = await import('./src/ai/services/vectorSyncService.js')
+        const results = await startupSync()
+        console.log('[SERVER] Vector sync completed')
+      } catch (err) {
+        console.log('[VECTOR_STORE] Setup skipped:', err.message)
+        console.log('[VECTOR_STORE] To use vector search, create the Atlas Search index:')
+        console.log('[VECTOR_STORE]   npm run create-vector-index')
+        console.log('[VECTOR_STORE]   Or create manually in Atlas UI: Services > Atlas Search > Create Index > Vector Search')
+        console.log('[VECTOR_STORE]   Database: gym, Collection: vectordocuments, Name: vector_index')
+        console.log('[VECTOR_STORE]   Dimensions: 768, Similarity: cosine, Filters: source, language')
+      }
+    })()
     startMembershipReminderScheduler()
   })
   .catch((error) => {

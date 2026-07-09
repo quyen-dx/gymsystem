@@ -1,0 +1,13 @@
+{
+  "module": "knowledge",
+  "description": "Tra cứu kiến thức gym, FAQ, chính sách, bài tập, dinh dưỡng và tài liệu hướng dẫn bằng vector search ngữ nghĩa",
+  "tools": ["searchVectorKnowledge"],
+  "examples": [
+    "Bài tập nào tốt cho vai?",
+    "Chế độ dinh dưỡng cho người tập gym",
+    "Tìm hiểu về chính sách hoàn tiền",
+    "Giờ mở cửa phòng gym",
+    "Các bài tập chân hiệu quả",
+    "Kiến thức cơ bản về gym"
+  ]
+}

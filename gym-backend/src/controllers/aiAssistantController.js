@@ -28,7 +28,6 @@ import {
     shouldSearchWeb,
 } from '../services/webSearchService.js'
 import AppError from '../utils/appError.js'
-import { runGymAiAction } from '../ai/services/aiService.js'
 import { gymProAgent } from '../ai/agent/gymProAgent.js'
 import { agentMemory } from '../ai/agent/agentMemory.js'
 
@@ -1104,19 +1103,15 @@ export const runGymProAiCore = async ({
             path,
             error: error?.message || 'unknown',
         })
-        const legacyResponse = await runGymAiAction({
-            query,
-            userMessage,
-            user,
-            conversationContext,
-            language,
-        })
+        const fallbackAnswer = language === 'en'
+            ? 'I apologize, but I encountered an error while processing your request. Please try again in a moment.'
+            : 'Xin lỗi, mình gặp lỗi khi xử lý yêu cầu của bạn. Vui lòng thử lại sau.'
         const safeResponse = normalizeAiActionResponse({
-            ...legacyResponse,
+            answer: fallbackAnswer,
+            type: 'text',
             metadata: {
-                ...(legacyResponse?.metadata || {}),
                 traceId,
-                agentUsed: 'legacyFallback',
+                agentUsed: 'fallback',
                 fallbackUsed: true,
                 fallbackReason: 'gymProAgent_runtime_error',
             },

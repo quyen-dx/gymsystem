@@ -2,6 +2,7 @@ import { generateResponse as generateGeminiResponse } from './providers/geminiPr
 import { generateResponse as generateOpenRouterResponse, getOpenRouterModels } from './providers/openrouterProvider.js'
 import { generateResponse as generateGroqResponse, GROQ_MODELS } from './providers/groqProvider.js'
 import { perfStart, perfEnd } from './perfLogger.js'
+import { logFallback, logLatency, logToken, logPromptSize } from './aiLogService.js'
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 8_000
 const GEMINI_MODEL = 'gemini-2.5-flash'
@@ -58,6 +59,7 @@ const buildDefaultAttempts = (request, options = {}) => [
       temperature: options.temperature ?? 0.25,
       maxTokens: options.maxTokens || 1200,
       thinkingBudget: options.thinkingBudget,
+      responseMimeType: options.responseMimeType ?? null,
     }),
   },
   ...getOpenRouterModels().map((model) => ({
@@ -138,17 +140,34 @@ export async function runAIWithFallback(request, options = {}) {
 
   const total = activeAttempts.length
   perfStart('ai_fallback_providers')
-  const entries = activeAttempts.map((attempt) => ({
-    promise: withTimeout(attempt.run(), timeoutMs, `${attempt.provider} ${attempt.model}`)
-      .then((result) => {
-        perfEnd('ai_fallback_providers')
-        return { ...result, _provider: attempt.provider, _model: attempt.model }
-      }),
-    attempt,
-  }))
+  const entries = activeAttempts.map((attempt, idx) => {
+    const attemptStart = Date.now()
+    return {
+      promise: withTimeout(attempt.run(), timeoutMs, `${attempt.provider} ${attempt.model}`)
+        .then((result) => {
+          perfEnd('ai_fallback_providers')
+          const latencyMs = Date.now() - attemptStart
+          logLatency('llm_call', latencyMs, { provider: attempt.provider, model: attempt.model, attempt: idx })
+          logToken(attempt.model, null, null, { estimated: true, provider: attempt.provider, textLength: (result.text || '').length })
+          return { ...result, _provider: attempt.provider, _model: attempt.model }
+        })
+        .catch((err) => {
+          logFallback(attempt.provider, err.message, { model: attempt.model, attempt: idx })
+          throw err
+        }),
+      attempt,
+    }
+  })
 
   const winner = await firstSuccess(entries, failedProviders)
   if (winner) {
+    if (failedProviders.length > 0) {
+      logFallback('ai_fallback', `Succeeded with ${winner._provider || winner.provider} after ${failedProviders.length} failure(s)`, {
+        provider: winner._provider || winner.provider,
+        model: winner._model || winner.model,
+        failures: failedProviders.map((f) => `${f.provider}/${f.model}:${f.status}`).join(', '),
+      })
+    }
     return normalizeResult(
       { text: winner.text, provider: winner._provider || winner.provider, model: winner._model || winner.model },
       failedProviders
@@ -157,6 +176,9 @@ export async function runAIWithFallback(request, options = {}) {
 
   const error = new Error(`All ${total} AI providers failed`)
   error.failedProviders = failedProviders
+  logFallback('ai_fallback', `All ${total} providers failed`, {
+    failures: failedProviders.map((f) => `${f.provider}/${f.model}:${f.status}`).slice(0, 10).join(', '),
+  })
   throw error
 }
 

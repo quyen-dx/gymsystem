@@ -1,0 +1,12 @@
+{
+  "module": "booking",
+  "description": "Đặt lịch và quản lý lịch tập với PT",
+  "tools": ["getUpcomingBookings", "createBookingRequest"],
+  "examples": [
+    "Lịch tập của tôi",
+    "Đặt lịch với PT",
+    "Tôi có buổi tập nào sắp tới?",
+    "Hủy lịch PT",
+    "Đặt lịch cho ngày mai"
+  ]
+}

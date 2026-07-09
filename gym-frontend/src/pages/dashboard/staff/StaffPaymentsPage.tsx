@@ -1,8 +1,9 @@
-import { CheckOutlined, CloseOutlined, FilterOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, DatePicker, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Tooltip, message } from 'antd'
-import { useEffect, useState } from 'react'
+import { CheckCircleFilled, CloseCircleFilled, EyeOutlined, FilterOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
+import { Alert, Badge, Button, DatePicker, Descriptions, Input, Modal, Select, Space, Table, Tabs, Tag, message } from 'antd'
+import { useEffect, useRef, useState } from 'react'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
-import { membershipService } from '../../../services/membershipService'
+import { membershipService, type RefundRequest } from '../../../services/membershipService'
+import { socketService } from '../../../services/socketService'
 import { staffListAllPayments } from '../../../services/walletService'
 
 const { RangePicker } = DatePicker
@@ -37,8 +38,10 @@ function getPaymentStatusMeta(status: string) {
   return { color: 'default' as const, label: status || '-' }
 }
 
-export default function StaffPaymentsPage() {
+const rrStatusColors: Record<string, string> = { PENDING: 'warning', APPROVED: 'success', REJECTED: 'error', CANCELLED: 'default', REFUNDED: 'orange' }
+const rrStatusLabels: Record<string, string> = { PENDING: 'Chờ duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Từ chối', CANCELLED: 'Đã hủy', REFUNDED: 'Đã hoàn tiền' }
 
+export default function StaffPaymentsPage() {
   const [activeTab, setActiveTab] = useState('history')
 
   // --- Tab 1: Payment History ---
@@ -49,22 +52,29 @@ export default function StaffPaymentsPage() {
   const [historyStatus, setHistoryStatus] = useState('')
   const [historyDateRange, setHistoryDateRange] = useState<[any, any] | null>(null)
 
-  // --- Tab 2: Refunds (cancellations) ---
-  const [cancellations, setCancellations] = useState<any[]>([])
-  const [loadingCancellations, setLoadingCancellations] = useState(false)
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
-  const [cancelPagination, setCancelPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 0 })
-  const [cancelSearch, setCancelSearch] = useState('')
-  const [cancelStatusFilter, setCancelStatusFilter] = useState('')
-  const [refundFilter, setRefundFilter] = useState('')
-  const [cancelDateRange, setCancelDateRange] = useState<[any, any] | null>(null)
+  // --- Tab 2: Refund history ---
+  const [refundHistory, setRefundHistory] = useState<RefundRequest[]>([])
+  const [loadingRefundHistory, setLoadingRefundHistory] = useState(false)
+  const [rhPagination, setRhPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 0 })
+  const [rhSearch, setRhSearch] = useState('')
+  const [rhStatusFilter, setRhStatusFilter] = useState('')
+  const [rhDateRange, setRhDateRange] = useState<[any, any] | null>(null)
 
-  // Modals for cancellations
-  const [approving, setApproving] = useState<any | null>(null)
-  const [approveRefund, setApproveRefund] = useState<number>(0)
-  const [approveNote, setApproveNote] = useState('')
-  const [rejectingCancel, setRejectingCancel] = useState<any | null>(null)
-  const [rejectCancelReason, setRejectCancelReason] = useState('')
+  // --- Tab 3: Refund Requests (PENDING) ---
+  const [refundRequests, setRefundRequests] = useState<RefundRequest[]>([])
+  const [loadingRefundRequests, setLoadingRefundRequests] = useState(false)
+  const [rrPagination, setRrPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 0 })
+  const [rrSearch, setRrSearch] = useState('')
+  const [rrStatusFilter, setRrStatusFilter] = useState('PENDING')
+
+  const [hasNewRefundRequest, setHasNewRefundRequest] = useState(false)
+  const [pendingRefundCount, setPendingRefundCount] = useState(0)
+  const [detailRR, setDetailRR] = useState<RefundRequest | null>(null)
+  const [approvingRR, setApprovingRR] = useState<RefundRequest | null>(null)
+  const [approvingRRNote, setApprovingRRNote] = useState('')
+  const [rejectingRR, setRejectingRR] = useState<RefundRequest | null>(null)
+  const [rejectingRRReason, setRejectingRRReason] = useState('')
+  const [rrActionLoading, setRrActionLoading] = useState(false)
 
   // --- History ---
   const fetchPayments = async (page = 1) => {
@@ -82,66 +92,45 @@ export default function StaffPaymentsPage() {
     setLoadingPayments(false)
   }
 
-  // --- Cancellations (Refunds) ---
-  const buildCancelParams = (page = 1) => {
+  const fetchRefundHistory = (page = 1) => {
+    setLoadingRefundHistory(true)
     const params: Record<string, any> = { page, limit: 20 }
-    if (cancelSearch.trim()) params.search = cancelSearch.trim()
-    if (cancelStatusFilter) params.status = cancelStatusFilter
-    if (refundFilter) params.refundFilter = refundFilter
-    if (cancelDateRange?.[0]) params.fromDate = cancelDateRange[0].format('YYYY-MM-DD')
-    if (cancelDateRange?.[1]) params.toDate = cancelDateRange[1].format('YYYY-MM-DD')
-    return params
-  }
-
-  const fetchCancellations = (page = 1) => {
-    setLoadingCancellations(true)
-    membershipService.getStaffCancellations(buildCancelParams(page))
+    if (rhSearch.trim()) params.search = rhSearch.trim()
+    if (rhStatusFilter) params.status = rhStatusFilter
+    else params.status = 'APPROVED,REJECTED,CANCELLED,REFUNDED'
+    if (rhDateRange?.[0]) params.fromDate = rhDateRange[0].format('YYYY-MM-DD')
+    if (rhDateRange?.[1]) params.toDate = rhDateRange[1].format('YYYY-MM-DD')
+    membershipService.getStaffRefundRequests(params)
       .then((res) => {
-        setCancellations(res.data.cancellations || [])
-        setCancelPagination(res.data.pagination || { total: 0, page: 1, limit: 20, totalPages: 0 })
+        setRefundHistory(res.data.refundRequests || [])
+        setRhPagination(res.data.pagination || { total: 0, page: 1, limit: 20, totalPages: 0 })
       })
-      .catch(() => message.error('Không thể tải danh sách hoàn tiền'))
-      .finally(() => setLoadingCancellations(false))
-  }
-
-  const submitApproveCancellation = async () => {
-    if (!approving) return
-    setActionLoadingId(approving._id)
-    try {
-      await membershipService.approveCancellation(approving._id, {
-        finalRefundAmount: approveRefund,
-        staffNote: approveNote.trim() || undefined,
-      })
-      message.success('Xác nhận hoàn tiền thành công')
-      setApproving(null)
-      setApproveRefund(0)
-      setApproveNote('')
-      fetchCancellations(cancelPagination.page)
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Xác nhận hoàn tiền thất bại')
-    } finally { setActionLoadingId(null) }
-  }
-
-  const submitRejectCancellation = async () => {
-    if (!rejectingCancel) return
-    setActionLoadingId(rejectingCancel._id)
-    try {
-      await membershipService.rejectCancellation(rejectingCancel._id, {
-        reason: rejectCancelReason.trim(),
-      })
-      message.success('Từ chối hoàn tiền thành công')
-      setRejectingCancel(null)
-      setRejectCancelReason('')
-      fetchCancellations(cancelPagination.page)
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Từ chối thất bại')
-    } finally { setActionLoadingId(null) }
+      .catch(() => message.error('Không thể tải lịch sử hoàn tiền'))
+      .finally(() => setLoadingRefundHistory(false))
   }
 
   useEffect(() => {
     fetchPayments()
+    fetchRefundHistory()
+    fetchRefundRequests()
+  }, [])
 
-    fetchCancellations()
+  useEffect(() => {
+    socketService.connect()
+    membershipService.getPendingRefundRequestCount().then(res => {
+      setPendingRefundCount(res.data.count ?? 0)
+    }).catch(() => {})
+    const handler = (data: { count: number }) => {
+      setPendingRefundCount(prev => {
+        if (data.count > prev) setHasNewRefundRequest(true)
+        return data.count
+      })
+      if (data.count === 0) setHasNewRefundRequest(false)
+    }
+    socketService.on('refund_request_update', handler)
+    return () => {
+      socketService.off('refund_request_update', handler)
+    }
   }, [])
 
   // --- Columns ---
@@ -182,242 +171,205 @@ export default function StaffPaymentsPage() {
     },
   ]
 
-  const refundMethodLabels: Record<string, string> = {
-    WALLET: 'Cộng ví GymPro',
-    NONE: 'Không hoàn',
-  }
-
-  const refundStatusMeta = (status: string) => {
-    if (status === 'PENDING') return { color: 'warning' as const, label: 'Chờ xử lý' }
-    if (status === 'COMPLETED') return { color: 'success' as const, label: 'Đã hoàn tiền' }
-    return { color: 'default' as const, label: 'Không áp dụng' }
-  }
-
-  const renderRefundPolicy = (record: any) => {
-    const eligible = record.currentRefundEligible ?? record.refundEligible
-    if (!eligible) return <Tag>Không đủ điều kiện hoàn tiền</Tag>
-    const color = record.policyCode === 'REFUND_100' ? 'success' : record.policyCode === 'REFUND_50' ? 'processing' : 'default'
-    return <Tag color={color}>{record.policyLabel || 'Hoàn tiền'}</Tag>
-  }
-
-  const cancellationColumns = [
-    {
-      title: 'Member ID', width: 100,
-      render: (_: any, r: any) => r.memberId?.memberCode || r.memberId?._id?.slice(-6) || '-',
-    },
-    {
-      title: 'Họ tên', width: 160,
-      render: (_: any, r: any) => r.memberId?.fullName || r.memberId?.name || '-',
-    },
-    {
-      title: 'Gói tập', width: 140,
-      render: (_: any, r: any) => r.planId?.nameVi || r.planId?.nameEn || '-',
-    },
-    {
-      title: 'Số tiền gốc', width: 120,
-      render: (_: any, r: any) => formatMoney(r.planId?.price || 0),
-    },
-    {
-      title: 'Điều kiện', width: 90,
-      render: (_: any, r: any) => {
-        const eligible = r.currentRefundEligible ?? r.refundEligible
-        return eligible
-          ? <Tag color="success">✅ Đủ điều kiện</Tag>
-          : <Tag color="error">❌ {r.ineligibilityReason?.includes('7 ngày') ? 'Quá hạn' : 'Không đủ'}</Tag>
-      },
-    },
-    {
-      title: 'Đã dùng', width: 80,
-      render: (_: any, r: any) => (
-        <Tooltip title={`Ngày mua: ${formatDate(r.registeredAt)} | Đã qua: ${r.daysSincePurchase ?? '-'} ngày | Check-in: ${r.checkInCount ?? '?'} | Booking: ${r.bookingCount ?? '?'}`}>
-          <span>{r.usedDays || 0}/{r.totalDays || '-'} ngày</span>
-        </Tooltip>
-      ),
-    },
-    {
-      title: 'Hoàn dự kiến', width: 130,
-      render: (_: any, r: any) => {
-        const eligible = r.currentRefundEligible ?? r.refundEligible
-        return eligible
-          ? <span className="font-medium text-green-600">{formatMoney(r.estimatedRefundAmount)}</span>
-          : <Tag>0đ</Tag>
-      },
-    },
-    {
-      title: 'Phương thức hoàn', width: 140,
-      render: (_: any, r: any) => {
-        const method = r.refundMethod
-        if (!method || method === 'NONE') return <Tag>—</Tag>
-        const label = refundMethodLabels[method] || method
-        return <Tag color="processing">{label}</Tag>
-      },
-    },
-    {
-      title: 'Lý do', width: 150,
-      render: (_: any, r: any) => (
-        <Tooltip title={r.reason}>
-          <span className="line-clamp-1 max-w-[140px] inline-block">{r.reason || '-'}</span>
-        </Tooltip>
-      ),
-    },
-    {
-      title: 'Trạng thái', width: 110,
-      render: (_: any, r: any) => {
-        const meta = r.status === 'pending' ? { color: 'warning' as const, label: 'Chờ xử lý' }
-          : r.status === 'approved' ? { color: 'success' as const, label: 'Đã duyệt' }
-          : { color: 'error' as const, label: 'Từ chối' }
-        return <Tag color={meta.color}>{meta.label}</Tag>
-      },
-    },
-    {
-      title: 'Refund status', width: 120,
-      render: (_: any, r: any) => {
-        const eligible = r.currentRefundEligible ?? r.refundEligible
-        if (!eligible || r.refundMethod === 'NONE') return <Tag>N/A</Tag>
-        const meta = refundStatusMeta(r.refundStatus)
-        return <Tag color={meta.color}>{meta.label}</Tag>
-      },
-    },
-    { title: 'Ngày yêu cầu', dataIndex: 'createdAt', width: 160, render: formatDate },
-    {
-      title: 'Thao tác', width: 200, fixed: 'right' as const,
-      render: (_: any, r: any) => {
-        if (r.status === 'pending') {
-          const eligible = r.currentRefundEligible ?? r.refundEligible
-          return (
-            <Space>
-              <Button size="small" type="primary" icon={<CheckOutlined />}
-                disabled={!eligible}
-                onClick={() => {
-                  setApproving(r)
-                  setApproveRefund(eligible ? r.estimatedRefundAmount : 0)
-                  setApproveNote('')
-                }}
-              >Xác nhận</Button>
-              <Button size="small" danger icon={<CloseOutlined />} onClick={() => {
-                setRejectingCancel(r)
-                setRejectCancelReason('')
-              }}>Từ chối</Button>
-            </Space>
-          )
-        }
-        return null
-      },
-    },
-  ]
-
-  const renderRefundDetail = (record: any) => {
-    const eligible = record.currentRefundEligible ?? record.refundEligible
-
+  const renderEligibilityTag = (rr: RefundRequest) => {
+    const eligible = rr.refundPolicyResult === 'Đủ điều kiện hoàn tiền'
     return (
-      <div className="space-y-5">
-        <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-5">
-          <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Hội viên</div>
-              <div className="mt-0.5 text-base font-semibold">{record.memberId?.fullName || record.memberId?.name || '-'}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Gói tập</div>
-              <div className="mt-0.5 text-base font-semibold">{record.planId?.nameVi || record.planId?.nameEn || '-'}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Ngày mua</div>
-              <div className="mt-0.5 text-base font-semibold">{formatDate(record.registeredAt)}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Số ngày đã trôi qua</div>
-              <div className="mt-0.5 text-base font-semibold">{record.daysSincePurchase ?? '-'} ngày</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Số lần check-in</div>
-              <div className="mt-0.5 text-base font-semibold">{record.checkInCount ?? '...'}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Số booking / PT đã dùng</div>
-              <div className="mt-0.5 text-base font-semibold">{record.bookingCount ?? '...'}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-5">
-          <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Trạng thái</div>
-              <div className="mt-0.5">
-                {eligible
-                  ? <span className="text-base font-semibold text-green-600">✅ Đủ điều kiện hoàn tiền</span>
-                  : <span className="text-base font-semibold text-red-500">❌ {record.ineligibilityReason || 'Không đủ điều kiện hoàn tiền'}</span>
-                }
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Chính sách hoàn</div>
-              <div className="mt-0.5">{renderRefundPolicy(record)}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Phương thức hoàn</div>
-              <div className="mt-0.5 text-base font-semibold">
-                {eligible
-                  ? (refundMethodLabels[record.refundMethod] || record.refundMethod || '-')
-                  : 'Không áp dụng'
-                }
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Hoàn dự kiến</div>
-              <div className={`mt-0.5 text-base font-semibold ${eligible ? 'text-green-600' : 'text-gray-400'}`}>
-                {eligible ? formatMoney(record.estimatedRefundAmount) : '0đ'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {record.reason && (
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Lý do hủy</p>
-            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-3 text-sm">{record.reason}</div>
-          </div>
-        )}
-
-        {eligible ? (
-          <>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">Số tiền hoàn thực tế</label>
-              <InputNumber
-                style={{ width: '100%' }} size="large"
-                min={0} max={record.estimatedRefundAmount || 0}
-                value={approveRefund}
-                onChange={(v) => setApproveRefund(v || 0)}
-                formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={(v) => Number(v?.replace(/,/g, '')) || 0}
-                addonAfter="đ"
-              />
-              <div className="mt-1 text-xs text-[var(--theme-muted)]">
-                Số tiền hoàn không vượt quá {formatMoney(record.estimatedRefundAmount || 0)}
-              </div>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">Ghi chú xử lý</label>
-              <Input.TextArea rows={4} value={approveNote} onChange={(e) => setApproveNote(e.target.value)} placeholder="Nhập ghi chú..." />
-            </div>
-          </>
-        ) : (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            <p className="font-semibold">Không thể xác nhận hoàn tiền</p>
-            <p className="mt-1">{record.ineligibilityReason || 'Yêu cầu không đủ điều kiện hoàn tiền theo chính sách.'}</p>
-          </div>
-        )}
-      </div>
+      <Tag color={eligible ? 'success' : 'error'} icon={eligible ? <CheckCircleFilled /> : <CloseCircleFilled />}>
+        {eligible ? 'Đủ điều kiện' : 'Không đủ điều kiện'}
+      </Tag>
     )
   }
 
-  const handleCancelResetFilter = () => {
-    setCancelSearch('')
-    setCancelStatusFilter('')
-    setRefundFilter('')
-    setCancelDateRange(null)
-    fetchCancellations(1)
+  const getRefundBreakdown = (rr: RefundRequest) => {
+  const hasPending = rr.pendingPeriodsCount && rr.pendingPeriodsCount > 0
+  const pendingTotal = rr.pendingPeriodsTotal || 0
+  const primaryAmount = rr.status === 'PENDING' ? rr.refundAmount : Math.max(0, rr.refundAmount - pendingTotal)
+  const total = rr.status === 'PENDING' ? rr.refundAmount + pendingTotal : rr.refundAmount
+  return { primaryAmount, pendingTotal, total, hasPending, pendingCount: rr.pendingPeriodsCount || 0 }
+}
+
+const renderBenefitsTag = (rr: RefundRequest) => {
+    if (!rr.usedBenefits) return <Tag color="default">Chưa sử dụng</Tag>
+    const parts: string[] = []
+    if (rr.usedCheckIn) parts.push('Check-in')
+    if (rr.usedPT) parts.push('PT')
+    if (rr.usedGym) parts.push('Phòng tập')
+    return <Tag color="warning">{parts.join(', ')}</Tag>
+  }
+
+  // --- Refund request columns (Tab 3: PENDING) ---
+  const refundRequestColumns = [
+    {
+      title: 'Hội viên', dataIndex: 'memberId', key: 'memberId', width: 180,
+      render: (member: any) => <div><div className="font-medium">{member?.fullName || member?.name || '-'}</div><div className="text-xs text-[var(--gs-text-muted)]">{member?.email}</div></div>,
+    },
+    {
+      title: 'Gói tập', dataIndex: 'planId', key: 'planId', width: 120,
+      render: (plan: any) => plan?.nameVi || plan?.nameEn || '-',
+    },
+    {
+      title: 'Số tiền', key: 'refundAmount', width: 200,
+      render: (_: any, rr: RefundRequest) => {
+        if (rr.pendingPeriodsCount && rr.pendingPeriodsCount > 0) {
+          const { primaryAmount, pendingTotal, total, pendingCount } = getRefundBreakdown(rr)
+          return (
+            <div className="text-xs leading-relaxed">
+              <div className="font-medium text-[var(--gs-accent)]">{formatMoney(total)}</div>
+              <div className="text-[var(--gs-text-muted)]">
+                Gói: {formatMoney(primaryAmount)} + GH ({pendingCount} kỳ): {formatMoney(pendingTotal)}
+              </div>
+            </div>
+          )
+        }
+        return <span className="font-medium text-[var(--gs-accent)]">{formatMoney(rr.refundAmount)}</span>
+      },
+    },
+    {
+      title: 'Đã dùng', key: 'daysUsed', width: 80,
+      render: (_: any, rr: RefundRequest) => <span>{rr.daysUsedAtRequest ?? '-'} ngày</span>,
+    },
+    {
+      title: 'Điều kiện hoàn tiền', key: 'eligibility', width: 160,
+      render: (_: any, rr: RefundRequest) => (
+        <Space direction="vertical" size={0}>
+          {renderEligibilityTag(rr)}
+          {rr.refundPolicyResult && <span className="text-xs text-[var(--gs-text-muted)]">{rr.refundPolicyResult}</span>}
+        </Space>
+      ),
+    },
+    {
+      title: 'Quyền lợi', key: 'benefits', width: 120,
+      render: (_: any, rr: RefundRequest) => renderBenefitsTag(rr),
+    },
+    {
+      title: 'Trạng thái', dataIndex: 'status', key: 'status', width: 110,
+      render: (status: string) => <Tag color={rrStatusColors[status] || 'default'}>{rrStatusLabels[status] || status}</Tag>,
+    },
+    {
+      title: 'Thao tác', key: 'actions', width: 200,
+      render: (_: any, record: RefundRequest) => (
+        <Space>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailRR(record)}>Xem</Button>
+          {record.status === 'PENDING' && (
+            <>
+              <Button size="small" type="primary" onClick={() => setApprovingRR(record)}>Duyệt</Button>
+              <Button size="small" danger onClick={() => setRejectingRR(record)}>Từ chối</Button>
+            </>
+          )}
+        </Space>
+      ),
+    },
+  ]
+
+  // --- Refund history columns (Tab 2) ---
+  const refundHistoryColumns = [
+    {
+      title: 'Hội viên', dataIndex: 'memberId', key: 'memberId', width: 180,
+      render: (member: any) => <div><div className="font-medium">{member?.fullName || member?.name || '-'}</div><div className="text-xs text-[var(--gs-text-muted)]">{member?.email}</div></div>,
+    },
+    {
+      title: 'Gói tập', dataIndex: 'planId', key: 'planId', width: 120,
+      render: (plan: any) => plan?.nameVi || plan?.nameEn || '-',
+    },
+    {
+      title: 'Số tiền', key: 'refundAmount', width: 200,
+      render: (_: any, rr: RefundRequest) => {
+        if (rr.pendingPeriodsCount && rr.pendingPeriodsCount > 0) {
+          const { primaryAmount, pendingTotal, total, pendingCount } = getRefundBreakdown(rr)
+          return (
+            <div className="text-xs leading-relaxed">
+              <div className="font-medium text-[var(--gs-accent)]">{formatMoney(total)}</div>
+              <div className="text-[var(--gs-text-muted)]">
+                Gói: {formatMoney(primaryAmount)} + GH ({pendingCount} kỳ): {formatMoney(pendingTotal)}
+              </div>
+            </div>
+          )
+        }
+        return <span className="font-medium text-[var(--gs-accent)]">{formatMoney(rr.refundAmount)}</span>
+      },
+    },
+    {
+      title: 'Đã dùng', key: 'daysUsed', width: 80,
+      render: (_: any, rr: RefundRequest) => <span>{rr.daysUsedAtRequest ?? '-'} ngày</span>,
+    },
+    {
+      title: 'Điều kiện hoàn tiền', key: 'eligibility', width: 160,
+      render: (_: any, rr: RefundRequest) => (
+        <Space direction="vertical" size={0}>
+          {renderEligibilityTag(rr)}
+          {rr.refundPolicyResult && <span className="text-xs text-[var(--gs-text-muted)]">{rr.refundPolicyResult}</span>}
+        </Space>
+      ),
+    },
+    {
+      title: 'Quyền lợi', key: 'benefits', width: 120,
+      render: (_: any, rr: RefundRequest) => renderBenefitsTag(rr),
+    },
+    {
+      title: 'Ngày yêu cầu', dataIndex: 'requestedAt', key: 'requestedAt', width: 150,
+      render: (date: string) => formatDate(date),
+    },
+    {
+      title: 'Trạng thái', dataIndex: 'status', key: 'status', width: 110,
+      render: (status: string) => <Tag color={rrStatusColors[status] || 'default'}>{rrStatusLabels[status] || status}</Tag>,
+    },
+    {
+      title: 'Người xử lý', dataIndex: 'reviewedBy', key: 'reviewedBy', width: 130,
+      render: (user: any) => user?.name || user?.fullName || '-',
+    },
+  ]
+
+  const fetchRefundRequests = (page = 1) => {
+    setLoadingRefundRequests(true)
+    setHasNewRefundRequest(false)
+    const params: Record<string, any> = { page, limit: 20 }
+    if (rrStatusFilter) params.status = rrStatusFilter
+    if (rrSearch.trim()) params.search = rrSearch.trim()
+    membershipService.getStaffRefundRequests(params)
+      .then((res) => {
+        setRefundRequests(res.data.refundRequests || [])
+        setRrPagination(res.data.pagination || { total: 0, page: 1, limit: 20, totalPages: 0 })
+      })
+      .catch(() => message.error('Không thể tải yêu cầu hoàn tiền'))
+      .finally(() => setLoadingRefundRequests(false))
+  }
+
+  const submitApproveRR = async () => {
+    if (!approvingRR) return
+    setRrActionLoading(true)
+    try {
+      await membershipService.approveRefundRequest(approvingRR._id, { staffNote: approvingRRNote.trim() || undefined })
+      message.success('Đã phê duyệt yêu cầu hoàn tiền.')
+      setApprovingRR(null)
+      setApprovingRRNote('')
+      fetchRefundRequests(rrPagination.page)
+      fetchRefundHistory(1)
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Phê duyệt thất bại')
+    } finally { setRrActionLoading(false) }
+  }
+
+  const submitRejectRR = async () => {
+    if (!rejectingRR) return
+    if (!rejectingRRReason.trim()) { message.warning('Vui lòng nhập lý do từ chối.'); return }
+    setRrActionLoading(true)
+    try {
+      await membershipService.rejectRefundRequest(rejectingRR._id, { reason: rejectingRRReason.trim() })
+      message.success('Đã từ chối yêu cầu hoàn tiền.')
+      setRejectingRR(null)
+      setRejectingRRReason('')
+      fetchRefundRequests(rrPagination.page)
+      fetchRefundHistory(1)
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Từ chối thất bại')
+    } finally { setRrActionLoading(false) }
+  }
+
+  const handleRefundHistoryReset = () => {
+    setRhSearch('')
+    setRhStatusFilter('')
+    setRhDateRange(null)
+    fetchRefundHistory(1)
   }
 
   return (
@@ -437,7 +389,8 @@ export default function StaffPaymentsPage() {
               onChange={(key) => {
                 setActiveTab(key)
                 if (key === 'history') { fetchPayments() }
-                if (key === 'refunds') fetchCancellations(cancelPagination.page)
+                if (key === 'refunds') fetchRefundHistory(rhPagination.page)
+                if (key === 'refund-requests') { setHasNewRefundRequest(false); fetchRefundRequests(rrPagination.page) }
               }}
               items={[
                 // ====== TAB 1: HISTORY ======
@@ -505,71 +458,124 @@ export default function StaffPaymentsPage() {
                   ),
                 },
 
-                // ====== TAB 2: REFUNDS ======
+                // ====== TAB 2: REFUND HISTORY ======
                 {
                   key: 'refunds',
-                  label: 'Hoàn tiền',
+                  label: 'Lịch sử hoàn tiền',
                   children: (
                     <>
                       <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
                         <div className="min-w-[200px] flex-1">
                           <div className="mb-1 text-xs font-medium text-[var(--gs-text-soft)]">Tìm kiếm</div>
-                          <Input prefix={<SearchOutlined />} placeholder="Mã HV, họ tên..." value={cancelSearch}
-                            onChange={(e) => setCancelSearch(e.target.value)}
-                            onPressEnter={() => { fetchCancellations(1) }}
+                          <Input prefix={<SearchOutlined />} placeholder="Tên HV, email..." value={rhSearch}
+                            onChange={(e) => setRhSearch(e.target.value)}
+                            onPressEnter={() => fetchRefundHistory(1)}
                           />
                         </div>
                         <div className="min-w-[140px]">
                           <div className="mb-1 text-xs font-medium text-[var(--gs-text-soft)]">Trạng thái</div>
-                          <Select className="w-full" value={cancelStatusFilter} onChange={(v) => setCancelStatusFilter(v)}
+                          <Select className="w-full" value={rhStatusFilter} onChange={(v) => { setRhStatusFilter(v); fetchRefundHistory(1) }}
                             options={[
-                              { value: '', label: 'Tất cả' },
-                              { value: 'pending', label: 'Chờ xử lý' },
-                              { value: 'approved', label: 'Đã duyệt' },
-                              { value: 'rejected', label: 'Từ chối' },
-                            ]}
-                          />
-                        </div>
-                        <div className="min-w-[140px]">
-                          <div className="mb-1 text-xs font-medium text-[var(--gs-text-soft)]">Hoàn tiền</div>
-                          <Select className="w-full" value={refundFilter} onChange={(v) => setRefundFilter(v)}
-                            options={[
-                              { value: '', label: 'Tất cả' },
-                              { value: 'eligible', label: 'Đủ điều kiện' },
-                              { value: 'not-eligible', label: 'Không đủ đk' },
+                              { value: 'APPROVED,REJECTED,CANCELLED,REFUNDED', label: 'Tất cả' },
+                              { value: 'APPROVED', label: 'Đã duyệt' },
+                              { value: 'REJECTED', label: 'Từ chối' },
+                              { value: 'REFUNDED', label: 'Đã hoàn tiền' },
+                              { value: 'CANCELLED', label: 'Đã hủy' },
                             ]}
                           />
                         </div>
                         <div className="min-w-[240px]">
                           <div className="mb-1 text-xs font-medium text-[var(--gs-text-soft)]">Khoảng thời gian</div>
-                          <RangePicker className="w-full" value={cancelDateRange as any}
-                            onChange={(dates) => setCancelDateRange(dates as any)}
+                          <RangePicker className="w-full" value={rhDateRange as any}
+                            onChange={(dates) => setRhDateRange(dates as any)}
                             format="DD/MM/YYYY"
                           />
                         </div>
                         <div className="flex gap-2">
-                          <Button type="primary" icon={<FilterOutlined />} onClick={() => fetchCancellations(1)}>Lọc</Button>
-                          <Button icon={<ReloadOutlined />} onClick={handleCancelResetFilter}>Reset</Button>
+                          <Button type="primary" icon={<FilterOutlined />} onClick={() => fetchRefundHistory(1)}>Lọc</Button>
+                          <Button icon={<ReloadOutlined />} onClick={handleRefundHistoryReset}>Reset</Button>
                         </div>
                       </div>
                       <div className="mb-4 flex justify-end">
-                        <Button icon={<ReloadOutlined />} onClick={() => fetchCancellations(cancelPagination.page)}>Tải lại</Button>
+                        <Button icon={<ReloadOutlined />} onClick={() => fetchRefundHistory(rhPagination.page)}>Tải lại</Button>
                       </div>
                       <div className="member-scroll-x">
                         <Table
                           rowKey="_id"
-                          dataSource={cancellations}
-                          columns={cancellationColumns}
-                          loading={loadingCancellations}
+                          dataSource={refundHistory}
+                          columns={refundHistoryColumns}
+                          loading={loadingRefundHistory}
                           pagination={{
-                            current: cancelPagination.page,
-                            pageSize: cancelPagination.limit,
-                            total: cancelPagination.total,
+                            current: rhPagination.page,
+                            pageSize: rhPagination.limit,
+                            total: rhPagination.total,
                             showSizeChanger: false,
                             showTotal: (total) => `Tổng: ${total}`,
                           }}
-                          onChange={(pag) => fetchCancellations(pag.current)}
-                          scroll={{ x: 1800 }}
+                          onChange={(pag) => fetchRefundHistory(pag.current)}
+                          scroll={{ x: 1300 }}
+                        />
+                      </div>
+                    </>
+                  ),
+                },
+
+                // ====== TAB 3: REFUND REQUESTS ======
+                {
+                  key: 'refund-requests',
+                  label: <Badge count={pendingRefundCount} offset={[8, 0]} size="small">Yêu cầu hoàn tiền</Badge>,
+                  children: (
+                    <>
+                      {hasNewRefundRequest && (
+                        <Alert
+                          message="Có yêu cầu hoàn tiền mới"
+                          description="Nhấn Tải lại để xem yêu cầu mới nhất."
+                          type="info"
+                          showIcon
+                          className="mb-4"
+                          closable
+                          onClose={() => setHasNewRefundRequest(false)}
+                        />
+                      )}
+                      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
+                        <div className="min-w-[200px] flex-1">
+                          <div className="mb-1 text-xs font-medium text-[var(--gs-text-soft)]">Tìm kiếm</div>
+                          <Input prefix={<SearchOutlined />} placeholder="Tên HV, email..." value={rrSearch}
+                            onChange={(e) => setRrSearch(e.target.value)}
+                            onPressEnter={() => fetchRefundRequests(1)}
+                          />
+                        </div>
+                        <div className="min-w-[140px]">
+                          <div className="mb-1 text-xs font-medium text-[var(--gs-text-soft)]">Trạng thái</div>
+                          <Select className="w-full" value={rrStatusFilter} onChange={(v) => { setRrStatusFilter(v); fetchRefundRequests(1) }}
+                            options={[
+                              { value: 'PENDING', label: 'Chờ duyệt' },
+                              { value: 'APPROVED', label: 'Đã duyệt' },
+                              { value: 'REJECTED', label: 'Từ chối' },
+                              { value: 'REFUNDED', label: 'Đã hoàn tiền' },
+                              { value: '', label: 'Tất cả' },
+                            ]}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button type="primary" icon={<ReloadOutlined />} onClick={() => fetchRefundRequests(1)}>Tải lại</Button>
+                        </div>
+                      </div>
+                      <div className="member-scroll-x">
+                        <Table
+                          rowKey="_id"
+                          dataSource={refundRequests}
+                          columns={refundRequestColumns}
+                          loading={loadingRefundRequests}
+                          pagination={{
+                            current: rrPagination.page,
+                            pageSize: rrPagination.limit,
+                            total: rrPagination.total,
+                            showSizeChanger: false,
+                            showTotal: (total) => `Tổng: ${total}`,
+                          }}
+                          onChange={(pag) => fetchRefundRequests(pag.current)}
+                          scroll={{ x: 1300 }}
                         />
                       </div>
                     </>
@@ -579,39 +585,185 @@ export default function StaffPaymentsPage() {
             />
           </div>
 
-          {/* APPROVE REFUND MODAL */}
+          {/* DETAIL MODAL */}
           <Modal
-            title="Xác nhận hoàn tiền"
-            open={Boolean(approving)}
-            onCancel={() => { setApproving(null); setApproveRefund(0); setApproveNote('') }}
-            onOk={submitApproveCancellation}
-            confirmLoading={Boolean(actionLoadingId)}
-            okText="Xác nhận hoàn"
-            okButtonProps={{
-              danger: approving?.currentRefundEligible ?? approving?.refundEligible,
-              disabled: !(approving?.currentRefundEligible ?? approving?.refundEligible),
-            }}
-            width={720}
-            style={{ maxWidth: 'calc(100vw - 32px)' }}
+            title="Chi tiết yêu cầu hoàn tiền"
+            open={Boolean(detailRR)}
+            onCancel={() => setDetailRR(null)}
+            footer={<Button onClick={() => setDetailRR(null)}>Đóng</Button>}
+            width={640}
           >
-            {approving && renderRefundDetail(approving)}
+            {detailRR && (
+              <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-2">
+                <Descriptions bordered size="small" column={1}>
+                  <Descriptions.Item label="Hội viên">
+                    {detailRR.memberId?.fullName || detailRR.memberId?.name || '-'}
+                    <span className="ml-2 text-xs text-[var(--gs-text-muted)]">({detailRR.memberId?.email})</span>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Gói tập">{detailRR.planId?.nameVi || detailRR.planId?.nameEn || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="Chi tiết hoàn tiền">
+                    {(() => {
+                      const { primaryAmount, pendingTotal, total, hasPending, pendingCount } = getRefundBreakdown(detailRR)
+                      return (
+                        <div className="space-y-1 text-xs w-full">
+                          <div className="flex justify-between">
+                            <span className="text-[var(--gs-text-soft)]">Gói đang hoạt động</span>
+                            <span className={primaryAmount > 0 ? 'font-medium' : 'text-[var(--gs-text-muted)]'}>{primaryAmount > 0 ? formatMoney(primaryAmount) : '0đ'}</span>
+                          </div>
+                          <div className="text-[10px] text-[var(--gs-text-muted)] pl-2 leading-tight">
+                            {detailRR.refundPolicyResult === 'Đủ điều kiện hoàn tiền' ? '(Đủ điều kiện hoàn tiền)' : `(Không đủ điều kiện — ${detailRR.refundPolicyResult})`}
+                          </div>
+                          {hasPending && (
+                            <div className="flex justify-between mt-1">
+                              <span className="text-[var(--gs-text-soft)]">Gia hạn ({pendingCount} kỳ chưa kích hoạt)</span>
+                              <span className="font-medium text-[var(--gs-success)]">{formatMoney(pendingTotal)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between mt-1 pt-1 border-t border-dashed border-[var(--gs-border)]">
+                            <span className="font-semibold">Tổng hoàn</span>
+                            <span className="font-bold text-[var(--gs-accent)]">{formatMoney(total)}</span>
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Lý do hủy">{detailRR.reason || '-'}</Descriptions.Item>
+                </Descriptions>
+
+                <h4 className="text-sm font-semibold text-[var(--gs-text)]">Thông tin kỳ hạn</h4>
+                <Descriptions bordered size="small" column={2}>
+                  <Descriptions.Item label="Ngày bắt đầu">{formatDate(detailRR.membershipPeriodId?.startDate)}</Descriptions.Item>
+                  <Descriptions.Item label="Ngày kết thúc">{formatDate(detailRR.membershipPeriodId?.endDate)}</Descriptions.Item>
+                  <Descriptions.Item label="Ngày kích hoạt">{formatDate(detailRR.membershipPeriodId?.activatedAt)}</Descriptions.Item>
+                  <Descriptions.Item label="Ngày gửi yêu cầu">{formatDate(detailRR.requestedAt)}</Descriptions.Item>
+                  <Descriptions.Item label="Số ngày đã sử dụng">{detailRR.daysUsedAtRequest ?? '-'}</Descriptions.Item>
+                  <Descriptions.Item label="Điều kiện hoàn tiền">
+                    <Tag color={detailRR.eligibleWithin7Days ? 'success' : 'error'} icon={detailRR.eligibleWithin7Days ? <CheckCircleFilled /> : <CloseCircleFilled />}>
+                      {detailRR.eligibleWithin7Days ? 'Trong 7 ngày' : 'Quá 7 ngày'}
+                    </Tag>
+                  </Descriptions.Item>
+                </Descriptions>
+
+                <h4 className="text-sm font-semibold text-[var(--gs-text)]">Quyền lợi đã sử dụng</h4>
+                <Descriptions bordered size="small" column={2}>
+                  <Descriptions.Item label="Check-in">
+                    <Tag color={detailRR.usedCheckIn ? 'warning' : 'default'}>{detailRR.usedCheckIn ? `Đã sử dụng (${detailRR.checkInCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="PT">
+                    <Tag color={detailRR.usedPT ? 'warning' : 'default'}>{detailRR.usedPT ? `Đã sử dụng (${detailRR.ptBookingCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Phòng tập">
+                    <Tag color={detailRR.usedGym ? 'warning' : 'default'}>{detailRR.usedGym ? `Đã sử dụng (${detailRR.gymUsageCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
+                  </Descriptions.Item>
+                </Descriptions>
+
+                <Descriptions bordered size="small" column={1}>
+                  <Descriptions.Item label="Kết luận chính sách">
+                    <Tag color={detailRR.refundPolicyResult === 'Đủ điều kiện hoàn tiền' ? 'success' : 'error'}>
+                      {detailRR.refundPolicyResult || '-'}
+                    </Tag>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Ghi chú của Staff">{detailRR.staffNote || '-'}</Descriptions.Item>
+                </Descriptions>
+              </div>
+            )}
           </Modal>
 
-          {/* REJECT REFUND MODAL */}
+          {/* APPROVE MODAL */}
           <Modal
-            title="Từ chối hoàn tiền"
-            open={Boolean(rejectingCancel)}
-            onCancel={() => { setRejectingCancel(null); setRejectCancelReason('') }}
-            onOk={submitRejectCancellation}
-            confirmLoading={Boolean(actionLoadingId)}
+            title="Phê duyệt yêu cầu hoàn tiền"
+            open={Boolean(approvingRR)}
+            onCancel={() => { setApprovingRR(null); setApprovingRRNote('') }}
+            onOk={submitApproveRR}
+            confirmLoading={rrActionLoading}
+            okText="Xác nhận duyệt"
+            width={560}
+          >
+            {approvingRR && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--gs-text-soft)]">Hội viên</span>
+                    <span className="font-medium">{approvingRR.memberId?.fullName || approvingRR.memberId?.name || '-'}</span>
+                  </div>
+                  <div className="border-t border-[var(--gs-border)] pt-2 mt-2">
+                    <div className="text-xs font-semibold text-[var(--gs-text)] mb-1">Chi tiết hoàn tiền</div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-[var(--gs-text-soft)]">Gói đang hoạt động</span>
+                      <span className={`font-medium ${approvingRR.refundPolicyResult === 'Đủ điều kiện hoàn tiền' ? 'text-[var(--gs-accent)]' : 'text-[var(--gs-text-muted)]'}`}>
+                        {approvingRR.refundPolicyResult === 'Đủ điều kiện hoàn tiền' ? formatMoney(approvingRR.refundAmount) : 'Không hoàn'}
+                      </span>
+                    </div>
+                    {approvingRR.refundPolicyResult !== 'Đủ điều kiện hoàn tiền' && (
+                      <div className="text-[10px] text-[var(--gs-text-muted)] pl-2 leading-tight">
+                        ({approvingRR.refundPolicyResult})
+                      </div>
+                    )}
+                    {approvingRR.pendingPeriodsCount && approvingRR.pendingPeriodsCount > 0 && (
+                      <div className="flex justify-between text-sm mt-1">
+                        <span className="text-[var(--gs-text-soft)]">Gia hạn ({approvingRR.pendingPeriodsCount} kỳ chưa kích hoạt)</span>
+                        <span className="font-medium text-[var(--gs-success)]">{formatMoney(approvingRR.pendingPeriodsTotal!)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm mt-1 pt-1 border-t border-dashed border-[var(--gs-border)]">
+                      <span className="font-semibold text-[var(--gs-text)]">Dự kiến tổng hoàn</span>
+                      <span className="font-bold text-[var(--gs-accent)]">
+                        {formatMoney(approvingRR.refundAmount + (approvingRR.pendingPeriodsTotal || 0))}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--gs-text-soft)]">Lý do</span>
+                    <span className="font-medium">{approvingRR.reason || '-'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--gs-text-soft)]">Điều kiện hoàn tiền (Snapshot)</span>
+                    <span>
+                      <Tag color={approvingRR.refundPolicyResult === 'Đủ điều kiện hoàn tiền' ? 'success' : 'error'}>
+                        {approvingRR.refundPolicyResult || '-'}
+                      </Tag>
+                    </span>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-3 text-xs text-[var(--gs-text)]">
+                  Hệ thống sẽ kiểm tra lại điều kiện hoàn tiền trước khi xử lý. Nếu đủ điều kiện, tiền sẽ được hoàn vào ví hội viên.
+                </div>
+                <div>
+                  <div className="mb-1 text-sm font-medium text-[var(--gs-text)]">Ghi chú</div>
+                  <Input.TextArea rows={3} value={approvingRRNote} onChange={(e) => setApprovingRRNote(e.target.value)} placeholder="Nhập ghi chú..." />
+                </div>
+              </div>
+            )}
+          </Modal>
+
+          {/* REJECT MODAL */}
+          <Modal
+            title="Từ chối yêu cầu hoàn tiền"
+            open={Boolean(rejectingRR)}
+            onCancel={() => { setRejectingRR(null); setRejectingRRReason('') }}
+            onOk={submitRejectRR}
+            confirmLoading={rrActionLoading}
             okText="Xác nhận từ chối"
             okButtonProps={{ danger: true }}
           >
-            <p className="mb-3 text-sm text-[var(--gs-text-soft)]">Vui lòng nhập lý do từ chối:</p>
-            <Input.TextArea rows={4} value={rejectCancelReason}
-              onChange={(e) => setRejectCancelReason(e.target.value)}
-              placeholder="Nhập lý do từ chối..."
-            />
+            {rejectingRR && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--gs-text-soft)]">Hội viên</span>
+                    <span className="font-medium">{rejectingRR.memberId?.fullName || rejectingRR.memberId?.name || '-'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--gs-text-soft)]">Lý do yêu cầu</span>
+                    <span className="font-medium">{rejectingRR.reason || '-'}</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-sm font-medium text-[var(--gs-text)]">Lý do từ chối <span className="text-red-500">*</span></div>
+                  <Input.TextArea rows={3} value={rejectingRRReason} onChange={(e) => setRejectingRRReason(e.target.value)} placeholder="Nhập lý do từ chối..." />
+                </div>
+              </div>
+            )}
           </Modal>
         </div>
       </div>

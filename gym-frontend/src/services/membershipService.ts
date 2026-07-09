@@ -55,6 +55,45 @@ export interface CancellationRequest {
   ineligibilityReason?: string | null
 }
 
+export interface MembershipPeriod {
+  _id: string
+  membershipId: string
+  planId: any
+  memberId: string
+  startDate: string
+  endDate: string
+  totalDays: number
+  price: number
+  paymentId?: string
+  activatedAt?: string
+  completedAt?: string
+  status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'REFUNDED' | 'CANCEL_REQUESTED' | 'REJECTED'
+  displayStatus?: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'REFUNDED' | 'CANCEL_REQUESTED' | 'REJECTED'
+  canCancel?: boolean
+  isFirst?: boolean
+  hasPendingRequest?: boolean
+  rejectionReason?: string
+  createdAt?: string
+  cancelledAt?: string
+  plan?: MembershipPlan
+}
+
+export interface MembershipRenewal {
+  _id: string
+  membershipId: string
+  planId: any
+  memberId: string
+  days: number
+  price: number
+  oldEndDate: string
+  newEndDate: string
+  renewedAt: string
+  status: 'ACTIVE' | 'CANCELLED'
+  paymentId?: string
+  durationMultiplier: number
+  plan?: MembershipPlan
+}
+
 export interface MyMembership {
   _id: string
   id: string
@@ -67,15 +106,109 @@ export interface MyMembership {
   startDate: string
   endDate: string
   remainingDays: number
-  status: 'active' | 'pending_cancel' | 'expired' | 'cancelled'
-  displayStatus: 'active' | 'expiring_soon' | 'expired'
+  status: 'active' | 'pending_cancel' | 'expired' | 'cancelled' | 'refunded' | 'cancel_requested'
+  displayStatus: 'active' | 'expiring_soon' | 'expired' | 'cancel_requested'
+  createdAt?: string
+  cancelledAt?: string
+}
+
+export interface CancelPeriodDetail {
+  _id: string
+  index: number
+  status: 'ACTIVE' | 'PENDING'
+  startDate: string
+  endDate: string
+  totalDays: number
+  price: number
+  activatedAt?: string
+  refundEligible: boolean
+  refundReason: string | null
+}
+
+export interface CancelInfo {
+  membership: MyMembership
+  period: {
+    _id: string
+    startDate: string
+    endDate: string
+    totalDays: number
+    price: number
+    activatedAt?: string
+  }
+  refundInfo: {
+    eligibleForRefund: boolean
+    isWithinWindow: boolean
+    hasUsedBenefits: boolean
+    refundDeadline: string
+    estimatedRefundAmount: number
+    reason: string
+  }
+  pendingPeriods: Array<{
+    _id: string
+    startDate: string
+    endDate: string
+    totalDays: number
+    price: number
+  }>
+  periodsDetail: CancelPeriodDetail[]
+  totalEstimatedRefund: number
+}
+
+export interface PendingCancelRequest {
+  id: string
+  reason: string
+  refundAmount: number
+  status: string
+  requestedAt: string
+  createdAt: string
+}
+
+export interface RefundRequest {
+  _id: string
+  memberId: any
+  membershipId: any
+  membershipPeriodId: any
+  planId: any
+  reason: string
+  refundAmount: number
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'REFUNDED'
+  requestedAt: string
+  reviewedBy: any
+  reviewedAt: string | null
+  staffNote: string
+  createdAt: string
+
+  // Snapshot fields
+  daysUsedAtRequest: number
+  eligibleWithin7Days: boolean
+  usedCheckIn: boolean
+  usedGym: boolean
+  usedPT: boolean
+  usedBenefits: boolean
+  checkInCountAtRequest: number
+  gymUsageCountAtRequest: number
+  ptBookingCountAtRequest: number
+  refundPolicyResult: string
+  policyVersion: string
+  pendingPeriodsTotal?: number
+  pendingPeriodsCount?: number
 }
 
 export const membershipService = {
   getPlans: (params?: Record<string, any>) => api.get<{ plans: MembershipPlan[] }>('/plans', { params: { limit: 100, ...params } }),
   registerPlan: (planId: string) => api.post('/memberships', { planId }),
   subscribePlan: (planId: string) => api.post('/memberships/subscribe', { planId }),
-  getMyMembership: () => api.get<{ membership: MyMembership | null; canRenew: boolean; renewalThresholdDays: number }>('/memberships/my'),
+  getMyMembership: () => api.get<{ membership: MyMembership | null; canRenew: boolean; renewalThresholdDays: number; pendingCancelRequest: PendingCancelRequest | null }>('/memberships/my'),
+  getMyRenewals: () => api.get<{ renewals: MembershipRenewal[] }>('/memberships/my/renewals'),
+  getMyPeriods: () => api.get<{ periods: MembershipPeriod[] }>('/memberships/my/periods'),
+  cancelPeriod: (periodId: string) =>
+    api.post<{ message: string; period: MembershipPeriod; refundAmount: number }>(
+      `/memberships/my/periods/${periodId}/cancel`,
+    ),
+  cancelRenewal: (renewalId: string) =>
+    api.post<{ message: string; membership: MyMembership; renewal: MembershipRenewal }>(
+      `/memberships/my/cancel-renewal/${renewalId}`,
+    ),
   renewMyMembership: () => api.post('/memberships/my/renew'),
   renewPlanWithWallet: () => api.post('/memberships/my/renew-wallet'),
   renewPlanWithDuration: (durationMultiplier: number) =>
@@ -89,6 +222,27 @@ export const membershipService = {
   searchMembers: (q: string) => api.get<{ members: any[] }>('/members/search', { params: { q } }),
   offlineRegister: (data: { memberId: string; planId: string; paymentMethod: string; amountPaid: number; note?: string }) =>
     api.post('/members/offline-register', data),
+
+  createRefundRequest: (data: { periodId: string; reason?: string }) =>
+    api.post<{ message: string; refundRequest: RefundRequest }>('/memberships/my/refund-request', data),
+  cancelPeriod: (periodId: string) =>
+    api.post<{ message: string; refundRequest: RefundRequest }>(
+      `/memberships/my/periods/${periodId}/cancel`,
+    ),
+  getMyHistory: () =>
+    api.get<{ history: Array<{ membership: MyMembership; periods: MembershipPeriod[] }> }>('/memberships/history'),
+  getMembershipDetail: (membershipId: string) =>
+    api.get<{ membership: MyMembership; periods: MembershipPeriod[]; refundRequest: RefundRequest | null }>(`/memberships/${membershipId}`),
+  getCancelInfo: () =>
+    api.get<CancelInfo>('/memberships/my/cancel-info'),
+  getPendingRefundRequestCount: () =>
+    api.get<{ count: number }>('/memberships/staff/refund-requests/count'),
+  getStaffRefundRequests: (params?: Record<string, unknown>) =>
+    api.get<{ refundRequests: RefundRequest[]; pagination: any }>('/memberships/staff/refund-requests', { params }),
+  approveRefundRequest: (id: string, data: { staffNote?: string }) =>
+    api.post<{ message: string; refundRequest: RefundRequest }>(`/memberships/staff/refund-requests/${id}/approve`, data),
+  rejectRefundRequest: (id: string, data: { reason: string }) =>
+    api.post<{ message: string; refundRequest: RefundRequest }>(`/memberships/staff/refund-requests/${id}/reject`, data),
 
   createCancelRequest: (data: { reason: string; policyAccepted?: boolean; refundMethod?: 'WALLET' | 'NONE' }) =>
     api.post<{ message: string; cancellationRequest: CancellationRequest }>('/memberships/cancel-request', data),

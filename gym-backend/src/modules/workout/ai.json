@@ -1,0 +1,11 @@
+{
+  "module": "workout",
+  "description": "Phân tích tập luyện, tạo giáo án và đề xuất gói tập thông minh",
+  "tools": ["analyzeWorkout", "generateWorkoutPlan", "getSmartRecommendations"],
+  "examples": [
+    "Phân tích tập luyện của tôi",
+    "Tạo giáo án tập cho tôi",
+    "Bài tập cho người mới",
+    "Gợi ý gói tập cho tôi"
+  ]
+}

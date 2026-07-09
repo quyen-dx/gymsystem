@@ -1,0 +1,12 @@
+{
+  "module": "checkin",
+  "description": "Điểm danh và theo dõi số buổi tập",
+  "tools": ["getCheckinStats"],
+  "examples": [
+    "Tôi đã điểm danh bao nhiêu buổi?",
+    "Check-in hôm nay",
+    "Streak của tôi",
+    "Số buổi tập tuần này",
+    "Tháng này tôi tập mấy buổi?"
+  ]
+}

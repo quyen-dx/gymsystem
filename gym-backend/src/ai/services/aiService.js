@@ -3,6 +3,7 @@ import User from '../../models/User.js'
 import { buildWebSearchContext, searchFitnessWeb, webSearchNutrition } from '../../services/webSearchService.js'
 import { runAIWithFallback } from './aiFallbackService.js'
 import { AI_DOC_FILES, getRelevantAiDocs } from './aiDocsService.js'
+import { buildPlainTextContext } from './contextBuilder.js'
 import {
   buildGenericNutritionAnswer as buildGenericNutritionAnswerFromBuilder,
   getNutritionWebSources as getNutritionWebSourcesFromBuilder,
@@ -43,11 +44,10 @@ import {
   getProducts,
   getSystemSettingsContext,
   getWorkoutContext,
-  invalidateAppCache,
-  invalidateAiDomainCache,
   serializeMembership,
   toObjectIdOrNull
 } from './context/contextDataService.js'
+import { invalidateAppCache, invalidateAiDomainCache } from '../../services/aiCacheService.js'
 import { conversationalUnderstand } from './conversationalUnderstandingLayer.js'
 import { buildContextualSuggestions } from './contextualSuggestions.js'
 import { buildPlanRecommendationPayload } from './dbResponder.js'
@@ -355,7 +355,23 @@ PHONG CÁCH TRẢ LỜI & GỢI Ý
 - Gợi ý câu hỏi tiếp theo (suggestions) PHẢI là câu hỏi và dựa trên nội dung vừa nói. Chỉ tạo đúng 3-4 gợi ý. Tuyệt đối không gợi ý "Xem tất cả gói tập", "Chi tiết mọi gói", v.v.
 
 CONTEXT:
-${JSON.stringify(context, null, 2).slice(0, 9000)}
+${buildPlainTextContext({
+    memberProfile: context.memberProfile,
+    currentMembership: context.currentMembership,
+    activePlans: context.activePlans,
+    checkinStats: context.checkinStats,
+    upcomingBookings: context.upcomingBookings,
+    recentBookings: context.recentBookings,
+    healthMetrics: context.healthMetrics,
+    progressActivities: context.progressActivities,
+    workoutActivities: context.workoutActivities,
+    notificationActivities: context.notificationActivities,
+    orders: context.orders,
+    pts: context.pts,
+    products: context.products,
+  }, lang)}
+${context.trainingGoal ? `Mục tiêu tập luyện: ${context.trainingGoal}\n` : ''}
+${context.webSearch?.context ? `Kết quả tìm kiếm web:\n${context.webSearch.context.slice(0, 3000)}\n` : ''}
 
 Return exactly one valid JSON object, no markdown:
 {
@@ -453,7 +469,22 @@ PHONG CÁCH TRẢ LỜI & GỢI Ý
 - Gợi ý câu hỏi tiếp theo (suggestions) PHẢI là câu hỏi và dựa trên nội dung vừa nói. Chỉ tạo đúng 3-4 gợi ý. Tuyệt đối không gợi ý "Xem tất cả gói tập", "Chi tiết mọi gói", v.v.
 
 CONTEXT:
-${JSON.stringify(context, null, 2).slice(0, 9000)}
+${buildPlainTextContext({
+    memberProfile: context.memberProfile,
+    currentMembership: context.currentMembership,
+    activePlans: context.activePlans,
+    checkinStats: context.checkinStats,
+    upcomingBookings: context.upcomingBookings,
+    recentBookings: context.recentBookings,
+    healthMetrics: context.healthMetrics,
+    progressActivities: context.progressActivities,
+    workoutActivities: context.workoutActivities,
+    notificationActivities: context.notificationActivities,
+    orders: context.orders,
+    pts: context.pts,
+    products: context.products,
+  }, lang)}
+${context.trainingGoal ? `Mục tiêu tập luyện: ${context.trainingGoal}\n` : ''}
 
 Return exactly one valid JSON object, no markdown:
 {
@@ -537,7 +568,22 @@ const buildContextPrompt = ({ query, conversationContext, memberContext, languag
   })
 
   return `CONTEXT:
-${JSON.stringify(context, null, 2).slice(0, 9000)}
+${buildPlainTextContext({
+    memberProfile: context.memberProfile,
+    currentMembership: context.currentMembership,
+    activePlans: context.activePlans,
+    checkinStats: context.checkinStats,
+    upcomingBookings: context.upcomingBookings,
+    recentBookings: context.recentBookings,
+    healthMetrics: context.healthMetrics,
+    progressActivities: context.progressActivities,
+    workoutActivities: context.workoutActivities,
+    notificationActivities: context.notificationActivities,
+    orders: context.orders,
+    pts: context.pts,
+    products: context.products,
+  }, language)}
+${context.trainingGoal ? `Mục tiêu tập luyện: ${context.trainingGoal}\n` : ''}
 
 Output JSON only, no explanation:
 ${planMode

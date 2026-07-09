@@ -1,0 +1,17 @@
+{
+  "module": "membership",
+  "description": "Quản lý gói tập, đăng ký, gia hạn membership",
+  "tools": ["getAvailablePlans", "getMembershipInfo", "createMembership"],
+  "examples": [
+    "Có những gói tập nào?",
+    "Gói Premium giá bao nhiêu?",
+    "Gói nào rẻ nhất?",
+    "Gói nào đắt nhất?",
+    "So sánh gói Premium và VIP",
+    "Tôi nên chọn gói nào?",
+    "Gói của tôi",
+    "Gia hạn gói tập",
+    "Gói Cơ Bản có quyền lợi gì?",
+    "Tôi mới tập nên mua gói nào?"
+  ]
+}

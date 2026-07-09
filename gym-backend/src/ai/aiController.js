@@ -1,47 +1,31 @@
-import AppError from '../utils/appError.js'
-import { runGymAiAction } from './services/aiService.js'
+import { gymProAgent } from './agent/gymProAgent.js'
 
 export const aiController = async (req, res, next) => {
   try {
     const { query, conversationContext } = req.body
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
-      return next(new AppError('Vui lòng nhập câu hỏi', 400))
+      return res.status(400).json({ answer: 'Vui lòng nhập câu hỏi' })
     }
 
-    const payload = await runGymAiAction({
+    const result = await gymProAgent({
       query: query.trim(),
       user: req.user,
       conversationContext,
+      language: 'vi',
     })
-
-    let output = payload
-    if (typeof output === 'string') {
-      try {
-        output = JSON.parse(output)
-      } catch {
-        output = { answer: output }
-      }
-    }
-
-    if (typeof output?.answer === 'string') {
-      const maybeNested = output.answer.trim()
-      if (maybeNested.startsWith('{')) {
-        try {
-          const nested = JSON.parse(maybeNested)
-          if (nested?.answer) output = { ...output, ...nested }
-        } catch { }
-      }
-    }
 
     return res.json({
-      ...output,
-      intent: output.intent || 'gym',
-      type: output.type || 'text',
-      answer: output.answer || (typeof output === 'string' ? output : String(output.text || output.message || output))
+      answer: result?.answer || '',
+      intent: result?.intent || 'gym',
+      type: result?.responseType || 'text',
+      suggestions: result?.suggestions || [],
     })
   } catch (error) {
-    return next(error)
+    console.error('[AI_CONTROLLER] error:', error.message)
+    return res.json({
+      answer: 'Xin lỗi, mình gặp lỗi khi xử lý yêu cầu. Vui lòng thử lại.',
+      intent: 'unknown',
+      type: 'text',
+    })
   }
 }
-
-export const aiService = runGymAiAction

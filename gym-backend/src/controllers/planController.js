@@ -2,7 +2,7 @@ import Plan from '../models/Plan.js';
 import Membership from '../models/Membership.js';
 import { recordAuditLog } from '../services/auditLogService.js';
 import { invalidateContextCache } from '../services/conversationContextCache.js';
-import { invalidateAiDomainCache } from '../ai/services/aiService.js';
+import { invalidateAiDomainCache } from '../services/aiCacheService.js';
 
 // ==================== TẠO GÓI TẬP ====================
 export const createPlan = async (req, res) => {

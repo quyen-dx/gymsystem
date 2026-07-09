@@ -1,5 +1,5 @@
 import { ArrowLeftOutlined, CheckCircleFilled, InfoCircleOutlined, WarningOutlined } from '@ant-design/icons'
-import { Button, Card, Descriptions, Spin, Statistic, message } from 'antd'
+import { Button, Card, Descriptions, Radio, Spin, Statistic, message } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
@@ -15,24 +15,29 @@ export default function RenewMembershipPage() {
   const [membership, setMembership] = useState<MyMembership | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [selectedMultiplier, setSelectedMultiplier] = useState(1)
 
   const planDays = membership?.durationDays || membership?.plan?.durationDays || 0
   const planPrice = membership?.price || membership?.plan?.price || 0
   const currentBalance = Number(wallet?.balance || 0)
-  const balanceSufficient = currentBalance >= planPrice
-  const balanceAfter = currentBalance - planPrice
+  const balanceSufficient = currentBalance >= planPrice * selectedMultiplier
+  const balanceAfter = currentBalance - planPrice * selectedMultiplier
 
   const currentEnd = membership?.endDate
   const now = new Date()
   const isStillActive = currentEnd ? new Date(currentEnd) >= now : false
 
-  const newEndDate = (() => {
+  const calcNewEndDate = (multiplier: number) => {
     if (!currentEnd) return ''
     const base = isStillActive ? new Date(currentEnd) : now
     const end = new Date(base)
-    end.setDate(end.getDate() + planDays)
+    end.setDate(end.getDate() + planDays * multiplier)
     return formatDate(end.toISOString())
-  })()
+  }
+
+  const newEndDate = calcNewEndDate(selectedMultiplier)
+
+  const multiplierOptions = [1, 2, 3]
 
   useEffect(() => {
     setLoading(true)
@@ -67,7 +72,7 @@ export default function RenewMembershipPage() {
   const handleRenew = async () => {
     setSubmitting(true)
     try {
-      const res = await membershipService.renewPlanWithDuration(1)
+      const res = await membershipService.renewPlanWithDuration(selectedMultiplier)
       message.success(res.data?.message || 'Gia hạn thành công!')
       await refreshWallet()
       navigate('/my-membership')
@@ -110,7 +115,36 @@ export default function RenewMembershipPage() {
         </Card>
 
         <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
-          <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">Tổng quan gia hạn</h3>
+          <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">Chọn thời gian gia hạn</h3>
+          <div className="mb-4 flex flex-col gap-2">
+            <Radio.Group
+              value={selectedMultiplier}
+              onChange={(e) => setSelectedMultiplier(e.target.value)}
+              className="w-full"
+            >
+              {multiplierOptions.map((m) => {
+                const days = planDays * m
+                const endDate = calcNewEndDate(m)
+                return (
+                  <Radio.Button
+                    key={m}
+                    value={m}
+                    className="!flex !h-auto !w-full !items-center !px-4 !py-3 [&:not(:first-child)]:!border-t-0"
+                    style={{ border: '1px solid var(--gs-border)', borderRadius: 0 }}
+                  >
+                    <div className="flex w-full items-center justify-between gap-4">
+                      <span className="text-sm font-semibold text-[var(--gs-success)]">
+                        +{days} ngày
+                      </span>
+                      <span className="text-xs text-[var(--gs-text-soft)] whitespace-nowrap">
+                        Hết hạn: {endDate}
+                      </span>
+                    </div>
+                  </Radio.Button>
+                )
+              })}
+            </Radio.Group>
+          </div>
           <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
             <Statistic
               title="Ngày kết thúc mới"
@@ -119,7 +153,7 @@ export default function RenewMembershipPage() {
             />
             <Statistic
               title="Tổng tiền"
-              value={formatMoney(planPrice)}
+              value={formatMoney(planPrice * selectedMultiplier)}
               valueStyle={{ fontSize: 16, fontWeight: 600, color: 'var(--gs-success)' }}
             />
             <Statistic

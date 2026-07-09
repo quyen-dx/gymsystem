@@ -43,12 +43,16 @@ export async function generateResponse({
   temperature = 0.25,
   maxTokens = 1200,
   thinkingBudget,
+  responseMimeType = null,
 }) {
   const client = getGeminiClient()
   const config = {
     temperature,
     maxOutputTokens: maxTokens,
-    responseMimeType: 'application/json',
+  }
+
+  if (responseMimeType) {
+    config.responseMimeType = responseMimeType
   }
 
   if (Number.isFinite(thinkingBudget)) {

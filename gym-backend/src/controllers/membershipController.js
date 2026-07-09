@@ -1,9 +1,17 @@
 import {
+  cancelPeriod,
   cancelRegistration,
+  cancelRenewal,
   confirmRegistration,
   createMembership as createMembershipService,
   createRenewalCheckoutSession,
   getMyMembership as getMyMembershipService,
+  getCancelInfo,
+  getMyHistory,
+  getMyPeriods,
+  getMyRenewals,
+  getMembershipDetail,
+  getMembershipPeriods,
   handleMembershipStripeWebhook,
   listPayments,
   listRegistrations,
@@ -79,7 +87,10 @@ export const renewMembershipByWallet = async (req, res, next) => {
 
 export const renewMembershipByWalletWithDuration = async (req, res, next) => {
   try {
-    const payload = await renewMembershipWithDuration({ userId: req.user._id })
+    const payload = await renewMembershipWithDuration({
+      userId: req.user._id,
+      durationMultiplier: req.body.durationMultiplier || 1,
+    })
     return res.status(201).json(payload)
   } catch (error) {
     return sendServiceError(res, error, next)
@@ -124,6 +135,90 @@ export const getMembershipPayments = async (req, res, next) => {
   try {
     const payload = await listPayments(req.query)
     return res.json(payload)
+  } catch (error) {
+    return sendServiceError(res, error, next)
+  }
+}
+
+export const getMyRenewalsHandler = async (req, res, next) => {
+  try {
+    const renewals = await getMyRenewals({ userId: req.user._id })
+    return res.json({ renewals })
+  } catch (error) {
+    return sendServiceError(res, error, next)
+  }
+}
+
+export const getMyPeriodsHandler = async (req, res, next) => {
+  try {
+    const periods = await getMyPeriods({ userId: req.user._id })
+    return res.json({ periods })
+  } catch (error) {
+    return sendServiceError(res, error, next)
+  }
+}
+
+export const getCancelInfoHandler = async (req, res, next) => {
+  try {
+    const payload = await getCancelInfo({ userId: req.user._id })
+    return res.json(payload)
+  } catch (error) {
+    return sendServiceError(res, error, next)
+  }
+}
+
+export const getMembershipHistory = async (req, res, next) => {
+  try {
+    const history = await getMyHistory({ userId: req.user._id })
+    return res.json({ history })
+  } catch (error) {
+    return sendServiceError(res, error, next)
+  }
+}
+
+export const getMembershipDetailHandler = async (req, res, next) => {
+  try {
+    const result = await getMembershipDetail({
+      userId: req.user._id,
+      membershipId: req.params.membershipId,
+    })
+    return res.json(result)
+  } catch (error) {
+    return sendServiceError(res, error, next)
+  }
+}
+
+export const getMembershipPeriodsHandler = async (req, res, next) => {
+  try {
+    const periods = await getMembershipPeriods({
+      userId: req.user._id,
+      membershipId: req.params.membershipId,
+    })
+    return res.json({ periods })
+  } catch (error) {
+    return sendServiceError(res, error, next)
+  }
+}
+
+export const cancelMyPeriod = async (req, res, next) => {
+  try {
+    const result = await cancelPeriod({
+      userId: req.user._id,
+      periodId: req.params.periodId,
+    })
+    return res.json(result)
+  } catch (error) {
+    return sendServiceError(res, error, next)
+  }
+}
+
+export const cancelMyRenewal = async (req, res, next) => {
+  try {
+    const result = await cancelRenewal({
+      userId: req.user._id,
+      renewalId: req.params.renewalId,
+    })
+    return res.json(result)
   } catch (error) {
     return sendServiceError(res, error, next)
   }

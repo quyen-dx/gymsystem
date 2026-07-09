@@ -5,7 +5,7 @@ import Policy from '../models/Policy.js'
 import mongoose from 'mongoose'
 import UserActivity from '../models/UserActivity.js'
 import { invalidateContextCache } from '../services/conversationContextCache.js'
-import { invalidateAiDomainCache } from '../ai/services/aiService.js'
+import { invalidateAiDomainCache } from '../services/aiCacheService.js'
 import { recordUserActivity } from '../services/userActivityService.js'
 
 const normalizePageId = (value) => {

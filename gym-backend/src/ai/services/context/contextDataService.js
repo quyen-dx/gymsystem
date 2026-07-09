@@ -15,6 +15,7 @@ import Transaction from '../../../models/Transaction.js'
 import User from '../../../models/User.js'
 import UserActivity from '../../../models/UserActivity.js'
 import { contextCache } from '../../../services/conversationContextCache.js'
+import { getCached as getCachedFromService, invalidateAppCache, invalidateAiDomainCache, invalidateAiPTCache } from '../../../services/aiCacheService.js'
 import { perfStart, perfEnd } from '../perfLogger.js'
 
 const defaultGetUserDisplayName = (user, fallback = '') =>
@@ -40,59 +41,7 @@ export const toObjectIdOrNull = (value) => mongoose.Types.ObjectId.isValid(value
   ? new mongoose.Types.ObjectId(value)
   : null
 
-const ttlCache = new Map()
-export const getCached = async (key, ttlSeconds, loader) => {
-  const now = Date.now()
-  const cached = ttlCache.get(key)
-  if (cached && cached.expiresAt > now) {
-    return cached.value
-  }
-  perfStart(`db:${key}`)
-  const value = await loader()
-  perfEnd(`db:${key}`)
-  ttlCache.set(key, { value, expiresAt: now + ttlSeconds * 1000 })
-  return value
-}
-
-export const invalidateAppCache = (key) => {
-  if (!key) {
-    ttlCache.clear()
-    console.log('[APP_CACHE] invalidate: all')
-    return
-  }
-  const deleted = ttlCache.delete(key)
-  for (const cacheKey of ttlCache.keys()) {
-    if (cacheKey.startsWith(key + ':')) {
-      ttlCache.delete(cacheKey)
-    }
-  }
-  console.log('[APP_CACHE] invalidate:', key, deleted || false)
-}
-
-export const invalidateAiPTCache = () => {
-  // Invalidate all PT-related caches: when admin/PT updates profile, lock/unlock, or change specialties/schedule
-  invalidateAppCache('ptList')
-  invalidateAppCache('ptAvailability')
-  invalidateAppCache('activePTs')
-  console.log('[AI_CACHE] invalidate: PT data (ptList, ptAvailability, activePTs)')
-}
-
-const AI_DOMAIN_CACHE_KEYS = {
-  plans: ['activePlans', 'plans'],
-  pts: ['ptList', 'ptAvailability', 'activePTs'],
-  products: ['products'],
-  faqs: ['faqs'],
-  policies: ['policies'],
-  settings: ['systemSettings'],
-  landing: ['landingCms'],
-}
-
-export const invalidateAiDomainCache = (domain) => {
-  const normalized = String(domain || '').trim()
-  const keys = AI_DOMAIN_CACHE_KEYS[normalized] || [normalized]
-  keys.filter(Boolean).forEach((key) => invalidateAppCache(key))
-  console.log('[AI_CACHE] invalidate domain:', normalized || 'all', keys)
-}
+export { getCachedFromService as getCached, invalidateAppCache, invalidateAiDomainCache, invalidateAiPTCache }
 
 export const getCollectionName = (module) => ({
   activePlans: 'plans',

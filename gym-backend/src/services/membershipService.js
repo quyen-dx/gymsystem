@@ -2,13 +2,18 @@ import mongoose from 'mongoose'
 import Stripe from 'stripe'
 import { buildClientUrl } from '../config/appUrls.js'
 import Membership from '../models/Membership.js'
+import MembershipPeriod from '../models/MembershipPeriod.js'
+import MembershipRenewal from '../models/MembershipRenewal.js'
 import MembershipCancellationRequest from '../models/MembershipCancellationRequest.js'
 import MembershipRegistration from '../models/MembershipRegistration.js'
 import Payment from '../models/Payment.js'
 import Plan from '../models/Plan.js'
+import RefundRequest from '../models/RefundRequest.js'
 import Transaction from '../models/Transaction.js'
 import User from '../models/User.js'
 import Wallet from '../models/Wallet.js'
+import CheckIn from '../models/CheckIn.js'
+import Booking from '../models/Booking.js'
 import { getSystemSettingsValue } from './systemSettingsService.js'
 import { invalidatePersonalContextCache } from './conversationContextCache.js'
 import { recordUserActivity } from './userActivityService.js'
@@ -23,6 +28,33 @@ import {
 } from '../utils/dateUtils.js'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
+
+const hasUsedMembershipBenefits = async ({ memberId, purchaseDate, session = null }) => {
+  const since = new Date(purchaseDate)
+  const now = new Date()
+
+  const checkInQuery = CheckIn.exists({
+    memberId,
+    status: 'success',
+    checkinTime: { $gte: since },
+  })
+  const bookingQuery = Booking.exists({
+    memberId,
+    status: { $in: ['completed', 'confirmed'] },
+    date: { $gte: since, $lte: now },
+  })
+
+  if (session) {
+    checkInQuery.session(session)
+    bookingQuery.session(session)
+    const checkIn = await checkInQuery
+    const booking = await bookingQuery
+    return Boolean(checkIn || booking)
+  }
+
+  const [checkIn, booking] = await Promise.all([checkInQuery, bookingQuery])
+  return Boolean(checkIn || booking)
+}
 
 const toObjectId = (value, fieldName) => {
   if (!mongoose.Types.ObjectId.isValid(String(value))) {
@@ -42,22 +74,25 @@ const getRenewalThresholdDays = async () => {
   }
 }
 
-const assertRenewalAllowed = async (endDate) => {
-  const remainingDays = calculateRemainingDays(endDate)
-  if (remainingDays === 0) return
-  const threshold = await getRenewalThresholdDays()
-  if (remainingDays > threshold) {
-    const error = new Error(
-      `Bạn chỉ có thể gia hạn khi gói sắp hết hạn (còn ≤ ${threshold} ngày) hoặc đã hết hạn.`
-    )
-    error.statusCode = 400
-    throw error
+const assertRenewalAllowed = async () => {}
+
+const computePeriodStatus = (period) => {
+  if (!period) return 'COMPLETED'
+  if (['CANCELLED', 'REFUNDED', 'CANCEL_REQUESTED', 'REJECTED'].includes(period.status)) {
+    return period.status
   }
+  const now = Date.now()
+  const start = new Date(period.startDate).getTime()
+  const end = new Date(period.endDate).getTime()
+  if (now >= start && now <= end) return 'ACTIVE'
+  if (now > end) return 'COMPLETED'
+  return 'PENDING'
 }
 
 const getMembershipDisplayStatus = (membership) => {
   if (!membership) return 'expired'
   if (membership.status === 'pending_cancel') return 'expiring_soon'
+  if (membership.status === 'cancel_requested') return 'cancel_requested'
   const remainingDays = calculateRemainingDays(membership.endDate)
   if (remainingDays <= 0) return 'expired'
   if (remainingDays < 30) return 'expiring_soon'
@@ -99,6 +134,8 @@ const serializeMembership = (membership) => {
     status: remainingDays <= 0 ? 'expired' : raw.status,
     displayStatus: getMembershipDisplayStatus(raw),
     source: raw.source,
+    createdAt: raw.createdAt,
+    cancelledAt: raw.cancelledAt,
   }
 }
 
@@ -154,11 +191,13 @@ const calculateNewMembershipDates = ({ existingMembership, durationDays, mode })
   return { startDate, endDate: endOfDayVN(endDate) }
 }
 
-const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
+const subscribeWithWallet = async ({ userId, planId, mode = 'register', durationMultiplier = 1 }) => {
   await assertPolicyConsent(userId, ['membership', 'terms'])
 
   const { user, plan, memberId, planObjectId } = await ensureMemberAndPlan({ userId, planId })
-  const amount = Number(plan.price || 0)
+  const multiplier = Math.max(1, Math.floor(Number(durationMultiplier) || 1))
+  const effectiveDays = plan.durationDays * multiplier
+  const amount = Number(plan.price || 0) * multiplier
 
   const existingActive = await findLatestActiveMembership(memberId)
   if (mode === 'register' && existingActive) {
@@ -198,19 +237,57 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
     const walletBalance = balanceBefore - amount
     const today = startOfTodayVN()
     const isRenew = existingActive && new Date(existingActive.endDate) >= today
+    let oldEndDate = null
+    let renewalPeriodsData = null
+    let newRegistrationPeriodData = null
 
     let membership = isRenew ? existingActive : null
 
     if (membership) {
-      // Gia hạn: lấy endDate hiện tại, cộng thêm durationDays
-      const currentEnd = endOfDayVN(membership.endDate)
+      // Gia hạn: tạo nhiều MembershipPeriod (mỗi period = một chu kỳ chuẩn của Plan)
+      const latestPeriod = await MembershipPeriod.findOne({ membershipId: membership._id })
+        .sort({ endDate: -1 })
+        .session(session)
+
+      const lastEnd = latestPeriod
+        ? endOfDayVN(latestPeriod.endDate)
+        : endOfDayVN(membership.endDate)
+
+      oldEndDate = new Date(membership.endDate)
+
+      let currentStart = new Date(lastEnd)
+      currentStart.setDate(currentStart.getDate() + 1)
+      currentStart.setHours(0, 0, 0, 0)
+
+      const numPeriods = Math.max(1, multiplier)
+      const periodsData = []
+      for (let i = 0; i < numPeriods; i++) {
+        const pStart = new Date(currentStart)
+        const pEnd = calcMembershipEndDate({
+          baseDate: pStart,
+          durationDays: plan.durationDays,
+        })
+        periodsData.push({
+          membershipId: membership._id,
+          planId: planObjectId,
+          memberId,
+          startDate: pStart,
+          endDate: pEnd,
+          totalDays: plan.durationDays,
+          price: plan.price,
+        })
+        // Period tiếp theo bắt đầu sau period hiện tại
+        currentStart = endOfDayVN(pEnd)
+        currentStart.setDate(currentStart.getDate() + 1)
+        currentStart.setHours(0, 0, 0, 0)
+      }
+
       membership.planId = planObjectId
-      membership.endDate = calcMembershipEndDate({
-        baseDate: currentEnd,
-        durationDays: plan.durationDays,
-      })
       membership.source = 'manual'
       await membership.save({ session })
+
+      // Lưu thông tin để tạo MembershipPeriod sau khi có paymentId
+      renewalPeriodsData = periodsData
     } else {
       if (existingActive) {
         existingActive.status = 'expired'
@@ -219,13 +296,14 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
 
       // Đăng ký mới: startDate = 00:00:00 VN hôm nay, endDate = 23:59:59 VN ngày cuối
       const startDate = new Date(today)
+      const periodEnd = calcMembershipEndDate({ baseDate: startDate, durationDays: plan.durationDays })
       const [createdMembership] = await Membership.create(
         [
           {
             memberId,
             planId: planObjectId,
             startDate,
-            endDate: calcMembershipEndDate({ baseDate: startDate, durationDays: plan.durationDays }),
+            endDate: periodEnd,
             status: 'active',
             source: 'manual',
           },
@@ -233,6 +311,17 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
         { session },
       )
       membership = createdMembership
+
+      // Lưu thông tin để tạo MembershipPeriod sau khi có paymentId
+      newRegistrationPeriodData = {
+        membershipId: membership._id,
+        planId: planObjectId,
+        memberId,
+        startDate,
+        endDate: periodEnd,
+        totalDays: plan.durationDays,
+        price: amount,
+      }
     }
 
     const [payment] = await Payment.create(
@@ -284,6 +373,50 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register' }) => {
 
     membership.paymentId = payment._id
     await membership.save({ session })
+
+    if (newRegistrationPeriodData) {
+      // Tạo MembershipPeriod đầu tiên (ACTIVE) cho đăng ký mới
+      await MembershipPeriod.create([{
+        ...newRegistrationPeriodData,
+        paymentId: payment._id,
+        status: 'ACTIVE',
+        activatedAt: new Date(),
+      }], { session })
+    }
+
+    if (renewalPeriodsData && renewalPeriodsData.length > 0) {
+      // Tạo nhiều MembershipPeriod (mỗi period = một chu kỳ chuẩn)
+      await MembershipPeriod.create(
+        renewalPeriodsData.map((pd) => ({
+          ...pd,
+          paymentId: payment._id,
+          status: 'PENDING',
+        })),
+        { session, ordered: true },
+      )
+
+      const lastPeriodEnd = renewalPeriodsData[renewalPeriodsData.length - 1].endDate
+      await MembershipRenewal.create([{
+        membershipId: membership._id,
+        planId: planObjectId,
+        memberId,
+        days: effectiveDays,
+        price: amount,
+        oldEndDate,
+        newEndDate: lastPeriodEnd,
+        renewedAt: new Date(),
+        status: 'ACTIVE',
+        paymentId: payment._id,
+        durationMultiplier: multiplier,
+      }], { session })
+
+      // Khi gia hạn, KHÔNG cập nhật membership.endDate.
+
+    }
+
+    if ((renewalPeriodsData && renewalPeriodsData.length > 0) || newRegistrationPeriodData) {
+      await rebuildMembershipTimeline({ membershipId: membership._id, session })
+    }
 
     await session.commitTransaction()
     committed = true
@@ -359,40 +492,123 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
     mode,
   })
 
-  // Lưu vào MongoDB: startDate/endDate là giờ VN (MongoDB hiển thị UTC là bình thường)
-  const membership = await Membership.create({
-    memberId,
-    planId: planObjectId,
-    startDate,
-    endDate,
-    status: 'active',
-    source,
-    paymentId,
+  if (mode === 'register') {
+    // Đăng ký mới: tạo Membership + ACTIVE MembershipPeriod
+    const membership = await Membership.create({
+      memberId,
+      planId: planObjectId,
+      startDate,
+      endDate,
+      status: 'active',
+      source,
+      paymentId,
+    })
+
+    await MembershipPeriod.create({
+      membershipId: membership._id,
+      planId: planObjectId,
+      memberId,
+      startDate,
+      endDate,
+      totalDays: plan.durationDays,
+      price: plan.price,
+      paymentId,
+      status: 'ACTIVE',
+      activatedAt: new Date(),
+    })
+
+    if (paymentId) {
+      await Payment.findByIdAndUpdate(paymentId, { membershipId: membership._id })
+    }
+
+    await recordUserActivity({
+      userId: user._id,
+      type: 'membership',
+      title: 'Đăng ký gói tập',
+      description: `Đăng ký gói "${plan.nameVi}" - ${plan.durationDays} ngày`,
+      metadata: { membershipId: membership._id, planId: plan._id, source },
+    })
+    invalidatePersonalContextCache(user._id)
+
+    const populated = await Membership.findById(membership._id).populate('planId')
+    return serializeMembership({ ...populated.toObject(), planId: plan.toObject() })
+  }
+
+  // mode === 'renew': thêm MembershipPeriod vào Membership hiện tại
+  const latestPeriod = await MembershipPeriod.findOne({ membershipId: existingActive._id })
+    .sort({ endDate: -1 })
+
+  const lastEnd = latestPeriod
+    ? endOfDayVN(latestPeriod.endDate)
+    : endOfDayVN(existingActive.endDate)
+
+  const periodStart = new Date(lastEnd)
+  periodStart.setDate(periodStart.getDate() + 1)
+  periodStart.setHours(0, 0, 0, 0)
+
+  const periodEnd = calcMembershipEndDate({
+    baseDate: periodStart,
+    durationDays: plan.durationDays,
   })
 
+  await MembershipPeriod.create({
+    membershipId: existingActive._id,
+    planId: planObjectId,
+    memberId,
+    startDate: periodStart,
+    endDate: periodEnd,
+    totalDays: plan.durationDays,
+    price: plan.price,
+    paymentId,
+    status: 'PENDING',
+  })
+
+  await MembershipRenewal.create({
+    membershipId: existingActive._id,
+    planId: planObjectId,
+    memberId,
+    days: plan.durationDays,
+    price: plan.price,
+    oldEndDate: new Date(existingActive.endDate),
+    newEndDate: periodEnd,
+    renewedAt: new Date(),
+    status: 'ACTIVE',
+    paymentId,
+    durationMultiplier: 1,
+  })
+
+  existingActive.planId = planObjectId
+  existingActive.source = source
+  if (paymentId) existingActive.paymentId = paymentId
+  await existingActive.save()
+
   if (paymentId) {
-    await Payment.findByIdAndUpdate(paymentId, { membershipId: membership._id })
+    await Payment.findByIdAndUpdate(paymentId, { membershipId: existingActive._id })
   }
+
+  // Gọi rebuild để đồng bộ timeline của các period
+  await rebuildMembershipTimeline({ membershipId: existingActive._id })
 
   await recordUserActivity({
     userId: user._id,
     type: 'membership',
-    title: mode === 'renew' ? 'Gia hạn gói tập' : 'Đăng ký gói tập',
-    description: `${mode === 'renew' ? 'Gia hạn' : 'Đăng ký'} gói "${plan.nameVi}" - ${plan.durationDays} ngày`,
-    metadata: { membershipId: membership._id, planId: plan._id, source },
+    title: 'Gia hạn gói tập',
+    description: `Gia hạn gói "${plan.nameVi}" thêm ${plan.durationDays} ngày`,
+    metadata: { membershipId: existingActive._id, planId: plan._id, source },
   })
   invalidatePersonalContextCache(user._id)
 
-  if (mode === 'renew' && user.email) {
+  if (user.email) {
     sendRenewalSuccessEmail({
       toEmail: user.email,
       userName: user.fullName || user.name || user.email,
       planName: plan.nameVi || plan.nameEn,
-      endDate: membership.endDate,
+      endDate: periodEnd,
     }).catch((e) => console.error('Gửi email gia hạn thất bại:', e.message))
   }
 
-  return serializeMembership({ ...membership.toObject(), planId: plan.toObject() })
+  const populated = await Membership.findById(existingActive._id).populate('planId')
+  return serializeMembership({ ...populated.toObject(), planId: plan.toObject() })
 }
 
 const createManualRegistration = async ({ userId, planId }) => {
@@ -803,18 +1019,30 @@ const listPayments = async ({ page = 1, limit = 20, status }) => {
 const getMyMembership = async ({ userId }) => {
   const memberId = toObjectId(userId, 'userId')
 
-  const membership = await Membership.findOne({ memberId, status: { $in: ['active', 'pending_cancel'] } })
+  // Gọi lazyActivatePendingPeriods trước để cập nhật database
+  await lazyActivatePendingPeriods({ memberId })
+
+  const membership = await Membership.findOne({ memberId, status: { $in: ['active', 'pending_cancel', 'cancel_requested'] } })
     .sort({ endDate: -1 })
     .populate('planId')
 
-  let canRenew = false
-  if (membership) {
-    const remainingDays = calculateRemainingDays(membership.endDate)
-    if (remainingDays === 0) {
-      canRenew = true
-    } else {
-      const threshold = await getRenewalThresholdDays()
-      canRenew = remainingDays <= threshold
+  let canRenew = !!membership
+
+  let pendingCancelRequest = null
+  if (membership && membership.status === 'cancel_requested') {
+    const pendingRefund = await RefundRequest.findOne({
+      membershipId: membership._id,
+      status: 'PENDING',
+    }).sort({ createdAt: -1 })
+    if (pendingRefund) {
+      pendingCancelRequest = {
+        id: pendingRefund._id,
+        reason: pendingRefund.reason,
+        refundAmount: pendingRefund.refundAmount,
+        status: pendingRefund.status,
+        requestedAt: pendingRefund.requestedAt,
+        createdAt: pendingRefund.createdAt,
+      }
     }
   }
 
@@ -822,6 +1050,7 @@ const getMyMembership = async ({ userId }) => {
     membership: serializeMembership(membership),
     canRenew,
     renewalThresholdDays: membership ? await getRenewalThresholdDays() : 7,
+    pendingCancelRequest,
   }
 }
 
@@ -849,7 +1078,630 @@ const renewMembershipWithDuration = async ({ userId, durationMultiplier = 1 }) =
 
   await assertRenewalAllowed(existingActive.endDate)
 
-  return subscribeWithWallet({ userId, planId: existingActive.planId?._id || existingActive.planId, mode: 'renew' })
+  return subscribeWithWallet({
+    userId,
+    planId: existingActive.planId?._id || existingActive.planId,
+    mode: 'renew',
+    durationMultiplier,
+  })
+}
+
+const getMyRenewals = async ({ userId }) => {
+  const memberId = toObjectId(userId, 'userId')
+  const renewals = await MembershipRenewal.find({ memberId })
+    .populate('planId', 'nameVi nameEn price durationDays')
+    .sort({ renewedAt: -1 })
+  return renewals
+}
+
+const cancelRenewal = async ({ userId, renewalId }) => {
+  const memberId = toObjectId(userId, 'userId')
+  const renewal = await MembershipRenewal.findById(renewalId).populate('planId', 'nameVi nameEn price')
+  if (!renewal) {
+    const error = new Error('Không tìm thấy lần gia hạn.')
+    error.statusCode = 404
+    throw error
+  }
+
+  if (String(renewal.memberId) !== String(memberId)) {
+    const error = new Error('Không có quyền hủy lần gia hạn này.')
+    error.statusCode = 403
+    throw error
+  }
+
+  if (renewal.status !== 'ACTIVE') {
+    const error = new Error('Lần gia hạn này đã được xử lý.')
+    error.statusCode = 400
+    throw error
+  }
+
+  // Chỉ cho phép hủy lần gia hạn mới nhất
+  const latestActive = await MembershipRenewal.findOne({
+    membershipId: renewal.membershipId,
+    status: 'ACTIVE',
+  }).sort({ renewedAt: -1 })
+
+  if (!latestActive || String(latestActive._id) !== String(renewal._id)) {
+    const error = new Error('Chỉ có thể hủy lần gia hạn mới nhất.')
+    error.statusCode = 400
+    throw error
+  }
+
+  const session = await mongoose.startSession()
+  let committed = false
+
+  try {
+    session.startTransaction()
+
+    // Cập nhật status renewal
+    renewal.status = 'CANCELLED'
+    await renewal.save({ session })
+
+    // Tính lại endDate của membership
+    const membership = await Membership.findById(renewal.membershipId).session(session).populate('planId')
+    if (!membership) {
+      const error = new Error('Không tìm thấy gói tập.')
+      error.statusCode = 404
+      throw error
+    }
+
+    // Tính lại endDate từ startDate + plan.durationDays + tổng các renewal ACTIVE
+    const plan = membership.planId
+    let totalDays = plan?.durationDays || 0
+    const activeRenewals = await MembershipRenewal.find({
+      membershipId: membership._id,
+      status: 'ACTIVE',
+    }).session(session)
+
+    for (const r of activeRenewals) {
+      totalDays += r.days
+    }
+
+    const newEnd = new Date(membership.startDate)
+    newEnd.setDate(newEnd.getDate() + totalDays - 1)
+    const recalculatedEnd = endOfDayVN(newEnd)
+    membership.endDate = recalculatedEnd
+    await membership.save({ session })
+
+    // Hoàn tiền: cộng vào ví
+    const refundAmount = renewal.price
+    if (refundAmount > 0) {
+      let wallet = await Wallet.findOne({ userId: memberId }).session(session)
+      if (!wallet) {
+        [wallet] = await Wallet.create([{ userId: memberId, balance: 0 }], { session })
+      }
+
+      const balanceBefore = Number(wallet.balance || 0)
+      wallet.balance = balanceBefore + refundAmount
+      await wallet.save({ session })
+
+      await Transaction.create([{
+        userId: memberId,
+        walletId: wallet._id,
+        type: 'REFUND_TO_WALLET',
+        provider: 'wallet',
+        source: 'membership',
+        description: `Hoàn tiền hủy gia hạn (+${renewal.days} ngày)`,
+        amount: refundAmount,
+        balanceBefore,
+        balanceAfter: balanceBefore + refundAmount,
+        referenceId: renewal._id.toString(),
+        status: 'completed',
+        completedAt: new Date(),
+        metadata: {
+          renewalId: renewal._id,
+          membershipId: membership._id,
+          renewalDays: renewal.days,
+          renewalPrice: renewal.price,
+        },
+        idempotencyKey: `cancel_renewal_refund_${renewal._id}`,
+      }], { session })
+    }
+
+    await recordUserActivity({
+      userId: memberId,
+      type: 'membership',
+      title: 'Hủy lần gia hạn',
+      description: `Đã hủy lần gia hạn +${renewal.days} ngày. Hoàn tiền: ${refundAmount.toLocaleString('vi-VN')}đ`,
+      metadata: { renewalId: renewal._id, membershipId: membership._id, refundAmount },
+      session,
+    })
+
+    await session.commitTransaction()
+    committed = true
+
+    invalidatePersonalContextCache(memberId)
+
+    return {
+      message: `Đã hủy lần gia hạn +${renewal.days} ngày và hoàn ${refundAmount.toLocaleString('vi-VN')}đ vào ví.`,
+      membership: serializeMembership(membership),
+      renewal,
+    }
+  } catch (error) {
+    if (!committed) await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
+}
+
+const rebuildMembershipTimeline = async ({ membershipId, session = null }) => {
+  const query = MembershipPeriod.find({
+    membershipId,
+    status: { $nin: ['CANCELLED', 'REFUNDED', 'CANCEL_REQUESTED'] },
+  }).sort({ createdAt: 1 })
+  if (session) query.session(session)
+  const periods = await query
+
+  if (periods.length === 0) return
+
+  // Fix period[0] nếu startDate >= endDate (dữ liệu bị lỗi)
+  const p0 = periods[0]
+  if (new Date(p0.startDate).getTime() >= new Date(p0.endDate).getTime()) {
+    const correctedEnd = calcMembershipEndDate({
+      baseDate: p0.startDate,
+      durationDays: p0.totalDays,
+    })
+    p0.endDate = correctedEnd
+    if (session) {
+      await p0.save({ session })
+    } else {
+      await p0.save()
+    }
+  }
+
+  let prevEnd = endOfDayVN(periods[0].endDate)
+
+  for (let i = 1; i < periods.length; i++) {
+    const period = periods[i]
+
+    const newStart = new Date(prevEnd)
+    newStart.setDate(newStart.getDate() + 1)
+    newStart.setHours(0, 0, 0, 0)
+
+    const newEnd = calcMembershipEndDate({
+      baseDate: newStart,
+      durationDays: period.totalDays,
+    })
+
+    if (
+      new Date(period.startDate).getTime() !== newStart.getTime() ||
+      new Date(period.endDate).getTime() !== newEnd.getTime()
+    ) {
+      period.startDate = newStart
+      period.endDate = newEnd
+      if (session) {
+        await period.save({ session })
+      } else {
+        await period.save()
+      }
+    }
+
+    prevEnd = endOfDayVN(newEnd)
+  }
+
+  // Sync Membership.startDate và endDate với kỳ đang ACTIVE
+  const activePeriod = periods.find((p) => p.status === 'ACTIVE')
+  if (activePeriod) {
+    const refStart = activePeriod.startDate
+    const refEnd = endOfDayVN(activePeriod.endDate)
+    if (session) {
+      await Membership.updateOne(
+        { _id: membershipId },
+        { $set: { startDate: refStart, endDate: refEnd } }
+      ).session(session)
+    } else {
+      await Membership.updateOne(
+        { _id: membershipId },
+        { $set: { startDate: refStart, endDate: refEnd } }
+      )
+    }
+  }
+}
+
+const lazyActivatePendingPeriods = async ({ memberId, session = null }) => {
+  const now = new Date()
+
+  // 1. Tìm membership hiện tại của member
+  const membership = await Membership.findOne({
+    memberId,
+    status: { $in: ['active', 'pending_cancel', 'cancel_requested', 'expired'] },
+  })
+  if (!membership) return
+
+  // 2. Tìm tất cả các periods thuộc membership này (ngoại trừ các kỳ bị hủy/hoàn tiền)
+  // Sắp xếp theo startDate tăng dần
+  const query = MembershipPeriod.find({
+    membershipId: membership._id,
+    status: { $nin: ['CANCELLED', 'REFUNDED', 'CANCEL_REQUESTED'] },
+  }).sort({ startDate: 1 })
+  if (session) query.session(session)
+  const periods = await query
+
+  let activePeriod = periods.find((p) => p.status === 'ACTIVE')
+
+  // 3. Nếu kỳ ACTIVE hiện tại đã hết hạn (endDate < now)
+  if (activePeriod && new Date(activePeriod.endDate) < now) {
+    activePeriod.status = 'COMPLETED'
+    activePeriod.completedAt = now
+    if (session) {
+      await activePeriod.save({ session })
+    } else {
+      await activePeriod.save()
+    }
+    activePeriod = null
+  }
+
+  // 4. Nếu không có kỳ ACTIVE (do chưa kích hoạt hoặc do vừa hết hạn ở bước trên)
+  if (!activePeriod) {
+    // Tìm kỳ PENDING tiếp theo gần nhất có startDate <= now
+    const nextPending = periods.find((p) => p.status === 'PENDING' && new Date(p.startDate) <= now)
+    if (nextPending) {
+      nextPending.status = 'ACTIVE'
+      nextPending.activatedAt = now
+      if (session) {
+        await nextPending.save({ session })
+      } else {
+        await nextPending.save()
+      }
+      activePeriod = nextPending
+    }
+  }
+
+  // 5. Cập nhật Membership dựa trên activePeriod hiện tại
+  if (activePeriod) {
+    // Đồng bộ startDate và endDate của Membership với activePeriod
+    membership.startDate = activePeriod.startDate
+    membership.endDate = activePeriod.endDate
+    if (membership.status === 'expired') {
+      membership.status = 'active'
+    }
+    if (session) {
+      await membership.save({ session })
+    } else {
+      await membership.save()
+    }
+  } else {
+    // Nếu không còn kỳ ACTIVE nào (tất cả các kỳ đều đã COMPLETED hoặc CANCELLED), chuyển trạng thái Membership sang expired
+    const allCompletedOrCancelled = periods.every((p) =>
+      ['COMPLETED', 'CANCELLED', 'REFUNDED', 'CANCEL_REQUESTED', 'REJECTED'].includes(p.status)
+    )
+    if (allCompletedOrCancelled && membership.status !== 'expired') {
+      membership.status = 'expired'
+      if (session) {
+        await membership.save({ session })
+      } else {
+        await membership.save()
+      }
+    }
+  }
+}
+
+const getMyPeriods = async ({ userId }) => {
+  const memberId = toObjectId(userId, 'userId')
+  await lazyActivatePendingPeriods({ memberId })
+  const currentMembership = await Membership.findOne({
+    memberId,
+    status: { $in: ['active', 'pending_cancel', 'cancel_requested'] },
+  }).sort({ endDate: -1 }).select('_id')
+
+  const filter = { memberId }
+  if (currentMembership) {
+    filter.membershipId = currentMembership._id
+  }
+
+  const periods = await MembershipPeriod.find(filter)
+    .populate('planId', 'nameVi nameEn price durationDays')
+    .sort({ startDate: 1 })
+
+  const { default: RefundRequest } = await import('../models/RefundRequest.js')
+  const periodIds = periods.map(p => p._id)
+  const refundRequests = await RefundRequest.find({
+    membershipPeriodId: { $in: periodIds },
+    status: { $in: ['PENDING', 'REJECTED'] },
+  }).sort({ createdAt: -1 }).lean()
+
+  const refundByPeriod = {}
+  for (const rr of refundRequests) {
+    const key = String(rr.membershipPeriodId)
+    if (!refundByPeriod[key]) refundByPeriod[key] = rr
+  }
+
+  return periods.map((p) => {
+    const pObj = p.toObject ? p.toObject() : p
+    pObj.displayStatus = computePeriodStatus(p)
+    pObj.canCancel = pObj.displayStatus === 'PENDING' || pObj.displayStatus === 'REJECTED'
+    pObj.isFirst = false
+
+    const rr = refundByPeriod[String(p._id)]
+    if (rr) {
+      if (rr.status === 'PENDING') {
+        pObj.hasPendingRequest = true
+      } else if (rr.status === 'REJECTED') {
+        pObj.rejectionReason = rr.staffNote || ''
+      }
+    }
+
+    return pObj
+  })
+}
+
+const refundPeriodToWallet = async ({ period, wallet, session }) => {
+  if (!period.price || period.price <= 0) return 0
+  const balanceBefore = Number(wallet.balance || 0)
+  wallet.balance = balanceBefore + period.price
+  await wallet.save({ session })
+
+  await Transaction.create([{
+    userId: period.memberId,
+    walletId: wallet._id,
+    type: 'REFUND_TO_WALLET',
+    provider: 'wallet',
+    source: 'membership',
+    description: `Hoàn tiền kỳ hạn (+${period.totalDays} ngày)`,
+    amount: period.price,
+    balanceBefore,
+    balanceAfter: balanceBefore + period.price,
+    referenceId: period._id.toString(),
+    status: 'completed',
+    completedAt: new Date(),
+    metadata: {
+      periodId: period._id,
+      membershipId: period.membershipId,
+      periodDays: period.totalDays,
+      periodPrice: period.price,
+    },
+    idempotencyKey: `period_refund_${period._id}`,
+  }], { session })
+
+  return period.price
+}
+
+const cancelPeriod = async ({ userId, periodId, reason = '' }) => {
+  const { createRefundRequest } = await import('./refundRequestService.js')
+  return createRefundRequest({ userId, periodId, reason })
+}
+
+const hasActivePeriod = async ({ memberId }) => {
+  const now = new Date()
+  const period = await MembershipPeriod.findOne({
+    memberId,
+    startDate: { $lte: now },
+    endDate: { $gte: now },
+  }).sort({ endDate: -1 })
+  return !!period
+}
+
+const getMyHistory = async ({ userId }) => {
+  const memberId = toObjectId(userId, 'userId')
+  const memberships = await Membership.find({ memberId })
+    .populate('planId', 'nameVi nameEn price durationDays')
+    .sort({ startDate: -1 })
+
+  const result = []
+  for (const membership of memberships) {
+    const periods = await MembershipPeriod.find({ membershipId: membership._id })
+      .populate('planId', 'nameVi nameEn price durationDays')
+      .sort({ startDate: 1 })
+    result.push({
+      membership: serializeMembership(membership),
+      periods: periods.map((p) => {
+        const pObj = p.toObject ? p.toObject() : p
+        pObj.displayStatus = computePeriodStatus(p)
+        return pObj
+      }),
+    })
+  }
+  return result
+}
+
+const getMembershipDetail = async ({ userId, membershipId }) => {
+  const memberId = toObjectId(userId, 'userId')
+  const membershipIdObj = toObjectId(membershipId, 'membershipId')
+
+  const membership = await Membership.findOne({ _id: membershipIdObj, memberId })
+    .populate('planId', 'nameVi nameEn price durationDays')
+
+  if (!membership) {
+    const error = new Error('Không tìm thấy gói tập.')
+    error.statusCode = 404
+    throw error
+  }
+
+  await lazyActivatePendingPeriods({ memberId })
+
+  const periods = await MembershipPeriod.find({ membershipId: membership._id })
+    .populate('planId', 'nameVi nameEn price durationDays')
+    .sort({ startDate: 1 })
+
+  const refundRequest = await RefundRequest.findOne({ membershipId: membership._id })
+    .populate('reviewedBy', 'name fullName')
+    .sort({ createdAt: -1 })
+
+  return {
+    membership: serializeMembership(membership),
+    periods: periods.map((p) => {
+      const pObj = p.toObject ? p.toObject() : p
+      pObj.displayStatus = computePeriodStatus(p)
+      return pObj
+    }),
+    refundRequest: refundRequest || null,
+  }
+}
+
+const getCancelInfo = async ({ userId }) => {
+  const memberId = toObjectId(userId, 'userId')
+  const membership = await Membership.findOne({
+    memberId,
+    status: { $in: ['active', 'cancel_requested'] },
+  }).sort({ endDate: -1 }).populate('planId', 'nameVi nameEn price durationDays')
+
+  if (!membership) {
+    const error = new Error('Không tìm thấy gói tập.')
+    error.statusCode = 404
+    throw error
+  }
+
+  const allPeriods = await MembershipPeriod.find({
+    membershipId: membership._id,
+  }).sort({ startDate: 1 })
+
+  let activePeriod = null
+  const pendingPeriods = []
+  let activeIndex = -1
+
+  for (let i = 0; i < allPeriods.length; i++) {
+    const p = allPeriods[i]
+    const status = computePeriodStatus(p)
+    if (status === 'ACTIVE') {
+      activePeriod = p
+      activeIndex = i
+    } else if (status === 'PENDING' && !['CANCELLED', 'REFUNDED', 'CANCEL_REQUESTED', 'REJECTED'].includes(p.status)) {
+      pendingPeriods.push(p)
+    }
+  }
+
+  if (!activePeriod) {
+    const error = new Error('Không tìm thấy kỳ hạn đang hoạt động.')
+    error.statusCode = 400
+    throw error
+  }
+
+  // Tính toán refund cho đợt active
+  const activatedAt = activePeriod.activatedAt || activePeriod.startDate
+  const refundDeadline = new Date(new Date(activatedAt).getTime() + 7 * 24 * 60 * 60 * 1000)
+  const isWithinWindow = Date.now() <= refundDeadline.getTime()
+
+  let hasUsed = false
+  if (isWithinWindow) {
+    hasUsed = await hasUsedMembershipBenefits({ memberId, purchaseDate: activatedAt })
+  }
+
+  const activeRefundEligible = isWithinWindow && !hasUsed
+
+  // Tạo danh sách chi tiết các đợt
+  const periodsDetail = []
+
+  // Đợt hiện tại (active)
+  periodsDetail.push({
+    _id: activePeriod._id,
+    index: activeIndex + 1,
+    status: 'ACTIVE',
+    startDate: activePeriod.startDate,
+    endDate: activePeriod.endDate,
+    totalDays: activePeriod.totalDays,
+    price: activePeriod.price,
+    activatedAt: activePeriod.activatedAt,
+    refundEligible: activeRefundEligible,
+    refundReason: !isWithinWindow
+      ? `Đã quá hạn 07 ngày kể từ ngày kích hoạt (${new Date(activatedAt).toLocaleDateString('vi-VN')}).`
+      : hasUsed
+        ? 'Đã sử dụng quyền lợi của gói tập (check-in, đặt lịch PT, ...).'
+        : null,
+  })
+
+  // Các đợt PENDING
+  for (const pp of pendingPeriods) {
+    periodsDetail.push({
+      _id: pp._id,
+      index: allPeriods.indexOf(pp) + 1,
+      status: 'PENDING',
+      startDate: pp.startDate,
+      endDate: pp.endDate,
+      totalDays: pp.totalDays,
+      price: pp.price,
+      activatedAt: null,
+      refundEligible: true,
+      refundReason: null,
+    })
+  }
+
+  const totalRefund = periodsDetail
+    .filter((pd) => pd.refundEligible)
+    .reduce((sum, pd) => sum + (pd.price || 0), 0)
+
+  return {
+    membership: serializeMembership(membership),
+    period: {
+      _id: activePeriod._id,
+      startDate: activePeriod.startDate,
+      endDate: activePeriod.endDate,
+      totalDays: activePeriod.totalDays,
+      price: activePeriod.price,
+      activatedAt: activePeriod.activatedAt,
+    },
+    refundInfo: {
+      eligibleForRefund: activeRefundEligible,
+      isWithinWindow,
+      hasUsedBenefits: hasUsed,
+      refundDeadline,
+      estimatedRefundAmount: activeRefundEligible ? (activePeriod.price || 0) : 0,
+      reason: !isWithinWindow
+        ? `Đã quá hạn 07 ngày kể từ ngày kích hoạt (${new Date(activatedAt).toLocaleDateString('vi-VN')}).`
+        : hasUsed
+          ? 'Bạn đã sử dụng quyền lợi của gói tập (check-in, đặt lịch PT, ...).'
+          : '',
+    },
+    pendingPeriods: pendingPeriods.map((pp) => ({
+      _id: pp._id,
+      startDate: pp.startDate,
+      endDate: pp.endDate,
+      totalDays: pp.totalDays,
+      price: pp.price,
+    })),
+    periodsDetail,
+    totalEstimatedRefund: totalRefund,
+  }
+}
+
+const getMembershipPeriods = async ({ userId, membershipId }) => {
+  const memberId = toObjectId(userId, 'userId')
+  const membershipIdObj = toObjectId(membershipId, 'membershipId')
+
+  const membership = await Membership.findOne({ _id: membershipIdObj, memberId }).select('_id')
+  if (!membership) {
+    const error = new Error('Không tìm thấy gói tập.')
+    error.statusCode = 404
+    throw error
+  }
+
+  const periods = await MembershipPeriod.find({ membershipId: membership._id })
+    .populate('planId', 'nameVi nameEn price durationDays')
+    .sort({ startDate: 1 })
+
+  return periods.map((p) => {
+    const pObj = p.toObject ? p.toObject() : p
+    pObj.displayStatus = computePeriodStatus(p)
+    return pObj
+  })
+}
+
+const getMembershipInfo = async ({ userId }) => {
+  const memberId = toObjectId(userId, 'userId')
+  const membership = await Membership.findOne({
+    memberId,
+    status: 'active',
+    endDate: { $gte: new Date() },
+  })
+    .sort({ endDate: -1 })
+    .populate('planId', 'name durationDays price')
+    .lean()
+
+  if (!membership) {
+    return { found: false, message: 'Bạn chưa có gói tập nào đang hoạt động.' }
+  }
+
+  const remainingDays = calculateRemainingDays(membership.endDate)
+  const status = remainingDays <= 0 && membership.status === 'active' ? 'expired' : membership.status
+
+  return {
+    found: true,
+    planName: membership.planId?.name || 'Gói tập',
+    startDate: membership.startDate,
+    endDate: membership.endDate,
+    remainingDays,
+    status,
+  }
 }
 
 export {
@@ -861,9 +1713,20 @@ export {
   subscribeWithWallet,
   createRenewalCheckoutSession,
   getMyMembership,
+  getCancelInfo,
+  getMembershipDetail,
+  getMembershipInfo,
+  getMembershipPeriods,
   handleMembershipStripeWebhook,
   listPayments,
   listRegistrations,
   renewMembershipWithDuration,
   renewMembershipWithWallet,
+  getMyRenewals,
+  cancelRenewal,
+  getMyHistory,
+  getMyPeriods,
+  hasActivePeriod,
+  cancelPeriod,
+  rebuildMembershipTimeline,
 }

@@ -29,6 +29,8 @@ const ACTION_TERMS = {
   check: { terms: ['co khong', 'co pt', 'con han', 'available', 'is there', 'do i have'], weight: 1 },
 }
 
+import { toolRegistry } from '../services/toolRegistry.js'
+
 const GOAL_TERMS = {
   muscle_gain: ['tang co', 'tap co', 'len co', 'co to', 'bigger', 'muscle', 'hypertrophy', 'co bap', 'bodybuilding', 'bulk'],
   fat_loss: ['giam mo', 'giam can', 'lose fat', 'lose weight', 'cut', 'fat loss', 'giam beo', 'ep can'],
@@ -37,13 +39,20 @@ const GOAL_TERMS = {
   general_fitness: ['gym', 'tap', 'workout', 'fitness', 'suc khoe'],
 }
 
-const TOOL_MAP = {
-  plan: ['getAvailablePlans'],
-  membership: ['getMembershipInfo'],
-  pt: ['getAvailablePTs'],
-  workout: ['analyzeWorkout'],
-  shop: ['getRecommendedProducts'],
-  booking: ['getUpcomingBookings'],
+const getToolMap = () => {
+  const map = toolRegistry.getSubjectMap()
+  // Flatten the subject map: membership and plan both map to the same tools
+  const flat = {}
+  for (const [subject, tools] of Object.entries(map)) {
+    if (subject === 'plan' || subject === 'pricing') flat.plan = [...(flat.plan || []), ...tools]
+    if (subject === 'membership') flat.membership = [...(flat.membership || []), ...tools]
+    if (subject === 'pt' || subject === 'trainer') flat.pt = [...(flat.pt || []), ...tools]
+    if (subject === 'workout') flat.workout = [...(flat.workout || []), ...tools]
+    if (subject === 'product' || subject === 'shop') flat.shop = [...(flat.shop || []), ...tools]
+    if (subject === 'booking' || subject === 'schedule') flat.booking = [...(flat.booking || []), ...tools]
+    if (subject === 'checkin' || subject === 'progress') flat.checkin = [...(flat.checkin || []), ...tools]
+  }
+  return flat
 }
 
 const scoreTerms = (text, concepts) => {

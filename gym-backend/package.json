@@ -7,7 +7,10 @@
     "dev": "node --env-file=.env server.js",
     "dev:watch": "nodemon --env-file=.env server.js",
     "start": "node server.js",
-    "migrate:member-ids": "node --env-file=.env src/scripts/migrateMemberIdsToShortFormat.js"
+    "migrate:member-ids": "node --env-file=.env src/scripts/migrateMemberIdsToShortFormat.js",
+    "create-vector-index": "node --env-file=.env src/scripts/createVectorIndex.js",
+    "reindex-vectors": "node --env-file=.env -e \"import('./src/ai/services/vectorStoreService.js').then(m => m.indexAll().then(r => console.log(JSON.stringify(r, null, 2))).catch(e => console.error(e)))\"",
+    "ai:evaluate": "node --env-file=.env src/ai/evaluation/index.js"
   },
   "keywords": [],
   "author": "",
@@ -38,6 +41,7 @@
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",
     "qrcode": "^1.5.4",
+    "socket.io": "^4.8.3",
     "stripe": "^22.2.0",
     "twilio": "^5.13.1",
     "zod": "^3.25.0"

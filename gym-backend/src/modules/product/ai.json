@@ -1,0 +1,11 @@
+{
+  "module": "product",
+  "description": "Sản phẩm và shop dinh dưỡng thể thao",
+  "tools": ["getRecommendedProducts"],
+  "examples": [
+    "Có bán sản phẩm gì?",
+    "Sản phẩm cho người tập gym",
+    "Whey protein",
+    "Đồ tập gym"
+  ]
+}

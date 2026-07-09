@@ -5,7 +5,7 @@ import {
   updateSystemSettingsValue,
 } from '../services/systemSettingsService.js'
 import { invalidateContextCache } from '../services/conversationContextCache.js'
-import { invalidateAiDomainCache } from '../ai/services/aiService.js'
+import { invalidateAiDomainCache } from '../services/aiCacheService.js'
 
 const sendSystemSettingsError = (res, error, fallbackMessage = 'Không thể xử lý cài đặt hệ thống') => {
   console.error('[system-settings] error:', error)

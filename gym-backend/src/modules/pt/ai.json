@@ -1,0 +1,14 @@
+{
+  "module": "pt",
+  "description": "Quản lý huấn luyện viên cá nhân (PT)",
+  "tools": ["getAvailablePTs"],
+  "examples": [
+    "Gym có bao nhiêu PT?",
+    "Danh sách PT",
+    "PT dạy yoga",
+    "PT Nguyễn Văn A",
+    "PT nào giỏi nhất?",
+    "PT chuyên giảm cân",
+    "Thông tin PT Lê Văn A"
+  ]
+}

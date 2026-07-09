@@ -1,5 +1,6 @@
 import { runAIWithFallback } from '../services/aiFallbackService.js'
 import { recordAiAudit } from '../services/aiAuditService.js'
+import { createPipelineLogger, logLatency } from '../services/aiLogService.js'
 import { constitutionalReview } from '../services/constitutionalReviewer.js'
 import { chooseRecommendedPlan } from '../services/dbResponder.js'
 import { buildFaqPolicyAnswer } from '../services/faqPolicySearchService.js'
@@ -15,6 +16,8 @@ import { agentMemory } from './agentMemory.js'
 import { optimizeQuery } from './queryOptimizer.js'
 import { reasonQuery } from './queryReasoner.js'
 import { perfStart, perfEnd, perfLog } from '../services/perfLogger.js'
+import { renderPlans, renderPTs, renderMembership } from '../services/contextBuilder.js'
+import { validateResponse, buildFallbackAnswer, validateWithRetry } from '../services/responseValidator.js'
 
 const CONSTITUTION_DOC = loadAiDoc(AI_DOC_FILES.constitution)
 
@@ -35,28 +38,35 @@ Rules:
 - Do NOT mention that you used tools or that this is tool data
 - Speak naturally as a helpful gym assistant`
 
-const buildLLMAnswer = async ({ query, analysis, plans, pts, memberships, smartRec, memory, lang }) => {
+const buildLLMAnswer = async ({ query, analysis, plans, pts, memberships, smartRec, memory, lang, vectorKnowledge }) => {
   const dataSections = []
+
+  if (Array.isArray(vectorKnowledge) && vectorKnowledge.length > 0) {
+    dataSections.push('\n--- Kiến thức liên quan ---')
+    for (const v of vectorKnowledge.slice(0, 3)) {
+      dataSections.push(`[${v.source}] ${v.title}:\n${v.content}`)
+    }
+  }
+
   const subject = analysis?.subject || 'general'
   if (subject === 'plan' || subject === 'membership') {
-    if (Array.isArray(plans) && plans.length > 0) {
-      dataSections.push(`Available plans (${plans.length}):\n${plans.slice(0, 5).map((p) => `- ${p.nameVi || p.nameEn || p.name}: ${(p.price || 0).toLocaleString()}₫ / ${p.durationDays || 0} ngày`).join('\n')}`)
+    const plansSection = renderPlans(plans, lang)
+    if (plansSection) dataSections.push(plansSection)
+    if (memberships) {
+      const membershipSection = renderMembership(memberships, lang)
+      if (membershipSection) dataSections.push(membershipSection)
     }
     if (smartRec?.recommendedPlan) {
       const rp = smartRec.recommendedPlan
-      dataSections.push(`Recommended plan: ${rp.nameVi || rp.nameEn || rp.name} (${(rp.price || 0).toLocaleString()}₫). Reason: ${smartRec.reason || 'best match for user needs'}`)
+      dataSections.push(`\n--- Gợi ý ---\nGói được đề xuất: ${rp.nameVi || rp.nameEn || rp.name} (${(rp.price || 0).toLocaleString()}₫). Lý do: ${smartRec.reason || 'phù hợp nhất với nhu cầu'}`)
     }
   }
   if (subject === 'pt') {
-    if (Array.isArray(pts) && pts.length > 0) {
-      dataSections.push(`Available PTs (${pts.length}):\n${pts.slice(0, 5).map((pt) => `- ${pt.name}: chuyên môn ${(pt.specialties || []).slice(0, 3).join(', ')}, rating ${pt.rating || 0}/5`).join('\n')}`)
-    }
-  }
-  if (subject === 'membership') {
-    if (memberships) dataSections.push(`User membership: found=${!!memberships.found}`)
+    const ptsSection = renderPTs(pts, lang)
+    if (ptsSection) dataSections.push(ptsSection)
   }
   if (memory?.lastSubject) {
-    dataSections.push(`Previous: ${memory.lastSubject}/${memory.lastAction || ''}`)
+    dataSections.push(`\n--- Trước đó ---\nChủ đề: ${memory.lastSubject}/${memory.lastAction || ''}`)
   }
 
   const guide = getRelevantAiDocs({
@@ -171,7 +181,6 @@ const formatPlanDetailResponse = (plan, lang = 'vi') => {
   const features = (lang === 'en' ? (plan?.featuresEn || plan?.featuresVi || []) : (plan?.featuresVi || plan?.featuresEn || []))
     .filter((feature) => typeof feature === 'string' && feature.trim())
     .map((feature) => feature.trim())
-    .slice(0, 6)
   const description = safeText(lang === 'en' ? (plan?.descriptionEn || plan?.descriptionVi || plan?.description) : (plan?.descriptionVi || plan?.descriptionEn || plan?.description))
   const lines = [titleText(name || (lang === 'en' ? 'Membership plan' : 'Gói tập'))]
   lines.push('', `${lang === 'en' ? 'Price' : 'Giá'}: ${price}`)
@@ -520,7 +529,7 @@ const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, la
 
   if (optimizer.subject === 'product') {
     const answer = products.length > 0
-      ? `${lang === 'en' ? `GymPro currently has ${products.length} matching product(s):` : `GymPro hiện có ${products.length} sản phẩm phù hợp:`}\n\n${products.slice(0, 5).map((p) => {
+      ? `${lang === 'en' ? `GymPro currently has ${products.length} matching product(s):` : `GymPro hiện có ${products.length} sản phẩm phù hợp:`}\n\n${products.map((p) => {
         const lines = [titleText(p.name || 'Product'), '', `${lang === 'en' ? 'Price' : 'Giá'}: ${formatPriceText(p.price, lang, lang === 'en' ? 'Not updated' : 'Chưa cập nhật')}`]
         const description = safeText(p.description)
         if (description) lines.push('', lang === 'en' ? 'Description:' : 'Mô tả:', '', description)
@@ -576,6 +585,9 @@ const buildAgentAnswer = async ({
   const n = normalizeQuery(query)
   const introMatch = /\b(ban la ai|who are you|gioi thieu)\b/.test(n)
   if (introMatch) return makeIntroduction(lang)
+
+  const greetingMatch = /\b(chao|hello|hi|hey|alo|chao buoi)\b/.test(n)
+  if (greetingMatch && !introMatch && subject === 'general') return makeIntroduction(lang)
 
   if (subject === 'plan' || (subject === 'workout' && action === 'list')) {
     if ((countPlanFromQuery(query) || action === 'list') && plans && plans.length > 0) {
@@ -714,6 +726,9 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   const userId = String(user?._id || user?.id || '')
   const conversationId = conversationContext?.conversationId || conversationContext?.sessionId || 'default'
 
+  const pl = createPipelineLogger()
+  pl.intent(null, { subject: 'starting', source: 'entry' })
+
   const memory = inputMemory || mergeConversationMemory(agentMemory.get(userId, conversationId), conversationContext)
   const n = normalizeQuery(queryText)
 
@@ -721,6 +736,23 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     const answer = lang === 'en'
       ? "I can't provide another user's personal account information."
       : 'Mình không thể cung cấp thông tin cá nhân của người dùng khác để bảo vệ quyền riêng tư.'
+    const audit = buildAudit({ source: 'local_fallback', usedTools: [], aiUsed: false, startedAt })
+    return withAudit({
+      answer,
+      usedTools: [],
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+      suggestions: [],
+      memoryUpdate: null,
+      confidence: 1,
+      shouldUseLegacyRouter: false,
+    }, audit)
+  }
+
+  const greetingPattern = /^(chao|xin chao|hello|hi|hey|alo|xin chao ban|good morning|good afternoon|good evening)[\s!?.]*$/i
+  if (greetingPattern.test(n)) {
+    const answer = makeIntroduction(lang)
+    agentMemory.update(userId, conversationId, { lastSubject: 'general', lastAction: 'greeting', lastQuery: queryText, lastAnswer: answer })
     const audit = buildAudit({ source: 'local_fallback', usedTools: [], aiUsed: false, startedAt })
     return withAudit({
       answer,
@@ -760,6 +792,10 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   perfStart('gympro_optimizer')
   const optimizer = optimizeQuery({ query: queryText, memory })
   perfEnd('gympro_optimizer')
+  pl.intent(
+    { intent: optimizer.intent, confidence: optimizer.confidence, subject: optimizer.subject, action: optimizer.action },
+    { source: optimizer.source || 'optimizer', reason: optimizer.reason }
+  )
   if (!optimizer.directTool && optimizer.shouldUseAI === false) {
     const direct = await buildDirectToolAnswer({ query: queryText, optimizer, toolResults: {}, memory, lang, userRole: user?.role || 'member' })
     if (direct?.answer) {
@@ -798,8 +834,10 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     const toolResults = {}
     try {
       perfStart('gympro_direct_tool')
+      pl.tool(optimizer.directTool, optimizer.args)
       const result = await runGymTool(optimizer.directTool, optimizer.args || {}, { userId })
       perfEnd('gympro_direct_tool')
+      pl.tool(optimizer.directTool, optimizer.args, result)
       toolResults[optimizer.directTool] = result
       const direct = await buildDirectToolAnswer({ query: queryText, optimizer, toolResults, memory, lang, userRole: user?.role || 'member' })
       if (direct?.answer) {
@@ -836,7 +874,7 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
           lastMentionedPlanName: direct.mentionedPlan ? (lang === 'en' ? (direct.mentionedPlan.nameEn || direct.mentionedPlan.nameVi || direct.mentionedPlan.name) : (direct.mentionedPlan.nameVi || direct.mentionedPlan.nameEn || direct.mentionedPlan.name)) : memory.lastMentionedPlanName,
           lastMentionedPlan: direct.mentionedPlan || memory.lastMentionedPlan,
           lastMentionedPTId: direct.mentionedPT?.id || direct.mentionedPT?._id || memory.lastMentionedPTId,
-          lastMentionedPTName: direct.mentionedPT?.name || memory.lastMentionedPTName,
+          lastMentionedPTName: direct.mentionedPT?.fullName || direct.mentionedPT?.name || memory.lastMentionedPTName,
           lastMentionedPT: direct.mentionedPT || memory.lastMentionedPT,
           lastMentionedProductId: direct.mentionedProduct?.id || direct.mentionedProduct?._id || memory.lastMentionedProductId,
           lastMentionedProductName: direct.mentionedProduct?.name || memory.lastMentionedProductName,
@@ -847,6 +885,30 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
         }
         agentMemory.update(userId, conversationId, memoryPatch)
         direct.answer = await naturalResponseRewrite({ answer: direct.answer, query: queryText, subject: optimizer.domainSubject || optimizer.subject, lang })
+
+        const regenerationResult = await validateWithRetry({
+          answer: direct.answer,
+          toolResults,
+          query: queryText,
+          lang,
+          regenerateFn: async ({ answer, validation, toolResults, query, lang, regeneratePrompt }) => {
+            try {
+              const result = await runAIWithFallback({
+                systemPrompt: ANSWER_SYSTEM_PROMPT,
+                userMessage: regeneratePrompt,
+              }, { temperature: 0.2, maxTokens: 600, timeoutMs: 8000 })
+              const text = (result.text || '').trim()
+    if (text.length >= 3) return text
+            } catch { }
+            return null
+          },
+        })
+        direct.answer = regenerationResult.answer
+        direct.responseType = 'text_advice'
+        if (!regenerationResult.valid && regenerationResult.regenerated) {
+          console.log('[VALIDATOR] direct-tool path fell back after regeneration:', regenerationResult.reason)
+        }
+
         const audit = buildAudit({ source: optimizer.reason === 'memory_entity_follow_up' ? 'memory' : 'tool', optimizer, usedTools: [optimizer.directTool], aiUsed: false, startedAt })
         return withAudit({
           answer: direct.answer,
@@ -981,9 +1043,12 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
           const ptName = analysis.entities.mentionedPT || (analysis.source === 'cu_fallback' || analysis.source === 'cu_layer' ? extractPTNameFromQuery(queryText) : null)
           args = { specialization: ptName || analysis.entities.goal || memory.lastGoal || undefined }
         }
+        aiLogTool(toolName, args, null)
         const result = await runGymTool(toolName, args, context)
+        pl.tool(toolName, args, result)
         toolResults[toolName] = result
       } catch (err) {
+        pl.toolError(toolName, err, args)
         toolResults[toolName] = { error: err.message }
         hasError = true
       }
@@ -1023,7 +1088,7 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       lastAction: 'clarify',
       lastQuery: queryText,
       lastAnswer: answer,
-      lastListedPlans: plans.slice(0, 12),
+      lastListedPlans: plans,
       lastUsedTools: analysis.needsTools,
     })
     const audit = buildAudit({ source: 'semantic_router', optimizer, usedTools: analysis.needsTools, aiUsed: analysis.source === 'llm', startedAt })
@@ -1041,7 +1106,7 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
         payload: { type: 'text_advice', plans },
         lang,
       }),
-      memoryUpdate: { lastSubject: 'plan', lastAction: 'clarify', lastListedPlans: plans.slice(0, 12) },
+      memoryUpdate: { lastSubject: 'plan', lastAction: 'clarify', lastListedPlans: plans },
       confidence: analysis.confidence,
       shouldUseLegacyRouter: false,
     }, audit)
@@ -1142,7 +1207,7 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       lastAction: analysis.action,
       lastQuery: queryText,
       lastAnswer: answer,
-      lastMentionedPTName: selectedPT?.name || pts[0]?.name || null,
+      lastMentionedPTName: selectedPT?.fullName || selectedPT?.name || pts[0]?.fullName || pts[0]?.name || null,
       lastMentionedPTId: selectedPT?.id || pts[0]?.id || null,
       lastUsedTools: analysis.needsTools,
       lastListedPTs: ptItems, // NEW: Save all PTs for follow-up resolution
@@ -1256,11 +1321,21 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   }
 
   perfStart('gympro_llm_answer')
+  let vectorKnowledge = null
+  try {
+    const { search: vectorSearch } = await import('../services/vectorStoreService.js')
+    const vr = await vectorSearch(queryText, { topK: 3, sources: ['faq', 'policy', 'knowledge', 'exercise', 'nutrition', 'module_readme'] })
+    if (vr.length > 0) vectorKnowledge = vr
+    pl.vectorSearch(queryText, vr, { topK: 3, sources: ['faq', 'policy', 'knowledge', 'exercise', 'nutrition', 'module_readme'] })
+  } catch {
+    pl.fallback('vector_search', 'Vector search unavailable')
+  }
   let answer = await buildLLMAnswer({
-    query: queryText, analysis, plans, pts, memberships, smartRec, memory, lang,
+    query: queryText, analysis, plans, pts, memberships, smartRec, memory, lang, vectorKnowledge,
   })
   perfEnd('gympro_llm_answer')
   if (!answer) {
+    pl.fallback('llm_answer', 'buildLLMAnswer returned null, using buildAgentAnswer')
     answer = await buildAgentAnswer({
       plan: analysis, query: queryText, plans, memberships, pts, workoutData, smartRec, targetPlan, memory, lang,
       hasBudget: Boolean(analysis.entities.budget || memory.lastBudget),
@@ -1290,6 +1365,47 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     answer = await naturalResponseRewrite({ answer, query: queryText, subject: analysis.subject, lang })
   }
 
+  if (answer) {
+    const toolDataForValidate = Object.keys(toolResults).length > 0 ? toolResults : null
+    const regenerationResult = await validateWithRetry({
+      answer,
+      toolResults: toolDataForValidate,
+      query: queryText,
+      lang,
+      regenerateFn: async ({ answer, validation, toolResults, query, lang, regeneratePrompt }) => {
+        try {
+          const result = await runAIWithFallback({
+            systemPrompt: ANSWER_SYSTEM_PROMPT,
+            userMessage: regeneratePrompt,
+          }, { temperature: 0.2, maxTokens: 600, timeoutMs: 8000 })
+          const text = (result.text || '').trim()
+          if (text.length >= 3) {
+            const reviewed = await constitutionalReview({
+              query: queryText,
+              answer: text,
+              subject: analysis.subject,
+              analysis,
+              currentUserRole: user?.role || 'member',
+              toolData: toolDataForValidate?.plansCount !== undefined ? {
+                plansCount: toolDataForValidate.plansCount,
+                ptsCount: toolDataForValidate.ptsCount,
+                productsCount: toolDataForValidate.productsCount,
+              } : toolDataForReview,
+              lang,
+            })
+            const rewritten = await naturalResponseRewrite({ answer: reviewed, query: queryText, subject: analysis.subject, lang })
+            return rewritten
+          }
+        } catch { }
+        return null
+      },
+    })
+    answer = regenerationResult.answer
+    if (!regenerationResult.valid && regenerationResult.regenerated) {
+      console.log('[VALIDATOR] LLM path fell back after regeneration:', regenerationResult.reason)
+    }
+  }
+
   if (!answer) {
     const audit = buildAudit({ source: 'local_fallback', optimizer, usedTools: analysis.needsTools, aiUsed: analysis.source === 'llm', startedAt })
     return withAudit({
@@ -1306,11 +1422,11 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   }
 
   const mentionedPTId = pts?.[0]?._id || null
-  const mentionedPTName = pts?.[0]?.name || null
+  const mentionedPTName = pts?.[0]?.fullName || pts?.[0]?.name || null
 
   // NEW: Save listed plans for follow-up resolution
-  const listedPlans = analysis.subject === 'plan' && plans.length > 0 ? plans.slice(0, 12) : memory?.lastListedPlans || []
-  const listedPTs = analysis.subject === 'pt' && pts.length > 0 ? pts.slice(0, 12) : memory?.lastListedPTs || []
+  const listedPlans = analysis.subject === 'plan' && plans.length > 0 ? plans : memory?.lastListedPlans || []
+  const listedPTs = analysis.subject === 'pt' && pts.length > 0 ? pts : memory?.lastListedPTs || []
 
   agentMemory.update(userId, conversationId, {
     lastSubject: analysis.subject,
@@ -1330,7 +1446,10 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     lastListedPTs: listedPTs, // NEW
   })
 
+  const latencyMs = Date.now() - startedAt
   const audit = buildAudit({ source: smartRec ? 'smart_recommend' : analysis.source === 'llm' ? 'ai_reasoning' : 'tool', optimizer, usedTools: analysis.needsTools, aiUsed: analysis.source === 'llm', startedAt })
+  pl.latency('gympro_agent_total', latencyMs)
+  pl.validator('response', { valid: true, answerLength: (answer || '').length })
   const shouldOverviewPlanFirst = analysis.subject === 'plan'
     && analysis.action === 'list'
     && shouldUsePlanSpecializationOverview({ plans, query: queryText })

@@ -1,120 +1,69 @@
-import { ArrowLeftOutlined, CheckCircleOutlined, WalletOutlined, WarningOutlined } from '@ant-design/icons'
-import { Button, Card, Checkbox, Input, Progress, Spin, Tooltip, message } from 'antd'
+import {
+  ArrowLeftOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
+  ExclamationCircleOutlined,
+  InfoCircleOutlined,
+  WarningOutlined,
+} from '@ant-design/icons'
+import { Button, Card, Checkbox, Descriptions, Spin, Table, Tag, message } from 'antd'
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
-import { membershipService, type MyMembership } from '../../../services/membershipService'
-import { acceptPolicyConsent, checkConsentStatus } from '../../../utils/policyConsent'
+import { membershipService, type CancelInfo } from '../../../services/membershipService'
 
 const formatMoney = (value: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 const formatDate = (value?: string) => (value ? new Date(value).toLocaleDateString('vi-VN') : '-')
 
+const statusTag = (status: string) => {
+  if (status === 'ACTIVE') return <Tag color="success">Đang hoạt động</Tag>
+  if (status === 'PENDING') return <Tag color="processing">Chờ kích hoạt</Tag>
+  return <Tag>{status}</Tag>
+}
+
 export default function CancelMembershipPage() {
   const navigate = useNavigate()
-  const [, setMembership] = useState<MyMembership | null>(null)
   const [loading, setLoading] = useState(true)
+  const [cancelInfo, setCancelInfo] = useState<CancelInfo | null>(null)
   const [reason, setReason] = useState('')
+  const [policyAgreed, setPolicyAgreed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-
-  const [usedDays, setUsedDays] = useState(0)
-  const [remainingDays, setRemainingDays] = useState(0)
-  const [totalDays, setTotalDays] = useState(0)
-  const [usedPercent, setUsedPercent] = useState(0)
-  const [refundEligible, setRefundEligible] = useState(false)
-  const [estimatedRefund, setEstimatedRefund] = useState(0)
-  const [refundPolicyCode, setRefundPolicyCode] = useState<'REFUND_100' | 'REFUND_50' | 'NO_REFUND'>('NO_REFUND')
-  const [planPrice, setPlanPrice] = useState(0)
-  const [planName, setPlanName] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-
-  const [policyAccepted, setPolicyAccepted] = useState(false)
-  const [consentStatus, setConsentStatus] = useState<Record<string, any> | null>(null)
-  const allConsented = consentStatus && ['refund', 'membership'].every((t) => consentStatus[t]?.accepted)
-  const canSubmitCancel = allConsented || policyAccepted
-  const refundEligibility = {
-    eligible: refundEligible,
-    estimatedAmount: estimatedRefund,
-    maxRefundAmount: planPrice,
-    policyCode: refundPolicyCode,
-  }
 
   useEffect(() => {
     setLoading(true)
-    membershipService
-      .getMyMembership()
-      .then((res) => {
-        const m = res.data.membership
-        if (!m) {
-          message.error('Không tìm thấy gói tập')
-          navigate('/my-membership')
-          return
-        }
-        setMembership(m)
-        setPlanName(m.plan?.nameVi || m.planNameVi || '-')
-        setPlanPrice(m.price || m.plan?.price || 0)
-        setStartDate(formatDate(m.startDate))
-        setEndDate(formatDate(m.endDate))
-
-        const start = new Date(m.startDate).getTime()
-        const end = new Date(m.endDate).getTime()
-        const now = Date.now()
-        const totalMs = end - start
-        const usedMs = Math.max(0, now - start)
-        const totalDays = Math.max(1, Math.round(totalMs / (1000 * 60 * 60 * 24)))
-        const used = Math.max(1, Math.min(totalDays, Math.ceil(usedMs / (1000 * 60 * 60 * 24))))
-        const remaining = Math.max(0, Math.round((end - now) / (1000 * 60 * 60 * 24)))
-        const percent = Math.round((used / totalDays) * 100)
-        setUsedDays(used)
-        setRemainingDays(remaining)
-        setTotalDays(totalDays)
-        setUsedPercent(percent)
-
-        if (percent > 50) {
-          setRefundEligible(false)
-          setEstimatedRefund(0)
-          setRefundPolicyCode('NO_REFUND')
-        } else if (used <= 7) {
-          setRefundEligible(true)
-          setEstimatedRefund(m.price || 0)
-          setRefundPolicyCode('REFUND_100')
-        } else {
-          setRefundEligible(true)
-          setEstimatedRefund(Math.floor((m.price || 0) * 0.5))
-          setRefundPolicyCode('REFUND_50')
-        }
-      })
+    membershipService.getCancelInfo()
+      .then((res) => setCancelInfo(res.data))
       .catch(() => {
-        message.error('Lỗi khi tải thông tin gói tập')
+        message.error('Không thể tải thông tin gói tập')
         navigate('/my-membership')
       })
       .finally(() => setLoading(false))
   }, [navigate])
 
-  useEffect(() => {
-    checkConsentStatus(['refund', 'membership']).then(setConsentStatus)
-  }, [])
-
-  const handleSubmit = async () => {
+  const handleSubmitCancel = async () => {
     if (!reason.trim()) {
       message.warning('Vui lòng nhập lý do hủy')
       return
     }
-    if (!canSubmitCancel) {
-      message.warning('Vui lòng đồng ý với chính sách')
+    if (!policyAgreed) {
+      message.warning('Vui lòng đồng ý với chính sách hủy gói')
+      return
+    }
+    const activePeriodId = cancelInfo?.period?._id
+    if (!activePeriodId) {
+      message.error('Không tìm thấy gói tập đang hoạt động')
       return
     }
     setSubmitting(true)
     try {
-      const data: any = { reason: reason.trim(), policyAccepted }
-      if (refundEligibility.eligible && refundEligibility.estimatedAmount > 0) {
-        data.refundMethod = 'WALLET'
-      }
-      const res = await membershipService.createCancelRequest(data)
-      message.success(res.data.message)
+      await membershipService.createRefundRequest({
+        periodId: activePeriodId,
+        reason: reason.trim(),
+      })
+      message.success('Yêu cầu hủy đã được gửi tới nhân viên. Vui lòng chờ phê duyệt.')
       navigate('/my-membership')
     } catch (error: any) {
-      message.error(error.response?.data?.message || 'Gửi yêu cầu thất bại')
+      message.error(error?.response?.data?.message || 'Gửi yêu cầu thất bại')
     } finally {
       setSubmitting(false)
     }
@@ -123,221 +72,253 @@ export default function CancelMembershipPage() {
   if (loading) {
     return (
       <MemberLayout>
-        <div className="flex min-h-[400px] items-center justify-center">
-          <Spin />
-        </div>
+        <div className="flex min-h-[400px] items-center justify-center"><Spin /></div>
       </MemberLayout>
     )
   }
 
-  const statusLabel = refundEligibility.policyCode === 'NO_REFUND'
-    ? 'Đã sử dụng trên 50%'
-    : `Đã sử dụng ${usedPercent}%`
+  if (!cancelInfo) return null
 
-  const policyResultText = refundEligibility.policyCode === 'REFUND_100'
-    ? `Bạn đã sử dụng ${usedDays} ngày, đủ điều kiện hoàn tiền 100%`
-    : refundEligibility.policyCode === 'REFUND_50'
-      ? `Bạn đã sử dụng ${usedDays} ngày, đủ điều kiện hoàn tiền 50%`
-      : 'Bạn đã sử dụng trên 50%, không đủ điều kiện hoàn tiền'
+  const { membership, refundInfo, pendingPeriods, periodsDetail, totalEstimatedRefund } = cancelInfo
+  const remainingDays = membership.remainingDays ?? 0
+  const activePeriodIndex = periodsDetail.find((pd) => pd.status === 'ACTIVE')?.index ?? 1
+  const activePeriodCount = 1
+  const pendingPeriodCount = pendingPeriods.length
+  const totalCancelPeriods = activePeriodCount + pendingPeriodCount
 
-  const refundPolicyStatus = refundEligibility.eligible
-    ? {
-        icon: <CheckCircleOutlined />,
-        title: 'Đủ điều kiện hoàn tiền',
-        text: `Bạn có thể được hoàn tối đa ${formatMoney(refundEligibility.maxRefundAmount)}`,
-        note: 'Số tiền hoàn sẽ được cộng vào ví của bạn',
-        tone: 'success' as const,
-      }
-    : {
-        icon: <WarningOutlined />,
-        title: 'Không đủ điều kiện hoàn tiền',
-        text: 'Bạn đã sử dụng quá 50% thời gian gói tập',
-        note: '',
-        tone: 'warning' as const,
-      }
-
-  const infoItems = [
-    { label: 'Tên gói tập', value: planName },
-    { label: 'Giá gói', value: formatMoney(planPrice) },
-    { label: 'Ngày bắt đầu', value: startDate },
-    { label: 'Ngày kết thúc', value: endDate },
-    { label: 'Số ngày đã dùng', value: `${usedDays} ngày` },
-    { label: 'Tổng số ngày', value: `${totalDays} ngày` },
-    { label: 'Số ngày còn lại', value: `${remainingDays} ngày` },
-    { label: 'Tỷ lệ đã dùng', value: `${usedPercent}%` },
+  const columns = [
     {
-      label: 'Số tiền hoàn dự kiến',
-      value: refundEligibility.eligible ? formatMoney(refundEligibility.estimatedAmount) : 'Không đủ điều kiện',
-      highlight: refundEligibility.eligible ? 'success' as const : 'muted' as const,
+      title: 'Đợt',
+      dataIndex: 'index',
+      key: 'index',
+      width: 60,
+      render: (val: number) => <span className="font-medium">Đợt {val}</span>,
+    },
+    {
+      title: 'Trạng thái',
+      dataIndex: 'status',
+      key: 'status',
+      width: 130,
+      render: (val: string) => statusTag(val),
+    },
+    {
+      title: 'Ngày bắt đầu',
+      dataIndex: 'startDate',
+      key: 'startDate',
+      width: 120,
+      render: (val: string) => formatDate(val),
+    },
+    {
+      title: 'Ngày kết thúc',
+      dataIndex: 'endDate',
+      key: 'endDate',
+      width: 120,
+      render: (val: string) => formatDate(val),
+    },
+    {
+      title: 'Giá',
+      dataIndex: 'price',
+      key: 'price',
+      width: 100,
+      align: 'right' as const,
+      render: (val: number) => formatMoney(val || 0),
     },
   ]
 
   return (
     <MemberLayout>
-      <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
+      <div className="mx-auto w-full max-w-6xl px-0 py-6 sm:px-2 lg:px-4">
         <div className="mb-6 flex items-center gap-3">
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/my-membership')} />
           <div>
             <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">QUẢN LÝ GÓI TẬP</p>
-            <h1 className="m-0 mt-1 text-2xl font-semibold text-[var(--gs-text)] max-[480px]:text-xl">Hủy gói tập</h1>
+            <h1 className="m-0 mt-1 text-2xl font-semibold text-[var(--gs-text)] max-[480px]:text-xl">Yêu cầu hủy & hoàn tiền</h1>
           </div>
         </div>
 
+        {/* 1. Thông tin gói đang hoạt động */}
         <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
-          <h3 className="mb-5 text-base font-semibold text-[var(--gs-text)]">Thông tin gói tập</h3>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
-            {infoItems.slice(0, 4).map((item) => (
-              <div key={item.label}>
-                <div className="mb-0.5 text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">{item.label}</div>
-                <div className="truncate text-base font-semibold text-[var(--gs-text)]">{item.value}</div>
-              </div>
-            ))}
-            {infoItems.slice(4).map((item) => (
-              <div key={item.label}>
-                <div className="mb-0.5 text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">{item.label}</div>
-                <div
-                  className={`truncate text-base font-semibold ${
-                    item.highlight === 'success'
-                      ? 'text-[var(--gs-success)]'
-                      : item.highlight === 'muted'
-                        ? 'text-[var(--gs-text-muted)]'
-                        : 'text-[var(--gs-text)]'
-                  }`}
-                >
-                  {item.value}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-5">
-            <Progress
-              percent={usedPercent}
-              status={refundEligibility.policyCode === 'NO_REFUND' ? 'exception' : 'active'}
-              format={() => statusLabel}
-              strokeLinecap="round"
-            />
-          </div>
-          <div className={`mt-5 rounded-xl border p-4 text-sm leading-6 ${
-            refundEligibility.policyCode === 'NO_REFUND'
-              ? 'border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] text-[var(--gs-text)]'
-              : 'border-[var(--gs-success)] bg-[var(--gs-success-bg)] text-[var(--gs-text)]'
-          }`}>
-            {policyResultText}
-          </div>
+          <h3 className="mb-5 text-base font-semibold text-[var(--gs-text)]">Thông tin gói đang hoạt động</h3>
+          <Descriptions bordered column={{ xs: 1, sm: 2 }} size="small">
+            <Descriptions.Item label="Tên gói">{membership.plan?.nameVi || membership.planNameVi || '-'}</Descriptions.Item>
+            <Descriptions.Item label="Giá">{formatMoney(membership.price || membership.plan?.price || 0)}</Descriptions.Item>
+            <Descriptions.Item label="Ngày bắt đầu">{formatDate(membership.startDate)}</Descriptions.Item>
+            <Descriptions.Item label="Ngày kết thúc">{formatDate(membership.endDate)}</Descriptions.Item>
+            <Descriptions.Item label="Số ngày còn lại">{remainingDays > 0 ? remainingDays : 'Đã hết hạn'}</Descriptions.Item>
+            <Descriptions.Item label="Trạng thái"><Tag color="success">Đang hoạt động</Tag></Descriptions.Item>
+          </Descriptions>
         </Card>
 
-        {refundEligibility.eligible && refundEligibility.estimatedAmount > 0 && (
-          <>
-            <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
-              <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">Phương thức hoàn tiền</h3>
-              <div className="rounded-xl border-2 border-[var(--gs-accent)] bg-[var(--gs-accent-muted)] p-4">
+        {/* 2. Danh sách các đợt */}
+        <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
+          <h3 className="mb-5 text-base font-semibold text-[var(--gs-text)]">Danh sách các đợt</h3>
+          <Table
+            dataSource={periodsDetail}
+            columns={columns}
+            rowKey="_id"
+            pagination={false}
+            size="small"
+            bordered
+          />
+        </Card>
+
+        {/* 3. Tóm tắt yêu cầu hủy */}
+        <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
+          <h3 className="mb-5 text-base font-semibold text-[var(--gs-text)]">Tóm tắt yêu cầu hủy</h3>
+          <Descriptions bordered column={{ xs: 1, sm: 3 }} size="small">
+            <Descriptions.Item label="Số đợt đang hoạt động">
+              <span className="font-semibold text-[var(--gs-text)]">{activePeriodCount}</span>
+            </Descriptions.Item>
+            <Descriptions.Item label="Số đợt chờ kích hoạt">
+              <span className="font-semibold text-[var(--gs-text)]">{pendingPeriodCount}</span>
+            </Descriptions.Item>
+            <Descriptions.Item label="Tổng số đợt sẽ bị hủy">
+              <span className="font-semibold text-[var(--gs-error)]">{totalCancelPeriods}</span>
+            </Descriptions.Item>
+          </Descriptions>
+        </Card>
+
+        {/* 4. Hoàn tiền dự kiến */}
+        <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
+          <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">Hoàn tiền dự kiến</h3>
+          <div className="space-y-3">
+            {periodsDetail.map((pd) => (
+              <div
+                key={pd._id}
+                className={`rounded-xl border p-4 ${
+                  pd.refundEligible
+                    ? 'border-[var(--gs-success)] bg-[var(--gs-success-bg)]'
+                    : 'border-[var(--gs-warning)] bg-[var(--gs-warning-bg)]'
+                }`}
+              >
                 <div className="flex items-start gap-3">
-                  <WalletOutlined className="mt-0.5 flex-shrink-0 text-base text-[var(--gs-accent)]" />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold leading-snug">Hoàn tiền vào ví</div>
-                    <div className="mt-1 text-sm leading-relaxed text-[var(--gs-text-muted)]">
-                      Số tiền hoàn sẽ được chuyển trực tiếp vào ví của bạn
-                    </div>
+                  {pd.refundEligible ? (
+                    <CheckCircleFilled className="mt-0.5 text-lg text-[var(--gs-success)]" />
+                  ) : (
+                    <CloseCircleFilled className="mt-0.5 text-lg text-[var(--gs-error)]" />
+                  )}
+                  <div className="flex-1">
+                    <p className="m-0 text-sm font-semibold text-[var(--gs-text)]">
+                      Đợt {pd.index} {pd.status === 'ACTIVE' ? '(đang hoạt động)' : '(chờ kích hoạt)'}
+                      {' — '}
+                      <span className={pd.refundEligible ? 'text-[var(--gs-success)]' : 'text-[var(--gs-error)]'}>
+                        {pd.refundEligible
+                          ? pd.status === 'ACTIVE'
+                            ? 'Đủ điều kiện hoàn tiền'
+                            : 'Chưa kích hoạt - Đủ điều kiện hoàn'
+                          : 'Không đủ điều kiện hoàn tiền'}
+                      </span>
+                    </p>
+                    {pd.refundReason && (
+                      <p className="m-0 mt-1 text-xs text-[var(--gs-text-muted)]">{pd.refundReason}</p>
+                    )}
+                    {pd.refundEligible && (
+                      <p className="m-0 mt-1 text-sm font-medium text-[var(--gs-success)]">
+                        Số tiền: {formatMoney(pd.price || 0)}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
-            </Card>
+            ))}
+          </div>
 
-          </>
-        )}
+          {/* Tổng tiền hoàn */}
+          <div className="mt-5 rounded-xl border border-[var(--gs-accent)] bg-[var(--gs-accent-bg)] p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-[var(--gs-text)]">Tổng số tiền dự kiến được hoàn</span>
+              <span className="text-lg font-bold text-[var(--gs-accent)]">
+                {formatMoney(totalEstimatedRefund)}
+              </span>
+            </div>
+          </div>
+        </Card>
 
+        {/* 5. Chính sách hoàn tiền */}
+        <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
+          <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">Chính sách hoàn tiền</h3>
+          <ul className="m-0 space-y-2 pl-5 text-sm leading-relaxed text-[var(--gs-text)]">
+            <li>
+              <CheckCircleFilled className="mr-2 text-[var(--gs-success)]" />
+              Hoàn tiền trong vòng 07 ngày kể từ ngày kích hoạt gói.
+            </li>
+            <li>
+              <CheckCircleFilled className="mr-2 text-[var(--gs-success)]" />
+              Gói chưa được sử dụng bất kỳ quyền lợi nào sẽ được hoàn tiền theo chính sách.
+            </li>
+            <li>
+              <CloseCircleFilled className="mr-2 text-[var(--gs-error)]" />
+              Sau 07 ngày sẽ không đủ điều kiện hoàn tiền.
+            </li>
+            <li>
+              <CloseCircleFilled className="mr-2 text-[var(--gs-error)]" />
+              Nếu đã sử dụng quyền lợi của gói (check-in, sử dụng phòng tập, thuê PT hoặc các quyền lợi khác) thì sẽ không được hoàn tiền.
+            </li>
+          </ul>
+        </Card>
+
+        {/* 6. Cảnh báo */}
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-4">
+          <WarningOutlined className="mt-0.5 text-lg text-[var(--gs-warning)]" />
+          <div>
+            <p className="m-0 text-sm font-semibold text-[var(--gs-text)]">Lưu ý quan trọng</p>
+            <p className="m-0 mt-1 text-xs text-[var(--gs-text-muted)]">
+              Việc gửi yêu cầu sẽ hủy toàn bộ <strong>{totalCancelPeriods} đợt</strong> bao gồm đợt đang hoạt động
+              {pendingPeriodCount > 0 ? ` và ${pendingPeriodCount} đợt chưa kích hoạt` : ''} nếu yêu cầu được phê duyệt.
+              Các đợt đủ điều kiện sẽ được hoàn tiền vào ví tài khoản của bạn.
+            </p>
+          </div>
+        </div>
+
+        {/* 7. Lý do hủy */}
         <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
           <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">
             Lý do hủy <span className="text-red-500">*</span>
           </h3>
-          <Input.TextArea
+          <textarea
             rows={4}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="Nhập lý do hủy gói tập của bạn..."
+            placeholder="Vui lòng nhập lý do hủy gói..."
+            className="w-full rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] px-4 py-3 text-sm text-[var(--gs-text)] outline-none transition-colors focus:border-[var(--gs-accent)] resize-none"
           />
         </Card>
 
-        <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
-          <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">Điều khoản & Chính sách</h3>
-          <div className={`mb-4 rounded-xl border p-5 ${
-            refundPolicyStatus.tone === 'success'
-              ? 'border-[var(--gs-success)] bg-[var(--gs-success-bg)]'
-              : 'border-[var(--gs-warning)] bg-[var(--gs-warning-bg)]'
-          }`}>
-            <div className={`mb-2 flex items-center gap-2 ${
-              refundPolicyStatus.tone === 'success' ? 'text-[var(--gs-success)]' : 'text-[var(--gs-warning)]'
-            }`}>
-              {refundPolicyStatus.icon}
-              <span className="font-semibold">{refundPolicyStatus.title}</span>
-            </div>
-            <p className="m-0 text-sm leading-relaxed text-[var(--gs-text)]">{refundPolicyStatus.text}</p>
-            {refundPolicyStatus.note && (
-              <p className="mt-2 text-xs text-[var(--gs-text-muted)]">{refundPolicyStatus.note}</p>
-            )}
-          </div>
-          {consentStatus && !allConsented && (
-            <p className="m-0 mb-3 rounded-lg border border-[var(--theme-accent-border)] bg-[var(--theme-accent-muted)] px-3 py-2 text-xs text-[var(--theme-accent)]">
-              Chính sách đã được cập nhật. Vui lòng đọc và xác nhận lại trước khi tiếp tục.
-            </p>
-          )}
-          {consentStatus && allConsented && (
-            <p className="m-0 mb-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
-              Bạn đã đồng ý với phiên bản chính sách hiện tại.
-            </p>
-          )}
-          <Checkbox
-            className="policy-confirm-checkbox"
-            checked={policyAccepted}
-            disabled={false}
-            onChange={async (event) => {
-              const checked = event.target.checked
-              setPolicyAccepted(checked)
-              if (checked) {
-                try {
-                  await acceptPolicyConsent('refund', '1.0')
-                } catch {
-                  // silent
-                }
-              }
-            }}
-          >
-            <span className="text-sm text-[var(--theme-text)]">
-              Tôi đã đọc và đồng ý với{' '}
-              <Link
-                to="/policies"
-                className="font-medium underline-offset-2 hover:underline"
-                style={{ color: 'var(--theme-accent)' }}
-                onMouseEnter={(event) => { event.currentTarget.style.color = 'var(--theme-accent-hover)' }}
-                onMouseLeave={(event) => { event.currentTarget.style.color = 'var(--theme-accent)' }}
-              >
-                chính sách
-              </Link>
+        {/* 8. Điều khoản */}
+        <div className="mb-6 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
+          <Checkbox checked={policyAgreed} onChange={(e) => setPolicyAgreed(e.target.checked)}>
+            <span className="text-sm text-[var(--gs-text)]">
+              Tôi đã đọc và đồng ý {' '}
+              <a href="/policies" className="text-[var(--gs-accent)] underline hover:opacity-80">
+                  chính sách hủy & hoàn tiền
+              </a>
+              .
             </span>
           </Checkbox>
-        </Card>
+        </div>
 
+        {/* 9. Nút gửi */}
         <div className="flex flex-col gap-3 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="m-0 text-sm font-medium text-[var(--gs-text)]">Xác nhận hủy gói tập</p>
-            <p className="m-0 mt-0.5 text-xs text-[var(--gs-text-muted)]">
-              Vui lòng kiểm tra kỹ thông tin trước khi gửi yêu cầu
-            </p>
+          <div className="flex items-start gap-3">
+            <InfoCircleOutlined className="mt-0.5 text-[var(--gs-text-soft)]" />
+            <div className="min-w-0">
+              <p className="m-0 text-sm font-medium text-[var(--gs-text)]">Xác nhận hủy gói tập</p>
+              <p className="m-0 mt-0.5 text-xs text-[var(--gs-text-muted)]">
+                Yêu cầu sẽ được gửi tới nhân viên xem xét
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex gap-2">
             <Button onClick={() => navigate('/my-membership')}>Quay lại</Button>
-            <Tooltip title={!canSubmitCancel ? 'Vui lòng đồng ý với chính sách' : undefined}>
-              <Button
-                className="policy-confirm-action"
-                type="primary"
-                danger
-                loading={submitting}
-                disabled={!reason.trim() || !canSubmitCancel}
-                onClick={handleSubmit}
-              >
-                Gửi yêu cầu
-              </Button>
-            </Tooltip>
+            <Button
+              type="primary"
+              danger
+              loading={submitting}
+              disabled={!reason.trim() || !policyAgreed}
+              onClick={handleSubmitCancel}
+            >
+              Gửi yêu cầu hủy
+            </Button>
           </div>
         </div>
       </div>
