@@ -201,10 +201,6 @@ export const membershipService = {
   getMyMembership: () => api.get<{ membership: MyMembership | null; canRenew: boolean; renewalThresholdDays: number; pendingCancelRequest: PendingCancelRequest | null }>('/memberships/my'),
   getMyRenewals: () => api.get<{ renewals: MembershipRenewal[] }>('/memberships/my/renewals'),
   getMyPeriods: () => api.get<{ periods: MembershipPeriod[] }>('/memberships/my/periods'),
-  cancelPeriod: (periodId: string) =>
-    api.post<{ message: string; period: MembershipPeriod; refundAmount: number }>(
-      `/memberships/my/periods/${periodId}/cancel`,
-    ),
   cancelRenewal: (renewalId: string) =>
     api.post<{ message: string; membership: MyMembership; renewal: MembershipRenewal }>(
       `/memberships/my/cancel-renewal/${renewalId}`,
@@ -225,10 +221,6 @@ export const membershipService = {
 
   createRefundRequest: (data: { periodId: string; reason?: string }) =>
     api.post<{ message: string; refundRequest: RefundRequest }>('/memberships/my/refund-request', data),
-  cancelPeriod: (periodId: string) =>
-    api.post<{ message: string; refundRequest: RefundRequest }>(
-      `/memberships/my/periods/${periodId}/cancel`,
-    ),
   getMyHistory: () =>
     api.get<{ history: Array<{ membership: MyMembership; periods: MembershipPeriod[] }> }>('/memberships/history'),
   getMembershipDetail: (membershipId: string) =>
