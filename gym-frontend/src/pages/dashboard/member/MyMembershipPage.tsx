@@ -22,16 +22,15 @@ export default function MyMembershipPage() {
   const [membership, setMembership] = useState<MyMembership | null>(null)
   const [loading, setLoading] = useState(true)
   const [pendingCancel, setPendingCancel] = useState<CancellationRequest | null>(null)
-  const [lastCancelRequest, setLastCancelRequest] = useState<CancellationRequest | null>(null)
+  const [, setLastCancelRequest] = useState<CancellationRequest | null>(null)
   const [pendingCancelRequest, setPendingCancelRequest] = useState<PendingCancelRequest | null>(null)
-  const [canRenew, setCanRenew] = useState(false)
-  const [renewalThresholdDays, setRenewalThresholdDays] = useState(7)
+  const [, setCanRenew] = useState(false)
+  const [, setRenewalThresholdDays] = useState(7)
   const [renewModalOpen, setRenewModalOpen] = useState(false)
   const [renewing, setRenewing] = useState(false)
   const [selectedMultiplier, setSelectedMultiplier] = useState(1)
-  const [renewals, setRenewals] = useState<MembershipRenewal[]>([])
+  const [, setRenewals] = useState<MembershipRenewal[]>([])
   const [periods, setPeriods] = useState<MembershipPeriod[]>([])
-  const [cancellingRenewal, setCancellingRenewal] = useState<string | null>(null)
   const [cancelPeriodModal, setCancelPeriodModal] = useState<{ open: boolean; period: MembershipPeriod | null }>({ open: false, period: null })
   const [cancellingPeriod, setCancellingPeriod] = useState(false)
   const [batchCancelDays, setBatchCancelDays] = useState(0)
@@ -89,7 +88,7 @@ export default function MyMembershipPage() {
     if (!period) return
     setCancellingPeriod(true)
     try {
-      const res = await membershipService.createRefundRequest({
+       await membershipService.createRefundRequest({
         periodId: period._id,
         reason: 'Hủy gia hạn',
       })
@@ -121,19 +120,7 @@ export default function MyMembershipPage() {
     }
   }
 
-  const handleCancelRenewal = async (renewalId: string) => {
-    setCancellingRenewal(renewalId)
-    try {
-      const res = await membershipService.cancelRenewal(renewalId)
-      message.success(res.data.message)
-      loadData()
-      refreshWallet()
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Hủy gia hạn thất bại')
-    } finally {
-      setCancellingRenewal(null)
-    }
-  }
+  
 
   const handleRenew = async () => {
     setRenewing(true)
@@ -174,15 +161,6 @@ export default function MyMembershipPage() {
 
   const planDays = membership?.durationDays || membership?.plan?.durationDays || 0
   const multiplierOptions = [1, 2, 3]
-  const calcNewEndDate = (multiplier: number) => {
-    if (!membership?.endDate) return ''
-    const base = new Date(membership.endDate) >= new Date()
-      ? new Date(membership.endDate)
-      : new Date()
-    const end = new Date(base)
-    end.setDate(end.getDate() + planDays * multiplier)
-    return end.toLocaleDateString('vi-VN')
-  }
 
   if (loading) {
     return (

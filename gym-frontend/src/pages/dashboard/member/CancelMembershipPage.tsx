@@ -2,7 +2,6 @@ import {
   ArrowLeftOutlined,
   CheckCircleFilled,
   CloseCircleFilled,
-  ExclamationCircleOutlined,
   InfoCircleOutlined,
   WarningOutlined,
 } from '@ant-design/icons'
@@ -79,9 +78,8 @@ export default function CancelMembershipPage() {
 
   if (!cancelInfo) return null
 
-  const { membership, refundInfo, pendingPeriods, periodsDetail, totalEstimatedRefund } = cancelInfo
+  const { membership, pendingPeriods, periodsDetail, totalEstimatedRefund } = cancelInfo
   const remainingDays = membership.remainingDays ?? 0
-  const activePeriodIndex = periodsDetail.find((pd) => pd.status === 'ACTIVE')?.index ?? 1
   const activePeriodCount = 1
   const pendingPeriodCount = pendingPeriods.length
   const totalCancelPeriods = activePeriodCount + pendingPeriodCount
