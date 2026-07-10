@@ -28,7 +28,7 @@ export const formatDaysText = (value, lang = 'vi', fallback = '') => {
 export const formatEmailText = (email) => {
   const value = safeText(email)
   if (!value) return ''
-  return `[${value}](mailto:${value})`
+  return value
 }
 
 export const compactList = (items = [], separator = ' • ') => (

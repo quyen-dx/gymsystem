@@ -1,5 +1,6 @@
 import { runAIWithFallback } from '../services/aiFallbackService.js'
 import { recordAiAudit } from '../services/aiAuditService.js'
+import { DATA_REQUIRED_INTENTS } from '../config/dataRequiredIntents.js'
 import { createPipelineLogger, logLatency } from '../services/aiLogService.js'
 import { constitutionalReview } from '../services/constitutionalReviewer.js'
 import { chooseRecommendedPlan } from '../services/dbResponder.js'
@@ -18,6 +19,10 @@ import { reasonQuery } from './queryReasoner.js'
 import { perfStart, perfEnd, perfLog } from '../services/perfLogger.js'
 import { renderPlans, renderPTs, renderMembership } from '../services/contextBuilder.js'
 import { validateResponse, buildFallbackAnswer, validateWithRetry } from '../services/responseValidator.js'
+import { extractFacts, hasNewFacts } from '../services/factExtractor.js'
+import { resolveSource } from '../services/sourceRouter.js'
+import { getNutritionKnowledge, getMealPlanKnowledge } from '../services/knowledgeBuilder.js'
+import { writeNutritionAnswer, writeMealPlanAnswer } from '../services/llmWriter.js'
 
 const CONSTITUTION_DOC = loadAiDoc(AI_DOC_FILES.constitution)
 
@@ -25,18 +30,232 @@ const CONSTITUTION_TEXT = CONSTITUTION_DOC.loaded && CONSTITUTION_DOC.content
   ? `\n\n=== GymPro Constitution ===\n${CONSTITUTION_DOC.content}\n=== End of Constitution ===\n`
   : ''
 
-const ANSWER_SYSTEM_PROMPT = `${CONSTITUTION_TEXT}You are GymPro AI — a fitness assistant for a Vietnamese gym.
-Your job: synthesize a natural, conversational answer using the tool data provided.
+const ANSWER_SYSTEM_PROMPT = `${CONSTITUTION_TEXT}
+# GymPro AI Assistant
 
-Rules:
-- Answer in Vietnamese unless the user wrote in English
-- Use the REAL data from the tool results — never make up prices, names, or numbers
-- Be concise but helpful (3-6 sentences)
-- If there are multiple plans/PTs, list them with key details
-- If recommending, explain WHY with data (price, rating, specialty match)
-- End with a follow-up question to continue the conversation
-- Do NOT mention that you used tools or that this is tool data
-- Speak naturally as a helpful gym assistant`
+Bạn là AI chính thức của GymPro.
+
+## Mục tiêu
+
+Mục tiêu quan trọng nhất của bạn là:
+
+**TRẢ LỜI ĐÚNG DỮ LIỆU.**
+
+Không phải trả lời dài.
+
+Không phải trả lời hay.
+
+Không phải cố gắng trả lời mọi câu hỏi.
+
+Nếu phải lựa chọn giữa:
+
+- Một câu trả lời ngắn nhưng đúng.
+- Một câu trả lời dài nhưng có thể sai.
+
+Luôn chọn câu trả lời ngắn nhưng đúng.
+
+---
+
+# SINGLE SOURCE OF TRUTH
+
+Dữ liệu hệ thống là nguồn sự thật duy nhất.
+
+Bạn chỉ được sử dụng:
+
+- dữ liệu người dùng do hệ thống cung cấp
+- kết quả từ tool
+- dữ liệu database đã được truyền vào context
+
+Bạn KHÔNG được sử dụng kiến thức của mô hình để thay thế dữ liệu hệ thống.
+
+---
+
+# TUYỆT ĐỐI KHÔNG ĐƯỢC BỊA
+
+Không được tự tạo:
+
+- tên gói tập
+- giá
+- ngày bắt đầu
+- ngày kết thúc
+- thời gian còn lại
+- quyền lợi
+- PT
+- lịch tập
+- lịch check-in
+- thanh toán
+- hoàn tiền
+- gia hạn
+- trạng thái
+- khuyến mãi
+- giảm giá
+- ưu đãi
+- bất kỳ thông tin cá nhân nào.
+
+Nếu dữ liệu không tồn tại thì KHÔNG được đoán.
+
+---
+
+# QUY TẮC VÀNG
+
+Nếu dữ liệu không có:
+
+Không được suy luận.
+
+Không được điền vào chỗ trống.
+
+Không được đoán giá trị hợp lý nhất.
+
+Không được tự tạo ví dụ.
+
+Không được giả định.
+
+Thay vào đó hãy trả lời:
+
+> Mình chưa có đủ dữ liệu từ hệ thống để trả lời chính xác câu hỏi này.
+
+---
+
+# DỮ LIỆU CÁ NHÂN
+
+Đối với các câu hỏi như:
+
+- Tôi đang tập gói nào?
+- Tôi còn bao nhiêu ngày?
+- Tôi có PT không?
+- Tôi có gia hạn không?
+- Tôi còn bao nhiêu buổi?
+- Tôi đã thanh toán chưa?
+- Tôi có yêu cầu hoàn tiền không?
+- Tôi đã check-in hôm nay chưa?
+
+PHẢI sử dụng đúng dữ liệu hệ thống.
+
+Nếu không có dữ liệu thì nói không có.
+
+Không được dùng kiến thức của mô hình.
+
+---
+
+# MEMBERSHIP
+
+Khi trả lời về gói tập.
+
+Luôn phân biệt rõ:
+
+- Membership hiện tại
+- MembershipPeriod ACTIVE
+- MembershipPeriod PENDING
+- MembershipPeriod CANCEL_REQUESTED
+- MembershipPeriod REFUND_PENDING
+
+Không được cộng tất cả các kỳ thành một gói.
+
+Không được tự tính tổng thời gian.
+
+Không được đổi tên gói.
+
+---
+
+# GIA HẠN
+
+Nếu có MembershipPeriod PENDING.
+
+Phải nói:
+
+"Bạn có một kỳ gia hạn đang chờ kích hoạt."
+
+Không được nói:
+
+"Bạn đang sử dụng gói đó."
+
+Nếu có MembershipPeriod CANCEL_REQUESTED.
+
+Phải nói rõ:
+
+"Kỳ này đang chờ hủy/phê duyệt."
+
+Không được tính kỳ đó là đã có hiệu lực.
+
+---
+
+# KIẾN THỨC CHUNG
+
+Các câu hỏi như:
+
+- tăng cơ
+- giảm cân
+- dinh dưỡng
+- creatine
+- cardio
+
+được phép sử dụng kiến thức phổ biến.
+
+Không cần dữ liệu người dùng.
+
+---
+
+# CHÀO HỎI
+
+Các câu:
+
+- chào
+- hi
+- hello
+- cảm ơn
+- tạm biệt
+
+không cần database.
+
+Trả lời tự nhiên.
+
+---
+
+# KHI DỮ LIỆU MÂU THUẪN
+
+Nếu dữ liệu hệ thống có mâu thuẫn.
+
+Không được tự chọn một đáp án.
+
+Hãy nói:
+
+"Mình thấy dữ liệu hiện tại chưa nhất quán nên chưa thể kết luận chính xác."
+
+---
+
+# PHONG CÁCH
+
+- Chính xác.
+- Rõ ràng.
+- Ngắn gọn.
+- Tự nhiên.
+- Trung thực.
+
+Không cố gắng trả lời bằng mọi giá.
+
+---
+
+# ƯU TIÊN
+
+1. Đúng dữ liệu.
+2. Không bịa.
+3. Trung thực.
+4. Rõ ràng.
+5. Tự nhiên.
+
+---
+
+# NGUYÊN TẮC CUỐI CÙNG
+
+Nếu trong đầu bạn xuất hiện một thông tin nhưng thông tin đó KHÔNG có trong dữ liệu hệ thống, hãy coi như thông tin đó KHÔNG TỒN TẠI.
+
+Đừng sử dụng kiến thức của mô hình để lấp khoảng trống dữ liệu.
+
+Một câu trả lời:
+
+> "Mình chưa có đủ dữ liệu."
+
+luôn tốt hơn một câu trả lời sai.`
 
 const buildLLMAnswer = async ({ query, analysis, plans, pts, memberships, smartRec, memory, lang, vectorKnowledge }) => {
   const dataSections = []
@@ -58,15 +277,13 @@ const buildLLMAnswer = async ({ query, analysis, plans, pts, memberships, smartR
     }
     if (smartRec?.recommendedPlan) {
       const rp = smartRec.recommendedPlan
-      dataSections.push(`\n--- Gợi ý ---\nGói được đề xuất: ${rp.nameVi || rp.nameEn || rp.name} (${(rp.price || 0).toLocaleString()}₫). Lý do: ${smartRec.reason || 'phù hợp nhất với nhu cầu'}`)
+      const reason = Array.isArray(rp.reason) ? rp.reason.join(', ') : (rp.reason || 'phù hợp nhất với nhu cầu')
+      dataSections.push(`\n--- Gợi ý ---\nGói được đề xuất: ${rp.nameVi || rp.nameEn || rp.name} (${(rp.price || 0).toLocaleString()}₫). Lý do: ${reason}`)
     }
   }
   if (subject === 'pt') {
     const ptsSection = renderPTs(pts, lang)
     if (ptsSection) dataSections.push(ptsSection)
-  }
-  if (memory?.lastSubject) {
-    dataSections.push(`\n--- Trước đó ---\nChủ đề: ${memory.lastSubject}/${memory.lastAction || ''}`)
   }
 
   const guide = getRelevantAiDocs({
@@ -79,6 +296,11 @@ const buildLLMAnswer = async ({ query, analysis, plans, pts, memberships, smartR
     maxChars: 2000,
   })
 
+  const hasNoData = dataSections.length === 0
+  if (hasNoData && subject !== 'general') {
+    return null
+  }
+
   const userPrompt = `Q: "${query}"\nSubject: ${subject}, action: ${analysis?.action || ''}\n${guide.content ? `Guide: ${guide.content}\n` : ''}Data:\n${dataSections.join('\n') || 'none'}\nAnswer naturally in ${lang === 'en' ? 'English' : 'Vietnamese'}.`
 
   try {
@@ -86,10 +308,17 @@ const buildLLMAnswer = async ({ query, analysis, plans, pts, memberships, smartR
       systemPrompt: ANSWER_SYSTEM_PROMPT,
       userMessage: userPrompt,
     }, { temperature: 0.3, maxTokens: 600, timeoutMs: 8000 })
-    const text = (result.text || '').trim()
-    if (text.length > 20) return text
+    let text = (result.text || '').trim()
+    try {
+      const parsed = JSON.parse(text)
+      if (parsed.response) text = parsed.response
+      else if (parsed.answer) text = parsed.answer
+      else if (parsed.text) text = parsed.text
+      else if (parsed.message) text = parsed.message
+    } catch {
+    }
+    if (text.length > 3) return text
   } catch {
-    // LLM unavailable, fall through to pattern builder
   }
   return null
 }
@@ -132,12 +361,34 @@ const isOtherPersonSensitiveQuery = (query = '') => {
   return sensitive && otherPerson
 }
 
-const hasAnyToolData = (toolResults) => {
+const hasRealToolData = (toolResults) => {
+  // TODO(PHASE-3): Normalize every tool response to { success, hasData, data }
+  // so this function only needs: result.some(tool => tool.hasData === true)
   if (!toolResults || toolResults.length === 0) return false
   return toolResults.some((r) => {
     if (!r || r.error) return false
     if (Array.isArray(r) && r.length > 0) return true
-    if (r && typeof r === 'object' && Object.keys(r).length > 0) return true
+    if (typeof r !== 'object') return false
+
+    // ── Plans / PTs / Products / Bookings ──────────────────────
+    if (Array.isArray(r.plans) && r.plans.length > 0) return true
+    if (Array.isArray(r.pts) && r.pts.length > 0) return true
+    if (Array.isArray(r.products) && r.products.length > 0) return true
+    if (Array.isArray(r.bookings) && r.bookings.length > 0) return true
+    if (Array.isArray(r.results) && r.results.length > 0) return true
+
+    // ── Membership ──────────────────────────────────────────────
+    if ('hasActiveMembership' in r && r.hasActiveMembership === true) return true
+
+    // ── Check-in ────────────────────────────────────────────────
+    if (r.stats && typeof r.stats === 'object' && r.stats.total > 0) return true
+
+    // ── Smart recommendations ───────────────────────────────────
+    if (r.recommendedPlan || r.recommendedPT || r.recommendedProduct) return true
+
+    // ── Workout analyzer ────────────────────────────────────────
+    if (r.type === 'workout_analyzer' && r.stats && r.stats.totalWorkouts > 0) return true
+
     return false
   })
 }
@@ -285,7 +536,25 @@ const buildAudit = ({ source, optimizer, usedTools = [], aiUsed = false, started
 const withAudit = (response, audit) => {
   recordAiAudit(audit)
   perfEnd('gympro_agent_total')
-  return { ...response, audit }
+  // Auto-detect source type from response and audit source
+  const hasTools = Array.isArray(response?.usedTools) && response.usedTools.length > 0
+  const isGymPro = audit?.source === 'tool' || audit?.source === 'database' || audit?.source === 'data_guard' || hasTools
+  const isAiKnowledge = audit?.source === 'ai_reasoning' || audit?.source === 'llm' || audit?.source === 'knowledge_builder'
+  // Don't show source label for internal knowledge — only show for GymPro data or web search
+  const sourceType = isGymPro ? 'gympro' : null
+  const sourceLabels = {
+    gympro: 'Dữ liệu hệ thống GymPro',
+  }
+  const sourceLabel = sourceLabels[sourceType] || ''
+  console.log(`[AI_TRACE] final:`, JSON.stringify({
+    answerLength: (response?.answer || '').length,
+    responseType: response?.responseType || 'unknown',
+    source: audit?.source || 'unknown',
+    sourceType: sourceType || 'none',
+    aiUsed: audit?.aiUsed || false,
+    latencyMs: audit?.latencyMs || 0,
+  }))
+  return { ...response, audit, sourceType, sourceLabel }
 }
 
 const makeSuggestions = ({ query, answer, intent, subject, responseType, payload, toolData, lang }) => buildContextualSuggestions({
@@ -318,14 +587,56 @@ const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, la
   }
 
   if (optimizer.subject === 'nutrition') {
-    return {
-      answer: buildNutritionAnswer({ intent: optimizer.intent, goal: optimizer.goal, lang }),
-      responseType: 'text_advice',
-      payload: { type: 'text_advice' },
+    const sourceInfo = resolveSource({ intent: optimizer.intent, subject: optimizer.subject, query })
+    console.log('[SOURCE_ROUTER]', JSON.stringify({ subject: 'nutrition', source: sourceInfo.source, allowWeb: sourceInfo.allowWeb }))
+    // Use knowledge builder + LLM writer for natural, varied answers
+    const knowledge = await getNutritionKnowledge({ goal: optimizer.goal, intent: optimizer.intent, question: query })
+    console.log('[NUTRITION] knowledge:', JSON.stringify({
+      goal: knowledge.goal,
+      foodsCount: knowledge.foods?.length,
+      tipsCount: knowledge.tips?.length,
+      source: knowledge.source,
+    }))
+    // ── Knowledge Guard ───────────────────────────────────────
+    const hasData = knowledge && Array.isArray(knowledge.foods) && knowledge.foods.length > 0
+    if (!hasData) {
+      console.log('[NUTRITION] knowledge guard: insufficient data, returning fallback')
+      const fallback = 'Xin lỗi, hiện chưa tìm thấy dữ liệu dinh dưỡng phù hợp.'
+      return { answer: fallback, responseType: 'text_advice', payload: { type: 'text_advice' } }
     }
+    if (optimizer.intent === 'nutrition_meal_plan') {
+      const mealData = await getMealPlanKnowledge({ goal: optimizer.goal })
+      const result = await writeMealPlanAnswer({ question: query, mealData })
+      return { answer: result.answer, responseType: 'text_advice', payload: { type: 'text_advice' } }
+    }
+    const writerResult = await writeNutritionAnswer({ question: query, knowledge })
+    let answer = writerResult.answer
+    // ── Output Guard ─────────────────────────────────────────
+    const PROMPT_LEAK_KEYWORDS = /\b(Đã rõ|Tôi sẽ tuân thủ|Bạn là.*trợ lý|Quy tắc hoạt động|# Nutrition Writer|## Vai trò)\b/i
+    const FALLBACK_MSG = 'Hiện chưa có đủ dữ liệu để trả lời câu hỏi này.'
+    const GREETING_LEAK = /^(Xin chào|Chào bạn|Chào mừng|Tôi có thể hỗ trợ|GymPro AI|Quy tắc|Welcome|I am|As an AI)/i
+    const WORKOUT_KEYWORDS = /\b(squat|bench\s*press|deadlift|pull.?up|cardio|bài\s+tập|lịch\s+tập|huấn\s+luyện\s+viên|pt)\b/i
+    const hasFallbackMsg = answer.trim() === FALLBACK_MSG
+    const hasLeak = PROMPT_LEAK_KEYWORDS.test(answer) || GREETING_LEAK.test(answer)
+    const hasWorkout = WORKOUT_KEYWORDS.test(answer)
+    if (hasFallbackMsg || hasLeak || hasWorkout) {
+      console.log('[NUTRITION] output guard: rejected —', hasFallbackMsg ? 'fallback message from LLM' : hasLeak ? 'prompt leak or greeting' : 'workout keywords')
+      const retryResult = await writeNutritionAnswer({ question: query, knowledge }).catch(() => null)
+      const retry = retryResult?.answer || ''
+      if (retry && retry.trim() !== FALLBACK_MSG && !PROMPT_LEAK_KEYWORDS.test(retry) && !GREETING_LEAK.test(retry) && !WORKOUT_KEYWORDS.test(retry)) {
+        console.log('[NUTRITION] output guard: retry accepted')
+        return { answer: retry, responseType: 'text_advice', payload: { type: 'text_advice' } }
+      }
+      console.log('[NUTRITION] output guard: retry also failed, using fallback')
+      return { answer: 'Xin lỗi, hiện chưa tìm thấy dữ liệu dinh dưỡng phù hợp.', responseType: 'text_advice', payload: { type: 'text_advice' } }
+    }
+    console.log('[NUTRITION] output guard: passed')
+    return { answer, responseType: 'text_advice', payload: { type: 'text_advice' } }
   }
 
   if (optimizer.subject === 'workout') {
+    const sourceInfo = resolveSource({ intent: optimizer.intent, subject: optimizer.subject, query })
+    console.log('[SOURCE_ROUTER]', JSON.stringify({ subject: 'workout', source: sourceInfo.source, allowWeb: sourceInfo.allowWeb }))
     return {
       answer: buildWorkoutDomainAnswer({ intent: optimizer.intent, goal: optimizer.goal, lang }),
       responseType: 'text_advice',
@@ -383,7 +694,7 @@ const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, la
   if (optimizer.subject === 'plan') {
     if (optimizer.action === 'status' || optimizer.action === 'renew') {
       const membershipData = toolResults.getMembershipInfo
-      if (!membershipData?.found) {
+      if (!membershipData?.hasActiveMembership) {
         const msg = membershipData?.message || (lang === 'en' ? 'You currently do not have an active membership. Let me show you the available plans.' : 'Bạn chưa có gói tập nào đang hoạt động. Để mình cho bạn xem các gói tập nhé.')
         return {
           answer: msg,
@@ -392,9 +703,10 @@ const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, la
           links: [{ label: 'Mở Gói tập', path: '/plans', allowedRoles: ['member'] }],
         }
       }
-      const planName = membershipData.planName || ''
-      const remainingDays = membershipData.remainingDays ?? 0
-      const endDate = membershipData.endDate ? new Date(membershipData.endDate).toLocaleDateString('vi-VN') : ''
+      const cm = membershipData.currentMembership || {}
+      const planName = cm.planName || ''
+      const remainingDays = cm.remainingDays ?? 0
+      const endDate = cm.endDate ? new Date(cm.endDate).toLocaleDateString('vi-VN') : ''
       if (optimizer.action === 'renew') {
         const answer = lang === 'en'
           ? `You can renew your **${planName}** plan. It still has ${remainingDays} day(s) left and expires on ${endDate}. Head to My Membership to renew whenever you are ready.`
@@ -406,11 +718,35 @@ const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, la
           links: [{ label: 'Mở Gói tập của tôi', path: '/my-membership', allowedRoles: ['member'] }],
         }
       }
-      const statusLabel = membershipData.status === 'active' ? 'còn hạn' : membershipData.status === 'expired' ? 'đã hết hạn' : membershipData.status || ''
-      const startDate = membershipData.startDate ? new Date(membershipData.startDate).toLocaleDateString('vi-VN') : ''
-      const answer = lang === 'en'
-        ? `Your current plan is **${planName}** (${membershipData.status}). You have ${remainingDays} day(s) remaining.\nPeriod: ${startDate} → ${endDate}`
+      const cmStatus = cm.status || ''
+      const statusLabel = cmStatus === 'ACTIVE' ? 'còn hạn' : cmStatus === 'EXPIRED' ? 'đã hết hạn' : cmStatus
+      const startDate = cm.startDate ? new Date(cm.startDate).toLocaleDateString('vi-VN') : ''
+
+      let answer = lang === 'en'
+        ? `Your current plan is **${planName}** (${cmStatus}). You have ${remainingDays} day(s) remaining.\nPeriod: ${startDate} → ${endDate}`
         : `Gói tập hiện tại của bạn là **${planName}** (${statusLabel}). Bạn còn ${remainingDays} ngày sử dụng.\nNgày bắt đầu: ${startDate}\nNgày kết thúc: ${endDate}`
+
+      // Append pending renewals
+      const pendingRenewals = Array.isArray(membershipData.pendingRenewals) ? membershipData.pendingRenewals : []
+      if (pendingRenewals.length > 0) {
+        const count = pendingRenewals.length
+        if (lang === 'en') {
+          answer += `\n\nYou have ${count} upcoming renewal${count > 1 ? 's' : ''}:`
+          for (const r of pendingRenewals) {
+            const rStart = r.startDate ? new Date(r.startDate).toLocaleDateString('vi-VN') : ''
+            const rEnd = r.endDate ? new Date(r.endDate).toLocaleDateString('vi-VN') : ''
+            answer += `\n- **${r.planName || 'Renewal'}**: starts ${rStart}, ends ${rEnd}`
+          }
+        } else {
+          answer += `\n\nBạn có ${count} kỳ gia hạn sắp tới:`
+          for (const r of pendingRenewals) {
+            const rStart = r.startDate ? new Date(r.startDate).toLocaleDateString('vi-VN') : ''
+            const rEnd = r.endDate ? new Date(r.endDate).toLocaleDateString('vi-VN') : ''
+            answer += `\n- **${r.planName || 'Gia hạn'}**: bắt đầu ${rStart}, kết thúc ${rEnd}`
+          }
+        }
+      }
+
       return {
         answer,
         responseType: 'text_advice',
@@ -441,6 +777,32 @@ const buildDirectToolAnswer = async ({ query, optimizer, toolResults, memory, la
         payload: { type: 'text_advice', plans: plan ? [plan] : [] },
         mentionedPlan: plan,
       }
+    }
+    if (optimizer.action === 'recommend') {
+      const smartRec = toolResults.getSmartRecommendations
+      if (smartRec?.recommendedPlan) {
+        const plan = smartRec.recommendedPlan
+        const reason = Array.isArray(plan.reason) ? plan.reason.join(', ') : (plan.reason || '')
+        const alternatives = Array.isArray(smartRec.alternatives?.plans) ? smartRec.alternatives.plans.slice(0, 2) : []
+        const answer = buildPlanRecommendResponse({ plan, reason, alternatives, lang })
+        return {
+          answer,
+          responseType: 'plan_recommend',
+          payload: { type: 'plan_recommend', recommendedPlan: plan, plans: smartRec.alternatives?.plans || [], cards: [plan] },
+          mentionedPlan: plan,
+        }
+      }
+      const chosen = chooseRecommendedPlan(plans, query)
+      if (chosen) {
+        const answer = buildPlanRecommendResponse({ plan: chosen, alternatives: plans.filter((p) => p._id !== chosen._id).slice(0, 2), lang })
+        return {
+          answer,
+          responseType: 'plan_recommend',
+          payload: { type: 'plan_recommend', recommendedPlan: chosen, plans, cards: [chosen] },
+          mentionedPlan: chosen,
+        }
+      }
+      return { answer: buildPlanListResponse({ plans, lang }), responseType: 'plan_list', payload: { type: 'plan_list', plans } }
     }
     const target = optimizer.targetEntity?.id
       ? plans.find((p) => String(p.id || p._id) === String(optimizer.targetEntity.id))
@@ -586,10 +948,45 @@ const buildAgentAnswer = async ({
   const introMatch = /\b(ban la ai|who are you|gioi thieu)\b/.test(n)
   if (introMatch) return makeIntroduction(lang)
 
-  const greetingMatch = /\b(chao|hello|hi|hey|alo|chao buoi)\b/.test(n)
-  if (greetingMatch && !introMatch && subject === 'general') return makeIntroduction(lang)
-
-  if (subject === 'plan' || (subject === 'workout' && action === 'list')) {
+  if (subject === 'plan' || subject === 'membership' || (subject === 'workout' && action === 'list')) {
+    if (action === 'status' || action === 'renew') {
+      if (memberships?.hasActiveMembership && memberships.currentMembership) {
+        const cm = memberships.currentMembership
+        const planName = cm.planName || ''
+        const remainingDays = cm.remainingDays ?? 0
+        const endDate = cm.endDate ? new Date(cm.endDate).toLocaleDateString('vi-VN') : ''
+        if (action === 'renew') {
+          return lang === 'en'
+            ? `You can renew your **${planName}** plan. It still has ${remainingDays} day(s) left and expires on ${endDate}.`
+            : `Bạn có thể gia hạn gói **${planName}** hiện tại. Gói của bạn còn ${remainingDays} ngày nữa và sẽ hết hạn vào ${endDate}.`
+        }
+        const startDate = cm.startDate ? new Date(cm.startDate).toLocaleDateString('vi-VN') : ''
+        let answer = lang === 'en'
+          ? `Your current plan is **${planName}**. You have ${remainingDays} day(s) remaining.\nPeriod: ${startDate} → ${endDate}`
+          : `Gói tập hiện tại của bạn là **${planName}**. Bạn còn ${remainingDays} ngày sử dụng.\nNgày bắt đầu: ${startDate}\nNgày kết thúc: ${endDate}`
+        const pendingRenewals = Array.isArray(memberships.pendingRenewals) ? memberships.pendingRenewals : []
+        if (pendingRenewals.length > 0) {
+          const count = pendingRenewals.length
+          if (lang === 'en') {
+            answer += `\n\nYou have ${count} upcoming renewal${count > 1 ? 's' : ''}:`
+            for (const r of pendingRenewals) {
+              const rStart = r.startDate ? new Date(r.startDate).toLocaleDateString('vi-VN') : ''
+              const rEnd = r.endDate ? new Date(r.endDate).toLocaleDateString('vi-VN') : ''
+              answer += `\n- **${r.planName || 'Renewal'}**: starts ${rStart}, ends ${rEnd}`
+            }
+          } else {
+            answer += `\n\nBạn có ${count} kỳ gia hạn sắp tới:`
+            for (const r of pendingRenewals) {
+              const rStart = r.startDate ? new Date(r.startDate).toLocaleDateString('vi-VN') : ''
+              const rEnd = r.endDate ? new Date(r.endDate).toLocaleDateString('vi-VN') : ''
+              answer += `\n- **${r.planName || 'Gia hạn'}**: bắt đầu ${rStart}, kết thúc ${rEnd}`
+            }
+          }
+        }
+        return answer
+      }
+      return buildEmptyDataResponse({ subject: 'plan', lang })
+    }
     if ((countPlanFromQuery(query) || action === 'list') && plans && plans.length > 0) {
       if (shouldUsePlanSpecializationOverview({ plans, query })) {
         return buildPlanSpecializationOverviewResponse({ plans, lang })
@@ -605,7 +1002,10 @@ const buildAgentAnswer = async ({
       }
       if (action === 'recommend' || hasBudget || hasFrequency || goal) {
         if (smartRec?.recommendedPlan) {
-          return buildPlanRecommendResponse({ plan: smartRec.recommendedPlan, reason: smartRec.reason, alternatives: smartRec.alternatives?.slice(0, 2), lang })
+          const rec = smartRec.recommendedPlan
+          const reason = Array.isArray(rec.reason) ? rec.reason.join(', ') : (rec.reason || '')
+          const alternatives = Array.isArray(smartRec.alternatives?.plans) ? smartRec.alternatives.plans.slice(0, 2) : []
+          return buildPlanRecommendResponse({ plan: rec, reason, alternatives, lang })
         }
         const chosen = chooseRecommendedPlan(plans, query)
         if (chosen) {
@@ -627,7 +1027,7 @@ const buildAgentAnswer = async ({
 
   if (subject === 'workout') {
     if (workoutData && !workoutData.error) {
-      return buildWorkoutAdviceResponse({ stats: workoutData, lang })
+      return buildWorkoutAdviceResponse({ stats: workoutData.stats || workoutData, lang })
     }
     return buildWorkoutDomainAnswer({ intent: plan?.intent || 'workout_advice', goal, lang })
   }
@@ -718,6 +1118,23 @@ const mergeConversationMemory = (storedMemory = {}, conversationContext = {}) =>
   return merged
 }
 
+const CHUC_THAN = ['cam on', 'cam on ban', 'thank', 'thanks', 'thank you']
+const CHUC_TAM_BIET = ['tam biet', 'goodbye', 'bye', 'bye bye']
+
+const greetingAnswer = (n, lang) => {
+  if (CHUC_THAN.some((t) => n.startsWith(t))) {
+    return lang === 'en'
+      ? 'Thank you! Feel free to ask if you need any help.'
+      : 'Cảm ơn bạn! Nếu cần hỗ trợ thêm, cứ nhắn mình nhé.'
+  }
+  if (CHUC_TAM_BIET.some((t) => n.startsWith(t))) {
+    return lang === 'en'
+      ? 'Goodbye! Have a great day!'
+      : 'Tạm biệt bạn! Chúc bạn một ngày tốt lành.'
+  }
+  return makeIntroduction(lang)
+}
+
 export const gymProAgent = async ({ query, userMessage, user, conversationContext, language = 'vi', memory: inputMemory }) => {
   const startedAt = Date.now()
   perfStart('gympro_agent_total')
@@ -732,27 +1149,19 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   const memory = inputMemory || mergeConversationMemory(agentMemory.get(userId, conversationId), conversationContext)
   const n = normalizeQuery(queryText)
 
+  // ── AI TRACE ────────────────────────────────────────────────
+  const trace = []
+  const traceStep = (stage, detail) => {
+    const entry = { stage, ...detail }
+    trace.push(entry)
+    console.log(`[AI_TRACE] ${stage}:`, JSON.stringify(detail))
+  }
+  traceStep('entry', { query: queryText, userId, conversationId })
+
   if (isOtherPersonSensitiveQuery(queryText)) {
     const answer = lang === 'en'
       ? "I can't provide another user's personal account information."
       : 'Mình không thể cung cấp thông tin cá nhân của người dùng khác để bảo vệ quyền riêng tư.'
-    const audit = buildAudit({ source: 'local_fallback', usedTools: [], aiUsed: false, startedAt })
-    return withAudit({
-      answer,
-      usedTools: [],
-      responseType: 'text_advice',
-      payload: { type: 'text_advice' },
-      suggestions: [],
-      memoryUpdate: null,
-      confidence: 1,
-      shouldUseLegacyRouter: false,
-    }, audit)
-  }
-
-  const greetingPattern = /^(chao|xin chao|hello|hi|hey|alo|xin chao ban|good morning|good afternoon|good evening)[\s!?.]*$/i
-  if (greetingPattern.test(n)) {
-    const answer = makeIntroduction(lang)
-    agentMemory.update(userId, conversationId, { lastSubject: 'general', lastAction: 'greeting', lastQuery: queryText, lastAnswer: answer })
     const audit = buildAudit({ source: 'local_fallback', usedTools: [], aiUsed: false, startedAt })
     return withAudit({
       answer,
@@ -778,7 +1187,7 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       suggestions: makeSuggestions({
         query: queryText,
         answer: makeIntroduction(lang),
-        intent: 'general_chat',
+        intent: 'greeting',
         subject: 'general',
         responseType: 'text_advice',
         lang,
@@ -789,9 +1198,34 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     }, audit)
   }
 
+  const greetingPattern = /^(chao|xin chao|hello|hi|hey|alo|cam on|cam on ban|thank|thanks|tam biet|goodbye|bye)\b/
+  if (greetingPattern.test(n) && n.split(/\s+/).length <= 3) {
+    const answer = greetingAnswer(n, lang)
+    agentMemory.update(userId, conversationId, { lastSubject: 'general', lastAction: 'greeting', lastQuery: queryText, lastAnswer: answer })
+    const audit = buildAudit({ source: 'local_fallback', usedTools: [], aiUsed: false, startedAt })
+    return withAudit({
+      answer,
+      usedTools: [],
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+      suggestions: makeSuggestions({
+        query: queryText,
+        answer,
+        intent: 'greeting',
+        subject: 'general',
+        responseType: 'text_advice',
+        lang,
+      }),
+      memoryUpdate: { lastSubject: 'general', lastAction: 'greeting' },
+      confidence: 1,
+      shouldUseLegacyRouter: false,
+    }, audit)
+  }
+
   perfStart('gympro_optimizer')
   const optimizer = optimizeQuery({ query: queryText, memory })
   perfEnd('gympro_optimizer')
+  traceStep('optimizer', { intent: optimizer.intent, subject: optimizer.subject, action: optimizer.action, confidence: optimizer.confidence, directTool: optimizer.directTool, source: optimizer.source || 'optimizer' })
   pl.intent(
     { intent: optimizer.intent, confidence: optimizer.confidence, subject: optimizer.subject, action: optimizer.action },
     { source: optimizer.source || 'optimizer', reason: optimizer.reason }
@@ -808,7 +1242,8 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
         lastUsedTools: [],
       }
       agentMemory.update(userId, conversationId, memoryPatch)
-      const audit = buildAudit({ source: 'domain_router', optimizer, usedTools: [], aiUsed: false, startedAt })
+      const isKnowledgeIntent = optimizer.subject === 'nutrition' || optimizer.subject === 'workout' || optimizer.subject === 'health'
+      const audit = buildAudit({ source: isKnowledgeIntent ? 'knowledge_builder' : 'domain_router', optimizer, usedTools: [], aiUsed: false, startedAt })
       return withAudit({
         answer: direct.answer,
         usedTools: [],
@@ -839,6 +1274,12 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       perfEnd('gympro_direct_tool')
       pl.tool(optimizer.directTool, optimizer.args, result)
       toolResults[optimizer.directTool] = result
+      // For recommendation, also run getAvailablePlans to populate plan list
+      // (getSmartRecommendations only returns the single recommended plan)
+      if (optimizer.directTool === 'getSmartRecommendations') {
+        const plansResult = await runGymTool('getAvailablePlans', {}, { userId })
+        toolResults['getAvailablePlans'] = plansResult
+      }
       const direct = await buildDirectToolAnswer({ query: queryText, optimizer, toolResults, memory, lang, userRole: user?.role || 'member' })
       if (direct?.answer) {
         direct.answer = await constitutionalReview({
@@ -898,7 +1339,19 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
                 userMessage: regeneratePrompt,
               }, { temperature: 0.2, maxTokens: 600, timeoutMs: 8000 })
               const text = (result.text || '').trim()
-    if (text.length >= 3) return text
+              if (text.length > 20) {
+                // ── FACT LOCK ───────────────────────────────────
+                // Regenerated answer must not contain facts that are
+                // absent from the tool result data.
+                const toolText = buildFallbackAnswer({ toolResults, query, lang })
+                const toolFacts = extractFacts(toolText)
+                const regenFacts = extractFacts(text)
+                if (hasNewFacts(toolFacts, regenFacts)) {
+                  console.log('[FACT_LOCK] direct-tool regenerate added new facts, using fallback')
+                  return toolText
+                }
+                return text
+              }
             } catch { }
             return null
           },
@@ -939,6 +1392,7 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
   perfStart('gympro_reasoner')
   const analysis = await reasonQuery({ query: queryText, memory, conversationContext, language: lang })
   perfEnd('gympro_reasoner')
+  traceStep('reasoner', { intent: analysis.intent, subject: analysis.subject, action: analysis.action, confidence: analysis.confidence, tools: analysis.requiredTools, source: analysis.source })
   const analysisTools = Array.isArray(analysis.requiredTools) ? analysis.requiredTools : (Array.isArray(analysis.needsTools) ? analysis.needsTools : [])
   analysis.requiredTools = analysisTools
   analysis.needsTools = analysisTools
@@ -1054,6 +1508,47 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
       }
     }
     perfEnd('gympro_tools')
+    // ── TOOL DATA VALIDATION ──────────────────────────────────
+    for (const [toolName, result] of Object.entries(toolResults)) {
+      if (!result || result.error) continue
+      if (toolName === 'getMembershipInfo') {
+        if (result.hasActiveMembership === true && !result.currentMembership) {
+          console.error(`[DATA_VALIDATION] ${toolName}: hasActiveMembership=true but currentMembership=null, forcing hasActiveMembership=false`)
+          toolResults[toolName] = { ...result, hasActiveMembership: false }
+        }
+        if ((result.currentMembership?.remainingDays ?? null) !== null && typeof result.currentMembership?.remainingDays !== 'number') {
+          console.error(`[DATA_VALIDATION] ${toolName}: remainingDays is not a number`)
+          toolResults[toolName] = { ...result, currentMembership: { ...result.currentMembership, remainingDays: 0 } }
+        }
+      }
+      if (toolName === 'getAvailablePlans') {
+        const planCount = Array.isArray(result.plans) ? result.plans.length : 0
+        if (result.count !== planCount) {
+          console.error(`[DATA_VALIDATION] ${toolName}: count=${result.count} != plans.length=${planCount}`)
+          toolResults[toolName] = { ...result, count: planCount }
+        }
+      }
+      if (toolName === 'getAvailablePTs') {
+        const ptCount = Array.isArray(result.pts) ? result.pts.length : 0
+        if (result.count !== ptCount) {
+          console.error(`[DATA_VALIDATION] ${toolName}: count=${result.count} != pts.length=${ptCount}`)
+          toolResults[toolName] = { ...result, count: ptCount }
+        }
+      }
+      if (toolName === 'getCheckinStats') {
+        if (result.stats && typeof result.stats.total !== 'number') {
+          console.error(`[DATA_VALIDATION] ${toolName}: stats.total is not a number`)
+          toolResults[toolName] = { ...result, stats: { ...result.stats, total: 0 } }
+        }
+      }
+      if (toolName === 'getUpcomingBookings') {
+        const bookingCount = Array.isArray(result.bookings) ? result.bookings.length : 0
+        if (result.count !== bookingCount) {
+          console.error(`[DATA_VALIDATION] ${toolName}: count=${result.count} != bookings.length=${bookingCount}`)
+          toolResults[toolName] = { ...result, count: bookingCount }
+        }
+      }
+    }
   }
 
   const plans = (toolResults.getAvailablePlans?.plans || toolResults.getAvailablePlans || [])
@@ -1278,7 +1773,8 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     }, audit)
   }
 
-  const hasData = hasAnyToolData(Object.values(toolResults))
+  const hasData = hasRealToolData(Object.values(toolResults))
+  traceStep('data_guard', { hasData, needsDatabase: analysis.needsDatabase, intent: analysis.intent })
   if (!hasData && !hasError && analysis.needsDatabase) {
     const audit = buildAudit({ source: 'tool', optimizer, usedTools: analysisTools, aiUsed: analysis.source === 'llm', startedAt })
     const emptyAnswer = buildEmptyDataResponse({ subject: analysis.subject, lang })
@@ -1320,7 +1816,37 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
     }, audit)
   }
 
+  // ── DATA_REQUIRED_INTENTS GUARD ─────────────────────────────
+  // If the intent needs database data but no real tool data was
+  // returned, the LLM must NOT be called — it would fabricate.
+  if (DATA_REQUIRED_INTENTS.has(analysis.intent) && !hasRealToolData(Object.values(toolResults))) {
+    traceStep('data_required_intents_guard', { intent: analysis.intent, subject: analysis.subject, action: 'BLOCK_LLM' })
+    pl.fallback('data_guard', `Blocked LLM for ${analysis.intent}: no real tool data`)
+    const emptyAnswer = buildEmptyDataResponse({ subject: analysis.subject, lang })
+    const audit = buildAudit({ source: 'data_guard', optimizer, usedTools: analysisTools, aiUsed: false, startedAt })
+    return withAudit({
+      answer: emptyAnswer,
+      usedTools: analysisTools,
+      responseType: 'text_advice',
+      payload: { type: 'text_advice' },
+      suggestions: makeSuggestions({
+        query: queryText,
+        answer: emptyAnswer,
+        intent: analysis.intent,
+        subject: analysis.subject,
+        responseType: 'text_advice',
+        payload: { type: 'text_advice' },
+        toolData: toolResults,
+        lang,
+      }),
+      memoryUpdate: null,
+      confidence: analysis.confidence,
+      shouldUseLegacyRouter: false,
+    }, audit)
+  }
+
   perfStart('gympro_llm_answer')
+  traceStep('llm_call', { intent: analysis.intent, subject: analysis.subject, action: analysis.action, dataSectionsAvailable: true })
   let vectorKnowledge = null
   try {
     const { search: vectorSearch } = await import('../services/vectorStoreService.js')
@@ -1379,7 +1905,17 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
             userMessage: regeneratePrompt,
           }, { temperature: 0.2, maxTokens: 600, timeoutMs: 8000 })
           const text = (result.text || '').trim()
-          if (text.length >= 3) {
+          if (text.length > 20) {
+            // ── FACT LOCK ───────────────────────────────────────
+            // Regenerated answer must not contain facts that are
+            // absent from the tool result data.
+            const toolText = buildFallbackAnswer({ toolResults, query, lang })
+            const toolFacts = extractFacts(toolText)
+            const regenFacts = extractFacts(text)
+            if (hasNewFacts(toolFacts, regenFacts)) {
+              console.log('[FACT_LOCK] LLM-path regenerate added new facts, using tool-data fallback')
+              return toolText
+            }
             const reviewed = await constitutionalReview({
               query: queryText,
               answer: text,
@@ -1499,7 +2035,8 @@ export const gymProAgent = async ({ query, userMessage, user, conversationContex
 
 export const __gymProAgentTestHooks = {
   buildDirectToolAnswer,
-  checkPermission,
   buildPlanNotFoundResponse,
   buildPtNotFoundResponse,
+  checkPermission,
+  hasRealToolData,
 }

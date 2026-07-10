@@ -59,7 +59,7 @@ const buildDefaultAttempts = (request, options = {}) => [
       temperature: options.temperature ?? 0.25,
       maxTokens: options.maxTokens || 1200,
       thinkingBudget: options.thinkingBudget,
-      responseMimeType: options.responseMimeType ?? null,
+      responseMimeType: options.responseMimeType,
     }),
   },
   ...getOpenRouterModels().map((model) => ({

@@ -727,7 +727,7 @@ body.member-interaction-lock .ai-chat-message-content :where(strong, b) {
 }
 
 .ai-plan-title {
-  color: var(--theme-accent, var(--gs-accent)) !important;
+  color: inherit;
   font-size: 17px;
   line-height: 1.45;
   font-weight: 700;
@@ -791,6 +791,16 @@ body.member-interaction-lock .ai-chat-message-content :where(strong, b) {
   width: 1.4em;
   color: var(--theme-accent, var(--gs-accent));
   animation: ai-loading-ellipsis 1.2s steps(4, end) infinite;
+}
+
+.ai-source-label {
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--theme-border, rgba(255,255,255,0.1));
+  font-size: 12px;
+  color: var(--theme-muted, var(--gs-muted));
+  line-height: 1.4;
+  letter-spacing: 0;
 }
 
 @keyframes ai-loading-ellipsis {

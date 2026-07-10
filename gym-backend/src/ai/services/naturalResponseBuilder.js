@@ -194,18 +194,19 @@ export const buildWorkoutAdviceResponse = ({ plan, stats, lang = 'vi' }) => {
 }
 
 export const buildMembershipInfoResponse = ({ membership, lang = 'vi' }) => {
-  if (!membership || (membership.hasOwnProperty('found') && !membership.found)) {
+  // Handle both new format (hasActiveMembership + currentMembership) and legacy flat format
+  const hasActive = membership?.hasActiveMembership === true
+  const isFound = membership?.found === true || membership?.hasOwnProperty?.('found') !== undefined
+  if (!membership || (!hasActive && !isFound)) {
     return lang === 'en'
       ? 'You currently do not have an active membership. Would you like to see our available plans?'
       : 'Hiện tại bạn chưa có gói tập nào đang hoạt động. Bạn muốn xem qua các gói tập của GymPro không?'
   }
-  const plan = membership
-  const name = membership.planName || membership.planNameVi || membership.nameVi || membership.nameEn || membership.name || ''
-  const days = membership.remainingDays ?? 0
-  const price = membership.planPrice ? fmtPrice(membership.planPrice, lang) : ''
-  const duration = membership.planDurationDays ? fmtDays(membership.planDurationDays, lang) : ''
-  const features = Array.isArray(membership.planFeaturesVi || membership.planFeaturesEn)
-    ? (lang === 'en' ? (membership.planFeaturesEn || membership.planFeaturesVi) : (membership.planFeaturesVi || membership.planFeaturesEn))
+  const cm = membership.currentMembership || membership
+  const name = cm.planName || cm.nameVi || cm.nameEn || cm.name || membership.planName || ''
+  const days = cm.remainingDays ?? membership.remainingDays ?? 0
+  const features = Array.isArray(cm.featuresVi || cm.featuresEn)
+    ? (lang === 'en' ? (cm.featuresEn || cm.featuresVi) : (cm.featuresVi || cm.featuresEn))
     : []
   const topFeatures = (features || []).filter(Boolean).slice(0, 6)
 
@@ -289,7 +290,7 @@ export const buildPtListResponse = ({ pts, lang = 'vi' }) => {
     const phone = String(pt.phone || '').trim()
     const schedule = String(pt.schedule || '').trim()
 
-    lines.push('', `${index + 1}. ${titleText(pt.name || 'PT')}`)
+    lines.push('', `${lang === 'en' ? 'Trainer' : 'PT'} ${index + 1}: ${titleText(pt.name || 'PT')}`)
 
     if (specialties.length > 0) {
       lines.push('', lang === 'en' ? 'Expertise:' : 'Chuyên môn:', compactList(specialties))
@@ -322,25 +323,29 @@ export const buildEmptyDataResponse = ({ subject, hasData, lang = 'vi' }) => {
 
   if (lang === 'en') {
     const suggestions = {
-      plan: 'Would you like me to show you our available membership plans?',
-      workout: 'I do not have workout data yet. Are you new to GymPro? I can help you get started.',
-      checkin: 'There is no check-in data available. Try checking in on your next visit!',
-      health: 'No health metrics recorded yet. Would you like to log your weight or measurements?',
-      pt: 'I do not have trainer information right now. Maybe ask about plan recommendations?',
-      booking: 'You have no upcoming bookings. Would you like to book a PT session?',
-      shop: 'No product data available. Please ask again later.',
+      plan: 'I could not find an active membership plan for your account. Would you like to view the plans GymPro offers?',
+      workout: 'No workout history found. Start training and check in to let me track your progress!',
+      checkin: 'You haven\'t checked in yet. Drop by the gym and check in on your next visit!',
+      health: 'No health metrics recorded yet. You can update your weight and measurements in your profile or ask the front desk for help.',
+      pt: 'No PT data available right now. Would you like to see available PTs or explore membership plans?',
+      booking: 'You have no upcoming bookings. Would you like to book a PT session or check available slots?',
+      shop: 'No product data available right now. Please ask again later or explore our store in person.',
+      membership: 'No active membership found. Would you like to view the plans GymPro offers?',
+      report: 'Report data requires special permissions. Contact an admin if you need access.',
     }
-    return suggestions[subject] || 'I do not have enough data to answer that yet.'
+    return suggestions[subject] || 'I don\'t have enough data to answer that yet. Please try asking about membership plans, PTs, or your schedule.'
   }
 
   const suggestions = {
-    plan: 'Hiện mình chưa có thông tin gói tập. Bạn muốn mình xem thử các gói tập của GymPro không?',
-    workout: 'Mình chưa có dữ liệu tập luyện của bạn. Bạn mới bắt đầu tập GymPro à? Mình có thể giúp bạn lên lịch tập thử.',
-    checkin: 'Chưa có dữ liệu điểm danh nào cả. Lần tới tới phòng, bạn thử điểm danh nhé — mình sẽ theo dõi tiến độ giúp bạn.',
-    health: 'Mình chưa thấy chỉ số sức khỏe nào. Bạn muốn ghi lại cân nặng hoặc số đo để mình theo dõi giúp không?',
-    pt: 'Hiện tại mình chưa có thông tin PT. Bạn muốn xem gợi ý gói tập hoặc mình giới thiệu PT phù hợp không?',
-    booking: 'Bạn chưa có lịch đặt nào. Cần mình giúp đặt lịch với PT không?',
+    plan: 'Mình chưa tìm thấy gói tập đang hoạt động của bạn. Bạn có muốn xem các gói tập GymPro đang có không?',
+    workout: 'Mình chưa có dữ liệu tập luyện của bạn. Hãy bắt đầu tập và điểm danh để mình theo dõi tiến độ nhé!',
+    checkin: 'Bạn chưa điểm danh lần nào. Ghé phòng tập và điểm danh để mình theo dõi tiến độ giúp bạn nhé!',
+    health: 'Mình chưa thấy chỉ số sức khỏe nào. Bạn có thể cập nhật trong hồ sơ hoặc nhờ lễ tân hỗ trợ.',
+    pt: 'Hiện tại mình chưa có thông tin PT. Bạn muốn xem danh sách PT hay khám phá các gói tập?',
+    booking: 'Bạn chưa có lịch đặt nào. Cần mình giúp đặt lịch với PT hoặc xem lịch trống không?',
     shop: 'Mình chưa có dữ liệu sản phẩm. Bạn thử hỏi lại sau nhé, hoặc hỏi về gói tập — mình sẵn sàng tư vấn!',
+    membership: 'Chưa tìm thấy gói tập nào. Bạn có muốn xem các gói tập GymPro đang có không?',
+    report: 'Dữ liệu báo cáo cần quyền đặc biệt. Liên hệ admin nếu bạn cần truy cập.',
   }
   return suggestions[subject] || 'Mình chưa có dữ liệu để trả lời câu hỏi này. Bạn muốn hỏi về gói tập, PT hay lịch tập không?'
 }

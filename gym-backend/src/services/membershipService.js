@@ -1678,29 +1678,78 @@ const getMembershipPeriods = async ({ userId, membershipId }) => {
 
 const getMembershipInfo = async ({ userId }) => {
   const memberId = toObjectId(userId, 'userId')
+  const now = new Date()
+
+  await lazyActivatePendingPeriods({ memberId })
+
+  // Step 1: Get the active Membership (same approach as frontend's getMyMembership)
+  // This ensures AI and UI return the SAME membership record.
   const membership = await Membership.findOne({
     memberId,
-    status: 'active',
-    endDate: { $gte: new Date() },
+    status: { $in: ['active', 'pending_cancel', 'cancel_requested'] },
   })
     .sort({ endDate: -1 })
-    .populate('planId', 'name durationDays price')
-    .lean()
+    .populate('planId')
 
-  if (!membership) {
-    return { found: false, message: 'Bạn chưa có gói tập nào đang hoạt động.' }
+  // Step 2: Get all MembershipPeriods for the active membership only
+  let activePeriod = null
+  let pendingRenewals = []
+  let cancelRequests = []
+  let completedMemberships = []
+
+  if (membership) {
+    const plan = membership.planId || {}
+    const mStart = membership.startDate
+    const mEnd = membership.endDate
+
+    activePeriod = {
+      planName: plan.nameVi || plan.nameEn || '',
+      startDate: mStart,
+      endDate: mEnd,
+      remainingDays: calculateRemainingDays(mEnd),
+      status: 'ACTIVE',
+    }
   }
 
-  const remainingDays = calculateRemainingDays(membership.endDate)
-  const status = remainingDays <= 0 && membership.status === 'active' ? 'expired' : membership.status
+  // Step 3: Get periods for detailed info (renewals, cancellations)
+  const allPeriods = await MembershipPeriod.find({ memberId })
+    .populate('planId', 'nameVi nameEn')
+    .sort({ startDate: 1 })
+    .lean()
+
+  pendingRenewals = allPeriods
+    .filter((p) => p.status === 'PENDING')
+    .map((p) => ({
+      planName: p.planId?.nameVi || p.planId?.nameEn || '',
+      startDate: p.startDate,
+      endDate: p.endDate,
+      status: 'PENDING',
+    }))
+
+  cancelRequests = allPeriods
+    .filter((p) => p.status === 'CANCEL_REQUESTED' || p.status === 'REFUND_PENDING')
+    .map((p) => ({
+      planName: p.planId?.nameVi || p.planId?.nameEn || '',
+      startDate: p.startDate,
+      endDate: p.endDate,
+      status: p.status,
+    }))
+
+  completedMemberships = allPeriods
+    .filter((p) => ['COMPLETED', 'EXPIRED', 'CANCELLED', 'REFUNDED'].includes(p.status))
+    .map((p) => ({
+      planName: p.planId?.nameVi || p.planId?.nameEn || '',
+      startDate: p.startDate,
+      endDate: p.endDate,
+      status: p.status,
+    }))
 
   return {
-    found: true,
-    planName: membership.planId?.name || 'Gói tập',
-    startDate: membership.startDate,
-    endDate: membership.endDate,
-    remainingDays,
-    status,
+    hasActiveMembership: !!membership,
+    currentMembership: activePeriod,
+    pendingRenewals,
+    cancelRequests,
+    completedMemberships,
   }
 }
 

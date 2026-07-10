@@ -11,10 +11,20 @@ const has = (n, pattern) => pattern.test(n)
 const goalFromQuery = (n) => {
   if (/\b(giam mo|giam can|fat loss|lose weight)\b/.test(n)) return 'fat_loss'
   if (/\b(tang co|len co|muscle gain|hypertrophy)\b/.test(n)) return 'muscle_gain'
+  if (/\b(tang can|len can|tang ky|weight gain|bulk)\b/.test(n)) return 'weight_gain'
   if (/\b(chay ben|suc ben|endurance|cardio)\b/.test(n)) return 'endurance'
   if (/\b(khoe hon|suc khoe|healthy|fitness)\b/.test(n)) return 'health'
   if (/\b(duy tri|giu dang|maintenance)\b/.test(n)) return 'maintenance'
   return null
+}
+
+const PRICE_PATTERN = /\b(\d+(?:[.,]\d+)?)\s*(k|nghin|ngàn|nghìn|triệu|triêu|tr|trieu|m|đ|dong|vnd)?\b|\b(dưới|duoi|dướí|trên|tren|khoảng|khoang)\s+\d+/
+const isPriceQuery = (n) => PRICE_PATTERN.test(n)
+
+const isPriceExtractedPlan = (value) => {
+  if (!value) return false
+  // If the "plan name" contains a number + price unit, it's a budget, not a name
+  return /^\d/.test(value) || /\d+\s*(k|nghin|ngàn|nghìn|triệu|triêu|tr|trieu|m)\b/.test(value)
 }
 
 const extractAfter = (n, pattern) => {
@@ -279,15 +289,22 @@ export const routeGymQuery = ({ query = '', memory = {} } = {}) => {
 
   if (/\b(goi|goi tap|membership|plan|package)\b/.test(n)) {
     const compare = /\b(so sanh|khac nhau|khac gi|vs|voi goi)\b/.test(n)
-    const recommend = /\b(nen mua|nen chon|chon goi|goi nao phu hop|phu hop|tu van)\b/.test(n)
+    const recommend = /\b(nen mua|nen chon|chon goi|goi nao phu hop|phu hop|tu van|tiet kiem|đáng tien|loi nhat|tot nhat|dang tien)\b/.test(n)
       && !/\b(dung tu van|khong tu van|chi tra loi dung goi)\b/.test(n)
     const list = /\b(co nhung|nhung goi nao|cac goi|danh sach|liet ke|tat ca|re nhat|dat nhat|cao nhat|thap nhat)\b/.test(n)
     const count = /\b(co may|co bao nhieu|bao nhieu goi)\b/.test(n)
-    const status = /\b(cua toi|dang dung|con han|het han)\b/.test(n)
+    const status = /\b(cua toi|dang dung|con han|het han|toi con|toi het)\b/.test(n) || /\b(toi|tui)\s+(dang|dang tap|dang dung)\b/.test(n)
     const renewal = /\b(gia han|renew)\b/.test(n)
     const detail = /\b(gia|bao nhieu|quyen loi|co gi|thoi han|chi tiet)\b/.test(n)
-    const extractedPlanName = planNameFromQuery(n)
-    const action = renewal ? 'renew' : status ? 'status' : compare ? 'compare' : recommend ? 'recommend' : count ? 'count' : list ? 'list' : detail || extractedPlanName ? 'detail' : 'list'
+    // If "detail" is triggered only by "giá"/"price"/"cost" and a price amount exists, it's a price search
+    const isPriceSearch = isPriceQuery(n) && !/\b(quyen loi|co gi|thoi han|chi tiet)\b/.test(n)
+    // Exclude "gói nào ... nhất" queries from detail — they are recommendations
+    const asksExtreme = /\b(nao|nào)\b/.test(n) && /\b(nhat|nhất)\b/.test(n)
+      && !/\b(re nhat|it tien nhat|thap nhat|dat nhat|cao nhat)\b/.test(n)
+    // If query has a specific named plan, check it's not a price/budget string
+    const rawPlanName = planNameFromQuery(n)
+    const extractedPlanName = (asksExtreme || isPriceSearch || (rawPlanName && isPriceExtractedPlan(rawPlanName))) ? null : rawPlanName
+    const action = renewal ? 'renew' : status ? 'status' : compare ? 'compare' : (recommend || asksExtreme) ? 'recommend' : count ? 'count' : list ? 'list' : isPriceSearch ? 'list' : detail || extractedPlanName ? 'detail' : 'list'
     const intentMap = {
       renew: 'membership_renewal',
       status: 'membership_status',
@@ -335,13 +352,18 @@ export const toLegacySubject = (subject) => {
 
 export const toOptimizerResult = (route, { query = '' } = {}) => {
   const subject = toLegacySubject(route.subject)
-  const firstTool = route.requiredTools?.[0] || null
+  // For recommendation intents, use getSmartRecommendations as the direct tool
+  // (it produces a reasoned recommendation instead of just listing all plans)
+  const isRecommend = route.action === 'recommend' && route.requiredTools?.includes('getSmartRecommendations')
+  const firstTool = isRecommend ? 'getSmartRecommendations' : (route.requiredTools?.[0] || null)
   const toolArgs = firstTool === 'searchPolicies'
     ? { query }
     : firstTool === 'searchFaqs'
       ? { query }
       : firstTool === 'getRecommendedProducts'
         ? { goal: route.goal || '' }
+        : firstTool === 'getSmartRecommendations'
+          ? { goal: route.goal || undefined }
         : firstTool === 'getAvailablePTs' && route.entityName
           ? { specialization: route.entityName }
         : {}

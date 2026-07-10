@@ -33,15 +33,21 @@ const extractToolCounts = (toolResults) => {
   if (toolResults?.getAvailablePTs?.pts) {
     counts.pts = toolResults.getAvailablePTs.pts.length
     counts.ptNames = toolResults.getAvailablePTs.pts.map(p => _normalize(p.fullName || p.name || ''))
-    counts.ptSpecializations = toolResults.getAvailablePTs.pts.map(p => _normalize(p.specialization || ''))
+    counts.ptSpecializations = toolResults.getAvailablePTs.pts.flatMap(p => Array.isArray(p.specialties) ? p.specialties.map(s => _normalize(s)) : [_normalize(p.specialties || '')]).filter(Boolean)
   }
   if (toolResults?.getMembershipInfo) {
-    counts.membershipFound = toolResults.getMembershipInfo.found
-    counts.membershipStatus = toolResults.getMembershipInfo.status
-    counts.membershipPlanName = _normalize(toolResults.getMembershipInfo.planName || '')
-    counts.membershipRemaining = toolResults.getMembershipInfo.remainingDays
-    counts.membershipStartDate = toolResults.getMembershipInfo.startDate
-    counts.membershipEndDate = toolResults.getMembershipInfo.endDate
+    const info = toolResults.getMembershipInfo
+    counts.membershipFound = info.hasActiveMembership === true
+    const membership = info.currentMembership
+    if (membership) {
+      counts.membershipStatus = membership.status
+      counts.membershipPlanName = _normalize(membership.planName || '')
+      counts.membershipRemaining = membership.remainingDays
+      counts.membershipStartDate = membership.startDate
+      counts.membershipEndDate = membership.endDate
+    } else {
+      counts.membershipFound = false
+    }
   }
   if (toolResults?.getUpcomingBookings?.bookings) {
     counts.bookings = toolResults.getUpcomingBookings.bookings.length

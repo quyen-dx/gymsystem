@@ -10,6 +10,11 @@ const normalizeQuery = (text = '') => String(text)
   .toLowerCase()
   .trim()
 
+const isPriceExtractedPlan = (value) => {
+  if (!value) return false
+  return /^\d/.test(value) || /\d+\s*(k|nghin|ngàn|nghìn|triệu|triêu|tr|trieu|m)\b/.test(value)
+}
+
 const hasComplexPersonalization = (n) => (
   /\b(toi muon|muc tieu|giam can|tang co|tang can|suc ben|ngan sach|budget|k|trieu|buoi\/tuan|lan\/tuan|phu hop|nen chon|recommend|goi y)\b/.test(n)
 )
@@ -210,7 +215,7 @@ export const optimizeQuery = ({ query, memory = {} } = {}) => {
 
   const planSearchForDetail = hasPlanSignal(n) ? extractPlanSearch(n) : ''
   const specificPlanDetailQuery = Boolean(planSearchForDetail)
-    || (hasPlanSignal(n) && /\b(gia|price|cost|quyen loi|co gi|benefit|benefits|chi tiet|thong tin)\b/.test(n) && !/\b(goi nao|nen chon|phu hop|hop voi|goi y|tu van)\b/.test(n))
+    || (hasPlanSignal(n) && /\b(gia|price|cost|quyen loi|co gi|benefit|benefits|chi tiet|thong tin)\b/.test(n) && !/\b(goi nao|nen chon|phu hop|hop voi|goi y|tu van|tiet kiem|loi nhat|tot nhat|dang tien)\b/.test(n))
 
   if (hasComplexPersonalization(n) && !specificPlanDetailQuery) {
     return { shouldUseAI: true, directTool: null, reason: 'complex_personalized_query', confidence: 0.78 }
@@ -221,7 +226,8 @@ export const optimizeQuery = ({ query, memory = {} } = {}) => {
       const wantsAllPlans = /\b(danh sach|liet ke|tat ca|cac|xem|cho xem|hien thi|show|list|all|view)\b/.test(n)
         && !/\b(chi tiet|quyen loi|benefit|co gi|bao gom|gom|detail|details)\b/.test(n)
       const planSearch = extractPlanSearch(n)
-      const wantsSpecificPlan = Boolean(planSearch) || /\b(chi tiet|thong tin|quyen loi|co gi|benefit|benefits|gia|price|cost)\b/.test(n) && !wantsAllPlans && !/\b(goi nao|nhung goi nao|cac goi|tat ca|danh sach)\b/.test(n)
+      const isPriceSearch = planSearch && isPriceExtractedPlan(planSearch)
+      const wantsSpecificPlan = Boolean(planSearch) && !isPriceSearch || /\b(chi tiet|thong tin|quyen loi|co gi|benefit|benefits|gia|price|cost)\b/.test(n) && !wantsAllPlans && !/\b(goi nao|nhung goi nao|cac goi|tat ca|danh sach)\b/.test(n)
       const wantsSortedList = /\b(re nhat|it tien nhat|thap nhat|dat nhat|cao nhat)\b/.test(n)
       return {
         shouldUseAI: false,

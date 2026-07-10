@@ -146,7 +146,7 @@ const resolveInitialAiStatus = (query, aiMode) => {
 
     for (const signal of NUTRITION_SIGNAL_WORDS) {
         if (signal.test(n)) {
-            return { status: 'nutrition_reasoning', message: 'Đang tổng hợp gợi ý dinh dưỡng...' }
+            return { status: 'nutrition_reasoning', message: 'Đang tìm thông tin tham khảo trên web...' }
         }
     }
 
@@ -214,7 +214,7 @@ const normalizeAiResponse = (data, defaultIntent = 'general') => {
     }
 
     // Final flattening/normalization
-    const finalAnswer = output.answer || output.message || output.text || (typeof output === 'string' ? output : String(output))
+    const finalAnswer = output.answer || output.message || output.text || ''
 
     return {
         ...output,
@@ -1067,6 +1067,8 @@ const normalizeGymProAgentResponse = (agentResponse, { language, traceId }) => {
             answerLanguage: language,
             usedTools: agentResponse?.usedTools || [],
             confidence: agentResponse?.confidence,
+            sourceType: agentResponse?.sourceType || undefined,
+            sourceLabel: agentResponse?.sourceLabel || undefined,
             reviewerStatus: 'reviewed',
             questionAnalysis: {
                 subject: agentResponse?.memoryUpdate?.lastSubject || '',
@@ -1662,7 +1664,7 @@ export const aiAssistantStream = async (req, res, next) => {
             if (initialStatus) {
                 writeSseStatus(res, initialStatus.status, initialStatus.message)
             } else {
-                writeSseStatus(res, 'reasoning', 'Đang tổng hợp câu trả lời...')
+                writeSseStatus(res, 'reasoning', 'Đang tìm thông tin tham khảo...')
             }
 
             writeSseEvent(res, 'start', {
@@ -1692,8 +1694,9 @@ export const aiAssistantStream = async (req, res, next) => {
                 fallbackUsed: Boolean(safeActionResponse.metadata?.fallbackUsed),
                 traceId,
             })
-            writeSseEvent(res, 'message', { text: safeActionResponse.answer })
-            writeSseEvent(res, 'chunk', { text: safeActionResponse.answer })
+            const cleanAnswer = cleanAssistantAnswer(String(safeActionResponse.answer || ''))
+            writeSseEvent(res, 'message', { text: cleanAnswer })
+            writeSseEvent(res, 'chunk', { text: cleanAnswer })
             writeSseEvent(res, 'done', normalizeAiResponse({
                 ...safeActionResponse,
             }, 'gym'))

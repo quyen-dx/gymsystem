@@ -43,7 +43,7 @@ export async function generateResponse({
   temperature = 0.25,
   maxTokens = 1200,
   thinkingBudget,
-  responseMimeType = null,
+  responseMimeType,
 }) {
   const client = getGeminiClient()
   const config = {

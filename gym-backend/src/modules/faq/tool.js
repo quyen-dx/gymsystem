@@ -12,7 +12,7 @@ export default [
         category: { type: 'string', description: 'Danh mục (optional)' },
       },
     },
-    handler: async (args) => searchFaqs(args?.query || '', args?.category || ''),
+    handler: async (args) => searchFaqs({ query: args?.query || '', category: args?.category || '' }),
   },
   {
     name: 'searchPolicies',
@@ -24,6 +24,6 @@ export default [
         query: { type: 'string', description: 'Từ khóa chính sách cần tìm' },
       },
     },
-    handler: async (args) => searchPolicies(args?.query || ''),
+    handler: async (args) => searchPolicies({ query: args?.query || '' }),
   },
 ]

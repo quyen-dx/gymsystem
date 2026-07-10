@@ -5,9 +5,10 @@ const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || process.env.APP_U
 const OPENROUTER_APP_NAME = process.env.OPENROUTER_APP_NAME || 'GymPro'
 
 const DEFAULT_OPENROUTER_MODELS = [
-  'deepseek/deepseek-r1:free',
-  'qwen/qwen3-235b-a22b:free',
-  'moonshotai/kimi-k2:free',
+  // Prioritize strong, available models (check current slug validity via OpenRouter API)
+  'google/gemini-2.5-flash:free',
+  'qwen/qwq-32b:free',
+  'deepseek/deepseek-r1-distill-qwen-32b:free',
 ]
 
 export const getOpenRouterModels = () => {

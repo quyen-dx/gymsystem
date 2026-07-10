@@ -76,6 +76,9 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
   const rawText = typeof content === 'string' ? content : (typeof message.content === 'string' ? message.content : '')
   const displayContent = tryExtractAnswerFromJsonText(rawText)
   const text = tryExtractAnswerFromJsonText(stripUnsafeModelOutput(displayContent))
+  const sourceType = message.metadata?.sourceType
+  const sourceLabel = message.metadata?.sourceLabel
+  const sourceIcon = sourceType === 'gympro' ? '🟢' : ''
   const isPlanResponseType = typeof message.type === 'string' && (
     message.type === 'plan_detail'
     || message.type === 'plan_compare'
@@ -127,6 +130,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
     value
       .replace(/\s*\((\d+)\)\s*/g, '\n- ')
       .replace(/([.!?])\s+(Kết luận|Lý do|Lựa chọn|Gợi ý|Tóm tắt|Conclusion|Reason|Suggestion|Summary):/g, '$1\n\n$2:')
+      .replace(/\[([^\]]+)\]\(mailto:[^)]+\)/g, '$1')
 
   const renderText = (t: string) => {
     const lines = normalizeReadableText(t).split('\n')
@@ -156,6 +160,17 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
         return
       }
       flushBullets(String(i))
+      const numberedEntity = trimmed.match(/^(PT|Huấn luyện viên|Trainer)\s+(\d+)\s*:\s*(.+)$/i)
+      if (numberedEntity) {
+        nodes.push(
+          <p key={i} className="ai-plan-title">
+            <span className="ai-section-index">{numberedEntity[2]}.</span>
+            {' '}
+            {renderRichText(numberedEntity[3])}
+          </p>
+        )
+        return
+      }
       const numberedTitle = trimmed.match(/^(\d+)\.\s+(.+)$/)
       if (numberedTitle) {
         nodes.push(
@@ -424,6 +439,11 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
       {renderGenericCards()}
       {renderSourceList()}
       {renderNavigationLinks()}
+      {displayText && sourceType === 'gympro' && (
+        <div className="ai-source-label">
+          {sourceIcon} {sourceLabel}
+        </div>
+      )}
       {!displayText && (
         <span className="ai-loading-text">{loadingMessage || 'đang suy nghĩ...'}</span>
       )}

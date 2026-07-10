@@ -1,8 +1,12 @@
 import { runAIWithFallback } from './aiFallbackService.js'
+import { extractFacts, hasNewFacts } from './factExtractor.js'
 
 const REWRITE_ENABLED = process.env.NATURAL_RESPONSE_REWRITE !== 'false'
 
-const ELIGIBLE_SUBJECTS = ['checkin', 'membership', 'nutrition', 'progress', 'workout', 'pt', 'health']
+// Never rewrite factual answers generated from database.
+// Rewriting may accidentally modify facts.
+const DATABASE_SUBJECTS = ['membership', 'payment', 'renewal', 'refund', 'checkin', 'booking', 'pt', 'profile', 'plan', 'product']
+const ELIGIBLE_SUBJECTS = ['general', 'nutrition', 'faq', 'policy']
 
 const INELIGIBLE_PATTERNS = [
   /\b(không có quyền|truy cập|forbidden|permission denied|bị tắt|đã tắt)\b/i,
@@ -47,6 +51,15 @@ const validateRewrite = (original, rewritten) => {
   if (planNames) {
     const allFound = planNames.every((name) => rewritten.includes(name))
     if (!allFound) return false
+  }
+
+  // ── FACT LOCK ───────────────────────────────────────────────
+  // Rewrite must NOT add new factual entities that were absent
+  // from the original answer (numbers, names, prices, dates).
+  const origFacts = extractFacts(original)
+  const rewFacts = extractFacts(rewritten)
+  if (hasNewFacts(origFacts, rewFacts)) {
+    return false
   }
 
   return true

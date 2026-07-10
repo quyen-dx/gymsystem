@@ -178,16 +178,10 @@ const buildReasonerSystemPrompt = async ({ subject = 'core', action = '', intent
   return prompt
 }
 
-const buildUserPrompt = ({ query, memory, conversationContext, knowledgeContext, domainRouterHint }) => {
+const buildUserPrompt = ({ query, memory, conversationContext, knowledgeContext }) => {
   const parts = [`User question: "${query}"`]
 
-  if (domainRouterHint) {
-    parts.push(`IMPORTANT: Regex keyword matcher provided this PRELIMINARY guess, which may be WRONG:\n${domainRouterHint}\n-> Use your language intelligence to determine the REAL intent and entity name. Do NOT blindly trust this guess.`)
-  }
-
   if (memory?.lastSubject) parts.push(`Previous context: subject=${memory.lastSubject}, action=${memory.lastAction || 'none'}`)
-  if (memory?.lastMentionedPlanName) parts.push(`Last mentioned plan: ${memory.lastMentionedPlanName}`)
-  if (memory?.lastMentionedPTName) parts.push(`Last mentioned PT: ${memory.lastMentionedPTName}`)
   if (memory?.lastGoal) parts.push(`Last mentioned goal: ${memory.lastGoal}`)
   if (memory?.lastBudget) parts.push(`Last mentioned budget: ${memory.lastBudget}`)
 
@@ -694,23 +688,17 @@ export const reasonQuery = async ({ query, userMessage, memory = {}, conversatio
   }
 
   const domainRoute = routeGymQuery({ query: input, memory })
-  // Khi domain router bắt được entity name (detail với tên gói/PT/sản phẩm):
-  // không short-circuit mà để LLM phân tích — AI mới hiểu đúng ngữ nghĩa
-  const hasExtractedEntityName = !!(domainRoute.entityName)
-  if (hasExtractedEntityName) {
-    logIntent(domainRoute.intent, { subject: domainRoute.subject, action: domainRoute.action, confidence: domainRoute.confidence, source: 'domain_router_deferred_to_llm', tools: domainRoute.requiredTools, entityName: domainRoute.entityName })
-  }
-  if (!hasExtractedEntityName && domainRoute.confidence >= 0.88 && domainRoute.intent !== 'general_chat') {
+  if (domainRoute.confidence >= 0.88 && domainRoute.intent !== 'general_chat') {
     const result = toReasonerResult(domainRoute)
     logIntent(result.intent, { subject: result.subject, action: result.action, confidence: result.confidence, source: 'domain_router', tools: result.requiredTools })
     return result
   }
 
   const semantic = classifySemanticIntent({ query: input, memory })
-  if (!hasExtractedEntityName && (semantic.confidence >= 0.78
+  if (semantic.confidence >= 0.78
     || semantic.subject === 'navigation'
     || semantic.subject === 'report'
-    || (semantic.subject === 'membership_plans' && (semantic.scope !== 'unknown')))) {
+    || (semantic.subject === 'membership_plans' && (semantic.scope !== 'unknown'))) {
     const result = semanticToReasonerResult(semantic)
     logIntent(result.intent, { subject: result.subject, action: result.action, confidence: result.confidence, source: 'semantic', tools: result.requiredTools })
     return result
@@ -727,11 +715,7 @@ export const reasonQuery = async ({ query, userMessage, memory = {}, conversatio
     } catch {
     }
 
-    const domainRouterHint = (domainRoute.entityName || domainRoute.action === 'detail')
-      ? `Preliminary regex guess: intent="${domainRoute.intent}", entityName="${domainRoute.entityName || '(none)'}". The user may NOT be asking about this entity. Use your language understanding to determine the real intent.`
-      : null
-
-    const userPrompt = buildUserPrompt({ query: input, memory, conversationContext, knowledgeContext, domainRouterHint })
+    const userPrompt = buildUserPrompt({ query: input, memory, conversationContext, knowledgeContext })
     const result = await runAIWithFallback({
       systemPrompt: await buildReasonerSystemPrompt({ subject: semantic.subject, action: semantic.action }),
       userMessage: userPrompt,

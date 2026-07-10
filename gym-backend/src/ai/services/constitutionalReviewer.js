@@ -1,5 +1,6 @@
 import { loadAiDoc, AI_DOC_FILES } from './aiDocsService.js'
 import { runAIWithFallback } from './aiFallbackService.js'
+import { extractFacts, hasNewFacts } from './factExtractor.js'
 
 const CONSTITUTION = loadAiDoc(AI_DOC_FILES.constitution)
 
@@ -114,8 +115,11 @@ export const reviewGymProAnswerSync = ({
     violations.push('report_data_without_tool')
   }
 
-  const hasProductData = /\b(?:sản phẩm|san pham|whey|creatine|tồn kho|ton kho)\b/i.test(answer) && hasPrice
-  if (hasProductData && !hasTool(tools, ['getRecommendedProducts'])) {
+  // Only flag actual product NAMES (whey, creatine) — "sản phẩm" is a generic word
+  // that appears in suggestion text ("thêm PT hoặc sản phẩm đi kèm").
+  // getSmartRecommendations may also mention products in suggestions.
+  const hasProductData = /\b(?:whey|creatine|tồn kho|ton kho)\b/i.test(answer) && hasPrice
+  if (hasProductData && !hasTool(tools, ['getRecommendedProducts', 'getSmartRecommendations'])) {
     violations.push('product_data_without_tool')
   }
 
@@ -186,6 +190,15 @@ export const constitutionalReview = async ({ query, answer, subject, analysis, t
     if (correctedMatch) {
       const corrected = text.slice(correctedMatch.index + correctedMatch[0].length).trim()
       if (corrected.length >= 10) {
+        // ── FACT LOCK ───────────────────────────────────────────
+        // LLM reviewer must NOT add new factual entities that were
+        // not present in the original answer. If it did, keep original.
+        const origFacts = extractFacts(answer)
+        const corrFacts = extractFacts(corrected)
+        if (hasNewFacts(origFacts, corrFacts)) {
+          console.log('[FACT_LOCK] corrected answer added new facts, keeping original')
+          return answer
+        }
         console.log('[CONSTITUTIONAL_REVIEWER] reviewerResult=CORRECTED')
         return corrected
       }

@@ -45,17 +45,36 @@ export const renderMemberProfile = (profile = {}, lang = 'vi') => {
 
 export const renderMembership = (membership = {}, lang = 'vi') => {
   if (!membership) return ''
-  const planName = membership.planName || (membership.planId?.nameVi || membership.planId?.nameEn || membership.planId?.name || '')
-  if (!planName && !membership.found) return 'Không có gói tập đang hoạt động.'
-  const lines = [buildHeader('Gói tập hiện tại', lang)]
-  lines.push(`Tên gói: ${planName}`)
-  if (membership.startDate) lines.push(`Ngày bắt đầu: ${formatDate(membership.startDate)}`)
-  if (membership.endDate) lines.push(`Ngày kết thúc: ${formatDate(membership.endDate)}`)
-  if (membership.remainingDays != null) lines.push(`Còn lại: ${membership.remainingDays} ngày`)
-  if (membership.status) {
-    const statusLabels = { active: 'Đang hoạt động', expired: 'Đã hết hạn', cancelled: 'Đã hủy', pending: 'Chờ xử lý' }
-    lines.push(`Trạng thái: ${statusLabels[membership.status] || membership.status}`)
+  const lines = []
+
+  if (!membership.hasActiveMembership || !membership.currentMembership) {
+    lines.push('Hiện tại bạn chưa có gói tập đang hoạt động.')
+  } else {
+    const cm = membership.currentMembership
+    lines.push(buildHeader('Gói tập hiện tại', lang))
+    if (cm.planName) lines.push(`Tên gói: ${cm.planName}`)
+    if (cm.startDate) lines.push(`Ngày bắt đầu: ${formatDate(cm.startDate)}`)
+    if (cm.endDate) lines.push(`Ngày kết thúc: ${formatDate(cm.endDate)}`)
+    if (cm.remainingDays != null) lines.push(`Còn lại: ${cm.remainingDays} ngày`)
+    lines.push(`Trạng thái: Đang hoạt động`)
   }
+
+  if (Array.isArray(membership.pendingRenewals) && membership.pendingRenewals.length > 0) {
+    if (lines.length > 0) lines.push('')
+    lines.push(`--- Gia hạn đang chờ ---`)
+    for (const p of membership.pendingRenewals) {
+      lines.push(`- ${p.planName || 'Gói tập'}: bắt đầu ${formatDate(p.startDate)}, kết thúc ${formatDate(p.endDate)}`)
+    }
+  }
+
+  if (Array.isArray(membership.cancelRequests) && membership.cancelRequests.length > 0) {
+    if (lines.length > 0) lines.push('')
+    lines.push(`--- Đang chờ hủy / hoàn tiền ---`)
+    for (const p of membership.cancelRequests) {
+      lines.push(`- ${p.planName || 'Gói tập'}: ${p.status === 'REFUND_PENDING' ? 'đang chờ hoàn tiền' : 'đang chờ hủy'}, kết thúc ${formatDate(p.endDate)}`)
+    }
+  }
+
   return lines.join('\n')
 }
 
@@ -94,7 +113,7 @@ export const renderPTs = (pts = [], lang = 'vi') => {
   pts.forEach((pt, i) => {
     const name = pt.fullName || pt.name || `PT ${i + 1}`
     lines.push('')
-    lines.push(`${i + 1}. ${name}`)
+    lines.push(`PT ${i + 1}: ${name}`)
     if (pt.specialties && pt.specialties.length > 0) {
       lines.push(`   Chuyên môn: ${pt.specialties.join(', ')}`)
     }

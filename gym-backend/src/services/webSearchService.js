@@ -247,7 +247,7 @@ export const buildShopeeLinkAnswer = (query, results = []) => {
     return `Mình chưa tìm thấy link sản phẩm Shopee trực tiếp. Link tìm kiếm Shopee phù hợp:\n${getShopeeSearchUrl(query)}`
 }
 
-export const searchWeb = async (query, { maxResults = DEFAULT_MAX_RESULTS } = {}) => {
+export const searchWeb = async (query, { maxResults = DEFAULT_MAX_RESULTS, includeAnswer = false, includeRawContent = false } = {}) => {
     if (!process.env.TAVILY_API_KEY) {
         return {
             used: false,
@@ -267,8 +267,8 @@ export const searchWeb = async (query, { maxResults = DEFAULT_MAX_RESULTS } = {}
             query,
             search_depth: 'advanced',
             max_results: maxResults,
-            include_answer: false,
-            include_raw_content: false,
+            include_answer: includeAnswer,
+            include_raw_content: includeRawContent,
         }),
     })
 
@@ -284,8 +284,10 @@ export const searchWeb = async (query, { maxResults = DEFAULT_MAX_RESULTS } = {}
             .map((item) => ({
                 title: String(item.title || '').slice(0, 180),
                 url: String(item.url || ''),
-                content: String(item.content || item.snippet || '').slice(0, 700),
+                content: String(item.content || item.snippet || '').slice(0, 2000),
+                rawContent: includeRawContent ? String(item.raw_content || item.content || '').slice(0, 8000) : '',
                 score: Number(item.score) || 0,
+                publishedDate: item.published_date || '',
             }))
             .filter((item) => /^https:\/\//i.test(item.url))
         : []
@@ -294,6 +296,8 @@ export const searchWeb = async (query, { maxResults = DEFAULT_MAX_RESULTS } = {}
         used: true,
         reason: 'searched',
         results,
+        answer: includeAnswer ? (data.answer || '') : '',
+        rawAnswer: includeAnswer ? (data.raw_answer || '') : '',
         context: buildWebSearchContext(results),
     }
 }
