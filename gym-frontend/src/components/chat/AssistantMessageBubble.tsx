@@ -76,8 +76,8 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
   const rawText = typeof content === 'string' ? content : (typeof message.content === 'string' ? message.content : '')
   const displayContent = tryExtractAnswerFromJsonText(rawText)
   const text = tryExtractAnswerFromJsonText(stripUnsafeModelOutput(displayContent))
-  const sourceType = message.metadata?.sourceType
-  const sourceLabel = message.metadata?.sourceLabel
+  const sourceType = message.metadata?.sourceType as string | undefined
+  const sourceLabel = message.metadata?.sourceLabel as string | undefined
   const sourceIcon = sourceType === 'gympro' ? '🟢' : ''
   const isPlanResponseType = typeof message.type === 'string' && (
     message.type === 'plan_detail'
