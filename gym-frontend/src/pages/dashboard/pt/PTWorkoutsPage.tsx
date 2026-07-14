@@ -270,7 +270,7 @@ export default function PTWorkoutsPage() {
 
   const columns = [
     {
-      title: 'Workout',
+      title: 'Giáo án',
       render: (_: unknown, record: WorkoutPlan) => (
         <div>
           <div className="font-semibold text-[var(--gs-text)]">{record.workoutName}</div>
@@ -279,7 +279,7 @@ export default function PTWorkoutsPage() {
       ),
     },
     {
-      title: 'Member',
+      title: 'Hội viên',
       render: (_: unknown, record: WorkoutPlan) => (
         <span>{typeof record.member === 'string' ? record.member : getUserDisplayName(record.member, record.member?.email || 'Thành viên')}</span>
       ),
@@ -291,12 +291,12 @@ export default function PTWorkoutsPage() {
       ),
     },
     {
-      title: 'Duration',
+      title: 'Thời lượng',
       width: 110,
-      render: (_: unknown, record: WorkoutPlan) => <Tag>{record.durationWeeks || record.weeks?.length || 0} weeks</Tag>,
+      render: (_: unknown, record: WorkoutPlan) => <Tag>{record.durationWeeks || record.weeks?.length || 0} tuần</Tag>,
     },
     {
-      title: 'Dates',
+      title: 'Ngày',
       width: 180,
       render: (_: unknown, record: WorkoutPlan) => (
         <span className="text-xs text-[var(--gs-text-muted)]">
@@ -312,7 +312,7 @@ export default function PTWorkoutsPage() {
       render: (_: unknown, record: WorkoutPlan) => <span>{Number(record.estimatedCalories || 0).toLocaleString('vi-VN')}</span>,
     },
     {
-      title: 'Structure',
+      title: 'Cấu trúc',
       width: 150,
       render: (_: unknown, record: WorkoutPlan) => {
         const sessions = record.weeks?.reduce((sum, week) => sum + (week.sessions?.length || 0), 0) || 0
@@ -320,15 +320,15 @@ export default function PTWorkoutsPage() {
           (sum, week) => sum + (week.sessions?.reduce((sessionSum, session) => sessionSum + (session.exercises?.length || 0), 0) || 0),
           0,
         ) || 0
-        return <span>{record.weeks?.length || 0}w / {sessions}s / {exercises}ex</span>
+        return <span>{record.weeks?.length || 0}t / {sessions}b / {exercises}bt</span>
       },
     },
     {
-      title: 'Actions',
+      title: 'Thao tác',
       width: 110,
       render: (_: unknown, record: WorkoutPlan) => (
         <Space size={4}>
-          <Tooltip title="Edit">
+          <Tooltip title="Chỉnh sửa">
             <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
           </Tooltip>
           <Popconfirm
@@ -338,7 +338,7 @@ export default function PTWorkoutsPage() {
             okButtonProps={{ danger: true }}
             onConfirm={() => handleDelete(record._id)}
           >
-            <Tooltip title="Delete">
+            <Tooltip title="Xoá">
               <Button size="small" danger icon={<DeleteOutlined />} />
             </Tooltip>
           </Popconfirm>
@@ -350,18 +350,18 @@ export default function PTWorkoutsPage() {
   return (
     <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Dashboard</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">Workout Plans</h1>
-        <p className="mt-2 text-sm text-[var(--gs-text-muted)]">Create and manage member workout plans by week, session, and exercise.</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Bảng điều khiển</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">Giáo án tập luyện</h1>
+        <p className="mt-2 text-sm text-[var(--gs-text-muted)]">Tạo và quản lý giáo án tập luyện cho hội viên theo tuần, buổi và bài tập.</p>
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
         <div className="dashboard-filter-bar">
           <Button icon={<ReloadOutlined />} onClick={loadWorkouts} loading={loading}>
-            Refresh
+            Tải lại
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            Add Workout
+            Thêm giáo án
           </Button>
         </div>
 
@@ -371,88 +371,88 @@ export default function PTWorkoutsPage() {
             columns={columns}
             rowKey="_id"
             loading={loading}
-            locale={{ emptyText: <Empty description="No workout plans yet" /> }}
+            locale={{ emptyText: <Empty description="Chưa có giáo án nào" /> }}
             pagination={{ pageSize: 10 }}
           />
         </div>
       </div>
 
       <Modal
-        title={editingWorkout ? 'Edit Workout Plan' : 'Create Workout Plan'}
+        title={editingWorkout ? 'Chỉnh sửa giáo án' : 'Tạo giáo án mới'}
         open={modalOpen}
         onCancel={closeModal}
         onOk={handleSubmit}
         confirmLoading={saving}
         width={1100}
-        okText={editingWorkout ? 'Save' : 'Create'}
+        okText={editingWorkout ? 'Lưu' : 'Tạo'}
         destroyOnHidden
       >
         <Spin spinning={detailLoading}>
           <Form form={form} layout="vertical" className="pt-3">
             <div className="grid gap-4 md:grid-cols-2">
               <Form.Item
-                label="Workout Name"
+                label="Tên giáo án"
                 name="workoutName"
-                rules={[{ required: true, whitespace: true, message: 'Workout name is required' }]}
+                rules={[{ required: true, whitespace: true, message: 'Tên giáo án là bắt buộc' }]}
               >
-                <Input placeholder="Strength foundation" />
+                <Input placeholder="VD: Strength foundation" />
               </Form.Item>
               <Form.Item
-                label="Goal"
+                label="Mục tiêu"
                 name="goal"
-                rules={[{ required: true, whitespace: true, message: 'Goal is required' }]}
+                rules={[{ required: true, whitespace: true, message: 'Mục tiêu là bắt buộc' }]}
               >
-                <Input placeholder="Build muscle, lose fat..." />
+                <Input placeholder="VD: Build muscle, lose fat..." />
               </Form.Item>
               <Form.Item
-                label="Duration (weeks)"
+                label="Thời lượng (tuần)"
                 name="durationWeeks"
-                rules={[{ required: true, message: 'Duration is required' }]}
+                rules={[{ required: true, message: 'Thời lượng là bắt buộc' }]}
               >
                 <InputNumber min={1} max={52} className="w-full" />
               </Form.Item>
               <Form.Item
-                label="Estimated Calories"
+                label="Calories dự kiến"
                 name="estimatedCalories"
-                rules={[{ required: true, message: 'Estimated calories is required' }]}
+                rules={[{ required: true, message: 'Calories dự kiến là bắt buộc' }]}
               >
                 <InputNumber min={0} className="w-full" />
               </Form.Item>
-              <Form.Item label="Start Date" name="startDate">
+              <Form.Item label="Ngày bắt đầu" name="startDate">
                 <DatePicker className="w-full" />
               </Form.Item>
-              <Form.Item label="End Date" name="endDate">
+              <Form.Item label="Ngày kết thúc" name="endDate">
                 <DatePicker className="w-full" />
               </Form.Item>
               <Form.Item
-                label="Member"
+                label="Hội viên"
                 name="member"
-                rules={[{ required: true, message: 'Member is required' }]}
+                rules={[{ required: true, message: 'Hội viên là bắt buộc' }]}
               >
-                <Select showSearch optionFilterProp="label" placeholder="Select member" options={memberOptions} />
+                <Select showSearch optionFilterProp="label" placeholder="Chọn hội viên" options={memberOptions} />
               </Form.Item>
               <Form.Item
-                label="Personal Trainer"
+                label="Huấn luyện viên"
                 name="personalTrainer"
-                rules={[{ required: true, message: 'Personal trainer is required' }]}
+                rules={[{ required: true, message: 'Huấn luyện viên là bắt buộc' }]}
               >
-                <Select showSearch optionFilterProp="label" placeholder="Select PT" options={ptOptions} />
+                <Select showSearch optionFilterProp="label" placeholder="Chọn PT" options={ptOptions} />
               </Form.Item>
             </div>
 
-            <Form.Item label="Description" name="description">
-              <Input.TextArea rows={3} placeholder="Plan description, goals, notes..." />
+            <Form.Item label="Mô tả" name="description">
+              <Input.TextArea rows={3} placeholder="Mô tả giáo án, mục tiêu, ghi chú..." />
             </Form.Item>
 
             <Form.List name="weeks" rules={[{ validator: async (_, value) => {
-              if (!value?.length) throw new Error('At least one week is required')
+              if (!value?.length) throw new Error('Cần ít nhất 1 tuần tập')
             } }]}>
               {(weekFields, { add: addWeek, remove: removeWeek }, { errors }) => (
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-lg font-semibold text-[var(--gs-text)]">Weeks</h2>
+                    <h2 className="text-lg font-semibold text-[var(--gs-text)]">Các tuần tập</h2>
                     <Button icon={<PlusOutlined />} onClick={() => addWeek(emptyWeek(weekFields.length + 1))}>
-                      Add Week
+                      Thêm tuần
                     </Button>
                   </div>
                   <Form.ErrorList errors={errors} />
@@ -461,15 +461,15 @@ export default function PTWorkoutsPage() {
                     <div key={weekField.key} className="rounded-xl border border-[var(--gs-border)] bg-[var(--theme-bg)] p-4">
                       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                         <Form.Item
-                          label="Week Number"
+                          label="Tuần số"
                           name={[weekField.name, 'weekNumber']}
-                          rules={[{ required: true, message: 'Week number is required' }]}
+                          rules={[{ required: true, message: 'Số tuần là bắt buộc' }]}
                           className="mb-0 min-w-40"
                         >
                           <InputNumber min={1} className="w-full" />
                         </Form.Item>
                         <Button danger icon={<DeleteOutlined />} disabled={weekFields.length === 1} onClick={() => removeWeek(weekField.name)}>
-                          Remove Week
+                          Xoá tuần
                         </Button>
                       </div>
 
@@ -477,9 +477,9 @@ export default function PTWorkoutsPage() {
                         {(sessionFields, { add: addSession, remove: removeSession }) => (
                           <div className="space-y-3">
                             <div className="flex flex-wrap items-center justify-between gap-3">
-                              <h3 className="font-semibold text-[var(--gs-text)]">Sessions</h3>
+                              <h3 className="font-semibold text-[var(--gs-text)]">Buổi tập</h3>
                               <Button size="small" icon={<PlusOutlined />} onClick={() => addSession(emptySession())}>
-                                Add Session
+                                Thêm buổi
                               </Button>
                             </div>
 
@@ -487,14 +487,14 @@ export default function PTWorkoutsPage() {
                               <div key={sessionField.key} className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-4">
                                 <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
                                   <Form.Item
-                                    label="Session Name"
+                                    label="Tên buổi"
                                     name={[sessionField.name, 'sessionName']}
-                                    rules={[{ required: true, whitespace: true, message: 'Session name is required' }]}
+                                    rules={[{ required: true, whitespace: true, message: 'Tên buổi là bắt buộc' }]}
                                   >
-                                    <Input placeholder={`Week ${weekIndex + 1} - Push day`} />
+                                    <Input placeholder={`Tuần ${weekIndex + 1} - Buổi A`} />
                                   </Form.Item>
-                                  <Form.Item label="Feedback" name={[sessionField.name, 'feedback']}>
-                                    <Input placeholder="Feedback or notes" />
+                                  <Form.Item label="Ghi chú" name={[sessionField.name, 'feedback']}>
+                                    <Input placeholder="Ghi chú buổi tập" />
                                   </Form.Item>
                                   <Button
                                     danger
@@ -503,7 +503,7 @@ export default function PTWorkoutsPage() {
                                     onClick={() => removeSession(sessionField.name)}
                                     className="mt-[30px]"
                                   >
-                                    Remove
+                                    Xoá
                                   </Button>
                                 </div>
 
@@ -511,44 +511,44 @@ export default function PTWorkoutsPage() {
                                   {(exerciseFields, { add: addExercise, remove: removeExercise }) => (
                                     <div className="space-y-3">
                                       <div className="flex flex-wrap items-center justify-between gap-3">
-                                        <h4 className="font-medium text-[var(--gs-text)]">Exercises</h4>
+                                        <h4 className="font-medium text-[var(--gs-text)]">Bài tập</h4>
                                         <Button size="small" icon={<PlusOutlined />} onClick={() => addExercise(emptyExercise())}>
-                                          Add Exercise
+                                          Thêm bài tập
                                         </Button>
                                       </div>
 
                                       {exerciseFields.map((exerciseField) => (
                                         <div key={exerciseField.key} className="grid gap-3 rounded-lg border border-dashed border-[var(--gs-border)] p-3 md:grid-cols-[1.5fr_0.7fr_0.7fr_1fr_1.5fr_auto]">
                                           <Form.Item
-                                            label="Name"
+                                            label="Tên bài tập"
                                             name={[exerciseField.name, 'name']}
-                                            rules={[{ required: true, whitespace: true, message: 'Exercise name is required' }]}
+                                            rules={[{ required: true, whitespace: true, message: 'Tên bài tập là bắt buộc' }]}
                                           >
                                             <Input placeholder="Bench press" />
                                           </Form.Item>
                                           <Form.Item
-                                            label="Sets"
+                                            label="Số hiệp"
                                             name={[exerciseField.name, 'sets']}
-                                            rules={[{ required: true, message: 'Sets required' }]}
+                                            rules={[{ required: true, message: 'Số hiệp là bắt buộc' }]}
                                           >
                                             <InputNumber min={1} className="w-full" />
                                           </Form.Item>
                                           <Form.Item
-                                            label="Reps"
+                                            label="Số lần"
                                             name={[exerciseField.name, 'reps']}
-                                            rules={[{ required: true, message: 'Reps required' }]}
+                                            rules={[{ required: true, message: 'Số lần là bắt buộc' }]}
                                           >
                                             <InputNumber min={1} className="w-full" />
                                           </Form.Item>
                                           <Form.Item
-                                            label="Rest Time"
+                                            label="Nghỉ"
                                             name={[exerciseField.name, 'restTime']}
-                                            rules={[{ required: true, whitespace: true, message: 'Rest time required' }]}
+                                            rules={[{ required: true, whitespace: true, message: 'Thời gian nghỉ là bắt buộc' }]}
                                           >
                                             <Input placeholder="60s" />
                                           </Form.Item>
-                                          <Form.Item label="Technique Note" name={[exerciseField.name, 'techniqueNote']}>
-                                            <Input placeholder="Keep core tight" />
+                                          <Form.Item label="Kỹ thuật" name={[exerciseField.name, 'techniqueNote']}>
+                                            <Input placeholder="Giữ core chặt" />
                                           </Form.Item>
                                           <Button
                                             danger

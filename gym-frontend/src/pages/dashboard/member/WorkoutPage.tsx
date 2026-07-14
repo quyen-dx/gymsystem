@@ -265,7 +265,7 @@ export default function WorkoutPage() {
               <Text strong className="min-w-[140px]">{ex.name}</Text>
               <Tag>{ex.sets} x {ex.reps}</Tag>
               <span className="text-xs text-[var(--gs-text-muted)]">
-                <ClockCircleOutlined className="mr-1" />Rest: {ex.restTime}
+                <ClockCircleOutlined className="mr-1" />Nghỉ: {ex.restTime}
               </span>
               {ex.techniqueNote && (
                 <Text type="secondary" className="text-xs italic">{ex.techniqueNote}</Text>
@@ -280,14 +280,14 @@ export default function WorkoutPage() {
                 Finish
               </Button>
             ) : isDone ? (
-              <Tag color="green">Completed</Tag>
+              <Tag color="green">Đã hoàn thành</Tag>
             ) : null}
           </div>
           {isDone && restRemaining !== undefined && restRemaining > 0 && (
             <div className="mt-2 flex items-center gap-2 rounded bg-orange-50 px-3 py-1.5 dark:bg-orange-900/20">
               <ClockCircleOutlined className="text-orange-500" />
               <Text className="tabular-nums text-orange-600 dark:text-orange-400">
-                Rest {formatTime(restRemaining)}
+                Nghỉ {formatTime(restRemaining)}
               </Text>
             </div>
           )}
@@ -306,7 +306,7 @@ export default function WorkoutPage() {
           <span className="flex items-center justify-between">
             <span>
               <RightOutlined className="mr-2 text-[var(--gs-primary)]" />
-              {session.sessionName || `Session ${i + 1}`}
+              {session.sessionName || `Buổi ${i + 1}`}
             </span>
             <span className="flex items-center gap-2">
               <Button
@@ -315,7 +315,7 @@ export default function WorkoutPage() {
                 icon={<PlayCircleOutlined />}
                 onClick={(e) => { e.stopPropagation(); toggleSession(sessionKey) }}
               >
-                {isRunning ? (isPaused ? 'Paused' : 'Running...') : 'Start'}
+                {isRunning ? (isPaused ? 'Đã tạm dừng' : 'Đang tập...') : 'Bắt đầu'}
               </Button>
               {isRunning && (
                 <Button
@@ -323,7 +323,7 @@ export default function WorkoutPage() {
                   icon={<PauseCircleOutlined />}
                   onClick={(e) => { e.stopPropagation(); togglePause(sessionKey) }}
                 >
-                  {isPaused ? 'Resume' : 'Pause'}
+                  {isPaused ? 'Tiếp tục' : 'Tạm dừng'}
                 </Button>
               )}
             </span>
@@ -337,7 +337,7 @@ export default function WorkoutPage() {
                 <Text strong className={`text-lg tabular-nums ${isPaused ? 'text-yellow-600 dark:text-yellow-400' : ''}`}>
                   {formatTime(elapsedTime[sessionKey] || 0)}
                 </Text>
-                {isPaused && <Tag color="warning">Paused</Tag>}
+                {isPaused && <Tag color="warning">Đã tạm dừng</Tag>}
               </div>
             )}
             {session.feedback && (
@@ -350,12 +350,12 @@ export default function WorkoutPage() {
                 size={80}
                 strokeColor="var(--gs-primary)"
               />
-              <Text type="secondary" className="mt-2 text-sm">Session Progress</Text>
+              <Text type="secondary" className="mt-2 text-sm">Tiến độ buổi tập</Text>
             </div>
             {session.exercises?.length > 0 ? (
               renderExercises(session.exercises, sessionKey)
             ) : (
-              <Text type="secondary">No exercises</Text>
+              <Text type="secondary">Không có bài tập</Text>
             )}
           </div>
         ),
@@ -366,14 +366,14 @@ export default function WorkoutPage() {
     key: String(wi),
     label: (
       <span className="font-semibold">
-        Week {week.weekNumber || wi + 1}
-        <Tag className="ml-2">{week.sessions?.length || 0} sessions</Tag>
+        Tuần {week.weekNumber || wi + 1}
+        <Tag className="ml-2">{week.sessions?.length || 0} buổi</Tag>
       </span>
     ),
     children: week.sessions?.length > 0 ? (
       <Collapse ghost items={sessionItems(week.sessions, wi)} />
     ) : (
-      <Text type="secondary">No sessions</Text>
+      <Text type="secondary">Không có buổi tập</Text>
     ),
   })) || []
 
@@ -383,11 +383,11 @@ export default function WorkoutPage() {
         <style>{`.ant-progress-circle-path { transition: stroke-dashoffset 0.5s ease; }`}</style>
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <Title level={3} className="mb-1">My Workout Plan</Title>
-            <Text type="secondary">View your personalized training plan</Text>
+            <Title level={3} className="mb-1">Giáo án của tôi</Title>
+            <Text type="secondary">Xem giáo án tập luyện cá nhân hóa</Text>
           </div>
           <Button icon={<ReloadOutlined />} onClick={loadWorkouts} loading={loading}>
-            Refresh
+            Tải lại
           </Button>
         </div>
 
@@ -395,7 +395,7 @@ export default function WorkoutPage() {
           <div className="flex min-h-[400px] items-center justify-center"><Spin size="large" /></div>
         ) : workouts.length === 0 ? (
           <Card>
-            <Empty description="No workout plan assigned yet. Contact your PT to get started!" />
+            <Empty description="Chưa có giáo án nào. Hãy liên hệ PT để bắt đầu!" />
           </Card>
         ) : (
           <>
@@ -417,11 +417,11 @@ export default function WorkoutPage() {
               <>
                 <Card className="mb-6">
                   <Descriptions column={{ xs: 1, sm: 2, md: 3 }} size="small" bordered>
-                    <Descriptions.Item label={<><AimOutlined className="mr-1" />Goal</>}>
-                      <Tag color="blue">{selectedWorkout.goal || 'N/A'}</Tag>
+                    <Descriptions.Item label={<><AimOutlined className="mr-1" />Mục tiêu</>}>
+                      <Tag color="blue">{selectedWorkout.goal || '-'}</Tag>
                     </Descriptions.Item>
-                    <Descriptions.Item label={<><CalendarOutlined className="mr-1" />Duration</>}>
-                      {selectedWorkout.durationWeeks || selectedWorkout.weeks?.length || 0} weeks
+                    <Descriptions.Item label={<><CalendarOutlined className="mr-1" />Thời lượng</>}>
+                      {selectedWorkout.durationWeeks || selectedWorkout.weeks?.length || 0} tuần
                     </Descriptions.Item>
                     <Descriptions.Item label={<><FireOutlined className="mr-1" />Calories</>}>
                       {Number(selectedWorkout.estimatedCalories || 0).toLocaleString('vi-VN')} kcal
@@ -429,10 +429,10 @@ export default function WorkoutPage() {
                     <Descriptions.Item label={<><UserOutlined className="mr-1" />PT</>}>
                       {ptName}
                     </Descriptions.Item>
-                    <Descriptions.Item label="Start">
+                    <Descriptions.Item label="Bắt đầu">
                       {selectedWorkout.startDate ? dayjs(selectedWorkout.startDate).format('DD/MM/YYYY') : '-'}
                     </Descriptions.Item>
-                    <Descriptions.Item label="End">
+                    <Descriptions.Item label="Kết thúc">
                       {selectedWorkout.endDate ? dayjs(selectedWorkout.endDate).format('DD/MM/YYYY') : '-'}
                     </Descriptions.Item>
                   </Descriptions>

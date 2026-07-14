@@ -120,7 +120,7 @@ export default function PTSchedulePage() {
       <div className="space-y-6">
         <div className="rounded-[28px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-8 max-[640px]:p-5">
           <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">
-            'PT Schedule'
+            'LỊCH PT'
           </p>
           <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">
             Lịch làm việc
@@ -218,17 +218,17 @@ export default function PTSchedulePage() {
 
             <div className="mb-4 grid grid-cols-3 gap-3">
               <div className="rounded-lg p-3 text-center" style={{ background: 'color-mix(in srgb, var(--theme-accent) 12%, var(--gs-card))' }}>
-                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Pending</p>
+                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Chờ</p>
                 <p className="text-lg font-bold" style={{ color: 'var(--theme-accent)' }}>{pendingDayCount}</p>
               </div>
               <div className="rounded-lg p-3 text-center"
                 style={{ background: dark ? 'rgba(34,197,94,0.10)' : 'rgba(34,197,94,0.08)' }}>
-                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Confirmed</p>
+                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Đã xác nhận</p>
                 <p className="text-lg font-bold" style={{ color: dark ? 'rgb(74,222,128)' : 'rgb(22,163,74)' }}>{confirmedCount}</p>
               </div>
               <div className="rounded-lg p-3 text-center"
                 style={{ background: dark ? 'rgba(59,130,246,0.10)' : 'rgba(59,130,246,0.08)' }}>
-                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Completed</p>
+                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Hoàn thành</p>
                 <p className="text-lg font-bold" style={{ color: dark ? 'rgb(96,165,250)' : 'rgb(37,99,235)' }}>{completedCount}</p>
               </div>
             </div>

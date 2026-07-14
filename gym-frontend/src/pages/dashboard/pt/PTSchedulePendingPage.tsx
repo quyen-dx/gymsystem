@@ -112,7 +112,7 @@ export default function PTSchedulePendingPage() {
             Quay lại lịch tập
           </button>
           <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">
-            PT Schedule
+            LỊCH PT
           </p>
           <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">
             Lịch chờ xác nhận
