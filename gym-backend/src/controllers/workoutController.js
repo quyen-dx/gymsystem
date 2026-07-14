@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 import Workout from '../models/Workout.js'
+import SessionFeedback from '../models/SessionFeedback.js'
 
 const isAdminRole = (role) => role === 'super_admin' || role === 'admin'
 const isPtRole = (role) => role === 'pt'
@@ -31,9 +32,9 @@ const canManageWorkout = (user, workout) =>
 const canUpdateSessionProgress = (user, workout) =>
   canManageWorkout(user, workout) || (isMemberRole(user.role) && sameId(workout.memberId, user._id))
 
-const buildScopedWorkoutFilter = (user) => {
-  if (isAdminRole(user.role)) return {}
-  if (isPtRole(user.role)) return { ptId: user._id }
+const buildScopedWorkoutFilter = (user, memberId) => {
+  if (isAdminRole(user.role)) return memberId ? { memberId } : {}
+  if (isPtRole(user.role)) return memberId ? { ptId: user._id, memberId } : { ptId: user._id }
   return { memberId: user._id }
 }
 
@@ -57,6 +58,9 @@ const buildProgressSummary = (workout) => ({
   workoutId: workout._id,
   name: workout.name,
   goal: workout.goal,
+  startDate: workout.startDate,
+  endDate: workout.endDate,
+  description: workout.description,
   memberId: workout.memberId,
   ptId: workout.ptId,
   completionRate: workout.completionRate,
@@ -136,7 +140,8 @@ const getSessionOr400 = (workout, weekIndex, sessionIndex, res) => {
 
 export const getAllWorkouts = async (req, res) => {
   try {
-    const workouts = await Workout.find(buildScopedWorkoutFilter(req.user))
+    const { memberId } = req.query
+    const workouts = await Workout.find(buildScopedWorkoutFilter(req.user, memberId))
       .populate('memberId', 'name fullName email phone memberCode avatar')
       .populate('ptId', 'name fullName email phone avatar')
       .sort({ createdAt: -1 })
@@ -201,7 +206,7 @@ export const updateWorkout = async (req, res) => {
       return res.status(403).json({ message: 'Ban khong co quyen sua workout nay' })
     }
 
-    const allowedFields = ['name', 'goal', 'duration', 'memberId', 'weeks', 'estimatedCalories']
+    const allowedFields = ['name', 'goal', 'duration', 'startDate', 'endDate', 'description', 'memberId', 'weeks', 'estimatedCalories']
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) workout[field] = req.body[field]
     })
@@ -338,8 +343,7 @@ export const getWorkoutProgressById = async (req, res) => {
 
 export const saveSessionFeedback = async (req, res) => {
   try {
-    const { workoutId, feedback = '' } = req.body
-    const { weekIndex, sessionIndex } = getIndexes(req.body)
+    const { workoutId, weekIndex, sessionIndex, feedback = '' } = req.body
     const workout = await getWorkoutOr404(workoutId, res)
     if (!workout) return
 
@@ -347,7 +351,7 @@ export const saveSessionFeedback = async (req, res) => {
       return res.status(403).json({ message: 'Chi PT phu trach moi duoc ghi feedback' })
     }
 
-    const session = getSessionOr400(workout, weekIndex, sessionIndex, res)
+    const session = getSessionOr400(workout, parseIndex(weekIndex), parseIndex(sessionIndex), res)
     if (!session) return
 
     session.feedback = String(feedback).trim()
@@ -356,5 +360,106 @@ export const saveSessionFeedback = async (req, res) => {
     return res.json({ message: 'Da luu feedback session', workout })
   } catch (error) {
     return res.status(500).json({ message: 'Khong the luu feedback', error: error.message })
+  }
+}
+
+export const getSessionFeedbacks = async (req, res) => {
+  try {
+    const { memberId, workoutId } = req.query
+    const filter = {}
+
+    if (workoutId) filter.workoutId = workoutId
+    if (memberId) filter.memberId = memberId
+
+    if (isMemberRole(req.user.role)) {
+      filter.memberId = req.user._id
+    } else if (isPtRole(req.user.role)) {
+      filter.ptId = req.user._id
+      if (memberId) filter.memberId = memberId
+    }
+
+    const feedbacks = await SessionFeedback.find(filter)
+      .populate('memberId', 'name fullName email phone avatar')
+      .populate('ptId', 'name fullName email phone avatar')
+      .populate('workoutId', 'name')
+      .sort({ date: -1 })
+
+    return res.status(200).json({ feedbacks })
+  } catch (error) {
+    return res.status(500).json({ message: 'Loi lay danh sach feedback', error: error.message })
+  }
+}
+
+export const createSessionFeedback = async (req, res) => {
+  try {
+    const { workoutId, memberId, date, note, performance, recommendation } = req.body
+
+    if (!workoutId || !memberId || !date) {
+      return res.status(400).json({ message: 'workoutId, memberId va date la bat buoc' })
+    }
+
+    const workout = await Workout.findById(workoutId)
+    if (!workout) {
+      return res.status(404).json({ message: 'Khong tim thay workout' })
+    }
+
+    if (!isAdminRole(req.user.role) && !sameId(workout.ptId, req.user._id)) {
+      return res.status(403).json({ message: 'Ban khong co quyen tao feedback cho workout nay' })
+    }
+
+    const feedback = await SessionFeedback.create({
+      workoutId,
+      memberId,
+      ptId: req.user._id,
+      date: new Date(date),
+      note: note || '',
+      performance: performance || 'good',
+      recommendation: recommendation || '',
+    })
+
+    return res.status(201).json({ message: 'Tao feedback thanh cong', feedback })
+  } catch (error) {
+    return res.status(400).json({ message: 'Tao feedback that bai', error: error.message })
+  }
+}
+
+export const updateSessionFeedback = async (req, res) => {
+  try {
+    const feedback = await SessionFeedback.findById(req.params.id)
+    if (!feedback) {
+      return res.status(404).json({ message: 'Khong tim thay feedback' })
+    }
+
+    if (!isAdminRole(req.user.role) && !sameId(feedback.ptId, req.user._id)) {
+      return res.status(403).json({ message: 'Ban khong co quyen sua feedback nay' })
+    }
+
+    const allowedFields = ['note', 'performance', 'recommendation', 'date']
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) feedback[field] = req.body[field]
+    })
+
+    await feedback.save()
+    return res.status(200).json({ message: 'Cap nhat feedback thanh cong', feedback })
+  } catch (error) {
+    return res.status(400).json({ message: 'Cap nhat feedback that bai', error: error.message })
+  }
+}
+
+export const deleteSessionFeedback = async (req, res) => {
+  try {
+    const feedback = await SessionFeedback.findById(req.params.id)
+    if (!feedback) {
+      return res.status(404).json({ message: 'Khong tim thay feedback' })
+    }
+
+    if (!isAdminRole(req.user.role) && !sameId(feedback.ptId, req.user._id)) {
+      return res.status(403).json({ message: 'Ban khong co quyen xoa feedback nay' })
+    }
+
+    await feedback.deleteOne()
+    return res.status(200).json({ message: 'Xoa feedback thanh cong' })
+  } catch (error) {
+    return res.status(500).json({ message: 'Xoa feedback that bai', error: error.message })
   }
 }

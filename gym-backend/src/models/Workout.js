@@ -122,6 +122,23 @@ const workoutSchema = new mongoose.Schema(
       min: 1,
     },
 
+    // Ngày bắt đầu
+    startDate: {
+      type: Date,
+    },
+
+    // Ngày kết thúc
+    endDate: {
+      type: Date,
+    },
+
+    // Mô tả
+    description: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
     // Member
     memberId: {
       type: mongoose.Schema.Types.ObjectId,
