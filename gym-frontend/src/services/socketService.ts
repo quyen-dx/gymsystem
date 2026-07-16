@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { SOCKET_URL } from '../config/env'
-import { getAuthToken } from './api'
+import { getAuthToken, refreshAccessToken } from './api'
 
 let socket: Socket | null = null
 let listeners: Array<{ event: string; handler: (...args: any[]) => void }> = []
@@ -28,7 +28,19 @@ const connect = () => {
     console.log('[Socket] Disconnected:', reason)
   })
 
-  socket.on('connect_error', (err) => {
+  socket.on('connect_error', async (err) => {
+    if (err.message === 'Unauthorized') {
+      try {
+        const newToken = await refreshAccessToken()
+        if (newToken) {
+          socket!.auth = { token: newToken }
+          socket!.connect()
+          return
+        }
+      } catch {
+        // refresh token expired too
+      }
+    }
     console.error('[Socket] Connection error:', err.message)
   })
 

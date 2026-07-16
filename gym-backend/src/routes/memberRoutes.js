@@ -7,6 +7,7 @@ import {
   createMemberAndRegister,
   createOfflinePlanPayment,
   getExpiringMembers,
+  getMyEnrollmentStatus,
   getOfflinePlanPayment,
   getMemberById,
   getMemberHealthScore,
@@ -20,7 +21,7 @@ import {
   toggleMemberStatus,
   updateMember,
 } from '../controllers/memberController.js'
-import { adminOrStaff, protect } from '../middlewares/authMiddleware.js'
+import { adminOrStaff, authorize, protect } from '../middlewares/authMiddleware.js'
 
 const router = express.Router()
 
@@ -34,7 +35,9 @@ router.get('/search', adminOrStaff, searchMembers)
 router.get('/stats', adminOrStaff, getMemberStats)
 router.get('/expiring', adminOrStaff, getExpiringMembers)
 
-router.get('/:id', adminOrStaff, getMemberById)
+router.get('/me/enrollment-status', getMyEnrollmentStatus)
+
+router.get('/:id', authorize('super_admin', 'admin', 'staff', 'pt'), getMemberById)
 router.get('/:id/timeline', adminOrStaff, getMemberTimeline)
 router.get('/:id/health-score', adminOrStaff, getMemberHealthScore)
 

@@ -7,6 +7,16 @@ import type {
   TimelineEvent,
 } from '../types/admin/member'
 
+export interface EnrollmentStatus {
+  hasActiveEnrollment: boolean
+  hasActiveSchedules: boolean
+  hasPendingRequest: boolean
+  pendingRequest: { _id: string; specialization?: string; timeSlots: string[]; daysOfWeek: number[] } | null
+  pt: { ptId: string; name: string } | null
+  class: { classId: string; name: string; code: string; specialization: string; daysOfWeek: number[]; time: string } | null
+  workout: { name: string; goal?: string } | null
+}
+
 export const memberService = {
   getMembers: (params?: Record<string, unknown>) =>
     api.get<{ members: MemberListItem[]; pagination: { total: number; page: number; limit: number; totalPages: number } }>('/members', { params }),
@@ -70,4 +80,7 @@ export const memberService = {
   offlineRegister: (data: {
     memberId: string; planId: string; paymentMethod: string; amountPaid: number; note?: string;
   }) => api.post('/members/offline-register', data),
+
+  getMyEnrollmentStatus: () =>
+    api.get<EnrollmentStatus>('/members/me/enrollment-status'),
 }

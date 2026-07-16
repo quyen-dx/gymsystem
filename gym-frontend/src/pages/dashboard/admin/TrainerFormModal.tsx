@@ -16,8 +16,8 @@ import type { PT } from '../../../types/admin/trainer'
 import { UploadOutlined } from '@ant-design/icons'
 
 const SPECIALTY_OPTIONS = [
-  'Yoga', 'GYM', 'Boxing', 'CrossFit', 'Pilates', 'Zumba', 'Personal Training',
-  'Cardio', 'Strength Training', 'HIIT', 'Dance', 'Meditation',
+  'YOGA', 'GYM', 'BOXING', 'CROSSFIT', 'PILATES', 'ZUMBA', 'PERSONAL TRAINING',
+  'CARDIO', 'STRENGTH TRAINING', 'HIIT', 'DANCE', 'MEDITATION',
 ]
 
 interface Props {
@@ -46,9 +46,6 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
           bio: pt.bio || '',
           experienceYears: pt.experienceYears || 0,
           introVideoUrl: pt.introVideoUrl || '',
-          oneToOnePrice: pt.oneToOnePrice || 0,
-          groupPrice: pt.groupPrice || 0,
-          groupCapacity: pt.groupCapacity || 5,
           certificates: pt.certificates || [],
         })
       } else {
@@ -73,9 +70,6 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
         fd.append('gender', (values.gender as string) || '')
         fd.append('experienceYears', String(values.experienceYears || 0))
         fd.append('introVideoUrl', (values.introVideoUrl as string) || '')
-        fd.append('oneToOnePrice', String(values.oneToOnePrice || 0))
-        fd.append('groupPrice', String(values.groupPrice || 0))
-        fd.append('groupCapacity', String(values.groupCapacity || 5))
         fd.append('specialties', JSON.stringify(values.specialties || []))
         fd.append('certificates', JSON.stringify(values.certificates || []))
         if (values.dateOfBirth) fd.append('dateOfBirth', new Date(values.dateOfBirth as Date).toISOString())
@@ -90,9 +84,6 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
           gender: (values.gender as string) || undefined,
           experienceYears: values.experienceYears || 0,
           introVideoUrl: (values.introVideoUrl as string) || '',
-          oneToOnePrice: values.oneToOnePrice || 0,
-          groupPrice: values.groupPrice || 0,
-          groupCapacity: values.groupCapacity || 5,
           specialties: values.specialties || [],
           certificates: values.certificates || [],
           dateOfBirth: values.dateOfBirth ? new Date(values.dateOfBirth as Date).toISOString() : undefined,
@@ -175,33 +166,6 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
 
         <Form.Item label='Số năm kinh nghiệm' name="experienceYears">
           <InputNumber min={0} style={{ width: '100%' }} placeholder='Nhập số năm kinh nghiệm' />
-        </Form.Item>
-
-        <Form.Item label="Giá PT 1-1 / buổi" name="oneToOnePrice">
-          <InputNumber
-            min={0}
-            step={10000}
-            style={{ width: '100%' }}
-            placeholder="300000"
-          />
-        </Form.Item>
-
-        <Form.Item label="Giá PT 1-1 / buổi (VNĐ)" name="groupPrice">
-          <InputNumber
-            min={0}
-            step={10000}
-            style={{ width: '100%' }}
-            placeholder="120000"
-          />
-        </Form.Item>
-
-        <Form.Item label="Giá PT nhóm / người (VNĐ)" name="groupCapacity">
-          <InputNumber
-            min={1}
-            max={5}
-            style={{ width: '100%' }}
-            placeholder="5"
-          />
         </Form.Item>
 
         <Form.Item label='Video giới thiệu' name="introVideoUrl">

@@ -1,5 +1,6 @@
 import api from './api'
 import type { PT, PTBooking, PTDaySchedule } from '../types/admin/trainer'
+import type { TrainingClass } from './trainingGroupService'
 
 export const trainerService = {
   getPTs: (params?: Record<string, unknown>) =>
@@ -19,6 +20,9 @@ export const trainerService = {
 
   getPTAvailability: (id: string, date: string) =>
     api.get<{ availability: Record<string, boolean> }>(`/pts/${id}/availability`, { params: { date } }),
+
+  getPTMyClasses: () =>
+    api.get<{ classes: TrainingClass[] }>('/pts/my-classes'),
 
   createPT: (data: FormData | Record<string, unknown>) =>
     api.post('/pts', data, data instanceof FormData

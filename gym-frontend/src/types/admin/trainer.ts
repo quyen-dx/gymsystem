@@ -8,6 +8,7 @@ export interface PTSchedule {
 export interface PT {
   _id: string
   name: string
+  fullName?: string
   email: string | null
   phone: string | null
   avatar: string
@@ -21,9 +22,6 @@ export interface PT {
   certificates: string[]
   rating: number
   introVideoUrl: string
-  oneToOnePrice: number
-  groupPrice: number
-  groupCapacity: number
   totalSessions: number
   totalStudents: number
   ptId: string | null
@@ -59,7 +57,4 @@ export interface PTFormData {
   experienceYears?: number
   certificates?: string[]
   introVideoUrl?: string
-  oneToOnePrice?: number
-  groupPrice?: number
-  groupCapacity?: number
 }

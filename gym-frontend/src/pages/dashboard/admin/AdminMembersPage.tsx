@@ -10,6 +10,7 @@ import {
   Button,
   Dropdown,
   Input,
+  Modal,
   Select,
   Space,
   Table,
@@ -21,6 +22,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import api from '../../../services/api'
+import { trainingRequestService, type TrainingRequest } from '../../../services/trainingRequestService'
+import { trainerService } from '../../../services/trainerService'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { memberService } from '../../../services/memberService'
 import type { MemberListItem } from '../../../types/admin/member'
@@ -33,6 +36,22 @@ interface PlanOption {
   _id: string
   nameVi: string
   nameEn: string
+}
+
+const SPEC_LABELS: Record<string, string> = {
+  GYM: 'GYM',
+  YOGA: 'Yoga',
+  BOXING: 'Boxing',
+  ZUMBA: 'Zumba',
+  PILATES: 'Pilates',
+  CARDIO: 'Cardio',
+  AEROBICS: 'Aerobics',
+  CROSSFIT: 'Crossfit',
+  KICKBOXING: 'Kickboxing',
+  DANCE: 'Dance',
+  MUAYTHAI: 'Muay Thái',
+  FUNCTIONAL: 'Functional Training',
+  OTHER: 'Khác',
 }
 
 export default function AdminMembersPage() {
@@ -59,10 +78,40 @@ export default function AdminMembersPage() {
   const [renewStartDate, setRenewStartDate] = useState('')
   const [renewPlanName, setRenewPlanName] = useState('')
   const [renewCurrentPlanId, setRenewCurrentPlanId] = useState('')
+  const [pendingTrainingCount, setPendingTrainingCount] = useState(0)
+
+  const [modalOpen, setModalOpen] = useState(false)
+  const [reqFilter, setReqFilter] = useState<string>('pending')
+  const [reqLoading, setReqLoading] = useState(false)
+  const [requests, setRequests] = useState<TrainingRequest[]>([])
+
+  const loadRequests = async () => {
+    setReqLoading(true)
+    try {
+      const reqRes = await trainingRequestService.getAllRequests({ status: reqFilter })
+      setRequests(reqRes.data.requests || [])
+    } finally {
+      setReqLoading(false)
+    }
+  }
+
+  useEffect(() => { if (modalOpen) loadRequests() }, [modalOpen, reqFilter])
   useEffect(() => {
     api.get<{ plans: PlanOption[] }>('/plans', { params: { limit: 100 } }).then(({ data }) => {
       setPlans(data.plans || [])
     }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await trainingRequestService.getAllRequests({ status: 'pending', page: 1, limit: 1 })
+        setPendingTrainingCount(res.data.pagination?.total || 0)
+      } catch {}
+    }
+    load()
+    const interval = setInterval(load, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   const fetchMembers = useCallback(async (p = page, s = search, plan = planFilter, status = statusFilter, remaining = remainingFilter) => {
@@ -257,6 +306,18 @@ export default function AdminMembersPage() {
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Quản lý</p>
         <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý thành viên</h1>
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          className="mt-3 inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white"
+        >
+          <span>Yêu cầu tập luyện</span>
+          {pendingTrainingCount > 0 && (
+            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f5222d] px-1.5 text-xs font-bold text-white">
+              {pendingTrainingCount > 99 ? '99+' : pendingTrainingCount}
+            </span>
+          )}
+        </button>
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
@@ -348,6 +409,95 @@ export default function AdminMembersPage() {
         onClose={() => setRenewModalOpen(false)}
         onSuccess={() => { setRenewModalOpen(false); fetchMembers() }}
       />
+
+      <Modal title="Yêu cầu tập luyện" open={modalOpen} onCancel={() => setModalOpen(false)}
+        width={1100} centered footer={null} destroyOnClose
+        styles={{ body: { paddingTop: 8 } }}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex gap-2">
+            {['pending', 'matched', 'cancelled', ''].map((s) => (
+              <Button key={s} type={reqFilter === s ? 'primary' : 'default'} size="small" onClick={() => setReqFilter(s)}>
+                {s === '' ? 'Tất cả' : s === 'pending' ? 'Chờ' : s === 'matched' ? 'Đã ghép' : 'Đã hủy'}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <Table
+          dataSource={requests}
+          rowKey="_id"
+          loading={reqLoading}
+          pagination={false}
+          locale={{ emptyText: 'Không có yêu cầu nào' }}
+          columns={[
+            {
+              title: 'Hội viên',
+              dataIndex: 'memberId',
+              width: 200,
+              render: (m: any) => (
+                <div className="flex items-center gap-2">
+                  {m?.avatar && <img src={m.avatar} className="h-8 w-8 rounded-full object-cover" />}
+                  <span className="font-medium text-[var(--gs-text)]">{getUserDisplayName(m)}</span>
+                </div>
+              ),
+            },
+            {
+              title: 'Chuyên môn & Mục tiêu',
+              dataIndex: 'goals',
+              width: 220,
+              render: (_: any, r: TrainingRequest) => {
+                const specName = SPEC_LABELS[r.specialization || 'GYM'] || r.specialization || 'GYM'
+                const goalText = r.goals?.[0]
+                return (
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--gs-text)] uppercase">{specName}</div>
+                    {goalText && <div className="text-xs text-[var(--gs-text-muted)] mt-0.5">Mục tiêu: {goalText}</div>}
+                  </div>
+                )
+              },
+            },
+            {
+              title: 'Lịch',
+              key: 'schedule',
+              width: 260,
+              render: (_: any, r: TrainingRequest) => (
+                <div className="text-xs text-[var(--gs-text-muted)]">
+                  {r.desiredSessions} buổi/tuần · {r.timeSlots?.join(', ')}<br />
+                  {r.daysOfWeek?.length > 0 ? r.daysOfWeek.map((d) => ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d]).join(', ') : 'Linh hoạt (Admin tự xếp ngày)'}
+                </div>
+              ),
+            },
+            {
+              title: 'Trạng thái',
+              dataIndex: 'status',
+              width: 100,
+              render: (s: string) => {
+                const map: Record<string, [string, string]> = {
+                  pending: ['orange', 'Chờ'],
+                  assigned: ['green', 'Đã xếp lớp'],
+                  cancelled: ['red', 'Hủy'],
+                }
+                return <Tag color={map[s]?.[0] || 'default'}>{map[s]?.[1] || s}</Tag>
+              },
+            },
+            {
+              title: 'Xếp vào lớp',
+              key: 'action',
+              width: 180,
+              render: (_: any, r: TrainingRequest) => {
+                if (r.status !== 'pending') {
+                  return <span className="text-xs text-[var(--gs-text-muted)]">Đã xử lý</span>
+                }
+                return (
+                  <Button type="primary" size="small" onClick={() => navigate(`/admin/member-requests/match?requestId=${r._id}`)}>
+                    Tìm lớp phù hợp
+                  </Button>
+                )
+              },
+            },
+          ]}
+        />
+      </Modal>
     </DashboardLayout>
   )
 }

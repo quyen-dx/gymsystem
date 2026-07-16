@@ -4,6 +4,7 @@ import {
   checkConflicts,
   createBooking,
   createRecurringBooking,
+  scheduleWeeklyBooking,
   getMyBookings,
   getPTBookings,
   confirmBooking,
@@ -25,6 +26,8 @@ router.get('/conflicts', protect, checkConflicts)
 router.post('/', protect, authorize('member'), createBooking)
 
 router.post('/recurring', protect, authorize('member'), createRecurringBooking)
+
+router.post('/schedule-weekly', protect, authorize('member'), scheduleWeeklyBooking)
 
 router.get('/my', protect, authorize('member'), getMyBookings)
 

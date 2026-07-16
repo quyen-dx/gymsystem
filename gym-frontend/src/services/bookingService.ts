@@ -7,9 +7,19 @@ export type BookingStatus =
   | 'cancelled'
   | 'completed'
 
+export type BookingMember = {
+  _id: string
+  name?: string
+  fullName?: string
+  email?: string | null
+  phone?: string
+  avatar?: string
+  memberCode?: string
+}
+
 export type Booking = {
   _id: string
-  memberId: string
+  memberId: string | BookingMember
   ptId: {
     _id: string
     name?: string
@@ -44,6 +54,13 @@ export type CreateRecurringBookingPayload = {
   trainingType: 'one_to_one' | 'group'
 }
 
+export type ScheduleWeeklyPayload = {
+  ptId: string
+  daysOfWeek: number[]
+  time: string
+  note?: string
+}
+
 export const bookingService = {
   checkConflicts(params: { ptId: string; date: string; slot: string }) {
     return api.get('/bookings/conflicts', { params })
@@ -55,6 +72,10 @@ export const bookingService = {
 
   createRecurringBooking(data: CreateRecurringBookingPayload) {
     return api.post('/bookings/recurring', data)
+  },
+
+  scheduleWeekly(data: ScheduleWeeklyPayload) {
+    return api.post('/bookings/schedule-weekly', data)
   },
 
   getMyBookings() {

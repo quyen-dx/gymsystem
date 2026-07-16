@@ -1,5 +1,6 @@
 import {
   BarChartOutlined,
+  BellOutlined,
   CalendarOutlined,
   CommentOutlined,
   CreditCardOutlined,
@@ -28,7 +29,10 @@ import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
 import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
 import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
+import { trainingRequestService } from '../../../services/trainingRequestService'
+import { shiftSwapService } from '../../../services/shiftSwapService'
 import { membershipService } from '../../../services/membershipService'
+import { notificationService } from '../../../services/notificationService'
 import { socketService } from '../../../services/socketService'
 import { getUserDisplayName, getUserInitialName } from '../../../utils/userDisplay'
 
@@ -50,6 +54,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navigate = useNavigate()
   const [pendingCount, setPendingCount] = useState(0)
   const [pendingRefundCount, setPendingRefundCount] = useState(0)
+  const [pendingTrainingCount, setPendingTrainingCount] = useState(0)
+  const [pendingSwapCount, setPendingSwapCount] = useState(0)
+  const [pendingNotificationCount, setPendingNotificationCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const location = useLocation()
@@ -66,6 +73,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         getPendingPartnershipRequestCount()
           .then((res) => setPendingCount(res.data.count || 0))
           .catch(() => { })
+        trainingRequestService.getAllRequests({ status: 'pending', page: 1, limit: 1 })
+          .then((res) => setPendingTrainingCount(res.data.pagination?.total || 0))
+          .catch(() => { })
       }
       if (user?.role === 'staff' || user?.role === 'super_admin' || user?.role === 'admin') {
         membershipService.getPendingRefundRequestCount()
@@ -74,6 +84,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
     }
     loadCounts()
+    const interval = setInterval(loadCounts, 30000)
+    return () => clearInterval(interval)
   }, [user?.role])
 
   useEffect(() => {
@@ -84,6 +96,71 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       socketService.off('refund_request_update', handler)
     }
   }, [])
+
+  // Shift swap: socket + initial count
+  useEffect(() => {
+    if (!['admin', 'super_admin'].includes(user?.role || '')) return
+
+    shiftSwapService.getAll({ status: 'cho_duyet', limit: 1 })
+      .then((res) => setPendingSwapCount(res.data.total || 0))
+      .catch(() => {})
+
+    const countHandler = (data: { pendingCount: number }) => setPendingSwapCount(data.pendingCount)
+    const newHandler = (data: { requestingPtName: string; targetDate: string }) => {
+      // TODO: show toast notification
+    }
+    socketService.on('shift_swap:count_updated', countHandler)
+    socketService.on('shift_swap:new_request', newHandler)
+    return () => {
+      socketService.off('shift_swap:count_updated', countHandler)
+      socketService.off('shift_swap:new_request', newHandler)
+    }
+  }, [user?.role])
+
+  // Notifications: fetch unread count + realtime via socket
+  useEffect(() => {
+    if (user?.role !== 'pt') return
+
+    const fetchUnreadCount = () => {
+      notificationService.getMyNotifications()
+        .then((res) => {
+          const data = res.data.data || []
+          setPendingNotificationCount(data.filter((n: any) => !n.isRead).length)
+        })
+        .catch(() => {})
+    }
+
+    fetchUnreadCount()
+    const interval = setInterval(fetchUnreadCount, 30000)
+
+    // Socket: lắng nghe notification mới
+    socketService.connect()
+    const handler = (notification: any) => {
+      setPendingNotificationCount((prev) => prev + 1)
+    }
+    socketService.on('notification:new', handler)
+
+    return () => {
+      clearInterval(interval)
+      socketService.off('notification:new', handler)
+    }
+  }, [user?.role])
+
+  const badgeLabel = (text: string, count: number) => (
+    <span style={{ position: 'relative', display: 'inline-block', paddingRight: 22 }}>
+      <span>{text}</span>
+      {count > 0 && (
+        <span style={{
+          position: 'absolute', top: '50%', right: 0, transform: 'translateY(-50%)',
+          minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#f5222d',
+          color: '#fff', fontSize: 10, lineHeight: '18px', textAlign: 'center',
+          padding: '0 4px', fontWeight: 600,
+        }}>
+          {count > 99 ? '99+' : count}
+        </span>
+      )}
+    </span>
+  )
 
   const roleMenus: Record<string, any[]> = {
     admin: [
@@ -126,27 +203,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         icon: <TeamOutlined />,
       },
 
-      {
-        key: '/staff/payments',
-        label: (
-          <span style={{ position: 'relative', display: 'inline-block', paddingRight: 22 }}>
-            <span>{'Thanh toán'}</span>
-            {pendingRefundCount > 0 && (
-              <span style={{
-              position: 'absolute', top: '50%', right: 0, transform: 'translateY(-50%)',
-              minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#f5222d',
-              color: '#fff', fontSize: 10, lineHeight: '18px', textAlign: 'center',
-              padding: '0 4px', fontWeight: 600,
-              }}>
-                {pendingRefundCount > 99 ? '99+' : pendingRefundCount}
-              </span>
-            )}
-          </span>
-        ),
-        icon: <CreditCardOutlined />,
-      },
-      { key: '/admin/members', label: 'Hội viên', icon: <TeamOutlined /> },
-      ...(isEnabled('pt.moduleEnabled') ? [{ key: '/admin/trainers', label: `${'Huấn luyện viên'} (PT)`, icon: <UserOutlined /> }] : []),
+      { key: '/admin/members', label: badgeLabel('Hội viên', pendingTrainingCount), icon: <TeamOutlined /> },
+      ...(isEnabled('pt.moduleEnabled') ? [
+        { key: '/admin/trainers', label: badgeLabel('Huấn luyện viên (PT)', pendingSwapCount), icon: <UserOutlined /> },
+      ] : []),
+      { key: '/admin/floors-zones', label: 'Tầng & Khu vực', icon: <DashboardOutlined /> },
       ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: 'Báo cáo', icon: <BarChartOutlined /> }] : []),
       { key: '/admin/faqs', label: 'Quản lý FAQ', icon: <QuestionCircleOutlined /> },
       { key: '/admin/feedback', label: 'Quản lý phản hồi', icon: <CommentOutlined /> },
@@ -180,11 +241,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ],
     pt: [
       { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
-      ...(isEnabled('pt.scheduleEnabled') ? [{ key: '/pt/schedule', label: 'Lịch trình', icon: <CalendarOutlined /> }] : []),
+      ...(isEnabled('pt.scheduleEnabled') ? [
+        { key: '/pt/schedule', label: 'Lịch làm việc', icon: <CalendarOutlined /> },
+
+      ] : []),
       ...(isEnabled('pt.moduleEnabled') ? [
         { key: '/pt/clients', label: 'Khách hàng', icon: <TeamOutlined /> },
-        { key: '/pt/workouts', label: 'Bài tập', icon: <FileTextOutlined /> },
+        { key: '/pt/workouts', label: 'Giáo án', icon: <FileTextOutlined /> },
       ] : []),
+      { key: '/pt/notifications', label: badgeLabel('Thông báo', pendingNotificationCount), icon: <BellOutlined /> },
     ],
     seller: [
       { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },

@@ -39,4 +39,5 @@ router.post('/', authorize('pt', 'admin', 'super_admin'), createWorkout)
 router.put('/:id', authorize('pt', 'admin', 'super_admin'), updateWorkout)
 router.delete('/:id', authorize('pt', 'admin', 'super_admin'), deleteWorkout)
 
+
 export default router

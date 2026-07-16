@@ -76,9 +76,9 @@ export default function MemberLayout({
     { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
     ...(isEnabled('shop.productStoreEnabled') ? [{ key: '/store', label: 'Cửa hàng', icon: <ShopOutlined /> }] : []),
     ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/my-membership', label: 'Gói tập', icon: <CalendarOutlined /> }] : []),
-    ...(isEnabled('pt.memberBookingEnabled') ? [{ key: '/booking', label: 'Đặt PT', icon: <CalendarOutlined /> }] : []),
+    ...(isEnabled('pt.moduleEnabled') ? [{ key: '/booking', label: 'Đặt lịch PT', icon: <CalendarOutlined /> }] : []),
     ...(isEnabled('workout.healthLogEnabled') ? [{ key: '/health', label: 'Sức khỏe', icon: <HeartOutlined /> }] : []),
-    ...(isEnabled('workout.workoutPlanEnabled') ? [{ key: '/workout', label: 'Tập luyện', icon: <FundOutlined /> }] : []),
+    ...(isEnabled('workout.workoutPlanEnabled') ? [{ key: '/workout', label: 'Lịch tập', icon: <FundOutlined /> }] : []),
     ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/checkin', label: 'Check-in', icon: <CreditCardOutlined /> }] : []),
   ]
   const moreNavItems = [

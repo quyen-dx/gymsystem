@@ -208,7 +208,7 @@ export const membershipService = {
   renewMyMembership: () => api.post('/memberships/my/renew'),
   renewPlanWithWallet: () => api.post('/memberships/my/renew-wallet'),
   renewPlanWithDuration: (durationMultiplier: number) =>
-    api.post<{ message: string; walletBalance: number; membership: MyMembership; payment: any }>(
+    api.post<{ message: string; walletBalance: number; membership: MyMembership; payment: any; newEndDate?: string }>(
       '/memberships/my/renew-plan', { durationMultiplier },
     ),
   getRegistrations: (params?: Record<string, unknown>) => api.get('/memberships/registrations', { params }),

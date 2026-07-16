@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import RefundRequest from '../models/RefundRequest.js'
 import MembershipPeriod from '../models/MembershipPeriod.js'
 import Membership from '../models/Membership.js'
+import User from '../models/User.js'
 import Wallet from '../models/Wallet.js'
 import Transaction from '../models/Transaction.js'
 import CheckIn from '../models/CheckIn.js'
@@ -10,6 +11,7 @@ import { rebuildMembershipTimeline } from './membershipService.js'
 import { recordUserActivity } from './userActivityService.js'
 import { invalidatePersonalContextCache } from './conversationContextCache.js'
 import { emitRefundRequestUpdate } from './socketService.js'
+import { sendRefundRequestSubmittedEmail, sendRefundRequestProcessedEmail } from './emailService.js'
 
 const toObjectId = (value, fieldName) => {
   if (!mongoose.Types.ObjectId.isValid(String(value))) {
@@ -205,6 +207,18 @@ export const createRefundRequest = async ({ userId, periodId, reason = '' }) => 
 
   invalidatePersonalContextCache(memberId)
 
+  const planName = period.planId?.nameVi || period.planId?.nameEn || ''
+  const refundUser = await User.findById(memberId).select('email fullName name')
+  if (refundUser?.email && !isFullMembershipCancel) {
+    sendRefundRequestSubmittedEmail({
+      toEmail: refundUser.email,
+      userName: refundUser.fullName || refundUser.name || refundUser.email,
+      planName,
+      periodDetail: `Kỳ hạn: ${new Date(period.startDate).toLocaleDateString('vi-VN')} → ${new Date(period.endDate).toLocaleDateString('vi-VN')}`,
+      isFullCancel: isFullMembershipCancel,
+    }).catch((e) => console.error('Gửi email yêu cầu hủy thất bại:', e.message))
+  }
+
   return {
     message: 'Yêu cầu đã được gửi tới nhân viên. Vui lòng chờ phê duyệt.',
     refundRequest,
@@ -395,6 +409,25 @@ export const approveRefundRequest = async ({ refundRequestId, staffId, staffNote
 
     emitRefundRequestUpdate().catch(() => {})
 
+    const planName = refundRequest.planId?.nameVi || refundRequest.planId?.nameEn || ''
+    const procUser = await User.findById(period.memberId).select('email fullName name')
+    const staffInfo = staffId ? await User.findById(staffId).select('fullName name') : null
+    const staffName = staffInfo ? (staffInfo.fullName || staffInfo.name) : ''
+    if (procUser?.email && refundRequest.memberId) {
+      const isFullCancel = refundRequest.pendingPeriodsCount > 0
+      sendRefundRequestProcessedEmail({
+        toEmail: procUser.email,
+        userName: procUser.fullName || procUser.name || procUser.email,
+        planName,
+        status: totalRefundAmount > 0 ? 'REFUNDED' : 'APPROVED',
+        refundAmount: totalRefundAmount,
+        reason: '',
+        isFullCancel,
+        staffName,
+        staffNote: staffNote || '',
+      }).catch((e) => console.error('Gửi email xử lý hủy thất bại:', e.message))
+    }
+
     const message = totalRefundAmount > 0
       ? `Đã phê duyệt và hoàn ${totalRefundAmount.toLocaleString('vi-VN')}đ vào ví hội viên.`
       : 'Đã phê duyệt hủy kỳ hạn (không hoàn tiền).'
@@ -410,6 +443,7 @@ export const approveRefundRequest = async ({ refundRequestId, staffId, staffNote
 
 export const rejectRefundRequest = async ({ refundRequestId, staffId, reason = '' }) => {
   const refundRequest = await RefundRequest.findById(refundRequestId)
+    .populate('planId', 'nameVi nameEn price')
   if (!refundRequest) {
     const error = new Error('Không tìm thấy yêu cầu hoàn tiền.')
     error.statusCode = 404
@@ -456,6 +490,25 @@ export const rejectRefundRequest = async ({ refundRequestId, staffId, reason = '
   invalidatePersonalContextCache(refundRequest.memberId)
 
   emitRefundRequestUpdate().catch(() => {})
+
+  const planName = refundRequest.planId?.nameVi || refundRequest.planId?.nameEn || ''
+  const rejUser = await User.findById(refundRequest.memberId).select('email fullName name')
+  const staffInfo = staffId ? await User.findById(staffId).select('fullName name') : null
+  const staffName = staffInfo ? (staffInfo.fullName || staffInfo.name) : ''
+  if (rejUser?.email) {
+    const isFullCancel = refundRequest.pendingPeriodsCount > 0
+    sendRefundRequestProcessedEmail({
+      toEmail: rejUser.email,
+      userName: rejUser.fullName || rejUser.name || rejUser.email,
+      planName,
+      status: 'REJECTED',
+      refundAmount: 0,
+      reason: reason || '',
+      isFullCancel,
+      staffName,
+      staffNote: reason || '',
+    }).catch((e) => console.error('Gửi email từ chối hủy thất bại:', e.message))
+  }
 
   return {
     message: 'Đã từ chối yêu cầu. Kỳ hạn của hội viên không thay đổi.',

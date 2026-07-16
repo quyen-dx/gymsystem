@@ -1,4 +1,5 @@
 import { invalidateAiPTCache } from '../ai/services/context/contextDataService.js'
+import { invalidateAiDomainCache } from '../services/aiCacheService.js'
 import { buildClientUrl } from '../config/appUrls.js'
 import Address from '../models/Address.js'
 import Booking from '../models/Booking.js'

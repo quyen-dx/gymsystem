@@ -32,9 +32,19 @@ const canManageWorkout = (user, workout) =>
 const canUpdateSessionProgress = (user, workout) =>
   canManageWorkout(user, workout) || (isMemberRole(user.role) && sameId(workout.memberId, user._id))
 
-const buildScopedWorkoutFilter = (user, memberId) => {
-  if (isAdminRole(user.role)) return memberId ? { memberId } : {}
-  if (isPtRole(user.role)) return memberId ? { ptId: user._id, memberId } : { ptId: user._id }
+const buildScopedWorkoutFilter = (user, memberId, isTemplate) => {
+  if (isAdminRole(user.role)) {
+    const filter = {}
+    if (memberId) filter.memberId = memberId
+    if (isTemplate !== undefined) filter.isTemplate = isTemplate === 'true'
+    return filter
+  }
+  if (isPtRole(user.role)) {
+    const filter = { ptId: user._id }
+    if (memberId) filter.memberId = memberId
+    if (isTemplate !== undefined) filter.isTemplate = isTemplate === 'true'
+    return filter
+  }
   return { memberId: user._id }
 }
 
@@ -140,8 +150,8 @@ const getSessionOr400 = (workout, weekIndex, sessionIndex, res) => {
 
 export const getAllWorkouts = async (req, res) => {
   try {
-    const { memberId } = req.query
-    const workouts = await Workout.find(buildScopedWorkoutFilter(req.user, memberId))
+    const { memberId, isTemplate } = req.query
+    const workouts = await Workout.find(buildScopedWorkoutFilter(req.user, memberId, isTemplate))
       .populate('memberId', 'name fullName email phone memberCode avatar')
       .populate('ptId', 'name fullName email phone avatar')
       .sort({ createdAt: -1 })
@@ -176,12 +186,25 @@ export const createWorkout = async (req, res) => {
       return res.status(403).json({ message: 'Chi PT moi duoc tao workout' })
     }
 
+    const isTemplate = req.body.isTemplate === true
     const payload = {
-      ...req.body,
-      ptId: isPtRole(req.user.role) ? req.user._id : req.body.ptId,
+      name: req.body.name || req.body.workoutName,
+      goal: req.body.goal,
+      duration: req.body.duration || req.body.durationWeeks,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      description: req.body.description,
+      memberId: req.body.memberId || req.body.member,
+      ptId: isPtRole(req.user.role) ? req.user._id : (req.body.ptId || req.body.personalTrainer),
+      weeks: req.body.weeks || [],
+      days: req.body.days || [],
+      estimatedCalories: req.body.estimatedCalories || 0,
+      isTemplate,
+      status: isTemplate ? undefined : (req.body.status || 'active'),
+      templateStatus: isTemplate ? 'pending_approval' : undefined,
     }
 
-    if (!payload.memberId || !isValidObjectId(payload.memberId)) {
+    if (!isTemplate && (!payload.memberId || !isValidObjectId(payload.memberId))) {
       return res.status(400).json({ message: 'memberId khong hop le' })
     }
 
@@ -206,10 +229,21 @@ export const updateWorkout = async (req, res) => {
       return res.status(403).json({ message: 'Ban khong co quyen sua workout nay' })
     }
 
-    const allowedFields = ['name', 'goal', 'duration', 'startDate', 'endDate', 'description', 'memberId', 'weeks', 'estimatedCalories']
+    const mapping = {
+      workoutName: 'name',
+      durationWeeks: 'duration',
+      member: 'memberId',
+      personalTrainer: 'ptId',
+    }
+
+    const allowedFields = ['name', 'goal', 'duration', 'startDate', 'endDate', 'description', 'memberId', 'ptId', 'weeks', 'days', 'estimatedCalories', 'isTemplate', 'status']
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) workout[field] = req.body[field]
     })
+
+    for (const [frontend, backend] of Object.entries(mapping)) {
+      if (req.body[frontend] !== undefined) workout[backend] = req.body[frontend]
+    }
 
     recalculateCompletionRate(workout)
     await workout.save()

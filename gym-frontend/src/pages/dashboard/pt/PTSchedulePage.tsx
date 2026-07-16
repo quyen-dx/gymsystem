@@ -1,315 +1,229 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { BellOutlined, RightOutlined } from '@ant-design/icons'
+import { useEffect, useMemo, useState } from 'react'
+import { Button, Checkbox, DatePicker, Input, message, Modal, Tag } from 'antd'
+import { SwapOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
-import { bookingService } from '../../../services/bookingService'
+import { trainerService } from '../../../services/trainerService'
+import { shiftSwapService } from '../../../services/shiftSwapService'
 import { useTheme } from '../../../context/ThemeProvider'
-import { getUserDisplayName } from '../../../utils/userDisplay'
+import type { TrainingClass } from '../../../services/trainingGroupService'
 
-interface PTBooking {
-  _id: string
-  memberId: {
-    _id: string
-    name?: string
-    fullName?: string
-    displayName?: string
-    email?: string
-    avatar?: string
-  }
-  date: string
-  slot: string
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed'
-  note?: string
+function getFloorName(f: string | { _id: string; name: string } | undefined): string {
+  if (!f) return ''
+  return typeof f === 'object' ? f.name : ''
+}
+function getZoneName(z: string | { _id: string; name: string } | undefined): string {
+  if (!z) return ''
+  return typeof z === 'object' ? z.name : ''
 }
 
-interface PTScheduleData {
-  dayOfWeek: number
-  shift: string
-}
-
-const statusLabels: Record<string, string> = {
-  pending: 'Chờ',
-  confirmed: 'Xác nhận',
-  completed: 'Hoàn thành',
-  cancelled: 'Hủy',
-}
+const DAY_LABEL_MAP_VN = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
 
 export default function PTSchedulePage() {
-  const navigate = useNavigate()
   const { dark } = useTheme()
-  const [bookings, setBookings] = useState<PTBooking[]>([])
-  const [pendingCount, setPendingCount] = useState(0)
-  const [schedules, setSchedules] = useState<PTScheduleData[]>([])
-  const [loading, setLoading] = useState(false)
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [classes, setClasses] = useState<TrainingClass[]>([])
+  const [swapModalOpen, setSwapModalOpen] = useState(false)
+  const [swapDate, setSwapDate] = useState<dayjs.Dayjs | null>(null)
+  const [swapReason, setSwapReason] = useState('')
+  const [swapSubmitting, setSwapSubmitting] = useState(false)
+  const [selectedClassIds, setSelectedClassIds] = useState<Set<string>>(new Set())
 
   const DAYS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
-  const SHIFTS = [
-    { value: 'morning', label: '6h - 12h' },
-    { value: 'afternoon', label: '12h - 18h' },
-    { value: 'evening', label: '18h - 22h' },
-  ]
 
-  const loadBookings = async () => {
+  const loadClasses = async () => {
     try {
-      setLoading(true)
-      const res = await bookingService.getPTBookings({ filter: 'week' })
-      let data = res.data?.data || res.data || []
-      if (!Array.isArray(data)) data = []
-
-      const filtered = data.filter((b: PTBooking) =>
-        new Date(b.date).toDateString() === new Date(selectedDate).toDateString()
-      )
-
-      setBookings(filtered.sort((a: PTBooking, b: PTBooking) => a.slot.localeCompare(b.slot)))
+      const res = await trainerService.getPTMyClasses()
+      const data = res.data?.classes || []
+      setClasses(data)
     } catch (error) {
       console.error(error)
+    }
+  }
+
+  useEffect(() => { loadClasses() }, [])
+
+  // Classes that fall on the selected date
+  const dateClasses = useMemo(() => {
+    if (!swapDate) return []
+    const dow = swapDate.day()
+    return classes
+      .filter(c => c.daysOfWeek.includes(dow))
+      .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+  }, [swapDate, classes])
+
+  const toggleClass = (id: string) => {
+    setSelectedClassIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const selectAll = () => setSelectedClassIds(new Set(dateClasses.map(c => c._id)))
+  const deselectAll = () => setSelectedClassIds(new Set())
+
+  const selectedCount = selectedClassIds.size
+  const hasSelected = selectedCount > 0
+
+  const handleSwapSubmit = async () => {
+    if (!swapDate || !hasSelected) { message.warning('Vui lòng chọn ngày và ít nhất 1 ca'); return }
+    setSwapSubmitting(true)
+    try {
+      await shiftSwapService.create({
+        targetDate: swapDate.format('YYYY-MM-DD'),
+        reason: swapReason,
+        classIds: Array.from(selectedClassIds),
+      })
+      message.success('Đã gửi yêu cầu thay ca')
+      setSwapModalOpen(false)
+      resetForm()
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Gửi yêu cầu thất bại')
     } finally {
-      setLoading(false)
+      setSwapSubmitting(false)
     }
   }
 
-  const loadPendingCount = async () => {
-    try {
-      const res = await bookingService.getPTBookings({ status: 'pending', from: 'today' })
-      let data = res.data?.data || res.data || []
-      if (!Array.isArray(data)) data = []
-      setPendingCount(data.length)
-    } catch (error) {
-      console.error(error)
-    }
+  const resetForm = () => {
+    setSwapDate(null)
+    setSwapReason('')
+    setSelectedClassIds(new Set())
   }
-
-  const loadSchedule = async () => {
-    try {
-      setSchedules([
-        { dayOfWeek: 1, shift: 'morning' },
-        { dayOfWeek: 1, shift: 'afternoon' },
-        { dayOfWeek: 3, shift: 'afternoon' },
-        { dayOfWeek: 5, shift: 'evening' },
-      ])
-    } catch (error) {
-      console.error(error)
-    }
-  }
-
-  useEffect(() => {
-    loadPendingCount()
-  }, [])
-
-  useEffect(() => {
-    loadBookings()
-  }, [selectedDate])
-
-  useEffect(() => {
-    loadSchedule()
-  }, [])
-
-  const selectedDateObj = new Date(selectedDate)
-  const dayOfWeek = selectedDateObj.getDay()
-  const daySchedules = schedules.filter(s => s.dayOfWeek === dayOfWeek)
-
-  const confirmedCount = bookings.filter(b => b.status === 'confirmed').length
-  const pendingDayCount = bookings.filter(b => b.status === 'pending').length
-  const completedCount = bookings.filter(b => b.status === 'completed').length
-
-  const formatDate = (d: string) => new Date(d).toLocaleDateString('vi-VN')
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
         <div className="rounded-[28px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-8 max-[640px]:p-5">
-          <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">
-            'LỊCH PT'
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">
-            Lịch làm việc
-          </h1>
-          <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
-            Quản lý lịch làm việc hàng tuần và xem các buổi tập được đặt lịch
-          </p>
+          <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">LỊCH PT</p>
+          <div className="flex items-center justify-between mt-3">
+            <h1 className="text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">Lịch làm việc</h1>
+            <Button type="primary" icon={<SwapOutlined />} onClick={() => setSwapModalOpen(true)}>
+              Yêu cầu thay ca
+            </Button>
+          </div>
+          <p className="mt-2 text-sm text-[var(--gs-text-muted)]">Quản lý lịch làm việc hàng tuần</p>
         </div>
 
-        {/* Pending summary card */}
-        <div
-          className="flex cursor-pointer items-center justify-between rounded-xl border p-4 transition-colors hover:bg-[var(--theme-accent-muted)]"
-          style={{
-            borderColor: 'color-mix(in srgb, var(--theme-accent) 35%, var(--gs-border))',
-            background: 'color-mix(in srgb, var(--theme-accent) 12%, var(--gs-card))',
-          }}
-          onClick={() => navigate('/pt/schedule/pending')}
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: 'color-mix(in srgb, var(--theme-accent) 20%, transparent)' }}>
-              <BellOutlined style={{ color: 'var(--theme-accent)', fontSize: 18 }} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-[var(--gs-text)]">Lịch chờ xác nhận</span>
-                {pendingCount > 0 && (
-                  <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white"
-                    style={{ background: 'var(--theme-accent)' }}>
-                    {pendingCount}
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-[var(--gs-text-muted)]">
-                {pendingCount > 0
-                  ? `Có ${pendingCount} lịch cần phản hồi trước buổi tập`
-                  : 'Không có lịch chờ xác nhận'}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 text-sm font-medium text-[var(--gs-text-muted)]">
-            Xem tất cả
-            <RightOutlined style={{ fontSize: 12 }} />
-          </div>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-          <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-6">
-            <h2 className="text-lg font-semibold text-[var(--gs-text)]">
-              Lịch làm việc hàng tuần
-            </h2>
-
-            <div className="mt-4 space-y-3">
-              {DAYS.map((day, idx) => (
-                <div key={idx} className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-3">
-                  <p className="font-semibold text-[var(--gs-text)]">{day}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {schedules
-                      .filter(s => s.dayOfWeek === idx)
-                      .map((s, i) => (
-                        <span key={i} className="rounded-full px-3 py-1 text-xs"
-                          style={{
-                            background: 'var(--theme-accent-muted)',
-                            color: 'var(--theme-accent)',
-                          }}>
-                          {SHIFTS.find(sh => sh.value === s.shift)?.label}
-                        </span>
-                      ))}
-                    {schedules.filter(s => s.dayOfWeek === idx).length === 0 && (
-                      <span className="text-xs text-[var(--gs-text-muted)]">Không làm việc</span>
+        <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-6">
+          <h2 className="text-lg font-semibold text-[var(--gs-text)]">Lịch làm việc hàng tuần</h2>
+          <div className="mt-4 flex flex-col gap-3">
+            {DAYS.map((day, idx) => {
+              const dayClasses = classes
+                .filter(c => c.daysOfWeek.includes(idx))
+                .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+              return (
+                <div key={idx} className="flex flex-col sm:flex-row gap-4 p-4 items-start rounded-lg border border-[var(--gs-border)]">
+                  <div className="w-40 shrink-0"><p className="text-lg font-bold text-slate-100">{day}</p></div>
+                  <div className="flex-1 w-full">
+                    {dayClasses.length === 0 ? (
+                      <div className="border border-dashed border-zinc-800 rounded-lg p-4 text-center text-zinc-500 text-sm">🏝️ Không có lịch</div>
+                    ) : (
+                      <div className="flex flex-col gap-4">
+                        {dayClasses.map((c, i) => (
+                          <div key={c._id}>
+                            {i > 0 && <div className="border-t border-zinc-800 pt-4 mb-0" />}
+                            <div className="space-y-1.5">
+                              <p className="font-bold text-green-500">{c.startTime || '--:--'} - {c.endTime || '--:--'}</p>
+                              <p className="font-medium text-[var(--gs-text)]">[{c.code || '???'}] {c.name}</p>
+                              <div className="flex items-center gap-2">
+                                <span className="inline-block rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                                  style={{ background: dark ? 'rgba(182,70,47,0.2)' : 'rgba(182,70,47,0.12)', color: dark ? 'rgb(235,130,100)' : 'rgb(150,55,35)' }}>
+                                  {c.specialization || 'GYM'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-[var(--gs-text-muted)]">📍 {[getFloorName(c.floorId), getZoneName(c.zoneId)].filter(Boolean).join(' - ')}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-[var(--gs-text)]">
-                Khách đặt lịch tập - {formatDate(selectedDate)}
-              </h2>
-
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                style={{
-                  background: 'var(--gs-input-bg)',
-                  color: 'var(--gs-text)',
-                  border: '1px solid var(--gs-border)',
-                }}
-                className="rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:border-[var(--theme-accent)]"
-              />
-            </div>
-
-            <div className="mb-4 grid grid-cols-3 gap-3">
-              <div className="rounded-lg p-3 text-center" style={{ background: 'color-mix(in srgb, var(--theme-accent) 12%, var(--gs-card))' }}>
-                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Chờ</p>
-                <p className="text-lg font-bold" style={{ color: 'var(--theme-accent)' }}>{pendingDayCount}</p>
-              </div>
-              <div className="rounded-lg p-3 text-center"
-                style={{ background: dark ? 'rgba(34,197,94,0.10)' : 'rgba(34,197,94,0.08)' }}>
-                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Đã xác nhận</p>
-                <p className="text-lg font-bold" style={{ color: dark ? 'rgb(74,222,128)' : 'rgb(22,163,74)' }}>{confirmedCount}</p>
-              </div>
-              <div className="rounded-lg p-3 text-center"
-                style={{ background: dark ? 'rgba(59,130,246,0.10)' : 'rgba(59,130,246,0.08)' }}>
-                <p className="text-xs" style={{ color: 'var(--gs-text-muted)' }}>Hoàn thành</p>
-                <p className="text-lg font-bold" style={{ color: dark ? 'rgb(96,165,250)' : 'rgb(37,99,235)' }}>{completedCount}</p>
-              </div>
-            </div>
-
-            {daySchedules.length > 0 && (
-              <div className="mb-4 rounded-lg border p-3 text-sm"
-                style={{
-                  borderColor: 'color-mix(in srgb, var(--theme-accent) 40%, var(--gs-border))',
-                  background: 'color-mix(in srgb, var(--theme-accent) 12%, var(--gs-card))',
-                  color: 'var(--theme-accent)',
-                }}>
-                ✓ Bạn làm việc vào ngày này: {daySchedules.map(s => SHIFTS.find(sh => sh.value === s.shift)?.label).join(', ')}
-              </div>
-            )}
-
-            {daySchedules.length === 0 && (
-              <div className="mb-4 rounded-lg border border-dashed border-[var(--gs-border)] bg-[var(--gs-card)] p-3 text-sm text-[var(--gs-text-muted)]">
-                ⚠️ Bạn không có lịch làm việc vào ngày này
-              </div>
-            )}
-
-            {loading && (
-              <p className="text-center text-[var(--gs-text-muted)]">Đang tải...</p>
-            )}
-
-            {!loading && bookings.length === 0 && (
-              <p className="text-center text-[var(--gs-text-muted)]">
-                Không có booking nào cho ngày này
-              </p>
-            )}
-
-            <div className="space-y-2 max-h-[500px] overflow-y-auto">
-              {bookings.map((booking) => (
-                <div
-                  key={booking._id}
-                  className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-3"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="font-semibold text-[var(--gs-text)]">
-                        {booking.slot}
-                      </p>
-                      <p className="text-sm text-[var(--gs-text-muted)]">
-                        {getUserDisplayName(booking.memberId, booking.memberId?.email || 'Thành viên')}
-                      </p>
-                      {booking.note && (
-                        <p className="text-xs text-[var(--gs-text-muted)]">
-                          {booking.note}
-                        </p>
-                      )}
-                    </div>
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '2px 10px',
-                      borderRadius: 999,
-                      fontSize: 12,
-                      fontWeight: 600,
-                      background: booking.status === 'pending'
-                        ? 'color-mix(in srgb, var(--theme-accent) 20%, transparent)'
-                        : booking.status === 'confirmed'
-                          ? (dark ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.12)')
-                          : booking.status === 'completed'
-                            ? (dark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.12)')
-                            : (dark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.12)'),
-                      color: booking.status === 'pending'
-                        ? 'var(--theme-accent)'
-                        : booking.status === 'confirmed'
-                          ? (dark ? 'rgb(74,222,128)' : 'rgb(22,163,74)')
-                          : booking.status === 'completed'
-                            ? (dark ? 'rgb(96,165,250)' : 'rgb(37,99,235)')
-                            : (dark ? 'rgb(248,113,113)' : 'rgb(220,38,38)'),
-                    }}>
-                      {statusLabels[booking.status]}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+              )
+            })}
           </div>
         </div>
       </div>
+
+      <Modal
+        title="Yêu cầu thay ca"
+        open={swapModalOpen}
+        onCancel={() => { setSwapModalOpen(false); resetForm() }}
+        onOk={handleSwapSubmit}
+        confirmLoading={swapSubmitting}
+        okText="Gửi yêu cầu"
+        okButtonProps={{ disabled: !swapDate || !hasSelected }}
+        width={560}
+      >
+        <div className="space-y-4 pt-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-[var(--gs-text)]">Ngày cần thay ca</label>
+            <DatePicker className="w-full" value={swapDate} onChange={(val) => { setSwapDate(val); setSelectedClassIds(new Set()) }}
+              disabledDate={(d) => d.isBefore(dayjs(), 'day')} placeholder="Chọn ngày" />
+          </div>
+
+          {swapDate && dateClasses.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-[var(--gs-text)]">
+                  Chọn ca cần đổi — {DAY_LABEL_MAP_VN[swapDate.day()]}, {swapDate.format('DD/MM/YYYY')}
+                </label>
+                <div className="flex gap-1">
+                  <Button size="small" type="link" onClick={selectAll}>Chọn tất cả</Button>
+                  <Button size="small" type="link" onClick={deselectAll}>Bỏ chọn</Button>
+                </div>
+              </div>
+              <div className="space-y-2 max-h-56 overflow-y-auto">
+                {dateClasses.map(c => {
+                  const loc = [getFloorName(c.floorId), getZoneName(c.zoneId)].filter(Boolean).join(' - ')
+                  return (
+                    <label key={c._id}
+                      className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                        selectedClassIds.has(c._id)
+                          ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
+                          : 'border-[var(--gs-border)] hover:border-[var(--theme-accent)]'
+                      }`}
+                    >
+                      <Checkbox checked={selectedClassIds.has(c._id)} onChange={() => toggleClass(c._id)} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-[var(--gs-text)]">
+                            {c.startTime || '--:--'} - {c.endTime || '--:--'}
+                          </span>
+                          <Tag className="m-0 text-[11px]" color="blue">[{c.code || '???'}] {c.name}</Tag>
+                        </div>
+                        {loc && <p className="mt-0.5 text-xs text-[var(--gs-text-muted)]">📍 {loc}</p>}
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {swapDate && dateClasses.length === 0 && (
+            <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card-soft)] px-3 py-2">
+              <p className="text-xs text-[var(--gs-text-muted)]">Không có ca dạy nào vào ngày này.</p>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-[var(--gs-text)]">Lý do <span className="text-[var(--gs-text-muted)] font-normal">(không bắt buộc)</span></label>
+            <Input.TextArea rows={2} value={swapReason} onChange={e => setSwapReason(e.target.value)} placeholder="VD: Có việc cá nhân, sức khỏe..." />
+          </div>
+
+          {hasSelected && swapDate && (
+            <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card-soft)] px-3 py-2">
+              <p className="text-xs text-[var(--gs-text-muted)]">
+                Hệ thống sẽ gửi yêu cầu đổi{' '}
+                <strong className="text-[var(--gs-text)]">{selectedCount} ca</strong>{' '}
+                ({dateClasses.filter(c => selectedClassIds.has(c._id)).map(c => `${c.startTime}-${c.endTime}, [${c.code}] ${c.name}`).join('; ')})
+                {' '}vào {DAY_LABEL_MAP_VN[swapDate.day()]}, {swapDate.format('DD/MM/YYYY')} lên admin duyệt.
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
     </DashboardLayout>
   )
 }

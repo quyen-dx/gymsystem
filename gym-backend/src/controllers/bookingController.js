@@ -118,16 +118,7 @@ export const createBooking = async (req, res) => {
         })
       }
 
-      const priceAtBooking =
-        finalTrainingType === 'group'
-          ? pt.groupPrice
-          : pt.oneToOnePrice
-
-      if (!priceAtBooking || priceAtBooking <= 0) {
-        return res.status(400).json({
-          message: 'PT chưa cấu hình giá dịch vụ',
-        })
-      }
+      const priceAtBooking = 0
 
     const memberConflict = await Booking.findOne({
       memberId: req.user._id,
@@ -258,6 +249,75 @@ export const createRecurringBooking = async (req, res) => {
   }
 }
 
+function getNextWeekDate(dayOfWeek) {
+  const now = new Date()
+  const currentDay = now.getDay()
+  const diff = dayOfWeek - currentDay + (dayOfWeek <= currentDay ? 7 : 0)
+  if (diff === 0) return normalizeDate(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const next = new Date(now.getTime() + diff * 24 * 60 * 60 * 1000)
+  return normalizeDate(next)
+}
+
+export const scheduleWeeklyBooking = async (req, res) => {
+  try {
+    const { ptId, daysOfWeek, time, note } = req.body
+
+    if (!ptId || !daysOfWeek || !Array.isArray(daysOfWeek) || daysOfWeek.length === 0 || !time) {
+      return res.status(400).json({
+        message: 'Thiếu thông tin: ptId, daysOfWeek, time',
+      })
+    }
+
+    const results = []
+    const errors = []
+
+    for (const day of daysOfWeek) {
+      const bookingDate = getNextWeekDate(day)
+
+      if (!(await requireActiveMembershipForDate(req.user._id, bookingDate, res))) return
+
+      const conflict = await Booking.findOne({
+        $or: [
+          { memberId: req.user._id, date: bookingDate, slot: time, status: { $in: activeStatus } },
+          { ptId, date: bookingDate, slot: time, status: { $in: activeStatus } },
+        ],
+      })
+
+      if (conflict) {
+        errors.push({
+          day,
+          date: bookingDate,
+          reason: 'Trùng lịch, vui lòng chọn giờ khác',
+        })
+        continue
+      }
+
+      const booking = await Booking.create({
+        memberId: req.user._id,
+        ptId,
+        date: bookingDate,
+        slot: time,
+        note,
+        status: 'pending',
+      })
+
+      results.push(booking)
+    }
+
+    return res.status(201).json({
+      message: 'Gửi yêu cầu đăng ký lịch tập thành công',
+      createdCount: results.length,
+      createdBookings: results,
+      errors,
+    })
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Lỗi đăng ký lịch tập',
+      error: error.message,
+    })
+  }
+}
+
 export const getMyBookings = async (req, res) => {
   try {
     const bookings = await Booking.find({
@@ -369,6 +429,12 @@ export const confirmBooking = async (req, res) => {
 
     booking.status = 'awaiting_payment'
     await booking.save()
+
+    const { createAssignment } = await import('../services/ptAssignmentService.js')
+    await createAssignment({
+      memberId: booking.memberId,
+      ptId: req.user._id,
+    })
 
     return res.json({
       message: 'Đã xác nhận lịch. Chờ thành viên thanh toán',

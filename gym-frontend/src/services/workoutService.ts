@@ -47,7 +47,7 @@ export type WorkoutExercise = {
   name: string
   sets: number
   reps: number
-  restTime: string
+  restTime: number
   techniqueNote?: string
 }
 
@@ -64,8 +64,21 @@ export type WorkoutWeek = {
   sessions: WorkoutSession[]
 }
 
+export type TemplateDayExercise = {
+  name: string
+  note: string
+}
+
+export type TemplateDay = {
+  dayOfWeek: number
+  muscleGroup: string
+  description: string
+  exercises: TemplateDayExercise[]
+}
+
 export type WorkoutPlan = {
   _id: string
+  name?: string
   workoutName: string
   goal: string
   durationWeeks: number
@@ -76,6 +89,9 @@ export type WorkoutPlan = {
   personalTrainer: string | { _id: string; name?: string; fullName?: string; displayName?: string; email?: string; phone?: string }
   estimatedCalories: number
   weeks: WorkoutWeek[]
+  days?: TemplateDay[]
+  isTemplate?: boolean
+  status?: 'active' | 'completed' | 'archived'
   createdAt?: string
   updatedAt?: string
 }
@@ -87,10 +103,37 @@ export type WorkoutPlanPayload = {
   startDate?: string
   endDate?: string
   description?: string
-  member: string
-  personalTrainer: string
+  member?: string
+  personalTrainer?: string
   estimatedCalories: number
   weeks: WorkoutWeek[]
+  days?: TemplateDay[]
+  isTemplate?: boolean
+  status?: 'active' | 'completed' | 'archived'
+}
+
+export type ScheduleExercise = {
+  name: string
+  note?: string
+  completed?: boolean
+}
+
+export type ScheduleSession = {
+  dayOrder: number
+  date: string
+  time: string
+  endTime?: string
+  className?: string
+  classCode?: string
+  location?: string
+  title: string
+  muscleGroup: string
+  exercises: ScheduleExercise[]
+  status: 'pending' | 'completed' | 'skipped'
+  feedback: string
+  _isSwapOverride?: boolean
+  _overridePtId?: { _id: string; name?: string; fullName?: string; email?: string }
+  _overrideLocation?: string
 }
 
 export type SessionFeedback = {
@@ -106,6 +149,18 @@ export type SessionFeedback = {
   updatedAt?: string
 }
 
+export type WorkoutSchedule = {
+  _id: string
+  memberId: string | { _id: string; name?: string }
+  templateId: string | { _id: string; name?: string; goal?: string; description?: string }
+  assignedBy: string | { _id: string; name?: string; email?: string }
+  startDate: string
+  status: 'active' | 'completed' | 'archived'
+  sessions: ScheduleSession[]
+  createdAt?: string
+  updatedAt?: string
+}
+
 export type SessionFeedbackPayload = {
   workoutId: string
   memberId: string
@@ -117,8 +172,13 @@ export type SessionFeedbackPayload = {
 
 export const workoutService = {
   getWorkouts(params?: Record<string, unknown>) {
-    return api.get<{ workouts?: WorkoutPlan[]; data?: WorkoutPlan[]; pagination?: { total: number; page: number; limit: number; totalPages: number } }>('/workouts', { params })
+    return api.get<WorkoutPlan[]>('/workouts', { params })
   },
+
+  getTemplates(params?: Record<string, unknown>) {
+    return api.get<WorkoutPlan[]>('/workouts', { params: { ...params, isTemplate: 'true' } })
+  },
+
 
   getWorkoutById(id: string) {
     return api.get<{ workout?: WorkoutPlan; data?: WorkoutPlan }>(`/workouts/${id}`)

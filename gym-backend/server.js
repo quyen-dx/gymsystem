@@ -37,6 +37,15 @@ import bookingRoutes from './src/routes/bookingRoutes.js'
 import policyConsentRoutes from './src/routes/policyConsentRoutes.js'
 import healthRoutes from './src/routes/healthRoutes.js'
 import workoutRoutes from './src/routes/workoutRoutes.js'
+import scheduleRoutes from './src/routes/scheduleRoutes.js'
+import ptAssignmentRoutes from './src/routes/ptAssignmentRoutes.js'
+import trainingRequestRoutes from './src/routes/trainingRequestRoutes.js'
+import trainingAssignmentRoutes from './src/routes/trainingAssignmentRoutes.js'
+import trainingClassRoutes from './src/routes/trainingClassRoutes.js'
+import floorZoneRoutes from './src/routes/floorZoneRoutes.js'
+import trainerScheduleRoutes from './src/routes/trainerScheduleRoutes.js'
+import trainerReplacementRoutes from './src/routes/trainerReplacementRoutes.js'
+import shiftSwapRoutes from './src/routes/shiftSwapRoutes.js'
 
 import groupClassRoutes from "./src/routes/groupClassRoutes.js"
 import reportRoutes from "./src/routes/reportRoutes.js"
@@ -111,7 +120,17 @@ app.use('/api/system-experience', systemExperienceRoutes)
 app.use('/api/system-settings', systemSettingsRoutes)
 app.use('/api/bookings', bookingRoutes)
 app.use('/api/policy-consents', policyConsentRoutes)
+app.use('/api/workouts', workoutRoutes)
 app.use('/api/workout', workoutRoutes)
+app.use('/api/schedules', scheduleRoutes)
+app.use('/api/pt-assignments', ptAssignmentRoutes)
+app.use('/api/training-requests', trainingRequestRoutes)
+app.use('/api/training-assignments', trainingAssignmentRoutes)
+app.use('/api/training-classes', trainingClassRoutes)
+app.use('/api/floors-zones', floorZoneRoutes)
+app.use('/api/trainer-schedules', trainerScheduleRoutes)
+app.use('/api/trainer-replacements', trainerReplacementRoutes)
+app.use('/api/shift-swaps', shiftSwapRoutes)
 app.use('/api/health', healthRoutes)
 app.use("/api/group-classes", groupClassRoutes)
 app.use("/api/admin/reports", reportRoutes)

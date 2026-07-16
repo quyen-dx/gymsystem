@@ -2,7 +2,7 @@ import { App as AntdApp, Button, ConfigProvider, theme } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import FeatureDisabled from './components/system/FeatureDisabled'
-import { getAuthToken } from './services/api'
+import { getAuthToken, startRefreshScheduler } from './services/api'
 import { SystemSettingsProvider, useSystemSettings } from './context/SystemSettingsContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { useAuth } from './hooks/useAuth'
@@ -13,6 +13,7 @@ import RegisterPage from './pages/auth/Registerpage'
 import AdminCheckinPage from './pages/dashboard/admin/AdminCheckinPage'
 import AdminDashboard from './pages/dashboard/admin/AdminDashboard'
 import AdminMembersPage from './pages/dashboard/admin/AdminMembersPage'
+import MatchmakingPage from './pages/dashboard/admin/MatchmakingPage'
 import AdminMembersEditPage from './pages/dashboard/admin/AdminMembersEditPage'
 import MemberDetailPage from './pages/dashboard/admin/MemberDetailPage'
 import AdminPartnershipRequestsPage from './pages/dashboard/admin/AdminPartnershipRequestsPage'
@@ -52,9 +53,15 @@ import PlansPage from './pages/dashboard/member/PlansPage'
 import ProductDetailPage from './pages/dashboard/member/ProductDetailPage'
 
 import WorkoutPage from './pages/dashboard/member/WorkoutPage'
+import AdminTrainingClassesPage from './pages/dashboard/admin/TrainingClassesPage'
+import AdminFloorsZonesPage from './pages/dashboard/admin/FloorsZonesPage'
+import AdminTrainerSchedulesPage from './pages/dashboard/admin/AdminTrainerSchedulesPage'
+import AdminReplacementRequestsPage from './pages/dashboard/admin/AdminReplacementRequestsPage'
 import PTClientsPage from './pages/dashboard/pt/PTClientsPage'
+import CreateSchedulePage from './pages/dashboard/pt/CreateSchedulePage'
 import PTSchedulePage from './pages/dashboard/pt/PTSchedulePage'
-import PTSchedulePendingPage from './pages/dashboard/pt/PTSchedulePendingPage'
+import PTNotificationsPage from './pages/dashboard/pt/PTNotificationsPage'
+import PTWorkoutFormPage from './pages/dashboard/pt/PTWorkoutFormPage'
 import PTWorkoutsPage from './pages/dashboard/pt/PTWorkoutsPage'
 import SellerOrdersPage from './pages/dashboard/seller/SellerOrdersPage'
 import SellerProductCreatePage from './pages/dashboard/seller/SellerProductCreatePage'
@@ -143,6 +150,10 @@ function AppWithTheme() {
   const { user, loading } = useAuth()
   const { settings, loading: settingsLoading } = useSystemSettings()
   const location = useLocation()
+
+  useEffect(() => {
+    if (getAuthToken()) startRefreshScheduler()
+  }, [])
   const antdTheme = useMemo(() => ({
     algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
     token: {
@@ -275,6 +286,7 @@ function AppWithTheme() {
         <Route path="/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
         <Route path="/admin/users/:id" element={<PrivateRoute><AdminUserDetailPage /></PrivateRoute>} />
         <Route path="/admin/members" element={<PrivateRoute><AdminMembersPage /></PrivateRoute>} />
+        <Route path="/admin/member-requests/match" element={<PrivateRoute><MatchmakingPage /></PrivateRoute>} />
         <Route path="/admin/members/:id/edit" element={<PrivateRoute><AdminMembersEditPage /></PrivateRoute>} />
         <Route path="/admin/members/:id" element={<PrivateRoute><MemberDetailPage /></PrivateRoute>} />
         <Route path="/admin/trainers" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersPage /></PrivateRoute>} />
@@ -289,6 +301,11 @@ function AppWithTheme() {
         <Route path="/admin/faqs/:faqId/edit" element={<PrivateRoute><FAQCreatePage /></PrivateRoute>} />
         <Route path="/admin/faqs" element={<PrivateRoute><FAQManagerPage /></PrivateRoute>} />
         <Route path="/admin/feedback" element={<PrivateRoute><FeedbackManagerPage /></PrivateRoute>} />
+        <Route path="/admin/training-classes" element={<PrivateRoute><AdminTrainingClassesPage /></PrivateRoute>} />
+
+        <Route path="/admin/floors-zones" element={<PrivateRoute><AdminFloorsZonesPage /></PrivateRoute>} />
+        <Route path="/admin/trainer-schedules" element={<PrivateRoute feature="pt.scheduleEnabled"><AdminTrainerSchedulesPage /></PrivateRoute>} />
+        <Route path="/admin/replacement-requests" element={<PrivateRoute feature="pt.scheduleEnabled"><AdminReplacementRequestsPage /></PrivateRoute>} />
         <Route path="/admin/policies/create" element={<PrivateRoute><PolicyCreatePage /></PrivateRoute>} />
         <Route path="/admin/policies/:policyId/edit" element={<PrivateRoute><PolicyCreatePage /></PrivateRoute>} />
         <Route path="/admin/policies" element={<PrivateRoute><PolicyManagerPage /></PrivateRoute>} />
@@ -313,10 +330,15 @@ function AppWithTheme() {
         {/* PT */}
         <Route path="/pt" element={<Navigate to="/pt/schedule" replace />} />
         <Route path="/pt/schedule" element={<PrivateRoute feature="pt.scheduleEnabled"><PTSchedulePage /></PrivateRoute>} />
-        <Route path="/pt/schedule/pending" element={<PrivateRoute><PTSchedulePendingPage /></PrivateRoute>} />
+
+
         <Route path="/pt/clients" element={<PrivateRoute feature="pt.moduleEnabled"><PTClientsPage /></PrivateRoute>} />
+        <Route path="/pt/clients/:memberId/create-schedule" element={<PrivateRoute feature="pt.moduleEnabled"><CreateSchedulePage /></PrivateRoute>} />
         <Route path="/pt/student" element={<Navigate to="/pt/clients" replace />} />
         <Route path="/pt/workouts" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutsPage /></PrivateRoute>} />
+        <Route path="/pt/workouts/create" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutFormPage /></PrivateRoute>} />
+        <Route path="/pt/workouts/edit/:id" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutFormPage /></PrivateRoute>} />
+        <Route path="/pt/notifications" element={<PrivateRoute><PTNotificationsPage /></PrivateRoute>} />
 
         {/* ACCOUNT */}
         <Route path="/account/profile" element={<PrivateRoute><AccountProfilePage /></PrivateRoute>} />

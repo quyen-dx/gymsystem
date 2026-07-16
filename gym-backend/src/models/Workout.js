@@ -98,6 +98,25 @@ const weekSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Ngày tập (cho template)
+const templateDayExerciseSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    note: { type: String, default: '', trim: true },
+  },
+  { _id: false }
+)
+
+const templateDaySchema = new mongoose.Schema(
+  {
+    dayOfWeek: { type: Number, default: 0, min: 0, max: 8 },
+    muscleGroup: { type: String, default: '', trim: true },
+    description: { type: String, default: '', trim: true },
+    exercises: { type: [templateDayExerciseSchema], default: [] },
+  },
+  { _id: false }
+)
+
 // Workout
 const workoutSchema = new mongoose.Schema(
   {
@@ -139,11 +158,10 @@ const workoutSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Member
+    // Member (không bắt buộc với template)
     memberId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
       index: true,
     },
 
@@ -151,13 +169,19 @@ const workoutSchema = new mongoose.Schema(
     ptId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
       index: true,
     },
 
-    // Các tuần
+    // Các tuần (cho giáo án đã gán)
     weeks: {
       type: [weekSchema],
+      default: [],
+    },
+
+    // Các ngày tập (cho template)
+    days: {
+      type: [templateDaySchema],
       default: [],
     },
 
@@ -175,6 +199,19 @@ const workoutSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+
+    // Là giáo án mẫu?
+    isTemplate: {
+      type: Boolean,
+      default: false,
+    },
+
+    // Trạng thái (với giáo án đã gán cho member)
+    status: {
+      type: String,
+      enum: ['active', 'completed', 'archived'],
+      default: 'active',
+    },
   },
   {
     timestamps: true,
@@ -185,5 +222,7 @@ const workoutSchema = new mongoose.Schema(
 workoutSchema.index({ memberId: 1 });
 workoutSchema.index({ ptId: 1 });
 workoutSchema.index({ memberId: 1, createdAt: -1 });
+
+workoutSchema.index({ isTemplate: 1, createdAt: -1 });
 
 export default mongoose.models.Workout || mongoose.model("Workout", workoutSchema);

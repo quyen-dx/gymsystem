@@ -7,8 +7,8 @@ import type { PT } from '../../../types/admin/trainer'
 import { UploadOutlined, ArrowLeftOutlined } from '@ant-design/icons'
 
 const SPECIALTY_OPTIONS = [
-  'Yoga', 'GYM', 'Boxing', 'CrossFit', 'Pilates', 'Zumba', 'Personal Training',
-  'Cardio', 'Strength Training', 'HIIT', 'Dance', 'Meditation',
+  'YOGA', 'GYM', 'BOXING', 'CROSSFIT', 'PILATES', 'ZUMBA', 'PERSONAL TRAINING',
+  'CARDIO', 'STRENGTH TRAINING', 'HIIT', 'DANCE', 'MEDITATION',
 ]
 
 const PHONE_REGEX = /^0\d{9,10}$/
@@ -39,9 +39,6 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
         bio: pt.bio || '',
         experienceYears: pt.experienceYears || 0,
         introVideoUrl: pt.introVideoUrl || '',
-        oneToOnePrice: pt.oneToOnePrice || 0,
-        groupPrice: pt.groupPrice || 0,
-        groupCapacity: pt.groupCapacity || 5,
         certificates: pt.certificates || [],
       })
     } else {
@@ -65,9 +62,6 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
         fd.append('gender', (values.gender as string) || '')
         fd.append('experienceYears', String(values.experienceYears || 0))
         fd.append('introVideoUrl', (values.introVideoUrl as string) || '')
-        fd.append('oneToOnePrice', String(values.oneToOnePrice || 0))
-        fd.append('groupPrice', String(values.groupPrice || 0))
-        fd.append('groupCapacity', String(values.groupCapacity || 5))
         fd.append('specialties', JSON.stringify(values.specialties || []))
         fd.append('certificates', JSON.stringify(values.certificates || []))
         if (values.dateOfBirth) fd.append('dateOfBirth', new Date(values.dateOfBirth as Date).toISOString())
@@ -82,9 +76,6 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
           gender: (values.gender as string) || undefined,
           experienceYears: values.experienceYears || 0,
           introVideoUrl: (values.introVideoUrl as string) || '',
-          oneToOnePrice: values.oneToOnePrice || 0,
-          groupPrice: values.groupPrice || 0,
-          groupCapacity: values.groupCapacity || 5,
           specialties: values.specialties || [],
           certificates: values.certificates || [],
           dateOfBirth: values.dateOfBirth ? new Date(values.dateOfBirth as Date).toISOString() : undefined,
@@ -219,41 +210,7 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
             </Form.Item>
           </div>
 
-          <div style={cardStyle} className="p-6 max-[640px]:p-4">
-            <h2 style={sectionTitleStyle}>Giá dịch vụ PT</h2>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <Form.Item label="Giá PT 1-1 / buổi (VNĐ)" name="oneToOnePrice">
-                <InputNumber
-                  min={0}
-                  step={10000}
-                  style={{ width: '100%' }}
-                  placeholder="Ví dụ: 300000"
-                  size="large"
-                />
-              </Form.Item>
-
-              <Form.Item label="Giá PT nhóm / người (VNĐ)" name="groupPrice">
-                <InputNumber
-                  min={0}
-                  step={10000}
-                  style={{ width: '100%' }}
-                  placeholder="Ví dụ: 120000"
-                  size="large"
-                />
-              </Form.Item>
-            </div>
-
-            <Form.Item label="Sức chứa nhóm tối đa" name="groupCapacity">
-              <InputNumber
-                min={1}
-                max={50}
-                style={{ width: '100%' }}
-                placeholder="Ví dụ: 5"
-                size="large"
-              />
-            </Form.Item>
-          </div>
 
           <div style={cardStyle} className="p-6 max-[640px]:p-4">
             <h2 style={sectionTitleStyle}>Avatar</h2>

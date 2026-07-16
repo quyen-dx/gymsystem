@@ -1,792 +1,414 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Button, Tag, Select, message, Input, Spin } from 'antd'
+import { CheckCircleFilled, FireOutlined, AimOutlined, ThunderboltOutlined, HeartOutlined, RiseOutlined, MedicineBoxOutlined, SafetyOutlined, QuestionCircleOutlined, EnvironmentOutlined, TeamOutlined, UserOutlined, ArrowLeftOutlined, CalendarOutlined } from '@ant-design/icons'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
-import { bookingService } from '../../../services/bookingService'
-import type { Booking } from '../../../services/bookingService'
+import MembershipRequired from '../../../components/membership/MembershipRequired'
 import { membershipService } from '../../../services/membershipService'
-import { trainerService } from '../../../services/trainerService'
-import type { PT } from '../../../types/admin/trainer'
+import { trainingRequestService, type TrainingRequest } from '../../../services/trainingRequestService'
+import { memberService, type EnrollmentStatus } from '../../../services/memberService'
+import { getUserDisplayName } from '../../../utils/userDisplay'
+
+const SPECIALIZATIONS = [
+  { value: 'GYM', label: 'GYM', color: '#6366f1', icon: <ThunderboltOutlined /> },
+  { value: 'YOGA', label: 'Yoga', color: '#84cc16', icon: <EnvironmentOutlined />, disabled: true },
+  { value: 'BOXING', label: 'Boxing', color: '#f97316', icon: <FireOutlined />, disabled: true },
+  { value: 'ZUMBA', label: 'Zumba', color: '#ef4444', icon: <HeartOutlined />, disabled: true },
+  { value: 'PILATES', label: 'Pilates', color: '#10b981', icon: <RiseOutlined />, disabled: true },
+  { value: 'CARDIO', label: 'Cardio', color: '#06b6d4', icon: <AimOutlined />, disabled: true },
+  { value: 'CROSSFIT', label: 'Crossfit', color: '#8b5cf6', icon: <QuestionCircleOutlined />, disabled: true },
+]
+
+const GOALS = [
+  { value: 'Giảm mỡ', icon: <FireOutlined />, color: '#f97316' },
+  { value: 'Tăng cân', icon: <RiseOutlined />, color: '#10b981' },
+  { value: 'Tăng cơ', icon: <ThunderboltOutlined />, color: '#6366f1' },
+  { value: 'Body Recomp (Giảm mỡ + Tăng cơ)', icon: <AimOutlined />, color: '#8b5cf6' },
+  { value: 'Tăng sức bền', icon: <HeartOutlined />, color: '#ef4444' },
+  { value: 'Nâng cao thể lực', icon: <RiseOutlined />, color: '#06b6d4' },
+  { value: 'Phục hồi sau chấn thương', icon: <MedicineBoxOutlined />, color: '#84cc16' },
+  { value: 'Duy trì sức khỏe', icon: <SafetyOutlined />, color: '#22c55e' },
+  { value: 'Người mới cần được hướng dẫn trực tiếp', icon: <QuestionCircleOutlined />, color: '#a855f7' },
+]
+
+const TIME_SLOTS = ['07:00-09:00', '09:00-11:00', '12:00-14:00', '14:00-16:00', '16:00-18:00', '18:00-20:00', '20:00-22:00']
+const DAYS = [
+  { value: 0, label: 'Chủ nhật', short: 'CN' },
+  { value: 1, label: 'Thứ 2', short: 'T2' },
+  { value: 2, label: 'Thứ 3', short: 'T3' },
+  { value: 3, label: 'Thứ 4', short: 'T4' },
+  { value: 4, label: 'Thứ 5', short: 'T5' },
+  { value: 5, label: 'Thứ 6', short: 'T6' },
+  { value: 6, label: 'Thứ 7', short: 'T7' },
+]
 
 export default function BookingPage() {
   const navigate = useNavigate()
-
-  const [pts, setPts] = useState<PT[]>([])
-  const [bookings, setBookings] = useState<Booking[]>([])
-
-  const [search, setSearch] = useState('')
-  const [specialtyFilter, setSpecialtyFilter] = useState('')
-  const [minExperience, setMinExperience] = useState('')
-  const [detailPT, setDetailPT] = useState<PT | null>(null)
-
-  // Review
-  const [reviewingId, setReviewingId] = useState<string | null>(null)
-  const [rating, setRating] = useState(5)
-  const [comment, setComment] = useState('')
-
-  const [loading, setLoading] = useState(false)
   const [membershipLoading, setMembershipLoading] = useState(true)
-  const [canBook, setCanBook] = useState(false)
+  const [canRequest, setCanRequest] = useState(false)
   const [planName, setPlanName] = useState<string | null>(null)
-  const [message, setMessage] = useState('')
-  const [activeTab, setActiveTab] = useState<'create' | 'list'>('create')
-  const [expandedSpecs, setExpandedSpecs] = useState<string | null>(null)
 
-  const specialtyOptions = useMemo(() => {
-    return Array.from(
-      new Set(
-        pts.flatMap((pt) => pt.specialties || []).filter(Boolean),
-      ),
-    )
-  }, [pts])
+  const [requests, setRequests] = useState<TrainingRequest[]>([])
+  const [specialization, setSpecialization] = useState<string>('GYM')
+  const [goal, setGoal] = useState<string>('')
+  const [desiredSessions, setDesiredSessions] = useState<number>(3)
+  const [timeSlots, setTimeSlots] = useState<string[]>([])
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([])
+  const [isNewToGym, setIsNewToGym] = useState(false)
+  const [healthNotes, setHealthNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [bookingType, setBookingType] = useState<string | null>(null)
 
-  const filteredPTs = useMemo(() => {
-    return pts.filter((pt) => {
-      const keyword = search.trim().toLowerCase()
-
-      const matchSearch =
-        !keyword ||
-        pt.name?.toLowerCase().includes(keyword) ||
-        pt.email?.toLowerCase().includes(keyword) ||
-        pt.specialties?.some((s) => s.toLowerCase().includes(keyword))
-
-      const matchSpecialty =
-        !specialtyFilter ||
-        pt.specialties?.some((s) =>
-          s.toLowerCase().includes(specialtyFilter.toLowerCase()),
-        )
-
-      const matchExperience =
-        !minExperience ||
-        Number(pt.experienceYears || 0) >= Number(minExperience)
-
-      return matchSearch && matchSpecialty && matchExperience
-    })
-  }, [pts, search, specialtyFilter, minExperience])
-
-  const loadPTs = async () => {
-    try {
-      const res = await trainerService.getAvailablePTs()
-      setPts(res.data.pts || [])
-    } catch (error) {
-      console.error(error)
-      setMessage('Không thể tải danh sách PT')
-    }
-  }
-
-  const loadMyBookings = async () => {
-    try {
-      const res = await bookingService.getMyBookings()
-      const data = res.data?.data || res.data || []
-      setBookings(Array.isArray(data) ? data : [])
-    } catch (error) {
-      console.error(error)
-    }
-  }
-
-  const handleCancelBooking = async (id: string) => {
-    const reason = window.prompt('Nhập lý do hủy:')
-
-    if (!reason) return
-
-    try {
-      await bookingService.cancelBooking(id, reason)
-      setMessage('Hủy lịch thành công')
-      await loadMyBookings()
-    } catch (error: any) {
-      console.error(error)
-      setMessage(
-        error?.response?.data?.message || 'Hủy lịch thất bại',
-      )
-    }
-  }
-
-  const handleReviewBooking = async (id: string) => {
-    if (rating < 1 || rating > 5) {
-      setMessage('Vui lòng chọn đánh giá từ 1-5 sao')
-      return
-    }
-
-    try {
-      setLoading(true)
-      await bookingService.reviewPT(id, rating, comment)
-      setMessage('Đánh giá thành công')
-      setReviewingId(null)
-      setRating(5)
-      setComment('')
-      await loadMyBookings()
-    } catch (error: any) {
-      console.error(error)
-      setMessage(error?.response?.data?.message || 'Đánh giá thất bại')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handlePayBooking = async (id: string) => {
-    try {
-      setLoading(true)
-
-      await bookingService.payBooking(id)
-
-      setMessage('Thanh toán thành công')
-
-      await loadMyBookings()
-    } catch (error: any) {
-      console.error(error)
-
-      setMessage(
-        error?.response?.data?.message ||
-        'Thanh toán thất bại',
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'Chờ xác nhận'
-      case 'awaiting_payment':
-        return 'Chờ thanh toán'
-      case 'confirmed':
-        return 'Đã xác nhận'
-      case 'cancelled':
-        return 'Đã hủy'
-      case 'completed':
-        return 'Hoàn thành'
-      default:
-        return status
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'bg-yellow-500/10 text-yellow-300'
-      case 'awaiting_payment':
-        return 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
-      case 'confirmed':
-        return 'bg-green-500/10 text-green-300'
-      case 'cancelled':
-        return 'bg-red-500/10 text-red-300'
-      case 'completed':
-        return 'bg-blue-500/10 text-blue-300'
-      default:
-        return 'bg-white/10 text-white'
-    }
-  }
+  const [enrollmentLoading, setEnrollmentLoading] = useState(true)
+  const [enrollment, setEnrollment] = useState<EnrollmentStatus | null>(null)
+  const [showBookingOptions, setShowBookingOptions] = useState(false)
 
   useEffect(() => {
-    setMembershipLoading(true)
-    membershipService.getMyMembership()
-      .then((res) => {
-        const membership = res.data.membership
-        const allowed = membership?.status === 'active' && Number(membership.remainingDays || 0) > 0
-
-        if (allowed) {
-          const features = membership.plan?.featuresVi || membership.plan?.featuresEn || []
-          const hasPT = features.some((f: string) => /huấn luyện viên|personal training/i.test(f))
-          setPlanName(membership.planNameVi || membership.planNameEn || null)
-
-          if (hasPT) {
-            setCanBook(true)
-            loadPTs()
-            loadMyBookings()
-          } else {
-            setCanBook(false)
-          }
-        } else {
-          setPlanName(null)
-          setCanBook(false)
-        }
-      })
-      .catch(() => {
-        setCanBook(false)
-        setPlanName(null)
-        setMessage('Không thể tải thông tin gói tập')
-      })
+    membershipService.getMyMembership().then((res) => {
+      const m = res.data.membership
+      const allowed = m?.status === 'active' && Number(m.remainingDays || 0) > 0
+      setCanRequest(allowed)
+      setPlanName(m?.planNameVi || m?.plan?.nameVi || null)
+    }).catch(() => setCanRequest(false))
       .finally(() => setMembershipLoading(false))
+
+    // Check enrollment status
+    memberService.getMyEnrollmentStatus().then((res) => {
+      setEnrollment(res.data)
+    }).catch(() => {})
+      .finally(() => setEnrollmentLoading(false))
   }, [])
 
-  // Refresh PT list khi tab được focus lại
-  useEffect(() => {
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && canBook) {
-        loadPTs()
-        loadMyBookings()
-      }
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
-  }, [canBook])
+  const loadData = async () => {
+    if (!canRequest) return
+    const reqRes = await trainingRequestService.getMyRequests()
+    setRequests(reqRes.data.requests || [])
+  }
 
-  const handleRefresh = () => {
-    if (canBook) {
-      loadPTs()
-      loadMyBookings()
-    } else {
-      setMembershipLoading(true)
-      membershipService.getMyMembership()
-        .then((res) => {
-          const membership = res.data.membership
-          const allowed = membership?.status === 'active' && Number(membership.remainingDays || 0) > 0
-          if (allowed) {
-            const features = membership.plan?.featuresVi || membership.plan?.featuresEn || []
-            const hasPT = features.some((f: string) => /huấn luyện viên|personal training/i.test(f))
-            setPlanName(membership.planNameVi || membership.planNameEn || null)
-            setCanBook(hasPT)
-            if (hasPT) {
-              loadPTs()
-              loadMyBookings()
-            }
-          } else {
-            setPlanName(null)
-            setCanBook(false)
-          }
-        })
-        .catch(() => {
-          setCanBook(false)
-          setPlanName(null)
-        })
-        .finally(() => setMembershipLoading(false))
+  useEffect(() => { if (canRequest) loadData() }, [canRequest])
+
+  const toggleTimeSlot = (s: string) => {
+    setTimeSlots((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s])
+  }
+
+  const toggleDay = (d: number) => {
+    setDaysOfWeek((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d])
+  }
+
+  const handleSubmit = async () => {
+    if (!specialization) { message.warning('Chọn chuyên môn muốn tập'); return }
+    if (!desiredSessions) { message.warning('Chọn số buổi mong muốn'); return }
+    if (timeSlots.length === 0) { message.warning('Chọn ít nhất 1 khung giờ'); return }
+
+
+    setSubmitting(true)
+    try {
+      await trainingRequestService.create({
+        specialization,
+        goals: goal ? [goal] : [],
+        desiredSessions,
+        timeSlots,
+        daysOfWeek,
+        isNewToGym,
+        healthNotes,
+      })
+      setSubmitted(true)
+      setSpecialization('GYM'); setGoal(''); setDesiredSessions(3); setTimeSlots([]); setDaysOfWeek([]); setIsNewToGym(false); setHealthNotes('')
+      loadData()
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Gửi yêu cầu thất bại')
+    } finally {
+      setSubmitting(false)
     }
   }
+
+  const statusTag = (s: string) => {
+    const map: Record<string, [string, string]> = { pending: ['orange', 'Chờ xử lý'], assigned: ['green', 'Đã xếp lớp'], cancelled: ['red', 'Đã hủy'] }
+    const [color, label] = map[s] || ['default', s]
+    return <Tag color={color}>{label}</Tag>
+  }
+
+  const pendingRequests = requests.filter((r) => r.status === 'pending')
+  const hasPending = pendingRequests.length > 0
 
   return (
     <MemberLayout>
-      <div className="member-page space-y-6">
-        {membershipLoading && (
-          <div className="rounded-[24px] border border-[var(--theme-border)] bg-white/5 p-6 text-sm text-[var(--theme-muted)]">
-            Đang kiểm tra thông tin gói tập...
-          </div>
-        )}
-
-        {!membershipLoading && !canBook && (
-          <div className="mx-auto max-w-2xl rounded-[24px] border border-[var(--theme-border)] bg-white/5 p-8 text-center">
-            {planName ? (
-              <>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--theme-accent)]">
-                  GÓI TẬP KHÔNG PHÙ HỢP
-                </p>
-                <h1 className="mt-3 text-2xl font-bold text-[var(--theme-text)]">
-                  Gói &ldquo;{planName}&rdquo; không bao gồm huấn luyện viên
-                </h1>
-                <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[var(--theme-muted)]">
-                  Vui lòng chọn gói tập có quyền lợi huấn luyện viên để đặt lịch với PT
-                </p>
-                <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/plans')}
-                    className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--theme-accent-hover)]"
-                  >
-                    Xem gói tập
-                  </button>
+      <div className="mx-auto max-w-5xl px-4 py-6 space-y-6">
+        {membershipLoading ? (
+          <div className="text-sm text-[var(--gs-text-muted)]">Đang kiểm tra...</div>
+        ) : !canRequest ? (
+          <MembershipRequired planName={planName} featureLabel="đăng ký tập luyện" />
+        ) : enrollmentLoading ? (
+          <div className="flex min-h-[200px] items-center justify-center"><Spin size="large" /></div>
+        ) : enrollment?.hasActiveEnrollment && !showBookingOptions ? (
+          <div className="max-w-2xl mx-auto pt-8 space-y-4">
+            <div className="text-center mb-4">
+              <div className="text-5xl mb-3">✅</div>
+              <h1 className="text-2xl font-bold text-[var(--gs-text)]">Bạn đã có PT phụ trách</h1>
+            </div>
+            <div className="rounded-2xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 space-y-3">
+              {enrollment.pt && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-[var(--gs-text-muted)] w-20 shrink-0">PT:</span>
+                  <span className="text-sm font-semibold text-[var(--gs-text)]">{enrollment.pt.name}</span>
                 </div>
-              </>
-            ) : (
-              <>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--theme-accent)]">
-                  CẦN GÓI TẬP
-                </p>
-                <h1 className="mt-3 text-2xl font-bold text-[var(--theme-text)]">
-                  Bạn cần có gói tập để đặt lịch
-                </h1>
-                <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[var(--theme-muted)]">
-                  Vui lòng chọn gói tập phù hợp để sử dụng dịch vụ đặt lịch với PT
-                </p>
-                <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/plans')}
-                    className="rounded-xl bg-[var(--theme-button-bg)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--theme-accent-hover)]"
-                  >
-                    Xem gói tập
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/my-membership')}
-                    className="rounded-xl border border-[var(--theme-border)] px-5 py-3 text-sm font-semibold text-[var(--theme-text)] transition hover:bg-white/10"
-                  >
-                    Gói của tôi
-                  </button>
+              )}
+              {enrollment.class && (
+                <div className="flex items-start gap-2">
+                  <span className="text-xs font-medium text-[var(--gs-text-muted)] w-20 shrink-0 pt-0.5">Lớp:</span>
+                  <div>
+                    <span className="text-sm font-semibold text-[var(--gs-text)]">[{enrollment.class.code}] {enrollment.class.name}</span>
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {enrollment.class.daysOfWeek?.map((d, i) => {
+                        const dayLabel = DAYS.find(dd => dd.value === d)?.label || `D${d}`
+                        return <Tag key={i} className="m-0 text-xs">{dayLabel}</Tag>
+                      })}
+                      <span className="text-xs text-[var(--gs-text-muted)] ml-1 leading-6">{enrollment.class.time}</span>
+                    </div>
+                  </div>
                 </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {!membershipLoading && canBook && (
-          <>
-
-        {message && (
-          <div className="rounded-2xl border border-[var(--theme-border)] bg-white/5 p-4 text-sm text-[var(--theme-text)]">
-            {message}
-          </div>
-        )}
-
-        <div className="grid gap-3 rounded-[24px] border border-[var(--theme-border)] bg-white/5 p-5 md:grid-cols-3">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm PT theo tên, email, chuyên môn..."
-            className="rounded-xl border border-[var(--theme-border)] bg-transparent p-3 text-[var(--theme-text)] outline-none"
-          />
-
-          <select
-            value={specialtyFilter}
-            onChange={(e) => setSpecialtyFilter(e.target.value)}
-            className="rounded-xl border border-[var(--theme-border)] bg-transparent p-3 text-[var(--theme-text)]"
-          >
-            <option className="bg-white text-black" value="">
-              Tất cả chuyên môn
-            </option>
-
-            {specialtyOptions.map((specialty) => (
-              <option className="bg-white text-black" key={specialty} value={specialty}>
-                {specialty}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={minExperience}
-            onChange={(e) => setMinExperience(e.target.value)}
-            className="rounded-xl border border-[var(--theme-border)] bg-transparent p-3 text-[var(--theme-text)]"
-          >
-            <option className="bg-white text-black" value="">
-              Tất cả kinh nghiệm
-            </option>
-            <option className="bg-white text-black" value="1">
-              Từ 1 năm trở lên
-            </option>
-            <option className="bg-white text-black" value="3">
-              Từ 3 năm trở lên
-            </option>
-            <option className="bg-white text-black" value="5">
-              Từ 5 năm trở lên
-            </option>
-          </select>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-4 border-b border-[var(--theme-border)]">
-          <button
-            onClick={() => setActiveTab('create')}
-            className={`pb-3 font-semibold transition ${
-              activeTab === 'create'
-                ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-accent)]'
-                : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
-            }`}
-          >
-            Đặt lịch mới
-          </button>
-          <button
-            onClick={() => setActiveTab('list')}
-            className={`pb-3 font-semibold transition ${
-              activeTab === 'list'
-                ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-accent)]'
-                : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]'
-            }`}
-          >
-            {`Lịch của tôi (${bookings.length})`}
-          </button>
-        </div>
-
-        {activeTab === 'create' && (
-          <div className="space-y-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold text-[var(--theme-text)]">
-                  Chọn huấn luyện viên PT
-                </h2>
-                <p className="mt-2 text-sm text-[var(--theme-muted)]">
-                  Xem thông tin PT, chuyên môn, đánh giá và đặt lịch tập phù hợp với mục tiêu của bạn.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleRefresh}
-                className="shrink-0 rounded-xl border border-[var(--theme-border)] px-4 py-2 text-sm text-[var(--theme-text)] hover:bg-white/10"
-              >
-                Làm mới
+              )}
+              {enrollment.workout && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-[var(--gs-text-muted)] w-20 shrink-0">Giáo án:</span>
+                  <Tag color="blue" className="m-0 text-xs">{enrollment.workout.name}</Tag>
+                  {enrollment.workout.goal && <span className="text-xs text-[var(--gs-text-muted)]">({enrollment.workout.goal})</span>}
+                </div>
+              )}
+            </div>
+            <p className="text-sm text-center text-[var(--gs-text-muted)]">
+              Lịch tập của bạn đã được lên sẵn. Xem chi tiết tại mục "Tập luyện".
+            </p>
+            <Button type="primary" size="large" block icon={<CalendarOutlined />}
+              onClick={() => navigate('/workout')}>
+              Xem lịch tập của tôi
+            </Button>
+            <div className="text-center">
+              <button type="button" className="text-xs text-[var(--gs-text-muted)] underline hover:text-[var(--gs-text)]"
+                onClick={() => setShowBookingOptions(true)}>
+                Muốn đăng ký thêm dịch vụ khác?
               </button>
             </div>
-
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {filteredPTs.map((pt) => (
-                <div
-                  key={pt._id}
-                  className="rounded-[24px] border border-[var(--theme-border)] bg-white/5 p-5 transition hover:-translate-y-1 hover:bg-white/10"
-                >
-                  <div className="flex items-center gap-4">
-                    <img
-                      src={pt.avatar || '/default-avatar.png'}
-                      alt={pt.name || 'PT'}
-                      className="h-20 w-20 rounded-2xl object-cover"
-                    />
-
-                    <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-lg font-bold text-[var(--theme-text)]">
-                        {pt.name || pt.email || 'PT'}
-                      </h3>
-
-                      <p className="mt-1 text-sm text-yellow-400">
-                        ⭐ {pt.rating || 0} / 5
-                      </p>
-
-                      <p className="mt-1 text-xs text-[var(--theme-muted)]">
-                        {pt.experienceYears || 0} năm kinh nghiệm
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--theme-muted)]">
-                      Chuyên môn
-                    </p>
-
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {pt.specialties && pt.specialties.length > 0 ? (
-                        <>
-                          {(expandedSpecs === pt._id ? pt.specialties : pt.specialties.slice(0, 4)).map((item) => (
-                            <span
-                              key={item}
-                              className="rounded-full bg-[var(--theme-accent-muted)] px-3 py-1 text-xs text-[var(--theme-accent)]"
-                            >
-                              {item}
-                            </span>
-                          ))}
-                          {pt.specialties.length > 4 && (
-                            <button
-                              onClick={() => setExpandedSpecs(expandedSpecs === pt._id ? null : pt._id)}
-                              className="rounded-full border border-dashed border-[var(--theme-accent-border)] px-3 py-1 text-xs text-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)]"
-                            >
-                              {expandedSpecs === pt._id ? 'Thu gọn' : `+${pt.specialties.length - 4}`}
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-sm text-[var(--theme-muted)]">
-                          Chưa cập nhật
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-[var(--theme-border)] bg-black/20 p-3">
-                      <p className="text-xs text-[var(--theme-muted)]">1-1</p>
-                      <p className="mt-1 font-semibold text-[var(--theme-accent)]">
-                        {(pt.oneToOnePrice || 0).toLocaleString('vi-VN')}đ/buổi
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-[var(--theme-border)] bg-black/20 p-3">
-                      <p className="text-xs text-[var(--theme-muted)]">Nhóm</p>
-                      <p className="mt-1 font-semibold text-[var(--theme-accent)]">
-                        {(pt.groupPrice || 0).toLocaleString('vi-VN')}đ/người
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setDetailPT(pt)}
-                      className="flex-1 rounded-xl border border-[var(--theme-border)] px-4 py-2 text-sm font-semibold text-[var(--theme-text)] transition hover:bg-white/10"
-                    >
-                      Xem chi tiết
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/booking/${pt._id}`)}
-                      className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--theme-accent-hover)]"
-                    >
-                      Đặt lịch
-                    </button>
-                  </div>
-                </div>
-              ))}
+          </div>
+        ) : bookingType === null ? (
+          <div className="max-w-2xl mx-auto pt-8 space-y-2">
+            {enrollment?.hasActiveEnrollment && showBookingOptions && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-center dark:border-amber-700 dark:bg-amber-900/20">
+                <p className="text-xs text-amber-800 dark:text-amber-200">
+                  Bạn đang có lịch tập đang hoạt động. Đăng ký thêm dịch vụ mới có thể cần admin xác nhận lại.
+                </p>
+              </div>
+            )}
+            {enrollment?.hasPendingRequest && !enrollment.hasActiveEnrollment && (
+              <div className="rounded-xl border border-blue-300 bg-blue-50 p-3 text-center dark:border-blue-700 dark:bg-blue-900/20">
+                <p className="text-xs text-blue-800 dark:text-blue-200">
+                  Bạn có 1 yêu cầu đang chờ xử lý. Vui lòng đợi admin duyệt hoặc hủy yêu cầu cũ trước khi gửi yêu cầu mới.
+                </p>
+              </div>
+            )}
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-[var(--gs-text)]">Đăng ký dịch vụ tập luyện</h1>
+              <p className="text-sm text-[var(--gs-text-muted)] mt-2">Chọn hình thức tập luyện phù hợp với bạn</p>
             </div>
-
-            {detailPT && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-                <div className="w-full max-w-2xl rounded-[24px] border border-[var(--theme-border)] bg-[var(--theme-bg)] p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <img
-                        src={detailPT.avatar || '/default-avatar.png'}
-                        alt={detailPT.name || 'PT'}
-                        className="h-20 w-20 rounded-2xl object-cover"
-                      />
-
-                      <div>
-                        <h3 className="text-xl font-bold text-[var(--theme-text)]">
-                          {detailPT.name || detailPT.email || 'PT'}
-                        </h3>
-                        <p className="mt-1 text-sm text-yellow-400">
-                          ⭐ {detailPT.rating || 0} / 5
-                        </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <button type="button" onClick={() => setBookingType('group')}
+                className="group relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left transition-all duration-200 hover:scale-[1.03] hover:border-[var(--theme-accent)] hover:shadow-lg cursor-pointer">
+                <div className="text-5xl mb-4 text-[var(--theme-accent)]"><TeamOutlined /></div>
+                <h3 className="text-xl font-bold text-[var(--gs-text)] mb-2">Đăng ký tập luyện nhóm</h3>
+                <p className="text-sm text-[var(--gs-text-muted)] leading-relaxed">
+                  Tập luyện theo nhóm, huấn luyện viên hỗ trợ giáo án cá nhân hóa, tiết kiệm chi phí.
+                </p>
+              </button>
+              <div className="relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left opacity-60 pointer-events-none">
+                <div className="absolute -top-2.5 right-4 z-10">
+                  <span className="inline-block rounded-full bg-gradient-to-r from-orange-400 to-pink-500 px-3 py-1 text-[11px] font-bold text-white uppercase tracking-wide shadow-md">
+                    Sắp ra mắt
+                  </span>
+                </div>
+                <div className="text-5xl mb-4 text-[var(--gs-text-muted)]"><UserOutlined /></div>
+                <h3 className="text-xl font-bold text-[var(--gs-text)] mb-2">Đăng ký PT riêng 1-1</h3>
+                <p className="text-sm text-[var(--gs-text-muted)] leading-relaxed">
+                  1 kèm 1 với huấn luyện viên cá nhân, cam kết đầu ra, thiết lập giáo án chuẩn xác 100% cho riêng bạn.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-3">
+              <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setBookingType(null)}
+                className="text-[var(--gs-text-muted)] hover:text-[var(--gs-text)] !px-1" />
+              <div>
+                <h2 className="text-lg font-semibold text-[var(--gs-text)]">Đăng ký tập luyện nhóm</h2>
+                <p className="text-sm text-[var(--gs-text-muted)]">Chia sẻ nhu cầu của bạn, admin sẽ xếp bạn vào lớp phù hợp</p>
+              </div>
+            </div>
+            {pendingRequests.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="text-lg font-semibold text-[var(--gs-text)]">Yêu cầu đã gửi</h2>
+                <div className="flex flex-wrap gap-3">
+                  {pendingRequests.map((r) => {
+                    const specLabel = SPECIALIZATIONS.find(s => s.value === r.specialization)?.label || r.specialization || 'GYM'
+                    const displayText = r.goals?.[0] ? `${specLabel} - ${r.goals[0]}` : specLabel
+                    return (
+                      <div key={r._id} className="rounded-xl border border-[var(--theme-border)] bg-[var(--gs-card)] p-3 flex items-center gap-3">
+                        <span className="text-sm text-[var(--gs-text)] uppercase">{displayText}</span>
+                        {statusTag(r.status)}
+                        <Button size="small" danger onClick={() => trainingRequestService.cancelMyRequest(r._id).then(loadData)}>
+                          Hủy
+                        </Button>
                       </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setDetailPT(null)}
-                      className="rounded-xl border border-[var(--theme-border)] px-3 py-2 text-sm text-[var(--theme-muted)] hover:bg-white/10"
-                    >
-                      Đóng
-                    </button>
-                  </div>
-
-                  <div className="mt-5 space-y-4 text-sm">
-                    <p className="text-[var(--theme-muted)]">
-                      Kinh nghiệm:{' '}
-                      <span className="text-[var(--theme-text)]">
-                        {detailPT.experienceYears || 0} năm
-                      </span>
-                    </p>
-
-                    <p className="text-[var(--theme-muted)]">
-                      Chuyên môn:{' '}
-                      <span className="text-[var(--theme-text)]">
-                        {detailPT.specialties?.length
-                          ? detailPT.specialties.join(', ')
-                          : 'Chưa cập nhật'}
-                      </span>
-                    </p>
-
-                    <div className="rounded-2xl border border-[var(--theme-border)] bg-black/20 p-4">
-                      <p className="mb-3 font-semibold text-[var(--theme-text)]">Giá dịch vụ</p>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <p className="text-xs text-[var(--theme-muted)]">PT 1-1</p>
-                          <p className="mt-1 font-semibold text-[var(--theme-accent)]">
-                            {(detailPT.oneToOnePrice || 0).toLocaleString('vi-VN')}đ/buổi
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs text-[var(--theme-muted)]">PT nhóm</p>
-                          <p className="mt-1 font-semibold text-[var(--theme-accent)]">
-                            {(detailPT.groupPrice || 0).toLocaleString('vi-VN')}đ/người
-                          </p>
-                        </div>
-                      </div>
-
-                      <p className="mt-3 text-xs text-[var(--theme-muted)]">
-                        Sức chứa nhóm: {detailPT.groupCapacity || 5} người
-                      </p>
-                    </div>
-
-                    <p className="leading-6 text-[var(--theme-muted)]">
-                      {detailPT.bio || 'PT chưa cập nhật giới thiệu.'}
-                    </p>
-                  </div>
-
-                  <div className="mt-6 flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setDetailPT(null)}
-                      className="flex-1 rounded-xl border border-[var(--theme-border)] px-4 py-3 text-sm font-semibold text-[var(--theme-text)] hover:bg-white/10"
-                    >
-                      Đóng
-                    </button>
-
-                    <button
-                      onClick={() => navigate(`/booking/${detailPT._id}`)}
-                      className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-3 text-sm font-semibold text-white hover:bg-[var(--theme-accent-hover)]"
-                    >
-                      Đặt lịch
-                    </button>
-                  </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
-          </div>
-        )}
 
-        {activeTab === 'list' && (
-          <div className="rounded-[24px] border border-[var(--theme-border)] bg-white/5 p-6">
-            <h2 className="text-xl font-semibold text-[var(--theme-text)]">
-              Lịch của tôi
-            </h2>
-
-            <div className="mt-5 space-y-4">
-              {bookings.length === 0 && (
-                <p className="text-sm text-[var(--theme-muted)]">
-                  Chưa có lịch đặt nào
-                </p>
-              )}
-
-              {bookings.map((booking) => (
-                <div
-                  key={booking._id}
-                  className="rounded-2xl border border-[var(--theme-border)] bg-black/10 p-4"
-                >
-                  {reviewingId === booking._id ? (
-                    // Review form
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-[var(--theme-text)]">
-                        Đánh giá buổi tập
-                      </h3>
-
-                      <div>
-                        <label className="mb-2 block text-sm text-[var(--theme-muted)]">
-                          Đánh giá:
-                        </label>
-                        <div className="flex gap-2">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <button
-                              key={star}
-                              onClick={() => setRating(star)}
-                              className={`text-2xl transition ${
-                                star <= rating ? 'text-yellow-400' : 'text-gray-500'
-                              }`}
-                            >
-                              ⭐
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="mb-2 block text-sm text-[var(--theme-muted)]">
-                          Nhận xét:
-                        </label>
-                        <textarea
-                          value={comment}
-                          onChange={(e) => setComment(e.target.value)}
-                          rows={3}
-                          placeholder="Nhập nhận xét của bạn..."
-                          className="w-full rounded-xl border border-[var(--theme-border)] bg-transparent p-3 text-[var(--theme-text)] outline-none"
-                        />
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleReviewBooking(booking._id)}
-                          disabled={loading}
-                          className="flex-1 rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--theme-accent-hover)] disabled:opacity-60"
-                        >
-                          {loading ? 'Đang xử lý...' : 'Gửi đánh giá'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setReviewingId(null)}
-                          className="flex-1 rounded-xl border border-[var(--theme-border)] px-4 py-2 text-sm text-[var(--theme-muted)] hover:bg-white/5"
-                        >
-                          Hủy
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    // Booking display
-                    <>
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <p className="font-semibold text-[var(--theme-text)]">
-                            PT:{' '}
-                            {booking.ptId?.name ||
-                              booking.ptId?.email ||
-                              'PT'}
-                          </p>
-
-                          <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                            {'Ngày: ' + new Date(booking.date).toLocaleDateString('vi-VN')}
-                          </p>
-
-                          <p className="text-sm text-[var(--theme-muted)]">
-                            {'Giờ: ' + booking.slot}
-                          </p>
-
-                          <p className="text-sm text-[var(--theme-muted)]">
-                            Hình thức:{' '}
-                            {booking.trainingType === 'group'
-                              ? 'PT nhóm'
-                              : 'PT 1-1'}
-                          </p>
-
-                          <p className="text-sm text-[var(--theme-muted)]">
-                            Chi phí:{' '}
-                            {booking.totalAmount?.toLocaleString('vi-VN')}đ
-                          </p>
-
-                          {booking.note && (
-                            <p className="text-sm text-[var(--theme-muted)]">
-                              {'Ghi chú: ' + booking.note}
-                            </p>
-                          )}
-
-                          {booking.isViolation && (
-                            <p className="mt-1 text-xs text-red-300">
-                              ⚠ Đã vi phạm - vui lòng liên hệ staff
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="text-right">
-                          <p
-                            className={`mb-3 inline-block rounded-full px-3 py-1 text-sm font-semibold ${getStatusColor(
-                              booking.status,
-                            )}`}
-                          >
-                            {getStatusText(booking.status)}
-                          </p>
-
-                          {booking.status === 'awaiting_payment' && (
-                            <p className="max-w-[220px] text-xs text-[var(--theme-accent)]">
-                              PT đã xác nhận lịch. Vui lòng thanh toán để hoàn tất đặt lịch.
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--theme-border)] pt-3">
-                        {booking.status === 'completed' && (
-                          <button
-                            type="button"
-                            onClick={() => setReviewingId(booking._id)}
-                            className="rounded-xl border border-[var(--theme-accent-border)] px-4 py-2 text-sm text-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)]"
-                          >
-                            Đánh giá
-                          </button>
-                        )}
-
-                        {booking.status === 'awaiting_payment' && (
-                          <button
-                            type="button"
-                            onClick={() => handlePayBooking(booking._id)}
-                            className="rounded-xl bg-[var(--theme-button-bg)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--theme-accent-hover)]"
-                          >
-                            Thanh toán
-                          </button>
-                        )}
-
-                        {booking.status !== 'cancelled' &&
-                          booking.status !== 'completed' && (
-                            <button
-                              type="button"
-                              onClick={() => handleCancelBooking(booking._id)}
-                              className="rounded-xl border border-red-500/40 px-4 py-2 text-sm text-red-300 hover:bg-red-500/10"
-                            >
-                              Hủy lịch
-                            </button>
-                          )}
-                      </div>
-                    </>
-                  )}
+            {submitted && !hasPending ? (
+              <div className="rounded-2xl border border-green-200 bg-green-50 p-8 text-center dark:border-green-800 dark:bg-green-900/20">
+                <CheckCircleFilled className="text-4xl text-green-500 mb-3" />
+                <h2 className="text-xl font-semibold text-green-700 dark:text-green-400">Đã gửi yêu cầu thành công!</h2>
+                <p className="text-sm text-green-600 dark:text-green-500 mt-1">Admin sẽ xem xét và xếp bạn vào lớp phù hợp.</p>
+                <Button className="mt-4" onClick={() => setSubmitted(false)}>Gửi yêu cầu khác</Button>
+              </div>
+            ) : (
+              <>
+                {hasPending && (
+                  <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                      Bạn hiện đang có một yêu cầu tập luyện đang chờ xử lý. Vui lòng đợi Admin duyệt hoặc hủy yêu cầu hiện tại để gửi yêu cầu mới.
+                    </p>
+                  </div>
+                )}
+                <div className={`rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-card)] p-6 space-y-6 ${hasPending ? 'pointer-events-none opacity-60' : ''}`}>
+                {/* Specialization */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Chuyên môn muốn tập *</label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {SPECIALIZATIONS.map((s) => (
+                      <button
+                        key={s.value}
+                        type="button"
+                        disabled={s.disabled}
+                        onClick={() => setSpecialization(s.value)}
+                        className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-all ${
+                          s.disabled ? 'opacity-30 cursor-not-allowed' : ''
+                        } ${
+                          specialization === s.value
+                            ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                            : 'border-[var(--theme-border)] text-[var(--gs-text)] hover:border-[var(--theme-accent)]'
+                        }`}
+                      >
+                        <span style={{ color: s.disabled ? undefined : s.color }}>{s.icon}</span>
+                        <span>{s.label}</span>
+                        {s.disabled && <span className="text-[10px] text-[var(--gs-text-muted)] ml-auto">Sắp ra mắt</span>}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-          </>
+
+                {/* Goal — only show when Gym is selected */}
+                {specialization === 'GYM' && (
+                <div>
+                  <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Mục tiêu tập luyện <span className="text-[var(--gs-text-muted)] font-normal">(không bắt buộc — gợi ý cho PT thiết kế giáo án)</span></label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {GOALS.map((g) => (
+                      <button
+                        key={g.value}
+                        type="button"
+                        onClick={() => setGoal(g.value)}
+                        className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-all ${
+                          goal === g.value
+                            ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                            : 'border-[var(--theme-border)] text-[var(--gs-text)] hover:border-[var(--theme-accent)]'
+                        }`}
+                      >
+                        <span style={{ color: g.color }}>{g.icon}</span>
+                        <span>{g.value}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                )}
+
+                {/* Sessions per week */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Số buổi mong muốn mỗi tuần *</label>
+                  <Select value={desiredSessions} onChange={setDesiredSessions} style={{ width: 200 }}
+                    options={[1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: n, label: `${n} buổi/tuần` }))} />
+                </div>
+
+                {/* Time slots */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Khung giờ mong muốn *</label>
+                  <div className="flex flex-wrap gap-2">
+                    {TIME_SLOTS.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => toggleTimeSlot(s)}
+                        className={`rounded-lg border px-3 py-1.5 text-sm transition-all ${
+                          timeSlots.includes(s)
+                            ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                            : 'border-[var(--theme-border)] text-[var(--gs-text)] hover:border-[var(--theme-accent)]'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Days of week */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Ngày có thể tập</label>
+                  <div className="flex flex-wrap gap-2">
+                    {DAYS.map((d) => (
+                      <button
+                        key={d.value}
+                        type="button"
+                        onClick={() => toggleDay(d.value)}
+                        className={`rounded-lg border px-3 py-1.5 text-sm transition-all ${
+                          daysOfWeek.includes(d.value)
+                            ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                            : 'border-[var(--theme-border)] text-[var(--gs-text)] hover:border-[var(--theme-accent)]'
+                        }`}
+                      >
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* New to gym */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="isNewToGym"
+                    checked={isNewToGym}
+                    onChange={(e) => setIsNewToGym(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <label htmlFor="isNewToGym" className="text-sm text-[var(--gs-text)] cursor-pointer">
+                    Tôi là người mới, cần được hướng dẫn từ cơ bản
+                  </label>
+                </div>
+
+                {/* Health notes */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Ghi chú sức khỏe</label>
+                  <Input.TextArea rows={2} value={healthNotes} onChange={(e) => setHealthNotes(e.target.value)}
+                    placeholder="VD: Có vấn đề về lưng, không chạy bộ được..." />
+                </div>
+
+                <Button type="primary" size="large" block loading={submitting} onClick={handleSubmit}>
+                  Gửi yêu cầu
+                </Button>
+              </div>
+            </>
+            )}
+          </> 
         )}
       </div>
     </MemberLayout>

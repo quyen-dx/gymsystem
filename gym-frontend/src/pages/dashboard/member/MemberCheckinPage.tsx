@@ -6,8 +6,8 @@ import {
 } from '@ant-design/icons'
 import { Button, Card, Progress, QRCode, Tag, Tooltip, Typography, message } from 'antd'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
+import MembershipRequired from '../../../components/membership/MembershipRequired'
 import { checkInService } from '../../../services/checkInService'
 import { membershipService } from '../../../services/membershipService'
 import type { QRTokenResponse } from '../../../types/admin/checkin'
@@ -25,7 +25,6 @@ function translateCheckinError(msg: string | undefined): string {
 }
 
 export default function MemberCheckinPage() {
-  const navigate = useNavigate()
   const [qrData, setQrData] = useState<QRTokenResponse | null>(null)
   const [countdown, setCountdown] = useState(30)
   const [streak, setStreak] = useState(0)
@@ -125,24 +124,8 @@ export default function MemberCheckinPage() {
   if (!canCheckin) {
     return (
       <MemberLayout>
-        <div className="member-page" style={{ maxWidth: 640, margin: '0 auto' }}>
-          <Card className="rounded-[24px]" style={{ textAlign: 'center', padding: 24 }}>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-400">
-              YÊU CẦU GÓI TẬP
-            </p>
-            <Title level={3} style={{ marginTop: 12 }}>
-              Bạn cần có gói tập để check-in
-            </Title>
-            <Text type="secondary">{error || 'Vui lòng đăng ký gói tập để sử dụng tính năng check-in'}</Text>
-            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-              <Button type="primary" onClick={() => navigate('/plans')}>
-                Xem gói tập
-              </Button>
-              <Button onClick={() => navigate('/my-membership')}>
-                Xem gói tập của tôi
-              </Button>
-            </div>
-          </Card>
+        <div className="member-page" style={{ maxWidth: 640, margin: '0 auto', paddingTop: 40 }}>
+          <MembershipRequired planName={null} featureLabel="check-in" />
         </div>
       </MemberLayout>
     )

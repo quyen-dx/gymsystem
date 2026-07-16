@@ -14,12 +14,16 @@ import User from '../models/User.js'
 import Wallet from '../models/Wallet.js'
 import CheckIn from '../models/CheckIn.js'
 import Booking from '../models/Booking.js'
+import Workout from '../models/Workout.js'
+import WorkoutSchedule from '../models/WorkoutSchedule.js'
+import PTAssignment from '../models/PTAssignment.js'
+import TrainingAssignment from '../models/TrainingAssignment.js'
 import { getSystemSettingsValue } from './systemSettingsService.js'
 import { invalidatePersonalContextCache } from './conversationContextCache.js'
 import { recordUserActivity } from './userActivityService.js'
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
 import { assertPolicyConsent } from '../utils/policyConsent.js'
-import { sendRenewalSuccessEmail } from './emailService.js'
+import { sendRenewalSuccessEmail, sendPeriodCompletedEmail, sendPeriodActivatedEmail, sendCancelRenewalEmail } from './emailService.js'
 import {
   startOfTodayVN,
   endOfDayVN,
@@ -89,14 +93,18 @@ const computePeriodStatus = (period) => {
   return 'PENDING'
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
 const getMembershipDisplayStatus = (membership) => {
   if (!membership) return 'expired'
   if (membership.status === 'pending_cancel') return 'expiring_soon'
   if (membership.status === 'cancel_requested') return 'cancel_requested'
-  const remainingDays = calculateRemainingDays(membership.endDate)
-  if (remainingDays <= 0) return 'expired'
-  if (remainingDays < 30) return 'expiring_soon'
-  return 'active'
+  const end = endOfDayVN(membership.endDate)
+  const rawDiff = Math.ceil((end.getTime() - Date.now()) / MS_PER_DAY)
+  if (rawDiff > 7) return 'active'
+  if (rawDiff >= 1) return 'expiring_soon'
+  if (rawDiff === 0) return 'expires_today'
+  return 'expired'
 }
 
 const serializePlan = (plan) => ({
@@ -421,6 +429,10 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
     await session.commitTransaction()
     committed = true
 
+    if (!isRenew) {
+      await cleanupMemberPTData({ memberId })
+    }
+
     try {
       await recordUserActivity({
         userId: user._id,
@@ -435,20 +447,29 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
     }
 
     if (isRenew && user.email) {
+      const existingPeriodCount = renewalPeriodsData
+        ? await MembershipPeriod.countDocuments({ membershipId: membership._id })
+        : 0
       sendRenewalSuccessEmail({
         toEmail: user.email,
         userName: user.fullName || user.name || user.email,
         planName: plan.nameVi || plan.nameEn,
-        endDate: membership.endDate,
+        endDate: renewalPeriodsData
+          ? renewalPeriodsData[0].endDate
+          : membership.endDate,
+        periodIndex: existingPeriodCount > 0 ? existingPeriodCount + 1 : undefined,
       }).catch((e) => console.error('Gửi email gia hạn thất bại:', e.message))
     }
 
     const populatedMembership = await Membership.findById(membership._id).populate('planId')
     return {
-      message: 'Đăng ký gói tập thành công',
+      message: isRenew ? 'Gia hạn thành công' : 'Đăng ký gói tập thành công',
       walletBalance,
       membership: serializeMembership(populatedMembership),
       payment,
+      ...(renewalPeriodsData && renewalPeriodsData.length > 0
+        ? { newEndDate: renewalPeriodsData[renewalPeriodsData.length - 1].endDate }
+        : {}),
     }
   } catch (error) {
     if (!committed) {
@@ -520,6 +541,8 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
     if (paymentId) {
       await Payment.findByIdAndUpdate(paymentId, { membershipId: membership._id })
     }
+
+    await cleanupMemberPTData({ memberId: user._id })
 
     await recordUserActivity({
       userId: user._id,
@@ -599,11 +622,13 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
   invalidatePersonalContextCache(user._id)
 
   if (user.email) {
+    const nextPeriodIndex = await MembershipPeriod.countDocuments({ membershipId: existingActive._id }) + 1
     sendRenewalSuccessEmail({
       toEmail: user.email,
       userName: user.fullName || user.name || user.email,
       planName: plan.nameVi || plan.nameEn,
       endDate: periodEnd,
+      periodIndex: nextPeriodIndex,
     }).catch((e) => console.error('Gửi email gia hạn thất bại:', e.message))
   }
 
@@ -1212,6 +1237,18 @@ const cancelRenewal = async ({ userId, renewalId }) => {
 
     invalidatePersonalContextCache(memberId)
 
+    const planName = renewal.planId?.nameVi || renewal.planId?.nameEn || ''
+    const cancelUser = await User.findById(memberId).select('email fullName name')
+    if (cancelUser?.email) {
+      sendCancelRenewalEmail({
+        toEmail: cancelUser.email,
+        userName: cancelUser.fullName || cancelUser.name || cancelUser.email,
+        planName,
+        days: renewal.days,
+        refundAmount,
+      }).catch((e) => console.error('Gửi email hủy gia hạn thất bại:', e.message))
+    }
+
     return {
       message: `Đã hủy lần gia hạn +${renewal.days} ngày và hoàn ${refundAmount.toLocaleString('vi-VN')}đ vào ví.`,
       membership: serializeMembership(membership),
@@ -1306,7 +1343,7 @@ const lazyActivatePendingPeriods = async ({ memberId, session = null }) => {
   const membership = await Membership.findOne({
     memberId,
     status: { $in: ['active', 'pending_cancel', 'cancel_requested', 'expired'] },
-  })
+  }).populate('planId', 'nameVi nameEn')
   if (!membership) return
 
   // 2. Tìm tất cả các periods thuộc membership này (ngoại trừ các kỳ bị hủy/hoàn tiền)
@@ -1320,16 +1357,36 @@ const lazyActivatePendingPeriods = async ({ memberId, session = null }) => {
 
   let activePeriod = periods.find((p) => p.status === 'ACTIVE')
 
+  // Lấy thông tin user và plan để gửi email
+  const planName = membership.planId?.nameVi || membership.planId?.nameEn || ''
+
   // 3. Nếu kỳ ACTIVE hiện tại đã hết hạn (endDate < now)
   if (activePeriod && new Date(activePeriod.endDate) < now) {
-    activePeriod.status = 'COMPLETED'
-    activePeriod.completedAt = now
+    const completedPeriod = activePeriod
+    const periodIndex = periods.findIndex((p) => p._id.toString() === completedPeriod._id.toString()) + 1
+    const completedEndDate = completedPeriod.endDate
+    completedPeriod.status = 'COMPLETED'
+    completedPeriod.completedAt = now
     if (session) {
-      await activePeriod.save({ session })
+      await completedPeriod.save({ session })
     } else {
-      await activePeriod.save()
+      await completedPeriod.save()
     }
     activePeriod = null
+
+    // Gửi email thông báo kỳ đã kết thúc
+    if (!session) {
+      const user = await User.findById(memberId).select('email fullName name')
+      if (user?.email) {
+        sendPeriodCompletedEmail({
+          toEmail: user.email,
+          userName: user.fullName || user.name || user.email,
+          planName,
+          periodIndex,
+          endDate: completedEndDate,
+        }).catch((e) => console.error('Gửi email kết thúc kỳ thất bại:', e.message))
+      }
+    }
   }
 
   // 4. Nếu không có kỳ ACTIVE (do chưa kích hoạt hoặc do vừa hết hạn ở bước trên)
@@ -1337,6 +1394,7 @@ const lazyActivatePendingPeriods = async ({ memberId, session = null }) => {
     // Tìm kỳ PENDING tiếp theo gần nhất có startDate <= now
     const nextPending = periods.find((p) => p.status === 'PENDING' && new Date(p.startDate) <= now)
     if (nextPending) {
+      const periodIndex = periods.findIndex((p) => p._id.toString() === nextPending._id.toString()) + 1
       nextPending.status = 'ACTIVE'
       nextPending.activatedAt = now
       if (session) {
@@ -1345,6 +1403,21 @@ const lazyActivatePendingPeriods = async ({ memberId, session = null }) => {
         await nextPending.save()
       }
       activePeriod = nextPending
+
+      // Gửi email thông báo kỳ mới đã được kích hoạt
+      if (!session) {
+        const user = await User.findById(memberId).select('email fullName name')
+        if (user?.email) {
+          sendPeriodActivatedEmail({
+            toEmail: user.email,
+            userName: user.fullName || user.name || user.email,
+            planName,
+            periodIndex,
+            startDate: nextPending.startDate,
+            endDate: nextPending.endDate,
+          }).catch((e) => console.error('Gửi email kích hoạt kỳ mới thất bại:', e.message))
+        }
+      }
     }
   }
 
@@ -1370,8 +1443,10 @@ const lazyActivatePendingPeriods = async ({ memberId, session = null }) => {
       membership.status = 'expired'
       if (session) {
         await membership.save({ session })
+        await cleanupMemberPTData({ memberId: membership.memberId, session })
       } else {
         await membership.save()
+        await cleanupMemberPTData({ memberId: membership.memberId })
       }
     }
   }
@@ -1751,6 +1826,53 @@ const getMembershipInfo = async ({ userId }) => {
     cancelRequests,
     completedMemberships,
   }
+}
+
+export const cleanupMemberPTData = async ({ memberId, session }) => {
+  const opts = session ? { session } : {}
+  const reason = 'Gói tập đã kết thúc'
+
+  await WorkoutSchedule.updateMany(
+    { memberId, status: 'active' },
+    { $set: { status: 'cancelled' } },
+    opts,
+  )
+
+  await Booking.updateMany(
+    { memberId, status: { $in: ['pending', 'awaiting_payment', 'confirmed'] } },
+    { $set: { status: 'cancelled', cancelReason: reason } },
+    opts,
+  )
+
+  await Workout.updateMany(
+    { memberId, isTemplate: false, status: 'active' },
+    { $set: { status: 'archived' } },
+    opts,
+  )
+
+  await PTAssignment.updateMany(
+    { memberId, status: 'active' },
+    {
+      $set: {
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        cancelReason: reason,
+      },
+    },
+    opts,
+  )
+
+  await TrainingAssignment.updateMany(
+    { memberId, status: 'active' },
+    {
+      $set: {
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        cancelReason: reason,
+      },
+    },
+    opts,
+  )
 }
 
 export {

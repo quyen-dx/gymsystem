@@ -26,6 +26,9 @@ export const initSocketIO = (httpServer) => {
       socket.userId = user._id.toString()
       socket.userRole = user.role
 
+      // Mỗi user join vào room riêng để nhận notification cá nhân
+      socket.join(socket.userId)
+
       if (['staff', 'admin', 'super_admin'].includes(user.role)) {
         socket.join('staff')
       }
@@ -53,4 +56,26 @@ export const emitRefundRequestUpdate = async () => {
   const { default: RefundRequest } = await import('../models/RefundRequest.js')
   const count = await RefundRequest.countDocuments({ status: 'PENDING' })
   io.to('staff').emit('refund_request_update', { count })
+}
+
+export const emitShiftSwapCountUpdate = async () => {
+  if (!io) return
+  const { default: ShiftSwapRequest } = await import('../models/ShiftSwapRequest.js')
+  const count = await ShiftSwapRequest.countDocuments({ status: 'cho_duyet' })
+  io.to('staff').emit('shift_swap:count_updated', { pendingCount: count })
+}
+
+export const emitShiftSwapNewRequest = (payload) => {
+  if (!io) return
+  io.to('staff').emit('shift_swap:new_request', payload)
+}
+
+export const emitTrainerReplacementNotification = ({ userId, notification }) => {
+  if (!io) return
+  io.to(userId.toString()).emit('notification:new', notification)
+}
+
+export const emitShiftSwapNotification = ({ userId, notification }) => {
+  if (!io) return
+  io.to(userId.toString()).emit('notification:new', notification)
 }

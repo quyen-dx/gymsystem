@@ -169,7 +169,7 @@ export default function TrainerDetailPage() {
             {pt.specialties?.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 {pt.specialties.map((s) => (
-                  <Tag key={s} color={tokens.accent} style={{ marginBottom: 4 }}>{s}</Tag>
+                  <Tag key={s} className="uppercase" color={tokens.accent} style={{ marginBottom: 4 }}>{s}</Tag>
                 ))}
               </div>
             )}
@@ -198,25 +198,7 @@ export default function TrainerDetailPage() {
             </Card>
           )}
 
-          <Card
-            className="rounded-[24px]"
-            title="Thông tin dịch vụ"
-            style={{ marginBottom: 16 }}
-          >
-            <Descriptions column={1} size="small">
-              <Descriptions.Item label="Giá PT 1-1">
-                {(pt.oneToOnePrice || 0).toLocaleString('vi-VN')} đ / buổi
-              </Descriptions.Item>
 
-              <Descriptions.Item label="Giá PT nhóm">
-                {(pt.groupPrice || 0).toLocaleString('vi-VN')} đ / người
-              </Descriptions.Item>
-
-              <Descriptions.Item label="Sức chứa nhóm">
-                {pt.groupCapacity || 5} người
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
 
           <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
             {pt.introVideoUrl && (

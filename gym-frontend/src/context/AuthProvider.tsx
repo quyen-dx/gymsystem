@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { clearAuthSession, clearLegacyAuthStorage, getAuthToken, setAuthToken } from '../services/api'
+import { clearAuthSession, clearLegacyAuthStorage, getAuthToken, setAuthToken, startRefreshScheduler } from '../services/api'
 import { authService } from '../services/authService'
 import { AuthContext, type LoginPayload, type User } from './auth.context'
 
@@ -28,6 +28,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         const { data } = await authService.getProfile()
         if (!cancelled) setUser(data.user)
+        startRefreshScheduler()
       } catch {
         clearAuthSession()
         if (!cancelled) setUser(null)
@@ -45,6 +46,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const login = async (payload: LoginPayload) => {
     const { data } = await authService.login(payload)
     setAuthToken(data.accessToken)
+    startRefreshScheduler()
     try {
       const freshUser = await refreshUser()
       return freshUser || data.user

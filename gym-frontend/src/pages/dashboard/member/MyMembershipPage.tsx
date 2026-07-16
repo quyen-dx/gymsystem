@@ -1,9 +1,11 @@
-import { CalendarOutlined, CheckCircleFilled, CloseCircleOutlined, ExclamationCircleFilled, ExclamationCircleOutlined, InfoCircleOutlined, WalletOutlined } from '@ant-design/icons'
-import { Button, Card, Descriptions, Empty, Modal, Progress, Radio, Spin, Tabs, Tag, message } from 'antd'
+import { CalendarOutlined, CheckCircleFilled, CloseCircleOutlined, ExclamationCircleFilled, ExclamationCircleOutlined, InfoCircleOutlined, MailOutlined, WalletOutlined } from '@ant-design/icons'
+import { Button, Card, Descriptions, Empty, Modal, Progress, Radio, Spin, Tabs, Tag, Tooltip, message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
+import PolicyConsentCard from '../../../components/wallet/PolicyConsentCard'
 import { useWallet } from '../../../context/WalletProvider'
+import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 import { membershipService, type CancellationRequest, type MembershipPeriod, type MembershipRenewal, type MyMembership, type PendingCancelRequest } from '../../../services/membershipService'
 
 const formatMoney = (value?: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
@@ -35,7 +37,23 @@ export default function MyMembershipPage() {
   const [cancellingPeriod, setCancellingPeriod] = useState(false)
   const [batchCancelDays, setBatchCancelDays] = useState(0)
   const [batchCancelling, setBatchCancelling] = useState(false)
+  const [tickedPolicies, setTickedPolicies] = useState<Record<string, { type: string; version: string }> | null>(null)
+  const [consentSubmitted, setConsentSubmitted] = useState(false)
+  const consentReady = tickedPolicies !== null && Object.keys(tickedPolicies).length > 0
+  const [successModalOpen, setSuccessModalOpen] = useState(false)
+  const [renewResult, setRenewResult] = useState<{
+    newEndDate?: string
+    amount: number
+    walletBalance: number
+    planName: string
+  } | null>(null)
 
+  useEffect(() => {
+    if (renewModalOpen) {
+      setTickedPolicies(null)
+      setConsentSubmitted(false)
+    }
+  }, [renewModalOpen])
 
   useEffect(() => {
     if (searchParams.get('payment') === 'success') {
@@ -123,11 +141,28 @@ export default function MyMembershipPage() {
   
 
   const handleRenew = async () => {
+    if (!consentReady) return
     setRenewing(true)
     try {
+      if (!consentSubmitted) {
+        await acceptMultiplePolicyConsent(
+          Object.values(tickedPolicies!).map((p) => ({
+            policyType: p.type,
+            policyVersion: p.version,
+            context: 'renew',
+          })),
+        )
+        setConsentSubmitted(true)
+      }
       const res = await membershipService.renewPlanWithDuration(selectedMultiplier)
-      message.success(res.data?.message || 'Gia hạn thành công')
+      setRenewResult({
+        newEndDate: res.data.newEndDate,
+        amount: res.data.payment?.amount || planPrice * selectedMultiplier,
+        walletBalance: res.data.walletBalance,
+        planName,
+      })
       setRenewModalOpen(false)
+      setSuccessModalOpen(true)
       loadData()
       refreshWallet()
     } catch (error: any) {
@@ -571,72 +606,95 @@ export default function MyMembershipPage() {
         }
         open={renewModalOpen}
         onCancel={() => setRenewModalOpen(false)}
-        footer={[
-          <Button key="cancel" onClick={() => setRenewModalOpen(false)}>
-            Hủy
-          </Button>,
-          <Button
-            key="renew"
-            type="primary"
-            loading={renewing}
-            disabled={!balanceSufficient}
-            onClick={handleRenew}
-          >
-            Xác nhận gia hạn
-          </Button>,
-        ]}
+        destroyOnClose
+        footer={null}
+        className="policy-ant-modal"
+        width={640}
+        centered
       >
-        <div className="space-y-4">
-          <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[var(--gs-text-soft)]">Gói tập</span>
-              <span className="text-sm font-semibold text-[var(--gs-text)]">{planName}</span>
-            </div>
-            <div className="border-t border-[var(--gs-border)] pt-3">
-              <span className="text-sm font-medium text-[var(--gs-text-soft)]">Chọn thời gian gia hạn</span>
-              <Radio.Group
-                className="mt-2 w-full"
-                value={selectedMultiplier}
-                onChange={(e) => setSelectedMultiplier(e.target.value)}
-              >
-                  {multiplierOptions.map((m) => {
-                    const days = planDays * m
-                    return (
-                      <Radio.Button
-                        key={m}
-                        value={m}
-                        className="!flex !h-auto !w-full !items-center !px-4 !py-3 [&:not(:first-child)]:!border-t-0"
-                        style={{ border: '1px solid var(--gs-border)', borderRadius: 0 }}
-                      >
-                        <div className="flex w-full items-center justify-between gap-4">
-                          <span className="text-sm font-semibold text-[var(--gs-success)]">
-                            + {days} ngày ({m} tháng)
-                          </span>
-                        </div>
-                      </Radio.Button>
-                    )
-                  })}
-              </Radio.Group>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[var(--gs-text-soft)]">Giá</span>
-              <span className="text-base font-bold text-[var(--gs-accent)]">{formatMoney(planPrice * selectedMultiplier)}</span>
-            </div>
-            <div className="border-t border-[var(--gs-border)] pt-3 flex items-center justify-between">
-              <span className="text-sm text-[var(--gs-text-soft)]">
-                <WalletOutlined className="mr-1" />
-                {'Số dư ví'}
-              </span>
-              <span className={`text-sm font-semibold ${balanceSufficient ? 'text-[var(--gs-success)]' : 'text-[var(--gs-error)]'}`}>
-                {formatMoney(wallet?.balance || 0)}
-              </span>
+        <div className="policy-modal-shell">
+          <div className="policy-modal-content">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--gs-text-soft)]">Gói tập</span>
+                  <span className="text-sm font-semibold text-[var(--gs-text)]">{planName}</span>
+                </div>
+                <div className="border-t border-[var(--gs-border)] pt-3">
+                  <span className="text-sm font-medium text-[var(--gs-text-soft)]">Chọn thời gian gia hạn</span>
+                  <Radio.Group
+                    className="mt-2 w-full"
+                    value={selectedMultiplier}
+                    onChange={(e) => setSelectedMultiplier(e.target.value)}
+                  >
+                      {multiplierOptions.map((m) => {
+                        const days = planDays * m
+                        return (
+                          <Radio.Button
+                            key={m}
+                            value={m}
+                            className="!flex !h-auto !w-full !items-center !px-4 !py-3 [&:not(:first-child)]:!border-t-0"
+                            style={{ border: '1px solid var(--gs-border)', borderRadius: 0 }}
+                          >
+                            <div className="flex w-full items-center justify-between gap-4">
+                              <span className="text-sm font-semibold text-[var(--gs-success)]">
+                                + {days} ngày ({m} tháng)
+                              </span>
+                            </div>
+                          </Radio.Button>
+                        )
+                      })}
+                  </Radio.Group>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--gs-text-soft)]">Giá</span>
+                  <span className="text-base font-bold text-[var(--gs-accent)]">{formatMoney(planPrice * selectedMultiplier)}</span>
+                </div>
+                <div className="border-t border-[var(--gs-border)] pt-3 flex items-center justify-between">
+                  <span className="text-sm text-[var(--gs-text-soft)]">
+                    <WalletOutlined className="mr-1" />
+                    {'Số dư ví'}
+                  </span>
+                  <span className={`text-sm font-semibold ${balanceSufficient ? 'text-[var(--gs-success)]' : 'text-[var(--gs-error)]'}`}>
+                    {formatMoney(wallet?.balance || 0)}
+                  </span>
+                </div>
+              </div>
+              {!balanceSufficient && (
+                <div className="rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-3 text-sm text-[var(--gs-warning)]">
+                  {'Số dư ví không đủ để gia hạn. Vui lòng nạp thêm tiền.'}
+                </div>
+              )}
+              <PolicyConsentCard
+                policies={[
+                  { type: 'membership', label: 'Chính sách hội viên' },
+                  { type: 'terms', label: 'Điều khoản sử dụng' },
+                ]}
+                context="renew"
+                onTickedChange={(ticked) => {
+                  setTickedPolicies(Object.keys(ticked).length > 0 ? ticked : null)
+                }}
+              />
             </div>
           </div>
-          {!balanceSufficient && (
-            <div className="rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-3 text-sm text-[var(--gs-warning)]">
-              {'Số dư ví không đủ để gia hạn. Vui lòng nạp thêm tiền.'}
+          <div className="policy-modal-footer">
+            <div className="policy-modal-actions">
+              <Button onClick={() => setRenewModalOpen(false)}>
+                Hủy
+              </Button>
+              <Tooltip title={!consentReady ? 'Vui lòng đồng ý với chính sách' : !balanceSufficient ? 'Số dư ví không đủ' : undefined}>
+                <Button
+                  className="policy-confirm-action"
+                  type="primary"
+                  loading={renewing}
+                  disabled={!consentReady || !balanceSufficient}
+                  onClick={handleRenew}
+                >
+                  Xác nhận gia hạn
+                </Button>
+              </Tooltip>
             </div>
-          )}
+          </div>
         </div>
       </Modal>
 
@@ -683,6 +741,75 @@ export default function MyMembershipPage() {
             </div>
             <div className="rounded-xl border border-[var(--gs-info-border)] bg-[var(--gs-info-bg)] p-3 text-xs text-[var(--gs-text)]">
               Yêu cầu sẽ được gửi tới nhân viên xem xét. Nhân viên sẽ kiểm tra và phản hồi trong thời gian sớm nhất.
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        title={
+          <span className="inline-flex items-center gap-2">
+            <CheckCircleFilled className="text-[var(--gs-success)]" />
+            Gia hạn thành công
+          </span>
+        }
+        open={successModalOpen}
+        onCancel={() => setSuccessModalOpen(false)}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setSuccessModalOpen(false)}>
+            Đóng
+          </Button>,
+        ]}
+        centered
+      >
+        {renewResult && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-[var(--gs-success-border)] bg-[var(--gs-success-bg)] p-4">
+              <div className="flex items-center gap-2 text-[var(--gs-success)]">
+                <CheckCircleFilled />
+                <span className="font-semibold">{planName} - Gia hạn thành công</span>
+              </div>
+            </div>
+            <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--gs-text-soft)]">Gói tập</span>
+                <span className="text-sm font-semibold text-[var(--gs-text)]">{renewResult.planName}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--gs-text-soft)]">Số tháng gia hạn</span>
+                <span className="text-sm font-semibold text-[var(--gs-text)]">{selectedMultiplier} tháng</span>
+              </div>
+              {renewResult.newEndDate && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--gs-text-soft)]">Gia hạn đến hết</span>
+                  <span className="text-sm font-semibold text-[var(--gs-success)]">{formatDate(renewResult.newEndDate)}</span>
+                </div>
+              )}
+              <div className="border-t border-[var(--gs-border)] pt-3 flex items-center justify-between">
+                <span className="text-sm text-[var(--gs-text-soft)]">Số tiền đã thanh toán</span>
+                <span className="text-base font-bold text-[var(--gs-accent)]">{formatMoney(renewResult.amount)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--gs-text-soft)]">
+                  <WalletOutlined className="mr-1" />
+                  Số dư ví còn lại
+                </span>
+                <span className="text-sm font-semibold text-[var(--gs-success)]">{formatMoney(renewResult.walletBalance)}</span>
+              </div>
+            </div>
+            <div className="rounded-xl border border-[var(--gs-info-border)] bg-[var(--gs-info-bg)] p-4 space-y-2">
+              <div className="flex items-start gap-2">
+                <CheckCircleFilled className="mt-0.5 text-[var(--gs-info)]" />
+                <div className="text-sm text-[var(--gs-text)]">
+                  Email xác nhận gia hạn đã được gửi đến email của bạn kèm thông tin đợt tập sắp tới.
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <MailOutlined className="mt-0.5 text-[var(--gs-info)]" />
+                <div className="text-sm text-[var(--gs-text)]">
+                  Hệ thống sẽ tự động gửi email khi đợt hiện tại kết thúc và khi đợt mới được kích hoạt.
+                </div>
+              </div>
             </div>
           </div>
         )}

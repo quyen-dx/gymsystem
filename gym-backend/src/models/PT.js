@@ -33,25 +33,6 @@ const ptSchema = new mongoose.Schema(
       default: '',
     },
 
-    // Giá dịch vụ PT
-    oneToOnePrice: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    groupPrice: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    groupCapacity: {
-      type: Number,
-      default: 5,
-      min: 1,
-    },
-
     // Thống kê
     totalSessions: {
       type: Number,

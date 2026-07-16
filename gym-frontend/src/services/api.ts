@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { jwtDecode } from 'jwt-decode'
 import { message } from 'antd'
 import { API_URL } from '../config/env'
 
@@ -50,6 +51,34 @@ export const refreshAccessToken = async () => {
 
   return refreshPromise
 }
+
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+
+const scheduleTokenRefresh = () => {
+  if (refreshTimer) clearTimeout(refreshTimer)
+  const token = getAuthToken()
+  if (!token) return
+  try {
+    const decoded = jwtDecode<{ exp: number }>(token)
+    const expiresIn = decoded.exp * 1000 - Date.now()
+    if (expiresIn <= 0) {
+      refreshAccessToken().catch(() => {})
+      return
+    }
+    const refreshAt = Math.max(expiresIn - 60000, 10000)
+    refreshTimer = setTimeout(() => {
+      refreshAccessToken()
+        .then((newToken) => {
+          if (newToken) scheduleTokenRefresh()
+        })
+        .catch(() => {})
+    }, refreshAt)
+  } catch {
+    // invalid token
+  }
+}
+
+export const startRefreshScheduler = scheduleTokenRefresh
 
 api.interceptors.request.use((config) => {
   const token = getAuthToken()

@@ -4,6 +4,11 @@ import Membership from '../models/Membership.js'
 import Payment from '../models/Payment.js'
 import Plan from '../models/Plan.js'
 import UserActivity from '../models/UserActivity.js'
+import PTAssignment from '../models/PTAssignment.js'
+import TrainingAssignment from '../models/TrainingAssignment.js'
+import TrainingClass from '../models/TrainingClass.js'
+import WorkoutSchedule from '../models/WorkoutSchedule.js'
+import TrainingRequest from '../models/TrainingRequest.js'
 import { buildClientUrl } from '../config/appUrls.js'
 import { recordAuditLog } from '../services/auditLogService.js'
 import { recordUserActivity } from '../services/userActivityService.js'
@@ -1232,6 +1237,69 @@ export const offlineRegisterMembership = async (req, res) => {
         source: payment.source,
         status: payment.status,
       },
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const getMyEnrollmentStatus = async (req, res) => {
+  try {
+    const memberId = req.user._id
+
+    const [assignment, trainingAssignment, pendingRequest, activeSchedules] = await Promise.all([
+      PTAssignment.findOne({ memberId, status: 'active' })
+        .populate('ptId', 'name fullName email')
+        .populate('workoutId', 'name goal')
+        .lean(),
+      TrainingAssignment.findOne({ memberId, status: 'active' })
+        .populate('classId')
+        .lean(),
+      TrainingRequest.findOne({ memberId, status: 'pending' })
+        .select('_id specialization timeSlots daysOfWeek')
+        .lean(),
+      WorkoutSchedule.countDocuments({ memberId, status: 'active' }),
+    ])
+
+    let classInfo = null
+    if (trainingAssignment?.classId) {
+      const cls = typeof trainingAssignment.classId === 'object'
+        ? trainingAssignment.classId
+        : await TrainingClass.findById(trainingAssignment.classId)
+            .select('name code specialization daysOfWeek startTime endTime')
+            .lean()
+      if (cls) {
+        classInfo = {
+          classId: cls._id,
+          name: cls.name,
+          code: cls.code,
+          specialization: cls.specialization,
+          daysOfWeek: cls.daysOfWeek,
+          time: `${cls.startTime} - ${cls.endTime}`,
+        }
+      }
+    }
+
+    const ptInfo = assignment?.ptId && typeof assignment.ptId === 'object'
+      ? { ptId: assignment.ptId._id, name: assignment.ptId.fullName || assignment.ptId.name }
+      : null
+
+    const workoutInfo = assignment?.workoutId && typeof assignment.workoutId === 'object'
+      ? { name: assignment.workoutId.name, goal: assignment.workoutId.goal }
+      : null
+
+    const hasActiveEnrollment = !!(assignment || trainingAssignment)
+
+    res.json({
+      hasActiveEnrollment,
+      hasActiveSchedules: activeSchedules > 0,
+      hasPendingRequest: !!pendingRequest,
+      pendingRequest: pendingRequest
+        ? { _id: pendingRequest._id, specialization: pendingRequest.specialization, timeSlots: pendingRequest.timeSlots, daysOfWeek: pendingRequest.daysOfWeek }
+        : null,
+      pt: ptInfo,
+      class: classInfo,
+      workout: workoutInfo,
     })
   } catch (error) {
     return sendError(res, error)

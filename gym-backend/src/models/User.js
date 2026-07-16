@@ -145,6 +145,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       select: false,
     },
+    preferredTime: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     memberCode: {
       type: String,
       unique: true,

@@ -8,6 +8,8 @@
     "dev:watch": "nodemon --env-file=.env server.js",
     "start": "node server.js",
     "migrate:member-ids": "node --env-file=.env src/scripts/migrateMemberIdsToShortFormat.js",
+    "migrate:specializations": "node --env-file=.env src/scripts/normalizeSpecializations.js",
+"migrate:backfill-pt": "node --env-file=.env src/scripts/backfillPTAssignments.js",
     "create-vector-index": "node --env-file=.env src/scripts/createVectorIndex.js",
     "reindex-vectors": "node --env-file=.env -e \"import('./src/ai/services/vectorStoreService.js').then(m => m.indexAll().then(r => console.log(JSON.stringify(r, null, 2))).catch(e => console.error(e)))\"",
     "ai:evaluate": "node --env-file=.env src/ai/evaluation/index.js"

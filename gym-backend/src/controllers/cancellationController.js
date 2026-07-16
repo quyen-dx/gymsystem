@@ -12,6 +12,8 @@ import { recordUserActivity } from '../services/userActivityService.js';
 import { invalidatePersonalContextCache } from '../services/conversationContextCache.js';
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js';
 import { assertPolicyConsent } from '../utils/policyConsent.js';
+import { cleanupMemberPTData } from '../services/membershipService.js';
+import { sendRefundRequestSubmittedEmail, sendRefundRequestProcessedEmail } from '../services/emailService.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const REFUND_WINDOW_DAYS = 7;
@@ -212,6 +214,17 @@ export const createCancellationRequest = async (req, res, next) => {
     }
 
     invalidatePersonalContextCache(memberId);
+
+    const planName = plan.nameVi || plan.nameEn || ''
+    if (req.user.email) {
+      sendRefundRequestSubmittedEmail({
+        toEmail: req.user.email,
+        userName: req.user.fullName || req.user.name || req.user.email,
+        planName,
+        periodDetail: `Gói: ${planName} (${new Date(membership.startDate).toLocaleDateString('vi-VN')} → ${new Date(membership.endDate).toLocaleDateString('vi-VN')})`,
+        isFullCancel: true,
+      }).catch((e) => console.error('Gửi email yêu cầu hủy gói thất bại:', e.message))
+    }
 
     return res.status(201).json({
       message: 'Đã gửi yêu cầu hủy gói. Staff sẽ kiểm tra và phản hồi.',
@@ -536,6 +549,8 @@ export const approveCancellationRequest = async (req, res, next) => {
         session,
       });
 
+      await cleanupMemberPTData({ memberId: cancellationRequest.memberId, session });
+
       await session.commitTransaction();
     } catch (error) {
       await session.abortTransaction();
@@ -545,6 +560,23 @@ export const approveCancellationRequest = async (req, res, next) => {
     }
 
     invalidatePersonalContextCache(cancellationRequest.memberId);
+
+    const planName = cancellationRequest.planId?.nameVi || cancellationRequest.planId?.nameEn || ''
+    const approveUser = await User.findById(cancellationRequest.memberId).select('email fullName name')
+    const staffName = req.user.fullName || req.user.name || ''
+    if (approveUser?.email) {
+      sendRefundRequestProcessedEmail({
+        toEmail: approveUser.email,
+        userName: approveUser.fullName || approveUser.name || approveUser.email,
+        planName,
+        status: refundAmount > 0 ? 'APPROVED' : 'APPROVED',
+        refundAmount,
+        reason: staffNote || '',
+        isFullCancel: true,
+        staffName,
+        staffNote: staffNote || '',
+      }).catch((e) => console.error('Gửi email phê duyệt hủy gói thất bại:', e.message))
+    }
 
     return res.json({
       message: refundAmount > 0
@@ -614,6 +646,23 @@ export const rejectCancellationRequest = async (req, res, next) => {
     }
 
     invalidatePersonalContextCache(cancellationRequest.memberId);
+
+    const planName = cancellationRequest.planId?.nameVi || cancellationRequest.planId?.nameEn || ''
+    const rejectUser = await User.findById(cancellationRequest.memberId).select('email fullName name')
+    const staffName = req.user.fullName || req.user.name || ''
+    if (rejectUser?.email) {
+      sendRefundRequestProcessedEmail({
+        toEmail: rejectUser.email,
+        userName: rejectUser.fullName || rejectUser.name || rejectUser.email,
+        planName,
+        status: 'REJECTED',
+        refundAmount: 0,
+        reason: reason || '',
+        isFullCancel: true,
+        staffName,
+        staffNote: reason || '',
+      }).catch((e) => console.error('Gửi email từ chối hủy gói thất bại:', e.message))
+    }
 
     return res.json({
       message: 'Đã từ chối yêu cầu hủy gói. Gói tập của hội viên vẫn hoạt động.',
