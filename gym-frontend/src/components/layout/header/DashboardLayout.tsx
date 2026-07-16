@@ -73,7 +73,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         getPendingPartnershipRequestCount()
           .then((res) => setPendingCount(res.data.count || 0))
           .catch(() => { })
-        trainingRequestService.getAllRequests({ status: 'pending', page: 1, limit: 1 })
+        trainingRequestService.getAllRequests({ status: 'pending', page: 1 })
           .then((res) => setPendingTrainingCount(res.data.pagination?.total || 0))
           .catch(() => { })
       }
@@ -106,7 +106,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .catch(() => {})
 
     const countHandler = (data: { pendingCount: number }) => setPendingSwapCount(data.pendingCount)
-    const newHandler = (data: { requestingPtName: string; targetDate: string }) => {
+    const newHandler = (_data: { requestingPtName: string; targetDate: string }) => {
       // TODO: show toast notification
     }
     socketService.on('shift_swap:count_updated', countHandler)
@@ -135,7 +135,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     // Socket: lắng nghe notification mới
     socketService.connect()
-    const handler = (notification: any) => {
+    const handler = (_notification: any) => {
       setPendingNotificationCount((prev) => prev + 1)
     }
     socketService.on('notification:new', handler)

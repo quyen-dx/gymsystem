@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { List, Typography, Button, Tag, Spin, Empty } from 'antd'
+import { List, Typography, Button, Tag, Spin } from 'antd'
 import { CheckOutlined, BellOutlined } from '@ant-design/icons'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { notificationService, type Notification } from '../../../services/notificationService'

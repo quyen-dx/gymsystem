@@ -1,5 +1,5 @@
 import { BellOutlined } from '@ant-design/icons'
-import { Badge, Dropdown, List, Typography, Button, Space, Empty } from 'antd'
+import { Badge, Dropdown, List, Typography, Button, Empty } from 'antd'
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { notificationService, type Notification } from '../../services/notificationService'
