@@ -4,7 +4,8 @@ import ScheduleOverride from '../models/ScheduleOverride.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import TrainingClass from '../models/TrainingClass.js'
 import TrainingRequest from '../models/TrainingRequest.js'
-import Notification from '../models/Notification.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
 import { emitShiftSwapNotification } from './socketService.js'
 
 const DAY_LABELS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
@@ -100,6 +101,18 @@ export const createSwapRequest = async ({ ptId, targetDate, reason, classIds }) 
   await ShiftSwapItem.insertMany(
     items.map(i => ({ ...i, swapRequestId: request._id }))
   )
+
+  createNotification({
+    receiverId: null,
+    receiverRole: 'admin',
+    notificationType: NOTIFICATION_TYPES.SHIFT_SWAP_REQUEST,
+    title: 'Yêu cầu đổi ca mới',
+    content: `Có một yêu cầu đổi ca mới cần được xử lý.`,
+    relatedId: request._id,
+    relatedType: 'ShiftSwapRequest',
+    redirectUrl: '/admin/shift-swaps',
+    createdBy: 'PT',
+  }).catch(err => console.error('Notify shift swap request failed:', err.message))
 
   return request
 }
@@ -307,10 +320,16 @@ export const approveSwapRequest = async ({ id, approvedBy, assignments }) => {
 
   // Thông báo cho từng PT thay thế
   for (const [ptId, info] of Object.entries(ptOverrideMap)) {
-    const notif = await Notification.create({
-      userId: ptId,
+    const notif = await createNotification({
+      receiverId: ptId,
+      receiverRole: 'pt',
+      notificationType: NOTIFICATION_TYPES.SHIFT_SWAP_APPROVED,
       title: 'Lịch dạy thay mới',
       content: `Bạn được xếp dạy thay ${requestingPt?.fullName || requestingPt?.name || 'PT'} vào ${dayOfWeek}, ngày ${targetDateStr}. Số buổi: ${info.count}.`,
+      relatedId: id,
+      relatedType: 'ShiftSwapRequest',
+      createdBy: 'Admin',
+      sendEmail: false,
     })
     emitShiftSwapNotification({ userId: ptId, notification: notif })
   }
@@ -318,10 +337,16 @@ export const approveSwapRequest = async ({ id, approvedBy, assignments }) => {
   // Thông báo cho PT yêu cầu (PT A) - biết yêu cầu đã được duyệt
   const replacePts = await User.find({ _id: { $in: Object.keys(ptOverrideMap) } }).select('name fullName').lean()
   const replacePtNames = replacePts.map(p => p.fullName || p.name).filter(Boolean).join(', ')
-  const notifRequestor = await Notification.create({
-    userId: request.requestingPtId,
+  const notifRequestor = await createNotification({
+    receiverId: request.requestingPtId,
+    receiverRole: 'pt',
+    notificationType: NOTIFICATION_TYPES.SHIFT_SWAP_APPROVED,
     title: 'Yêu cầu đổi ca đã được duyệt',
     content: `Yêu cầu đổi ca của bạn vào ${dayOfWeek}, ngày ${targetDateStr} đã được admin duyệt. PT ${replacePtNames || 'khác'} sẽ dạy thay bạn.`,
+    relatedId: id,
+    relatedType: 'ShiftSwapRequest',
+    createdBy: 'Admin',
+    sendEmail: false,
   })
   emitShiftSwapNotification({ userId: request.requestingPtId, notification: notifRequestor })
 
@@ -344,10 +369,16 @@ export const rejectSwapRequest = async ({ id, approvedBy, reason }) => {
 
   // Thông báo cho PT yêu cầu biết yêu cầu bị từ chối
   const targetDateStr = new Date(request.targetDate).toLocaleDateString('vi-VN')
-  const notif = await Notification.create({
-    userId: request.requestingPtId,
+  const notif = await createNotification({
+    receiverId: request.requestingPtId,
+    receiverRole: 'pt',
+    notificationType: NOTIFICATION_TYPES.SHIFT_SWAP_REJECTED,
     title: 'Yêu cầu đổi ca bị từ chối',
     content: `Yêu cầu đổi ca ngày ${targetDateStr} của bạn đã bị từ chối. ${reason ? `Lý do: ${reason}` : 'Vui lòng liên hệ admin để biết thêm chi tiết.'}`,
+    relatedId: id,
+    relatedType: 'ShiftSwapRequest',
+    createdBy: 'Admin',
+    sendEmail: false,
   })
   emitShiftSwapNotification({ userId: request.requestingPtId, notification: notif })
 

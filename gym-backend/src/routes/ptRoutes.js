@@ -7,6 +7,7 @@ import {
   getPTSchedule,
   getPTs,
   getPTMyClasses,
+  getPTMyWeekAttendees,
   updatePT,
   updatePTSchedule,
   getPTAvailability,
@@ -21,6 +22,7 @@ router.use(protect)
 router.get('/available', getPTs)
 router.get('/available/:id', getPTById)
 router.get('/my-classes', getPTMyClasses)
+router.get('/my-week-attendees', getPTMyWeekAttendees)
 router.get('/:id/availability', getPTAvailability)
 
 // Admin / Staff routes

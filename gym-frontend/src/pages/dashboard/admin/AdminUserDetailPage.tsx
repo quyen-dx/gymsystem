@@ -110,7 +110,7 @@ export default function AdminUserDetailPage() {
       title: 'Gói tập',
       dataIndex: 'planId',
       key: 'planName',
-      render: (plan: any) => plan?.nameVi || plan?.nameEn || '—',
+      render: (plan: any) => plan?.nameVi || '—',
     },
     {
       title: 'Ngày bắt đầu',
@@ -402,7 +402,7 @@ export default function AdminUserDetailPage() {
               </Descriptions.Item>
               <Descriptions.Item label="Gói tập hiện tại" span={2}>
                  {activeMembership ? (
-                   <Text strong style={{ color: '#1677ff' }}>{activeMembership.planId?.nameVi || activeMembership.planId?.nameEn} (Hết hạn: {new Date(activeMembership.endDate).toLocaleDateString('vi-VN')})</Text>
+                   <Text strong style={{ color: '#1677ff' }}>{activeMembership.planId?.nameVi} (Hết hạn: {new Date(activeMembership.endDate).toLocaleDateString('vi-VN')})</Text>
                  ) : (
                    <Text type="secondary">Chưa đăng ký gói tập</Text>
                  )}

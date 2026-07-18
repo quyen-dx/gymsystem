@@ -4,6 +4,60 @@ import TrainingClass from '../models/TrainingClass.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
 import TrainingRequest from '../models/TrainingRequest.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
+import Workout from '../models/Workout.js'
+import PTAssignmentEndRequest from '../models/PTAssignmentEndRequest.js'
+import ClassEnrollment from '../models/ClassEnrollment.js'
+
+const nearestFutureDay = (startDate, targetDayOfWeek) => {
+  const d = new Date(startDate)
+  const currentDay = d.getDay()
+  let diff = targetDayOfWeek - currentDay
+  if (diff <= 0) diff += 7
+  d.setDate(d.getDate() + diff)
+  return d
+}
+
+/**
+ * Helper: khoi tao WorkoutSchedule tu template days.
+ * Tao 1 WorkoutSchedule voi sessions duoc xay dung tu template.days.
+ */
+export const buildSchedulesFromTemplate = async ({ templateId, memberId, ptId }) => {
+  const template = await Workout.findById(templateId).lean()
+  if (!template || !template.isTemplate) return null
+
+  const startDate = new Date()
+  const days = template.days || []
+  const sessions = days
+    .filter((d) => d.exercises && d.exercises.length > 0)
+    .map((d, i) => ({
+      dayOrder: i + 1,
+      date: nearestFutureDay(startDate, d.dayOfWeek ?? 0),
+      time: '',
+      endTime: '',
+      className: '',
+      classCode: '',
+      title: d.muscleGroup || `Buổi ${i + 1}`,
+      muscleGroup: d.muscleGroup || '',
+      exercises: (d.exercises || []).map((ex) => ({
+        name: ex.name,
+        note: ex.note || '',
+        completed: false,
+      })),
+      status: 'pending',
+      feedback: '',
+    }))
+
+  const schedule = await WorkoutSchedule.create({
+    memberId,
+    templateId,
+    assignedBy: ptId,
+    startDate,
+    status: 'active',
+    sessions,
+  })
+
+  return schedule
+}
 
 export const findActiveAssignment = async ({ memberId, session }) => {
   const opts = session ? { session } : {}
@@ -14,6 +68,13 @@ export const findActiveAssignment = async ({ memberId, session }) => {
 }
 
 export const findActiveAssignmentByPt = async ({ ptId, session }) => {
+  // 0. Get members with pending end requests to exclude
+  const pendingEndMemberIds = await PTAssignmentEndRequest
+    .find({ ptId, status: 'pending' })
+    .select('memberId')
+    .lean()
+  const excludeMemberIds = pendingEndMemberIds.map(r => String(r.memberId))
+
   // 1. Direct PTAssignment records (one-on-one)
   const directAssignments = await PTAssignment.find({ ptId, status: 'active' })
     .populate('memberId', 'name fullName email phone avatar memberCode memberNumber preferredTime')
@@ -27,13 +88,13 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
   const classIds = classes.map(c => c._id)
 
   if (classIds.length === 0) {
-    // Still need schedule counts for direct assignments
     return attachScheduleCounts(directAssignments)
   }
 
-  // 3. Members enrolled in those classes
+  // 3. Members enrolled in those classes (exclude those with pending end requests)
   const classAssignments = await TrainingAssignment.find({ classId: { $in: classIds }, status: 'active' })
     .populate('memberId', 'name fullName email phone avatar memberCode memberNumber preferredTime')
+    .populate('classId', 'name code')
     .sort({ createdAt: -1 })
     .session(session || null)
     .lean()
@@ -42,15 +103,18 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
   const memberMap = new Map()
   for (const a of directAssignments) {
     const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
-    memberMap.set(mid, a)
+    if (!excludeMemberIds.includes(mid)) {
+      memberMap.set(mid, a)
+    }
   }
   for (const a of classAssignments) {
     const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
-    if (!memberMap.has(mid)) {
+    if (!memberMap.has(mid) && !excludeMemberIds.includes(mid)) {
       memberMap.set(mid, {
         _id: a._id,
         memberId: a.memberId,
         ptId,
+        classId: a.classId,
         status: 'active',
         startDate: a.startDate,
         createdAt: a.createdAt,
@@ -62,8 +126,76 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
 
   const results = Array.from(memberMap.values())
 
+  // 4b. Attach classId for PTAssignment members (find their TrainingAssignment)
+  const memberIds = results.map(a =>
+    typeof a.memberId === 'object' ? a.memberId._id : a.memberId
+  ).filter(Boolean)
+  const trainingAssignments = await TrainingAssignment.find({
+    memberId: { $in: memberIds },
+    status: 'active',
+  })
+    .populate('classId', 'name code')
+    .select('memberId classId')
+    .lean()
+
+  const taMap = new Map()
+  for (const ta of trainingAssignments) {
+    const mid = String(ta.memberId)
+    if (!taMap.has(mid)) {
+      taMap.set(mid, ta)
+    }
+  }
+  for (const a of results) {
+    const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
+    if (!a.classId && taMap.has(mid)) {
+      a.classId = taMap.get(mid).classId
+    }
+  }
+
   // 5. Attach schedule counts for all members in results
-  return attachScheduleCounts(results)
+  const withCounts = await attachScheduleCounts(results)
+
+  // 6. Attach ClassEnrollment data + TrainingRequest data (specialization, goals)
+  const allMemberIds = withCounts.map(a =>
+    typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
+  ).filter(Boolean)
+
+  if (allMemberIds.length > 0) {
+    const [enrollments, trainingRequests] = await Promise.all([
+      ClassEnrollment.find({ memberId: { $in: allMemberIds }, status: 'active' })
+        .populate('classId', 'code name')
+        .select('memberId classId')
+        .lean(),
+      TrainingRequest.aggregate([
+        { $match: { memberId: { $in: allMemberIds.map(id => new mongoose.Types.ObjectId(id)) }, status: 'assigned' } },
+        { $sort: { createdAt: -1 } },
+        { $group: { _id: '$memberId', specialization: { $first: '$specialization' }, goals: { $first: '$goals' } } },
+      ]),
+    ])
+
+    const enrollmentMap = new Map()
+    for (const e of enrollments) {
+      const mid = String(e.memberId)
+      if (!enrollmentMap.has(mid)) {
+        enrollmentMap.set(mid, e.classId)
+      }
+    }
+
+    const trainingRequestMap = new Map()
+    for (const tr of trainingRequests) {
+      trainingRequestMap.set(String(tr._id), { specialization: tr.specialization, goals: tr.goals })
+    }
+
+    for (const a of withCounts) {
+      const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
+      a.classEnrollment = enrollmentMap.get(mid) || null
+      const tr = trainingRequestMap.get(mid)
+      a.specialization = tr?.specialization || ''
+      a.goals = tr?.goals || []
+    }
+  }
+
+  return withCounts
 }
 
 /**
@@ -120,6 +252,12 @@ const attachScheduleCounts = async (assignments) => {
     const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
     a.scheduleCount = scheduleMap.get(mid) || 0
 
+    // If no active schedules, no current workout — skip fill
+    if (a.scheduleCount === 0) {
+      a.workoutId = null
+      continue
+    }
+
     if (!a.workoutId) {
       const fromPa = paMap.get(mid)
       if (fromPa) {
@@ -153,17 +291,147 @@ const attachScheduleCounts = async (assignments) => {
   return assignments
 }
 
-export const findHistoryByPt = async ({ ptId, page = 1, limit = 20 }) => {
+export const findPendingApprovals = async ({ ptId }) => {
+  const items = await PTAssignmentEndRequest.find({ ptId, status: 'pending' })
+    .populate('memberId', 'name fullName email phone avatar memberCode memberNumber')
+    .populate('assignmentId', 'workoutId')
+    .populate('classId', 'name code')
+    .sort({ createdAt: -1 })
+    .lean()
+
+  // Populate workout data for assignmentId references
+  const results = []
+  for (const item of items) {
+    const entry = { ...item }
+    if (entry.assignmentId && entry.assignmentId.workoutId) {
+      const w = await Workout.findById(entry.assignmentId.workoutId).select('name goal').lean()
+      if (w) entry.workoutData = { name: w.name, goal: w.goal }
+    }
+    results.push(entry)
+  }
+
+  return results
+}
+
+export const findHistoryByPt = async ({ ptId, page = 1, limit = 20, type, fromDate, toDate, search }) => {
   const skip = (Number(page) - 1) * Number(limit)
-  const filter = { ptId, status: { $in: ['cancelled', 'completed'] } }
-  const [items, total] = await Promise.all([
-    PTAssignment.find(filter)
-      .populate('memberId', 'name fullName email phone avatar memberCode memberNumber preferredTime')
-      .sort({ cancelledAt: -1, updatedAt: -1 })
-      .skip(skip)
-      .limit(Number(limit)),
-    PTAssignment.countDocuments(filter),
-  ])
+  const ptObjectId = new mongoose.Types.ObjectId(ptId)
+
+  // Query 1: Workout end history (PTAssignment where status = completed and workoutEndedAt exists)
+  const workoutEndFilter = { ptId, status: 'completed', workoutEndedAt: { $ne: null } }
+
+  // Query 2: Assignment end history (PTAssignmentEndRequest where status = approved)
+  const assignmentEndFilter = { ptId: ptObjectId, status: 'approved' }
+
+  // Apply type filter
+  if (type === 'workout_end') {
+    assignmentEndFilter._id = { $exists: false }
+  } else if (type === 'assignment_end') {
+    workoutEndFilter._id = { $exists: false }
+  }
+
+  // Apply date filters
+  if (fromDate || toDate) {
+    const buildRange = () => {
+      const range = {}
+      if (fromDate) range.$gte = new Date(fromDate)
+      if (toDate) range.$lte = new Date(toDate)
+      return range
+    }
+
+    if (!type || type === 'workout_end') {
+      workoutEndFilter.workoutEndedAt = buildRange()
+    }
+    if (!type || type === 'assignment_end') {
+      assignmentEndFilter.processedAt = buildRange()
+    }
+  }
+
+  // Apply search filter (will be done in-memory if needed)
+  const fetchAndFilter = async () => {
+    const [workoutEnds, assignmentEnds] = await Promise.all([
+      type !== 'assignment_end'
+        ? PTAssignment.find(workoutEndFilter)
+            .populate('memberId', 'name fullName memberCode memberNumber')
+            .populate('workoutEndedBy', 'name fullName')
+            .sort({ workoutEndedAt: -1 })
+            .lean()
+        : [],
+      type !== 'workout_end'
+        ? PTAssignmentEndRequest.find(assignmentEndFilter)
+            .populate('memberId', 'name fullName memberCode memberNumber')
+            .populate('ptId', 'name fullName')
+            .populate('classId', 'name code')
+            .populate('processedBy', 'name fullName')
+            .sort({ processedAt: -1 })
+            .lean()
+        : [],
+    ])
+
+    const workoutEndItems = workoutEnds.map(a => ({
+      _type: 'workout_end',
+      _id: a._id,
+      memberId: a.memberId,
+      ptId: a.ptId,
+      workoutName: a.workoutNameSnapshot || a.workoutId?.name || '',
+      endedAt: a.workoutEndedAt,
+      endedBy: a.workoutEndedBy,
+      createdAt: a.createdAt,
+    }))
+
+    const assignmentEndItems = assignmentEnds.map(r => ({
+      _type: 'assignment_end',
+      _id: r._id,
+      memberId: r.memberId,
+      ptId: r.ptId,
+      classId: r.classId,
+      reasonType: r.reasonType,
+      reasonDetail: r.reasonDetail,
+      requestedAt: r.createdAt,
+      approvedAt: r.processedAt,
+      approvedBy: r.processedBy,
+      createdAt: r.createdAt,
+    }))
+
+    let combined = [...workoutEndItems, ...assignmentEndItems]
+
+    // Apply search filter in-memory
+    if (search) {
+      const q = search.toLowerCase()
+      combined = combined.filter(item => {
+        const member = typeof item.memberId === 'object' ? item.memberId : null
+        const memberName = member?.fullName || member?.name || ''
+        const memberCode = member?.memberCode || ''
+        if (memberName.toLowerCase().includes(q) || memberCode.toLowerCase().includes(q)) return true
+
+        if (item._type === 'workout_end') {
+          if (item.workoutName?.toLowerCase().includes(q)) return true
+        } else {
+          const cls = typeof item.classId === 'object' ? item.classId : null
+          const className = cls?.name || ''
+          const classCode = cls?.code || ''
+          if (className.toLowerCase().includes(q) || classCode.toLowerCase().includes(q)) return true
+        }
+        return false
+      })
+    }
+
+    // Sort by date descending (newest first)
+    combined.sort((a, b) => {
+      const dateA = a._type === 'workout_end' ? a.endedAt : a.approvedAt
+      const dateB = b._type === 'workout_end' ? b.endedAt : b.approvedAt
+      const dA = dateA ? new Date(dateA).getTime() : 0
+      const dB = dateB ? new Date(dateB).getTime() : 0
+      return dB - dA
+    })
+
+    return combined
+  }
+
+  const allItems = await fetchAndFilter()
+  const total = allItems.length
+  const items = allItems.slice(skip, skip + Number(limit))
+
   return {
     items,
     pagination: {
@@ -178,8 +446,31 @@ export const findHistoryByPt = async ({ ptId, page = 1, limit = 20 }) => {
 export const createAssignment = async ({ memberId, ptId, membershipId, session }) => {
   const opts = session ? { session } : {}
 
-  const existing = await PTAssignment.findOne({ memberId, status: 'active' }).session(session || null)
-  if (existing) return existing
+  // BUSINESS RULE: 1 (memberId, ptId) pair can have AT MOST 1 active PTAssignment at a time.
+  //  - If an active assignment exists for the SAME pair (memberId, ptId): reuse it (idempotent).
+  //  - If an active assignment exists for the SAME memberId but a DIFFERENT ptId: leave it
+  //    alone (member can have multiple PTs, e.g. PT for different specialization).
+  //  - Note: any stale duplicate actives for the same (memberId, ptId) pair are cancelled
+  //    here defensively to recover from legacy dup data.
+  const existingSamePair = await PTAssignment.findOne({
+    memberId, ptId, status: 'active',
+  }).session(session || null).lean()
+
+  if (existingSamePair) {
+    // Defensive: cancel any OTHER active assignment for same (memberId, ptId) pair (legacy dups)
+    await PTAssignment.updateMany(
+      { memberId, ptId, status: 'active', _id: { $ne: existingSamePair._id } },
+      {
+        $set: {
+          status: 'cancelled',
+          cancelledAt: new Date(),
+          cancelReason: 'cleanup_duplicate_pt_assignment',
+        },
+      },
+      opts,
+    )
+    return existingSamePair
+  }
 
   const [assignment] = await PTAssignment.create([{
     memberId,

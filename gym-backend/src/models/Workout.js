@@ -165,7 +165,7 @@ const workoutSchema = new mongoose.Schema(
       index: true,
     },
 
-    // PT
+    // PT (tác giả tạo giáo án)
     ptId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -212,11 +212,56 @@ const workoutSchema = new mongoose.Schema(
       enum: ['active', 'completed', 'archived'],
       default: 'active',
     },
+
+    // Chuyên môn (vd: Bodybuilding, Yoga, Cardio...)
+    specializationId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+
+    // Trạng thái template dùng chung
+    templateStatus: {
+      type: String,
+      enum: ['published', 'under_review', 'hidden', 'deleted'],
+      default: 'published',
+    },
+
+    // Phiên bản
+    version: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+
+    // Tổng số buổi
+    totalSessions: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    // Số hội viên đang sử dụng giáo án này
+    assignmentCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+workoutSchema.pre('save', function () {
+  if (this.isModified('weeks') || this.isModified('days')) {
+    if (this.weeks && this.weeks.length > 0) {
+      this.totalSessions = this.weeks.reduce((sum, week) => sum + (week.sessions?.length || 0), 0)
+    } else if (this.days && this.days.length > 0) {
+      this.totalSessions = this.days.reduce((sum, day) => sum + (day.exercises?.length > 0 ? 1 : 0), 0)
+    }
+  }
+})
 
 // Index
 workoutSchema.index({ memberId: 1 });
@@ -224,5 +269,11 @@ workoutSchema.index({ ptId: 1 });
 workoutSchema.index({ memberId: 1, createdAt: -1 });
 
 workoutSchema.index({ isTemplate: 1, createdAt: -1 });
+workoutSchema.index({ isTemplate: 1, templateStatus: 1 });
+workoutSchema.index({ isTemplate: 1, specializationId: 1 });
+workoutSchema.index({ isTemplate: 1, goal: 1 });
+workoutSchema.index({ isTemplate: 1, totalSessions: 1 });
+workoutSchema.index({ isTemplate: 1, assignmentCount: -1 });
+workoutSchema.index({ name: 'text', goal: 'text', specializationId: 'text' });
 
 export default mongoose.models.Workout || mongoose.model("Workout", workoutSchema);

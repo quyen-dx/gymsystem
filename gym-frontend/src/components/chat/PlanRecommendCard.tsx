@@ -41,17 +41,11 @@ const formatDuration = (days: number, lang: 'vi' | 'en'): string => {
   return lang === 'en' ? `${days} days` : `${days} ngày`
 }
 
-const getName = (plan: PlanPayloadPlan, lang: 'vi' | 'en') => (
-  lang === 'vi' ? (plan.nameVi || plan.nameEn) : (plan.nameEn || plan.nameVi)
-)
+const getName = (plan: PlanPayloadPlan) => plan.nameVi
 
-const getDescription = (plan: PlanPayloadPlan, lang: 'vi' | 'en') => (
-  lang === 'vi' ? (plan.descriptionVi || plan.descriptionEn) : (plan.descriptionEn || plan.descriptionVi)
-)
+const getDescription = (plan: PlanPayloadPlan) => plan.descriptionVi
 
-const getFeatures = (plan: PlanPayloadPlan, lang: 'vi' | 'en') => (
-  lang === 'vi' ? (plan.featuresVi || plan.featuresEn || []) : (plan.featuresEn || plan.featuresVi || [])
-)
+const getFeatures = (plan: PlanPayloadPlan) => plan.featuresVi || []
 
 const splitReasonItems = (reason?: string | string[]) => {
   if (Array.isArray(reason)) {
@@ -79,9 +73,9 @@ const splitReasonItems = (reason?: string | string[]) => {
 }
 
 export function PlanRecommendCard({ recommendedPlan, reason, conclusion, alternatives = [], lang = 'vi' }: Props) {
-  const name = getName(recommendedPlan, lang)
-  const description = getDescription(recommendedPlan, lang)
-  const features = getFeatures(recommendedPlan, lang)
+  const name = getName(recommendedPlan)
+  const description = getDescription(recommendedPlan)
+  const features = getFeatures(recommendedPlan)
   const accentColor = recommendedPlan.color || 'var(--theme-accent)'
   const alternativePlans = alternatives.filter((plan) => String(plan._id) !== String(recommendedPlan._id)).slice(0, 2)
   const t = labels[lang]

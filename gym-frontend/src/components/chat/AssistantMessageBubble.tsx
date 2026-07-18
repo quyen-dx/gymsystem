@@ -8,7 +8,6 @@ import { PlanCompareTable } from './PlanCompareTable'
 import { PlanDetailCard } from './PlanDetailCard'
 import { PlanRecommendCard } from './PlanRecommendCard'
 import { WorkoutAnalyzeCard, WorkoutPlanCard } from './WorkoutAnalyzeCard'
-import { stripUnsafeModelOutput } from '../../utils/aiUtils'
 
 interface Props {
   message: ChatMessage
@@ -75,7 +74,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
       : 'vi'
   const rawText = typeof content === 'string' ? content : (typeof message.content === 'string' ? message.content : '')
   const displayContent = tryExtractAnswerFromJsonText(rawText)
-  const text = tryExtractAnswerFromJsonText(stripUnsafeModelOutput(displayContent))
+  const text = displayContent
   const sourceType = message.metadata?.sourceType as string | undefined
   const sourceLabel = message.metadata?.sourceLabel as string | undefined
   const sourceIcon = sourceType === 'gympro' ? '🟢' : ''
@@ -198,9 +197,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
   const getCardTitle = (card: unknown) => {
     if (!card || typeof card !== 'object') return ''
     const item = card as Record<string, any>
-    return lang === 'en'
-      ? (item.nameEn || item.name || item.titleEn || item.title || item.questionEn || item.planNameEn || item.planName || item.ptName || item.memberName || item.categoryEn || item.category || '')
-      : (item.nameVi || item.name || item.titleVi || item.title || item.questionVi || item.planNameVi || item.planName || item.ptName || item.memberName || item.categoryVi || item.category || '')
+    return item.nameVi || item.name || item.titleVi || item.title || item.questionVi || item.planNameVi || item.planName || item.ptName || item.memberName || item.categoryVi || item.category || ''
   }
 
   const getCardMeta = (card: unknown) => {
@@ -235,9 +232,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
           const title = getCardTitle(card) || `${messageType.replace(/_/g, ' ')} ${index + 1}`
           const meta = getCardMeta(card)
           const body = card && typeof card === 'object'
-            ? String(lang === 'en'
-              ? ((card as Record<string, any>).descriptionEn || (card as Record<string, any>).description || (card as Record<string, any>).answerEn || (card as Record<string, any>).contentEn || (card as Record<string, any>).reason || '')
-              : ((card as Record<string, any>).descriptionVi || (card as Record<string, any>).description || (card as Record<string, any>).answerVi || (card as Record<string, any>).contentVi || (card as Record<string, any>).reason || '')).slice(0, 180)
+            ? String((card as Record<string, any>).descriptionVi || (card as Record<string, any>).description || (card as Record<string, any>).answerVi || (card as Record<string, any>).contentVi || (card as Record<string, any>).reason || '').slice(0, 180)
             : ''
           return (
             <div key={`${message.id}-card-${index}`} className="ai-plan-row">
@@ -352,7 +347,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
     )
   }
 
-  const answerText = tryExtractAnswerFromJsonText(stripUnsafeModelOutput(tryExtractAnswerFromJsonText(message.answer)))
+  const answerText = tryExtractAnswerFromJsonText(tryExtractAnswerFromJsonText(message.answer))
   const displayText = answerText || text
 
   const shouldRenderPlanCompact = (() => {

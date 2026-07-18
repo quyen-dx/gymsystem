@@ -79,3 +79,36 @@ export const emitShiftSwapNotification = ({ userId, notification }) => {
   if (!io) return
   io.to(userId.toString()).emit('notification:new', notification)
 }
+
+export const emitPTEndRequestCountUpdate = async () => {
+  if (!io) return
+  const { default: PTAssignmentEndRequest } = await import('../models/PTAssignmentEndRequest.js')
+  const count = await PTAssignmentEndRequest.countDocuments({ status: 'pending' })
+  io.to('staff').emit('pt_end_request:count_updated', { pendingCount: count })
+}
+
+/**
+ * Emit a notification to a specific user (PT, member, etc.)
+ * userId: the user's _id as string
+ * notification: the full Notification document to send
+ */
+export const emitNotificationToUser = ({ userId, notification }) => {
+  if (!io || !userId || !notification) return
+  io.to(userId.toString()).emit('notification:new', notification)
+}
+
+/**
+ * Emit a notification to all staff/admin users
+ */
+export const emitNotificationToStaff = (notification) => {
+  if (!io || !notification) return
+  io.to('staff').emit('notification:new', notification)
+}
+
+/**
+ * Emit a status change event for PT end request to a specific user
+ */
+export const emitPTEndRequestStatusChange = ({ userId, data }) => {
+  if (!io || !userId) return
+  io.to(userId.toString()).emit('pt_end_request:status_changed', data)
+}

@@ -3,14 +3,23 @@ import cron from 'node-cron'
 import Membership from '../models/Membership.js'
 import User from '../models/User.js'
 import Plan from '../models/Plan.js'
-import Notification from '../models/Notification.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
 import { sendRenewalReminderEmail } from './emailService.js'
 
 const REMINDER_DAYS = [7, 1]
 
-const createInAppNotification = async ({ userId, title, content }) => {
+const createInAppNotification = async ({ userId, title, content, notificationType }) => {
   try {
-    await Notification.create({ userId, title, content })
+    await createNotification({
+      receiverId: userId,
+      receiverRole: 'member',
+      notificationType,
+      title,
+      content,
+      createdBy: 'System',
+      sendEmail: false,
+    })
   } catch (error) {
     console.error('Tạo thông báo trong app thất bại:', error.message)
   }
@@ -42,6 +51,7 @@ const sendReminderForMembership = async (membership, daysLeft) => {
     userId: user._id,
     title: 'Gói tập sắp hết hạn',
     content: `Gói tập "${planName}" của bạn sẽ hết hạn sau ${daysLeft} ngày. Hãy gia hạn để tiếp tục tập luyện!`,
+    notificationType: daysLeft === 7 ? NOTIFICATION_TYPES.MEMBERSHIP_EXPIRING_7D : NOTIFICATION_TYPES.MEMBERSHIP_EXPIRING_1D,
   })
 
   if (user.email) {

@@ -1,6 +1,12 @@
 import mongoose from 'mongoose'
 import Workout from '../models/Workout.js'
+import WorkoutSchedule from '../models/WorkoutSchedule.js'
+import PTAssignment from '../models/PTAssignment.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
 import SessionFeedback from '../models/SessionFeedback.js'
+import { isValidGoalForSpecialization } from '../config/specializationGoals.js'
+import { buildSchedulesFromTemplate } from '../services/ptAssignmentService.js'
 
 const isAdminRole = (role) => role === 'super_admin' || role === 'admin'
 const isPtRole = (role) => role === 'pt'
@@ -26,6 +32,17 @@ const canViewWorkout = (user, workout) =>
   sameId(workout.ptId, user._id) ||
   sameId(workout.memberId, user._id)
 
+const canViewTemplate = (user, workout) => {
+  if (isAdminRole(user.role)) return true
+  if (workout.templateStatus === 'published') return true
+  if (workout.templateStatus === 'under_review') return true
+  if (workout.templateStatus === 'hidden') {
+    return isAdminRole(user.role) || sameId(workout.ptId, user._id)
+  }
+  if (workout.templateStatus === 'deleted') return isAdminRole(user.role)
+  return isPtRole(user.role) || isAdminRole(user.role)
+}
+
 const canManageWorkout = (user, workout) =>
   isAdminRole(user.role) || (isPtRole(user.role) && sameId(workout.ptId, user._id))
 
@@ -33,19 +50,23 @@ const canUpdateSessionProgress = (user, workout) =>
   canManageWorkout(user, workout) || (isMemberRole(user.role) && sameId(workout.memberId, user._id))
 
 const buildScopedWorkoutFilter = (user, memberId, isTemplate) => {
+  const base = {}
+  if (isTemplate !== undefined) {
+    base.isTemplate = isTemplate === 'true'
+    // Chi hien thi template published/under_review, dong nhat voi thu vien /pt/workouts
+    base.templateStatus = { $in: ['published', 'under_review'] }
+  }
   if (isAdminRole(user.role)) {
-    const filter = {}
-    if (memberId) filter.memberId = memberId
-    if (isTemplate !== undefined) filter.isTemplate = isTemplate === 'true'
-    return filter
+    if (memberId) base.memberId = memberId
+    return base
   }
   if (isPtRole(user.role)) {
-    const filter = { ptId: user._id }
-    if (memberId) filter.memberId = memberId
-    if (isTemplate !== undefined) filter.isTemplate = isTemplate === 'true'
-    return filter
+    base.ptId = user._id
+    if (memberId) base.memberId = memberId
+    return base
   }
-  return { memberId: user._id }
+  base.memberId = user._id
+  return base
 }
 
 const recalculateCompletionRate = (workout) => {
@@ -118,15 +139,19 @@ const buildProgressSummary = (workout) => ({
   }),
 })
 
-const getWorkoutOr404 = async (id, res) => {
+const getWorkoutOr404 = async (id, res, opts = {}) => {
   if (!isValidObjectId(id)) {
-    res.status(400).json({ message: 'ID workout khong hop le' })
+    res.status(400).json({ message: 'ID workout không hợp lệ' })
     return null
   }
 
-  const workout = await Workout.findById(id)
+  let query = Workout.findById(id)
+  if (opts.populatePt) query = query.populate('ptId', 'name fullName email phone avatar')
+  if (opts.populateMember) query = query.populate('memberId', 'name fullName email phone memberCode avatar')
+
+  const workout = await query
   if (!workout) {
-    res.status(404).json({ message: 'Khong tim thay workout' })
+    res.status(404).json({ message: 'Không tìm thấy workout' })
     return null
   }
 
@@ -135,18 +160,206 @@ const getWorkoutOr404 = async (id, res) => {
 
 const getSessionOr400 = (workout, weekIndex, sessionIndex, res) => {
   if (!isValidIndex(weekIndex) || !isValidIndex(sessionIndex)) {
-    res.status(400).json({ message: 'Tuan hoac buoi tap khong hop le' })
+    res.status(400).json({ message: 'Tuần hoặc buổi tập không hợp lệ' })
     return null
   }
 
   const session = workout.weeks[weekIndex]?.sessions[sessionIndex]
   if (!session) {
-    res.status(400).json({ message: 'Tuan hoac buoi tap khong hop le' })
+    res.status(400).json({ message: 'Tuần hoặc buổi tập không hợp lệ' })
     return null
   }
 
   return session
 }
+
+const REASON_LABELS = {
+  wrong_expertise: 'Sai chuyên môn',
+  incorrect_content: 'Nội dung không đúng kỹ thuật',
+  missing_info: 'Thiếu thông tin',
+  spam: 'Spam',
+  duplicate: 'Trùng lặp',
+  other: 'Khác',
+}
+
+// ============ SHARED LIBRARY ============
+
+export const getSharedTemplates = async (req, res) => {
+  try {
+    if (!isPtRole(req.user.role) && !isAdminRole(req.user.role)) {
+      return res.status(403).json({ message: 'Ban khong co quyen truy cap thu vien giao an' })
+    }
+
+    const {
+      search,
+      specializationId,
+      goal,
+      createdBy,
+      trainerId,
+      mine,
+      totalSessions,
+      status: templateStatus,
+      sortBy,
+      page = 1,
+      limit = 20,
+    } = req.query
+
+    const filter = { isTemplate: true }
+
+    if (isAdminRole(req.user.role)) {
+      if (templateStatus) {
+        filter.templateStatus = templateStatus
+      } else {
+        filter.templateStatus = { $ne: 'deleted' }
+      }
+    } else {
+      filter.templateStatus = { $in: ['published', 'under_review'] }
+    }
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { goal: { $regex: search, $options: 'i' } },
+        { specializationId: { $regex: search, $options: 'i' } },
+      ]
+    }
+
+    if (specializationId) {
+      filter.specializationId = specializationId
+    }
+
+    if (goal) {
+      filter.goal = { $regex: goal, $options: 'i' }
+    }
+
+    if (mine === 'true' || mine === '1') {
+      filter.ptId = req.user._id
+    } else if (trainerId && isValidObjectId(trainerId)) {
+      filter.ptId = trainerId
+    } else if (createdBy) {
+      if (isValidObjectId(createdBy)) {
+        filter.ptId = createdBy
+      } else {
+        filter.ptId = { $regex: createdBy, $options: 'i' }
+      }
+    }
+
+    if (totalSessions) {
+      const count = Number(totalSessions)
+      if (!isNaN(count)) {
+        filter.totalSessions = count
+      }
+    }
+
+    let sort = { createdAt: -1 }
+    if (sortBy === 'most_used') {
+      sort = { assignmentCount: -1, createdAt: -1 }
+    } else if (sortBy === 'newest') {
+      sort = { createdAt: -1 }
+    }
+
+    const pageNum = Math.max(1, Number(page))
+    const limitNum = Math.min(100, Math.max(1, Number(limit)))
+    const skip = (pageNum - 1) * limitNum
+
+    const [workouts, total] = await Promise.all([
+      Workout.find(filter)
+        .populate('ptId', 'name fullName email phone avatar')
+        .sort(sort)
+        .skip(skip)
+        .limit(limitNum),
+      Workout.countDocuments(filter),
+    ])
+
+    return res.status(200).json({
+      workouts,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+      },
+    })
+  } catch (error) {
+    return res.status(500).json({ message: 'Loi lay danh sach giao an', error: error.message })
+  }
+}
+
+export const getDistinctSpecializations = async (req, res) => {
+  try {
+    const specializations = await Workout.distinct('specializationId', {
+      isTemplate: true,
+      templateStatus: { $in: ['published', 'under_review'] },
+      specializationId: { $ne: '' },
+    })
+    return res.status(200).json({ specializations })
+  } catch (error) {
+    return res.status(500).json({ message: 'Loi lay danh sach chuyen mon', error: error.message })
+  }
+}
+
+export const getDistinctGoals = async (req, res) => {
+  try {
+    const goals = await Workout.distinct('goal', {
+      isTemplate: true,
+      templateStatus: { $in: ['published', 'under_review'] },
+      goal: { $ne: '' },
+    })
+    return res.status(200).json({ goals })
+  } catch (error) {
+    return res.status(500).json({ message: 'Lỗi lấy danh sách mục tiêu', error: error.message })
+  }
+}
+
+export const getDistinctGoalsBySpecialization = async (req, res) => {
+  try {
+    const { specializationId } = req.query
+    const filter = {
+      isTemplate: true,
+      templateStatus: { $in: ['published', 'under_review'] },
+      goal: { $ne: '' },
+    }
+    if (specializationId) {
+      filter.specializationId = specializationId
+    }
+    const goals = await Workout.distinct('goal', filter)
+    return res.status(200).json({ goals })
+  } catch (error) {
+    return res.status(500).json({ message: 'Lỗi lấy danh sách mục tiêu', error: error.message })
+  }
+}
+
+export const getDistinctTrainersWithWorkouts = async (req, res) => {
+  try {
+    const trainers = await Workout.aggregate([
+      { $match: { isTemplate: true, templateStatus: { $in: ['published', 'under_review'] } } },
+      { $group: { _id: '$ptId' } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'user',
+        },
+      },
+      { $unwind: '$user' },
+      {
+        $project: {
+          _id: '$user._id',
+          name: '$user.name',
+          fullName: '$user.fullName',
+          email: '$user.email',
+          avatar: '$user.avatar',
+        },
+      },
+    ])
+    return res.status(200).json({ trainers })
+  } catch (error) {
+    return res.status(500).json({ message: 'Lỗi lấy danh sách PT', error: error.message })
+  }
+}
+
+// ============ GENERAL ============
 
 export const getAllWorkouts = async (req, res) => {
   try {
@@ -164,15 +377,18 @@ export const getAllWorkouts = async (req, res) => {
 
 export const getWorkoutById = async (req, res) => {
   try {
-    const workout = await getWorkoutOr404(req.params.id, res)
+    const workout = await getWorkoutOr404(req.params.id, res, { populatePt: true, populateMember: true })
     if (!workout) return
 
-    if (!canViewWorkout(req.user, workout)) {
-      return res.status(403).json({ message: 'Ban khong co quyen xem workout nay' })
+    if (workout.isTemplate) {
+      if (!canViewTemplate(req.user, workout)) {
+        return res.status(403).json({ message: 'Ban khong co quyen xem giao an nay' })
+      }
+    } else {
+      if (!canViewWorkout(req.user, workout)) {
+        return res.status(403).json({ message: 'Ban khong co quyen xem workout nay' })
+      }
     }
-
-    await workout.populate('memberId', 'name fullName email phone memberCode avatar')
-    await workout.populate('ptId', 'name fullName email phone avatar')
 
     return res.status(200).json(workout)
   } catch (error) {
@@ -186,7 +402,7 @@ export const createWorkout = async (req, res) => {
       return res.status(403).json({ message: 'Chi PT moi duoc tao workout' })
     }
 
-    const isTemplate = req.body.isTemplate === true
+    const isTemplate = req.body.isTemplate === true || req.body.isTemplate === 'true'
     const payload = {
       name: req.body.name || req.body.workoutName,
       goal: req.body.goal,
@@ -201,7 +417,15 @@ export const createWorkout = async (req, res) => {
       estimatedCalories: req.body.estimatedCalories || 0,
       isTemplate,
       status: isTemplate ? undefined : (req.body.status || 'active'),
-      templateStatus: isTemplate ? 'pending_approval' : undefined,
+      specializationId: req.body.specializationId || '',
+      templateStatus: isTemplate ? 'published' : undefined,
+      version: 1,
+    }
+
+    if (isTemplate && payload.specializationId && payload.goal) {
+      if (!isValidGoalForSpecialization(payload.specializationId, payload.goal)) {
+        return res.status(400).json({ message: `Muc tieu "${payload.goal}" khong thuoc chuyen mon "${payload.specializationId}"` })
+      }
     }
 
     if (!isTemplate && (!payload.memberId || !isValidObjectId(payload.memberId))) {
@@ -216,6 +440,7 @@ export const createWorkout = async (req, res) => {
 
     return res.status(201).json({ message: 'Tao workout thanh cong', workout })
   } catch (error) {
+    console.error('createWorkout error:', error)
     return res.status(400).json({ message: 'Tao workout that bai', error: error.message })
   }
 }
@@ -226,7 +451,15 @@ export const updateWorkout = async (req, res) => {
     if (!workout) return
 
     if (!canManageWorkout(req.user, workout)) {
-      return res.status(403).json({ message: 'Ban khong co quyen sua workout nay' })
+      return res.status(403).json({ message: 'Ban khong co quyen sua giao an nay' })
+    }
+
+    const specId = req.body.specializationId !== undefined ? req.body.specializationId : workout.specializationId
+    const goalVal = req.body.goal !== undefined ? req.body.goal : workout.goal
+    if (workout.isTemplate && specId && goalVal) {
+      if (!isValidGoalForSpecialization(specId, goalVal)) {
+        return res.status(400).json({ message: `Muc tieu "${goalVal}" khong thuoc chuyen mon "${specId}"` })
+      }
     }
 
     const mapping = {
@@ -236,13 +469,21 @@ export const updateWorkout = async (req, res) => {
       personalTrainer: 'ptId',
     }
 
-    const allowedFields = ['name', 'goal', 'duration', 'startDate', 'endDate', 'description', 'memberId', 'ptId', 'weeks', 'days', 'estimatedCalories', 'isTemplate', 'status']
+    const allowedFields = [
+      'name', 'goal', 'duration', 'startDate', 'endDate', 'description',
+      'memberId', 'ptId', 'weeks', 'days', 'estimatedCalories',
+      'isTemplate', 'status', 'specializationId',
+    ]
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) workout[field] = req.body[field]
     })
 
     for (const [frontend, backend] of Object.entries(mapping)) {
       if (req.body[frontend] !== undefined) workout[backend] = req.body[frontend]
+    }
+
+    if (workout.isModified('name') || workout.isModified('goal') || workout.isModified('days') || workout.isModified('weeks')) {
+      workout.version = (workout.version || 1) + 1
     }
 
     recalculateCompletionRate(workout)
@@ -260,16 +501,167 @@ export const deleteWorkout = async (req, res) => {
     if (!workout) return
 
     if (!canManageWorkout(req.user, workout)) {
-      return res.status(403).json({ message: 'Ban khong co quyen xoa workout nay' })
+      return res.status(403).json({ message: 'Ban khong co quyen xoa giao an nay' })
+    }
+
+    if (workout.isTemplate) {
+      workout.templateStatus = 'deleted'
+      await workout.save()
+      return res.status(200).json({ message: 'Da xoa giao an khoi thu vien' })
     }
 
     await workout.deleteOne()
-
     return res.status(200).json({ message: 'Xoa workout thanh cong' })
   } catch (error) {
     return res.status(500).json({ message: 'Xoa workout that bai', error: error.message })
   }
 }
+
+// ============ ADMIN: HIDE / RESTORE ============
+
+export const hideWorkout = async (req, res) => {
+  try {
+    if (!isAdminRole(req.user.role)) {
+      return res.status(403).json({ message: 'Chi admin moi co quyen an giao an' })
+    }
+
+    const workout = await getWorkoutOr404(req.params.id, res)
+    if (!workout) return
+
+    workout.templateStatus = 'hidden'
+    await workout.save()
+
+    if (workout.ptId) {
+      await createNotification({
+        receiverId: workout.ptId,
+        receiverRole: 'pt',
+        notificationType: NOTIFICATION_TYPES.WORKOUT_HIDDEN,
+        title: 'Giáo án của bạn đã bị Ẩn',
+        content: `Giáo án "${workout.name}" đã bị ẩn khỏi thư viện. Lý do: ${req.body.reason || 'Vi phạm nội dung'}. Vui lòng chỉnh sửa trước khi gửi duyệt lại.`,
+        createdBy: 'Admin',
+        sendEmail: false,
+      })
+    }
+
+    return res.status(200).json({ message: 'Da an giao an', workout })
+  } catch (error) {
+    return res.status(500).json({ message: 'Khong the an giao an', error: error.message })
+  }
+}
+
+export const restoreWorkout = async (req, res) => {
+  try {
+    if (!isAdminRole(req.user.role)) {
+      return res.status(403).json({ message: 'Chi admin moi co quyen khoi phuc giao an' })
+    }
+
+    const workout = await getWorkoutOr404(req.params.id, res)
+    if (!workout) return
+
+    workout.templateStatus = 'published'
+    await workout.save()
+
+    if (workout.ptId) {
+      await createNotification({
+        receiverId: workout.ptId,
+        receiverRole: 'pt',
+        notificationType: NOTIFICATION_TYPES.WORKOUT_RESTORED,
+        title: 'Giáo án của bạn đã được khôi phục',
+        content: `Giáo án "${workout.name}" đã được khôi phục và hiển thị lại trong thư viện.`,
+        createdBy: 'Admin',
+        sendEmail: false,
+      })
+    }
+
+    return res.status(200).json({ message: 'Da khoi phuc giao an', workout })
+  } catch (error) {
+    return res.status(500).json({ message: 'Khong the khoi phuc giao an', error: error.message })
+  }
+}
+
+// ============ ASSIGN WORKOUT TO MEMBER ============
+
+export const assignWorkoutToMember = async (req, res) => {
+  try {
+    if (!isPtRole(req.user.role) && !isAdminRole(req.user.role)) {
+      return res.status(403).json({ message: 'Chi PT moi duoc gan giao an cho hoi vien' })
+    }
+
+    const { workoutTemplateId, memberId } = req.body
+
+    if (!workoutTemplateId || !memberId) {
+      return res.status(400).json({ message: 'Thieu workoutTemplateId hoac memberId' })
+    }
+
+    const template = await Workout.findById(workoutTemplateId)
+    if (!template || !template.isTemplate) {
+      return res.status(404).json({ message: 'Khong tim thay giao an mau' })
+    }
+
+    if (template.templateStatus !== 'published' && !isAdminRole(req.user.role)) {
+      if (template.templateStatus === 'hidden' && !sameId(template.ptId, req.user._id)) {
+        return res.status(403).json({ message: 'Giao an nay dang bi an, khong the gan moi' })
+      }
+    }
+
+    let assignment = await PTAssignment.findOne({
+      memberId,
+      ptId: req.user._id,
+      status: 'active',
+    })
+
+    if (!assignment) {
+      return res.status(404).json({ message: 'Khong tim thay phan cong PT cho hoi vien nay. Hay phan cong PT truoc.' })
+    }
+
+    assignment.workoutId = workoutTemplateId
+    await assignment.save()
+
+    template.assignmentCount = (template.assignmentCount || 0) + 1
+    await template.save()
+
+    // Auto-create WorkoutSchedule if one does not exist yet
+    const existing = await WorkoutSchedule.findOne({ memberId, templateId: workoutTemplateId, status: 'active' }).lean()
+    if (!existing) {
+      await buildSchedulesFromTemplate({
+        templateId: workoutTemplateId,
+        memberId,
+        ptId: req.user._id,
+      })
+    }
+
+    const populated = await PTAssignment.findById(assignment._id)
+      .populate('memberId', 'name fullName email phone avatar memberCode memberNumber')
+      .populate('workoutId', 'name goal')
+      .populate('ptId', 'name fullName')
+
+    return res.status(200).json({ message: 'Da gan giao an thanh cong', assignment: populated })
+  } catch (error) {
+    return res.status(500).json({ message: 'Loi gan giao an', error: error.message })
+  }
+}
+
+export const getWorkoutAssignments = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const assignments = await PTAssignment.find({ workoutId: id })
+      .populate('memberId', 'name fullName email phone avatar memberCode')
+      .populate('ptId', 'name fullName email')
+      .sort({ createdAt: -1 })
+
+    const schedules = await WorkoutSchedule.find({ templateId: id })
+      .populate('memberId', 'name fullName email phone avatar memberCode')
+      .populate('assignedBy', 'name fullName email')
+      .sort({ createdAt: -1 })
+
+    return res.status(200).json({ assignments, schedules })
+  } catch (error) {
+    return res.status(500).json({ message: 'Loi lay danh sach su dung', error: error.message })
+  }
+}
+
+// ============ SESSION / EXERCISE (giữ nguyên) ============
 
 export const startWorkoutSession = async (req, res) => {
   try {

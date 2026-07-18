@@ -11,10 +11,10 @@ export function PlanCompactList({ plans, lang = 'vi' }: Props) {
     return (
         <div className="plan-compact-list">
             {plans.slice(0, 12).map((p, idx) => {
-                const name = lang === 'en' ? (p.nameEn || p.nameVi) : (p.nameVi || p.nameEn)
+                const name = p.nameVi
                 const price = p.price != null ? `${Number(p.price).toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')}đ` : ''
                 const duration = p.durationDays != null ? (lang === 'en' ? `${p.durationDays} days` : `${p.durationDays} ngày`) : ''
-                const features = (lang === 'en' ? (p.featuresEn || p.featuresVi) : (p.featuresVi || p.featuresEn)) || []
+                const features = p.featuresVi || []
                 const featureLine = features.filter(Boolean).slice(0, 6).join(' · ')
 
                 return (

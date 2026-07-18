@@ -1,15 +1,23 @@
 import Plan from '../models/Plan.js';
+import PlanFeature from '../models/PlanFeature.js';
 import Membership from '../models/Membership.js';
 import { recordAuditLog } from '../services/auditLogService.js';
-import { invalidateContextCache } from '../services/conversationContextCache.js';
-import { invalidateAiDomainCache } from '../services/aiCacheService.js';
 
 // ==================== TẠO GÓI TẬP ====================
 export const createPlan = async (req, res) => {
   try {
-    const { nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive, applicableSpecializations } = req.body;
+    const { nameVi, price, durationDays, descriptionVi, featuresVi, color, isActive, featureIds } = req.body;
 
-    const plan = await Plan.create({ nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive, applicableSpecializations });
+    let resolvedFeatureIds = featureIds || [];
+    if (!resolvedFeatureIds.length && featuresVi && featuresVi.length) {
+      const matched = await PlanFeature.find({
+        name: { $in: featuresVi.map((f) => new RegExp(`^${f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')) },
+      }).lean();
+      resolvedFeatureIds = matched.map((f) => f._id);
+    }
+
+    const plan = await Plan.create({ nameVi, price, durationDays, descriptionVi, featuresVi, color, isActive, featureIds: resolvedFeatureIds });
+    const populated = await Plan.findById(plan._id).populate('featureIds');
     await recordAuditLog({
       req,
       module: 'plans',
@@ -17,10 +25,8 @@ export const createPlan = async (req, res) => {
       entity: plan,
       details: 'Tạo gói tập',
     });
-    invalidateContextCache('activePlans');
-    invalidateAiDomainCache('plans');
 
-    res.status(201).json({ message: 'Tạo gói tập thành công', plan });
+    res.status(201).json({ message: 'Tạo gói tập thành công', plan: populated });
   } catch (error) {
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map((e) => e.message);
@@ -38,7 +44,6 @@ export const getPlans = async (req, res) => {
       limit = 10,
       search = '',
       isActive,
-      specialization,
     } = req.query;
 
     const filter = {};
@@ -46,12 +51,7 @@ export const getPlans = async (req, res) => {
     if (search) {
       filter.$or = [
         { nameVi: { $regex: search, $options: 'i' } },
-        { nameEn: { $regex: search, $options: 'i' } },
       ];
-    }
-
-    if (specialization) {
-      filter.applicableSpecializations = specialization;
     }
 
     if (req.user?.role === 'admin') {
@@ -64,7 +64,8 @@ export const getPlans = async (req, res) => {
     const plans = await Plan.find(filter)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .populate('featureIds');
 
     const plansWithMemberCount = await Promise.all(
       plans.map(async (plan) => {
@@ -93,7 +94,7 @@ export const getPlans = async (req, res) => {
 // ==================== LẤY CHI TIẾT GÓI TẬP ====================
 export const getPlanById = async (req, res) => {
   try {
-    const plan = await Plan.findById(req.params.id);
+    const plan = await Plan.findById(req.params.id).populate('featureIds specializationIds');
     if (!plan) {
       return res.status(404).json({ message: 'Không tìm thấy gói tập' });
     }
@@ -112,23 +113,26 @@ export const getPlanById = async (req, res) => {
 // ==================== CẬP NHẬT GÓI TẬP ====================
 export const updatePlan = async (req, res) => {
   try {
-    const { nameVi, nameEn, price, durationDays, descriptionVi, descriptionEn, featuresVi, featuresEn, color, isActive, applicableSpecializations } = req.body;
+    const { nameVi, price, durationDays, descriptionVi, featuresVi, color, isActive, featureIds } = req.body;
 
     const plan = await Plan.findById(req.params.id);
     if (!plan) return res.status(404).json({ message: 'Không tìm thấy gói tập' });
 
     plan.nameVi = nameVi;
-    plan.nameEn = nameEn;
     plan.price = price;
     plan.durationDays = durationDays;
     plan.descriptionVi = descriptionVi;
-    plan.descriptionEn = descriptionEn;
     plan.featuresVi = featuresVi || [];
-    plan.featuresEn = featuresEn || [];
-    plan.applicableSpecializations = applicableSpecializations || [];
+
+    if (featureIds !== undefined) {
+      plan.featureIds = featureIds;
+    }
+
     plan.isActive = isActive !== undefined ? isActive : plan.isActive;
     plan.color = color;
     await plan.save();
+
+    const populated = await Plan.findById(plan._id).populate('featureIds');
     await recordAuditLog({
       req,
       module: 'plans',
@@ -136,10 +140,8 @@ export const updatePlan = async (req, res) => {
       entity: plan,
       details: 'Cập nhật thông tin gói tập',
     });
-    invalidateContextCache('activePlans');
-    invalidateAiDomainCache('plans');
 
-    res.json({ message: 'Cập nhật gói tập thành công', plan });
+    res.json({ message: 'Cập nhật gói tập thành công', plan: populated });
   } catch (error) {
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map((e) => e.message);
@@ -174,8 +176,6 @@ export const deletePlan = async (req, res) => {
       entity: plan,
       details: 'Xóa gói tập',
     });
-    invalidateContextCache('activePlans');
-    invalidateAiDomainCache('plans');
 
     res.json({ message: 'Xóa gói tập thành công' });
   } catch (error) {
@@ -200,8 +200,6 @@ export const togglePlanStatus = async (req, res) => {
       entity: plan,
       details: plan.isActive ? 'Kích hoạt gói tập' : 'Vô hiệu hóa gói tập',
     });
-    invalidateContextCache('activePlans');
-    invalidateAiDomainCache('plans');
 
     res.json({
       message: `Gói tập đã được ${plan.isActive ? 'kích hoạt' : 'vô hiệu hóa'}`,

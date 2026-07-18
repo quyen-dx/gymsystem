@@ -1,22 +1,45 @@
 import api from './api'
 
-export interface Notification {
+export interface NotificationItem {
   _id: string
+  receiverId?: string | null
+  receiverRole?: string | null
+  notificationType?: string
+  category?: string
   title: string
   content: string
-  userId: string | null
+  userId?: string | null
   isRead: boolean
+  readAt?: string | null
+  relatedId?: string | null
+  relatedType?: string | null
+  requestId?: string
+  redirectUrl?: string | null
+  createdBy?: string
   createdAt: string
-  updatedAt: string
+  updatedAt?: string
 }
 
 export const notificationService = {
   getMyNotifications: () =>
-    api.get<{ success: boolean; data: Notification[] }>('/notifications/my'),
+    api.get<{ success: boolean; data: NotificationItem[] }>(
+      '/notifications/my',
+    ),
+
+  getUnreadCount: () =>
+    api.get<{ success: boolean; count: number }>(
+      '/notifications/unread-count',
+    ),
 
   markAsRead: (id: string) =>
-    api.put<{ success: boolean; message: string }>(`/notifications/${id}/read`),
+    api.put(`/notifications/${id}/read`),
+
+  markAsUnread: (id: string) =>
+    api.put(`/notifications/${id}/unread`),
 
   markAllAsRead: () =>
-    api.put<{ success: boolean; message: string }>('/notifications/read-all'),
+    api.put('/notifications/read-all'),
+
+  deleteNotification: (id: string) =>
+    api.delete(`/notifications/${id}`),
 }

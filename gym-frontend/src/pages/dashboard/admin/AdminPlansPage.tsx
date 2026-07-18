@@ -2,7 +2,8 @@ import {
   DeleteOutlined,
   EditOutlined,
   PlusOutlined,
-  PoweroffOutlined
+  PoweroffOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 import {
   Button,
@@ -16,28 +17,18 @@ import {
   Space,
   Table,
   Tag,
-  message
+  message,
 } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import api from '../../../services/api'
+import { planFeatureService, type PlanFeature } from '../../../services/planFeatureService'
 import type { AdminPlan } from '../../../types/admin/plan'
 import AdminHistoryButton from './AdminHistoryButton'
-import { DEFAULT_FEATURES, DEFAULT_SPECIALIZATIONS, PRESET_COLORS } from './plan/constants'
-
-function getPlanDisplayName(plan: AdminPlan, lang: string): string {
-  if (lang.startsWith('vi')) return plan.nameVi || plan.nameEn
-  return plan.nameEn || plan.nameVi
-}
-
-function getPlanDisplayFeatures(plan: AdminPlan, lang: string): string[] {
-  if (lang.startsWith('vi')) return plan.featuresVi?.length ? plan.featuresVi : plan.featuresEn
-  return plan.featuresEn?.length ? plan.featuresEn : plan.featuresVi
-}
+import { PRESET_COLORS } from './planColors'
 
 export default function AdminPlansPage() {
-  const lang = 'vi'
   const navigate = useNavigate()
   const [plans, setPlans] = useState<AdminPlan[]>([])
   const [loading, setLoading] = useState(false)
@@ -49,16 +40,22 @@ export default function AdminPlansPage() {
   const [editingPlan, setEditingPlan] = useState<AdminPlan | null>(null)
   const [form] = Form.useForm()
   const [submitLoading, setSubmitLoading] = useState(false)
-  const [allFeatures, setAllFeatures] = useState<string[]>(DEFAULT_FEATURES)
-  const [newFeatureInput, setNewFeatureInput] = useState('')
-  const [allSpecializations, setAllSpecializations] = useState<string[]>(DEFAULT_SPECIALIZATIONS)
-  const [newSpecializationInput, setNewSpecializationInput] = useState('')
+  const [allFeatures, setAllFeatures] = useState<PlanFeature[]>([])
+  const [selectedFeatureIds, setSelectedFeatureIds] = useState<string[]>([])
+  const [featuresLoading, setFeaturesLoading] = useState(true)
   const [selectedColor, setSelectedColor] = useState('#3B82F6')
 
   const updateColor = (color: string) => {
     setSelectedColor(color)
     form.setFieldsValue({ color })
   }
+
+  useEffect(() => {
+    planFeatureService.getAll({ isActive: true })
+      .then((res) => setAllFeatures(res.data.data || []))
+      .catch(() => { /* ignore */ })
+      .finally(() => setFeaturesLoading(false))
+  }, [])
 
   const fetchPlans = async (p = page, s = search, spec = specializationFilter) => {
     setLoading(true)
@@ -81,58 +78,44 @@ export default function AdminPlansPage() {
   }, [])
 
 
+  const resolveFeatureIds = (plan: AdminPlan): string[] => {
+    if (plan.featureIds && plan.featureIds.length > 0) {
+      return plan.featureIds.map((f: any) => typeof f === 'string' ? f : f._id)
+    }
+    if (allFeatures.length === 0) return []
+    return allFeatures
+      .filter((f) => plan.featuresVi?.includes(f.name))
+      .map((f) => f._id)
+  }
 
   const openEdit = (plan: AdminPlan) => {
     setEditingPlan(plan)
     setSelectedColor(plan.color || '#3B82F6')
+
+    const featIds = resolveFeatureIds(plan)
+    setSelectedFeatureIds(featIds)
+
     form.setFieldsValue({
       nameVi: plan.nameVi,
       price: plan.price,
       durationDays: plan.durationDays,
       descriptionVi: plan.descriptionVi || '',
-      featuresVi: plan.featuresVi || [],
-      applicableSpecializations: plan.applicableSpecializations || [],
-      color: plan.color,
-      isActive: plan.isActive,
+      color: plan.color || '#3B82F6',
     })
     setModalOpen(true)
   }
 
-  const handleSubmit = async (values: any) => {
-    setSubmitLoading(true)
+  const openCreate = () => {
+    navigate('/admin/plans/create')
+  }
+
+  const handleToggle = async (id: string) => {
     try {
-      const features = values.featuresVi || []
-      if (features.length === 0) {
-        message.warning('Vui lòng chọn ít nhất 1 quyền lợi')
-        setSubmitLoading(false)
-        return
-      }
-
-      const payload = {
-        nameVi: values.nameVi,
-        nameEn: values.nameVi,
-        price: values.price,
-        durationDays: values.durationDays,
-        descriptionVi: values.descriptionVi || '',
-        descriptionEn: values.descriptionVi || '',
-        featuresVi: features,
-        featuresEn: features,
-        applicableSpecializations: values.applicableSpecializations || [],
-        isActive: values.isActive ?? true,
-        color: typeof values.color === 'string'
-          ? values.color
-          : values.color?.toHexString?.() || '#3B82F6',
-      }
-
-      await api.put(`/plans/${editingPlan!._id}`, payload)
-      message.success('Cập nhật gói tập thành công')
-
-      setModalOpen(false)
+      await api.patch(`/plans/${id}/toggle-status`)
+      message.success('Thay đổi trạng thái gói tập thành công')
       fetchPlans()
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'Thao tác thất bại')
-    } finally {
-      setSubmitLoading(false)
+    } catch {
+      message.error('Không thể thay đổi trạng thái')
     }
   }
 
@@ -141,28 +124,39 @@ export default function AdminPlansPage() {
       await api.delete(`/plans/${id}`)
       message.success('Xóa gói tập thành công')
       fetchPlans()
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'Không thể xóa gói tập')
+    } catch {
+      message.error('Không thể xóa gói tập')
     }
   }
 
-  const handleToggle = async (id: string) => {
+  const handleFeatureChange = (checkedValues: any[]) => {
+    setSelectedFeatureIds(checkedValues)
+  }
+
+  const handleSubmit = async (values: any) => {
+    setSubmitLoading(true)
     try {
-      await api.patch(`/plans/${id}/toggle-status`)
-      message.success('Thay đổi trạng thái thành công')
+      const featureNames = allFeatures
+        .filter((f) => selectedFeatureIds.includes(f._id))
+        .map((f) => f.name)
+
+      const body = {
+        ...values,
+        featureIds: selectedFeatureIds,
+        featuresVi: featureNames,
+      }
+      await api.put(`/plans/${editingPlan?._id}`, body)
+      message.success('Cập nhật gói tập thành công')
+      setModalOpen(false)
       fetchPlans()
-    } catch {
-      message.error('Thao tác thất bại')
+    } catch (err: any) {
+      message.error(err.response?.data?.message || 'Không thể cập nhật gói tập')
+    } finally {
+      setSubmitLoading(false)
     }
   }
 
   const columns = [
-    {
-      title: 'STT',
-      width: 70,
-      align: 'center' as const,
-      render: (_: any, __: AdminPlan, index: number) => (page - 1) * 10 + index + 1,
-    },
     {
       title: 'Tên gói tập',
       render: (_: any, record: AdminPlan) => (
@@ -173,7 +167,7 @@ export default function AdminPlansPage() {
               background: record.color, flexShrink: 0,
             }}
           />
-          <span style={{ fontWeight: 600 }}>{getPlanDisplayName(record, lang)}</span>
+          <span style={{ fontWeight: 600 }}>{record.nameVi}</span>
         </div>
       ),
     },
@@ -192,7 +186,7 @@ export default function AdminPlansPage() {
     {
       title: 'Quyền lợi',
       render: (_: any, record: AdminPlan) => {
-        const feats = getPlanDisplayFeatures(record, lang)
+        const feats = record.featuresVi || []
         return feats.length > 0
           ? feats.slice(0, 3).map((f, i) => <Tag key={i} style={{ marginBottom: 2 }}>{f}</Tag>).concat(
             feats.length > 3 ? <Tag key="more">+{feats.length - 3}</Tag> : []
@@ -245,34 +239,6 @@ export default function AdminPlansPage() {
     },
   ]
 
-  const handleAddFeature = () => {
-    const val = newFeatureInput.trim()
-    if (!val) return
-    if (allFeatures.includes(val)) {
-      message.info('Quyền lợi này đã có trong danh sách')
-      setNewFeatureInput('')
-      return
-    }
-    setAllFeatures((prev) => [...prev, val])
-    const current = form.getFieldValue('featuresVi') || []
-    form.setFieldsValue({ featuresVi: [...current, val] })
-    setNewFeatureInput('')
-  }
-
-  const handleAddSpecialization = () => {
-    const val = newSpecializationInput.trim()
-    if (!val) return
-    if (allSpecializations.includes(val)) {
-      message.info('Chuyên môn này đã có trong danh sách')
-      setNewSpecializationInput('')
-      return
-    }
-    setAllSpecializations((prev) => [...prev, val])
-    const current = form.getFieldValue('applicableSpecializations') || []
-    form.setFieldsValue({ applicableSpecializations: [...current, val] })
-    setNewSpecializationInput('')
-  }
-
   return (
     <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
@@ -293,6 +259,9 @@ export default function AdminPlansPage() {
           />
           <Space wrap>
             <AdminHistoryButton module="plans" title="gói tập" />
+            <Button icon={<SettingOutlined />} onClick={() => navigate('/admin/features')}>
+              Quản lý quyền lợi
+            </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/admin/plans/create')}>
               Tạo gói tập
             </Button>
@@ -324,7 +293,7 @@ export default function AdminPlansPage() {
         onCancel={() => setModalOpen(false)}
         footer={null}
         destroyOnHidden
-        width={720}
+        width={640}
       >
         <Form layout="vertical" form={form} onFinish={handleSubmit}>
           <Form.Item name="isActive" hidden />
@@ -387,67 +356,33 @@ export default function AdminPlansPage() {
           </div>
 
           <Form.Item
-            label="Mô tả ngắn"
+            label="Mô tả"
             name="descriptionVi"
           >
-            <Input.TextArea rows={2} placeholder="Mô tả gói tập (không bắt buộc)" />
+            <Input.TextArea rows={3} placeholder="Mô tả gói tập (không bắt buộc)" />
           </Form.Item>
 
-          <Form.Item
-            label="Quyền lợi"
-            name="featuresVi"
-            rules={[{ required: true, type: 'array', min: 1, message: 'Vui lòng chọn ít nhất 1 quyền lợi' }]}
-          >
-            <Checkbox.Group>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                {allFeatures.map((f) => (
-                  <Checkbox key={f} value={f}>{f}</Checkbox>
-                ))}
-              </div>
-            </Checkbox.Group>
+          <Form.Item label="Quyền lợi" required>
+            {featuresLoading ? (
+              <div className="text-sm text-[var(--gs-text-muted)]">Đang tải quyền lợi...</div>
+            ) : (
+              <Checkbox.Group value={selectedFeatureIds} onChange={handleFeatureChange}>
+                <div className="grid grid-cols-1 gap-y-3">
+                  {allFeatures.map((f) => (
+                    <div key={f._id} className="flex items-start gap-3">
+                      <Checkbox value={f._id} />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold text-[var(--gs-text)]">{f.name}</span>
+                        {f.description && (
+                          <p className="m-0 mt-0.5 text-xs text-[var(--gs-text-muted)]">{f.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Checkbox.Group>
+            )}
           </Form.Item>
-
-          <div className="flex items-center gap-2 mb-4">
-            <Input
-              size="small"
-              style={{ width: 260 }}
-              placeholder="Nhập quyền lợi mới..."
-              value={newFeatureInput}
-              onChange={(e) => setNewFeatureInput(e.target.value)}
-              onPressEnter={handleAddFeature}
-            />
-            <Button size="small" icon={<PlusOutlined />} onClick={handleAddFeature}>
-              Thêm quyền lợi mới
-            </Button>
-          </div>
-
-          <Form.Item
-            label="Chuyên môn áp dụng"
-            name="applicableSpecializations"
-            rules={[{ required: true, message: 'Vui lòng chọn chuyên môn' }]}
-          >
-            <Checkbox.Group>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                {allSpecializations.map((s) => (
-                  <Checkbox key={s} value={s}>{s}</Checkbox>
-                ))}
-              </div>
-            </Checkbox.Group>
-          </Form.Item>
-
-          <div className="flex items-center gap-2 mb-4">
-            <Input
-              size="small"
-              style={{ width: 260 }}
-              placeholder="Nhập chuyên môn mới..."
-              value={newSpecializationInput}
-              onChange={(e) => setNewSpecializationInput(e.target.value)}
-              onPressEnter={handleAddSpecialization}
-            />
-            <Button size="small" icon={<PlusOutlined />} onClick={handleAddSpecialization}>
-              Thêm chuyên môn mới
-            </Button>
-          </div>
 
           <div style={{ marginTop: 24, textAlign: 'right' }}>
             <Space>

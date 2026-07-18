@@ -290,7 +290,7 @@ export default function TrainingClassesPage() {
           pagination={false} locale={{ emptyText: 'Chưa có lớp tập nào' }} />
 
         <Modal title={editing ? 'Sửa lớp tập' : 'Tạo lớp tập mới'} open={open}
-          onOk={handleSave} onCancel={() => setOpen(false)} okText="Lưu" cancelText="Hủy" width={800} destroyOnClose>
+          onOk={handleSave} onCancel={() => setOpen(false)} okText="Lưu" cancelText="Hủy" width={960} destroyOnClose>
           <Form form={form} layout="vertical" size="middle">
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-2">

@@ -2,6 +2,22 @@ import api from './api'
 import type { PT, PTBooking, PTDaySchedule } from '../types/admin/trainer'
 import type { TrainingClass } from './trainingGroupService'
 
+export interface WeekAttendeeMember {
+  _id: string
+  name: string
+  memberCode: string
+  checkedIn?: boolean
+  checkedInAt?: string | null
+}
+
+export interface WeekAttendee {
+  dayOfWeek: number
+  classId: string | null
+  code: string
+  count: number
+  members: WeekAttendeeMember[]
+}
+
 export const trainerService = {
   getPTs: (params?: Record<string, unknown>) =>
     api.get<{ pts: PT[]; pagination: { total: number; page: number; limit: number; totalPages: number } }>('/pts', { params }),
@@ -23,6 +39,9 @@ export const trainerService = {
 
   getPTMyClasses: () =>
     api.get<{ classes: TrainingClass[] }>('/pts/my-classes'),
+
+  getPTMyWeekAttendees: (weekStart: string) =>
+    api.get<{ attendees: WeekAttendee[] }>('/pts/my-week-attendees', { params: { weekStart } }),
 
   createPT: (data: FormData | Record<string, unknown>) =>
     api.post('/pts', data, data instanceof FormData

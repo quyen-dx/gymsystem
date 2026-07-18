@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { trainerService } from '../../../services/trainerService'
 import { trainerScheduleService } from '../../../services/trainerScheduleService'
+import { ptAssignmentEndService } from '../../../services/ptAssignmentEndService'
 import { trainerReplacementService, type TrainerReplacementRequest } from '../../../services/trainerReplacementService'
 import { shiftSwapService, type ShiftSwapRequest, type ShiftSwapItem } from '../../../services/shiftSwapService'
 import { socketService } from '../../../services/socketService'
@@ -54,6 +55,7 @@ export default function AdminTrainersPage() {
   const [schedulesOpen, setSchedulesOpen] = useState(false)
   const [replacementsOpen, setReplacementsOpen] = useState(false)
   const [pendingSwapCount, setPendingSwapCount] = useState(0)
+  const [pendingEndRequestCount, setPendingEndRequestCount] = useState(0)
 
   const fetchPTs = useCallback(async (p = page, s = search, sp = specialtyFilter) => {
     setLoading(true)
@@ -81,6 +83,16 @@ export default function AdminTrainersPage() {
     const countHandler = (data: { pendingCount: number }) => setPendingSwapCount(data.pendingCount)
     socketService.on('shift_swap:count_updated', countHandler)
     return () => { socketService.off('shift_swap:count_updated', countHandler) }
+  }, [])
+
+  // Socket: listen for pt end request count updates
+  useEffect(() => {
+    ptAssignmentEndService.getAllRequests({ status: 'pending', limit: 1 })
+      .then(res => setPendingEndRequestCount(res.data?.pagination?.total || 0))
+      .catch(() => {})
+    const handler = (data: { pendingCount: number }) => setPendingEndRequestCount(data.pendingCount)
+    socketService.on('pt_end_request:count_updated', handler)
+    return () => { socketService.off('pt_end_request:count_updated', handler) }
   }, [])
 
   const handleSearch = (value: string) => {
@@ -159,6 +171,15 @@ export default function AdminTrainersPage() {
             {pendingSwapCount > 0 && (
               <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#f5222d] text-white text-[10px] font-bold px-1">
                 {pendingSwapCount > 99 ? '99+' : pendingSwapCount}
+              </span>
+            )}
+          </button>
+          <button type="button" onClick={() => navigate('/admin/trainer-end-requests')}
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white">
+            Yêu cầu kết thúc phụ trách
+            {pendingEndRequestCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#f5222d] text-white text-[10px] font-bold px-1">
+                {pendingEndRequestCount > 99 ? '99+' : pendingEndRequestCount}
               </span>
             )}
           </button>

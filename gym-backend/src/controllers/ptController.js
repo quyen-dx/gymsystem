@@ -3,12 +3,14 @@ import PT from '../models/PT.js'
 import PTSchedule from '../models/PTSchedule.js'
 import Booking from '../models/Booking.js'
 import TrainingClass from '../models/TrainingClass.js'
+import WorkoutSchedule from '../models/WorkoutSchedule.js'
+import CheckIn from '../models/CheckIn.js'
 import { recordAuditLog } from '../services/auditLogService.js'
-import { invalidateContextCache } from '../services/conversationContextCache.js'
-import { invalidateAiDomainCache } from '../services/aiCacheService.js'
 import AppError from '../utils/appError.js'
 import { isValidEmail, normalizePhone } from '../utils/identifier.js'
 import sendError from '../utils/sendError.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
 
 export const getPTs = async (req, res) => {
   try {
@@ -229,6 +231,176 @@ export const getPTMyClasses = async (req, res) => {
   }
 }
 
+const DAY_LABELS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
+
+/**
+ * Lấy số lượng hội viên có buổi tập thực tế cho từng lớp theo từng ngày trong tuần.
+ * Query params: weekStart=YYYY-MM-DD (Monday of the week)
+ * Tự động tạo notification nếu có lớp sắp tới (24-48h) mà không có hội viên.
+ */
+export const getPTMyWeekAttendees = async (req, res) => {
+  try {
+    const { weekStart } = req.query
+    if (!weekStart) {
+      return res.status(400).json({ message: 'Thiếu weekStart (YYYY-MM-DD)' })
+    }
+
+    const startDate = new Date(weekStart)
+    if (isNaN(startDate.getTime())) {
+      return res.status(400).json({ message: 'weekStart không hợp lệ' })
+    }
+
+    const endDate = new Date(startDate)
+    endDate.setDate(endDate.getDate() + 7)
+
+    const classes = await TrainingClass.find({ ptId: req.user._id })
+      .select('_id code name daysOfWeek startTime endTime')
+      .lean()
+
+    if (classes.length === 0) {
+      return res.json({ attendees: [] })
+    }
+
+    const classCodes = classes.map(c => c.code).filter(Boolean)
+
+    const schedules = await WorkoutSchedule.find({
+      status: 'active',
+      'sessions.date': { $gte: startDate, $lt: endDate },
+      'sessions.classCode': { $in: classCodes },
+      'sessions.status': { $ne: 'cancelled' },
+    })
+      .populate('memberId', 'name fullName memberCode')
+      .lean()
+
+    // Map: "dayOfWeek_classCode" -> Map<memberId, memberInfo>
+    const attendeeMap = new Map()
+
+    for (const schedule of schedules) {
+      const member = typeof schedule.memberId === 'object' ? schedule.memberId : null
+      if (!member?._id) continue
+
+      for (const session of schedule.sessions || []) {
+        if (!session.classCode || !classCodes.includes(session.classCode)) continue
+        if (session.status === 'cancelled' || session.status === 'skipped') continue
+
+        const sessionDate = new Date(session.date)
+        if (sessionDate < startDate || sessionDate >= endDate) continue
+
+        const dayOfWeek = sessionDate.getDay()
+        const key = `${dayOfWeek}_${session.classCode}`
+
+        if (!attendeeMap.has(key)) {
+          attendeeMap.set(key, new Map())
+        }
+        const members = attendeeMap.get(key)
+        if (!members.has(String(member._id))) {
+          members.set(String(member._id), {
+            _id: member._id,
+            name: member.fullName || member.name || '',
+            memberCode: member.memberCode || '',
+          })
+        }
+      }
+    }
+
+    // Build attendee list with check-in status for today
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayEnd = new Date(today)
+    todayEnd.setHours(23, 59, 59, 999)
+    const todayDayOfWeek = today.getDay()
+
+    // Collect all member IDs from today's sessions
+    const todayMemberIds = new Set()
+    const todaySessionKeys = new Set()
+    for (const [key, members] of attendeeMap) {
+      const [dayOfWeek] = key.split('_')
+      if (parseInt(dayOfWeek) === todayDayOfWeek) {
+        todaySessionKeys.add(key)
+        for (const memberId of members.keys()) {
+          todayMemberIds.add(memberId)
+        }
+      }
+    }
+
+    // Batch-query today's check-ins for all relevant members
+    const todayCheckins = todayMemberIds.size > 0
+      ? await CheckIn.find({
+          memberId: { $in: Array.from(todayMemberIds) },
+          sessionDate: { $gte: today, $lte: todayEnd },
+          status: 'success',
+        }).select('memberId checkinTime sessionType scheduleId sessionIndex').lean()
+      : []
+
+    const checkinMap = new Map()
+    for (const c of todayCheckins) {
+      const mid = String(c.memberId)
+      if (!checkinMap.has(mid)) checkinMap.set(mid, [])
+      checkinMap.get(mid).push(c)
+    }
+
+    const attendees = []
+    for (const [key, members] of attendeeMap) {
+      const [dayOfWeek, code] = key.split('_')
+      const cls = classes.find(c => c.code === code)
+      const isToday = parseInt(dayOfWeek) === todayDayOfWeek
+
+      const memberList = Array.from(members.values()).map(m => {
+        const mDoc = { _id: m._id, name: m.name, memberCode: m.memberCode }
+        if (isToday) {
+          const memberCheckins = checkinMap.get(String(m._id)) || []
+          const hasCheckin = memberCheckins.length > 0
+          mDoc.checkedIn = hasCheckin
+          mDoc.checkedInAt = hasCheckin ? memberCheckins[0].checkinTime : null
+        }
+        return mDoc
+      })
+
+      attendees.push({
+        dayOfWeek: parseInt(dayOfWeek),
+        classId: cls?._id || null,
+        code,
+        count: members.size,
+        members: memberList,
+      })
+    }
+
+    // Auto-notify for upcoming empty classes (within 24-48h)
+    const now = new Date()
+    const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000)
+
+    for (const entry of attendees) {
+      if (entry.count > 0) continue
+
+      const classDate = new Date(startDate)
+      classDate.setDate(classDate.getDate() + entry.dayOfWeek)
+
+      if (classDate >= now && classDate <= in48h) {
+        const cls = classes.find(c => c._id === entry.classId)
+        if (cls) {
+          const dayLabel = DAY_LABELS[entry.dayOfWeek] || ''
+          const dateStr = `${classDate.getDate()}/${classDate.getMonth() + 1}`
+          createNotification({
+            receiverId: req.user._id,
+            receiverRole: 'pt',
+            notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+            title: 'Lớp sắp tới chưa có hội viên',
+            content: `Lớp [${cls.code}] ${cls.name} ngày ${dateStr} (${dayLabel}) hiện chưa có hội viên nào đăng ký buổi tập.`,
+            relatedId: cls._id,
+            relatedType: 'TrainingClass',
+            redirectUrl: '/pt/schedule',
+            createdBy: 'System',
+          }).catch(err => console.error('Notify empty class failed:', err.message))
+        }
+      }
+    }
+
+    res.json({ attendees })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
 export const createPT = async (req, res) => {
   try {
     const {
@@ -281,10 +453,6 @@ export const createPT = async (req, res) => {
       entity: user,
       details: 'Thêm PT mới',
     })
-    invalidateContextCache('ptList')
-    invalidateContextCache('ptAvailability')
-    invalidateAiDomainCache('pts')
-
     res.status(201).json({ message: 'Thêm PT thành công', pt: { ...pt.toObject(), user: { _id: user._id, name: user.name, email: user.email, phone: user.phone, avatar: user.avatar } } })
   } catch (error) {
     return sendError(res, error)
@@ -344,10 +512,6 @@ export const updatePT = async (req, res) => {
       entity: user,
       details: 'Cập nhật thông tin PT',
     })
-    invalidateContextCache('ptList')
-    invalidateContextCache('ptAvailability')
-    invalidateAiDomainCache('pts')
-
     res.json({ message: 'Cập nhật thành công' })
   } catch (error) {
     return sendError(res, error)
@@ -371,10 +535,6 @@ export const deletePT = async (req, res) => {
       entity: user,
       details: 'Xóa PT (vô hiệu hóa)',
     })
-    invalidateContextCache('ptList')
-    invalidateContextCache('ptAvailability')
-    invalidateAiDomainCache('pts')
-
     res.json({ message: 'Đã xóa PT' })
   } catch (error) {
     return sendError(res, error)
@@ -399,8 +559,18 @@ export const updatePTSchedule = async (req, res) => {
         schedules.map((s) => ({ ptId: userId, dayOfWeek: s.dayOfWeek, shift: s.shift })),
       )
     }
-    invalidateContextCache('ptAvailability')
-    invalidateAiDomainCache('pts')
+
+    createNotification({
+      receiverId: req.params.id,
+      receiverRole: 'pt',
+      notificationType: NOTIFICATION_TYPES.PT_SCHEDULE_CHANGED,
+      title: 'Lịch làm việc đã được cập nhật',
+      content: `Lịch làm việc của bạn đã được Admin cập nhật.`,
+      relatedId: req.params.id,
+      relatedType: 'PTSchedule',
+      redirectUrl: '/pt/schedule',
+      createdBy: 'Admin',
+    }).catch(err => console.error('Notify PT schedule failed:', err.message))
 
     res.json({ message: 'Cập nhật lịch làm việc thành công' })
   } catch (error) {

@@ -6,6 +6,8 @@ import Shipping from '../models/Shipping.js'
 import DiscountCode from '../models/DiscountCode.js'
 import AppError from '../utils/appError.js'
 import { applyWalletTransaction, getOrCreateWallet } from './walletService.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
 
 const PLATFORM_FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.02)
 export const ORDER_STATUSES = ['CHỜ XÁC NHẬN', 'ĐANG GIAO HÀNG', 'GIAO THÀNH CÔNG']
@@ -284,6 +286,19 @@ export const createOrder = async ({ userId, items, address, paymentReference, di
         }
 
         await session.commitTransaction()
+
+        createNotification({
+          receiverId: userId,
+          receiverRole: 'member',
+          notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+          title: 'Đặt hàng thành công',
+          content: 'Đơn hàng của bạn đã được đặt thành công.',
+          relatedId: createdOrders[0]._id,
+          relatedType: 'Order',
+          redirectUrl: '/my-orders',
+          createdBy: 'System',
+        }).catch(err => console.error('Notify checkoutOrder failed:', err.message))
+
         return createdOrders
     } catch (error) {
         await session.abortTransaction()
@@ -411,6 +426,18 @@ export const updateSellerOrderStatus = async ({ orderId, sellerId, status }) => 
         }
 
         await session.commitTransaction()
+
+        createNotification({
+          receiverId: order.userId,
+          receiverRole: 'member',
+          notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+          title: 'Đơn hàng cập nhật trạng thái',
+          content: `Đơn hàng của bạn đã được cập nhật: ${status}`,
+          relatedId: order._id,
+          relatedType: 'Order',
+          redirectUrl: '/my-orders',
+          createdBy: 'Staff',
+        }).catch(err => console.error('Notify order status failed:', err.message))
     } catch (error) {
         await session.abortTransaction()
         throw error

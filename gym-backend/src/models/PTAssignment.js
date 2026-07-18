@@ -6,7 +6,7 @@ const ptAssignmentSchema = new mongoose.Schema({
   membershipId: { type: mongoose.Schema.Types.ObjectId, ref: 'Membership' },
   status: {
     type: String,
-    enum: ['active', 'cancelled', 'completed'],
+    enum: ['active', 'pending_end_approval', 'cancelled', 'completed'],
     default: 'active',
   },
   workoutId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workout', default: null },
@@ -14,6 +14,9 @@ const ptAssignmentSchema = new mongoose.Schema({
   endDate: Date,
   cancelledAt: Date,
   cancelReason: { type: String, default: '' },
+  workoutEndedAt: Date,
+  workoutEndedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  workoutNameSnapshot: { type: String, default: '' },
 }, { timestamps: true })
 
 ptAssignmentSchema.index({ memberId: 1, status: 1 })

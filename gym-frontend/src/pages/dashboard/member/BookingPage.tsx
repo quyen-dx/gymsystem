@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Tag, Select, message, Input, Spin } from 'antd'
-import { CheckCircleFilled, FireOutlined, AimOutlined, ThunderboltOutlined, HeartOutlined, RiseOutlined, MedicineBoxOutlined, SafetyOutlined, QuestionCircleOutlined, EnvironmentOutlined, TeamOutlined, UserOutlined, ArrowLeftOutlined, CalendarOutlined } from '@ant-design/icons'
+import { Button, Tag, Radio, message, Input, Spin, Tooltip } from 'antd'
+import { CheckCircleFilled, FireOutlined, AimOutlined, ThunderboltOutlined, HeartOutlined, RiseOutlined, MedicineBoxOutlined, SafetyOutlined, QuestionCircleOutlined, EnvironmentOutlined, TeamOutlined, UserOutlined, ArrowLeftOutlined, CalendarOutlined, LockOutlined } from '@ant-design/icons'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import MembershipRequired from '../../../components/membership/MembershipRequired'
 import { membershipService } from '../../../services/membershipService'
 import { trainingRequestService, type TrainingRequest } from '../../../services/trainingRequestService'
 import { memberService, type EnrollmentStatus } from '../../../services/memberService'
-import { getUserDisplayName } from '../../../utils/userDisplay'
+import { socketService } from '../../../services/socketService'
+import { planFeatureService, type PlanFeature } from '../../../services/planFeatureService'
 
 const SPECIALIZATIONS = [
   { value: 'GYM', label: 'GYM', color: '#6366f1', icon: <ThunderboltOutlined /> },
@@ -23,7 +24,7 @@ const GOALS = [
   { value: 'Giảm mỡ', icon: <FireOutlined />, color: '#f97316' },
   { value: 'Tăng cân', icon: <RiseOutlined />, color: '#10b981' },
   { value: 'Tăng cơ', icon: <ThunderboltOutlined />, color: '#6366f1' },
-  { value: 'Body Recomp (Giảm mỡ + Tăng cơ)', icon: <AimOutlined />, color: '#8b5cf6' },
+
   { value: 'Tăng sức bền', icon: <HeartOutlined />, color: '#ef4444' },
   { value: 'Nâng cao thể lực', icon: <RiseOutlined />, color: '#06b6d4' },
   { value: 'Phục hồi sau chấn thương', icon: <MedicineBoxOutlined />, color: '#84cc16' },
@@ -42,6 +43,49 @@ const DAYS = [
   { value: 6, label: 'Thứ 7', short: 'T7' },
 ]
 
+function useMemberFeatureCodes(): { codes: string[]; loading: boolean; features: PlanFeature[] } {
+  const [allFeatures, setAllFeatures] = useState<PlanFeature[]>([])
+  const [codes, setCodes] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      try {
+        const [featRes, memRes] = await Promise.all([
+          planFeatureService.getAll({ isActive: true }),
+          membershipService.getMyMembership(),
+        ])
+        if (cancelled) return
+
+        const features = featRes.data.data || []
+        setAllFeatures(features)
+
+        const m = memRes.data.membership
+        const planFeatures = m?.plan?.features || m?.plan?.featureIds
+
+        if (planFeatures && planFeatures.length > 0) {
+          const mapped = typeof planFeatures[0] === 'string'
+            ? features.filter((f) => planFeatures.includes(f._id)).map((f) => f.code)
+            : planFeatures.map((f: any) => f.code || f)
+          setCodes(mapped)
+        } else {
+          setCodes(features.map((f) => f.code))
+        }
+      } catch {
+        if (!cancelled) setCodes([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  return { codes, loading, features: allFeatures }
+}
+
 export default function BookingPage() {
   const navigate = useNavigate()
   const [membershipLoading, setMembershipLoading] = useState(true)
@@ -50,7 +94,7 @@ export default function BookingPage() {
 
   const [requests, setRequests] = useState<TrainingRequest[]>([])
   const [specialization, setSpecialization] = useState<string>('GYM')
-  const [goal, setGoal] = useState<string>('')
+  const [goals, setGoals] = useState<string[]>([])
   const [desiredSessions, setDesiredSessions] = useState<number>(3)
   const [timeSlots, setTimeSlots] = useState<string[]>([])
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([])
@@ -64,20 +108,38 @@ export default function BookingPage() {
   const [enrollment, setEnrollment] = useState<EnrollmentStatus | null>(null)
   const [showBookingOptions, setShowBookingOptions] = useState(false)
 
+  const { codes: featureCodes, loading: featuresLoading } = useMemberFeatureCodes()
+
+  const hasFeature = (code: string) => featureCodes.includes(code)
+
+  const fetchEnrollment = async () => {
+    try {
+      const res = await memberService.getMyEnrollmentStatus()
+      setEnrollment(res.data)
+    } catch { /* ignore */ }
+  }
+
   useEffect(() => {
     membershipService.getMyMembership().then((res) => {
       const m = res.data.membership
-      const allowed = m?.status === 'active' && Number(m.remainingDays || 0) > 0
+      const allowed = (m?.status === 'active' || m?.status === 'pending_cancel') && Number(m.remainingDays || 0) > 0
       setCanRequest(allowed)
       setPlanName(m?.planNameVi || m?.plan?.nameVi || null)
     }).catch(() => setCanRequest(false))
       .finally(() => setMembershipLoading(false))
 
-    // Check enrollment status
-    memberService.getMyEnrollmentStatus().then((res) => {
-      setEnrollment(res.data)
-    }).catch(() => {})
-      .finally(() => setEnrollmentLoading(false))
+    fetchEnrollment().finally(() => setEnrollmentLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const handler = (data: { type: string }) => {
+      if (data.type === 'assignment_ended') {
+        fetchEnrollment()
+      }
+    }
+    socketService.connect()
+    socketService.on('pt_end_request:status_changed', handler)
+    return () => { socketService.off('pt_end_request:status_changed', handler) }
   }, [])
 
   const loadData = async () => {
@@ -106,7 +168,7 @@ export default function BookingPage() {
     try {
       await trainingRequestService.create({
         specialization,
-        goals: goal ? [goal] : [],
+        goals,
         desiredSessions,
         timeSlots,
         daysOfWeek,
@@ -114,7 +176,7 @@ export default function BookingPage() {
         healthNotes,
       })
       setSubmitted(true)
-      setSpecialization('GYM'); setGoal(''); setDesiredSessions(3); setTimeSlots([]); setDaysOfWeek([]); setIsNewToGym(false); setHealthNotes('')
+      setSpecialization('GYM'); setGoals([]); setDesiredSessions(3); setTimeSlots([]); setDaysOfWeek([]); setIsNewToGym(false); setHealthNotes('')
       loadData()
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Gửi yêu cầu thất bại')
@@ -131,6 +193,10 @@ export default function BookingPage() {
 
   const pendingRequests = requests.filter((r) => r.status === 'pending')
   const hasPending = pendingRequests.length > 0
+
+  const canBookGroup = featuresLoading ? true : hasFeature('BOOK_PT_GROUP')
+  const canBookPTPrivate = featuresLoading ? true : hasFeature('BOOK_PT_PRIVATE')
+  const canBookPTGroup = featuresLoading ? true : hasFeature('BOOK_PT_GROUP')
 
   return (
     <MemberLayout>
@@ -178,7 +244,7 @@ export default function BookingPage() {
               )}
             </div>
             <p className="text-sm text-center text-[var(--gs-text-muted)]">
-              Lịch tập của bạn đã được lên sẵn. Xem chi tiết tại mục "Tập luyện".
+              Lịch tập của bạn đã được lên sẵn. Xem chi tiết tại mục "Lịch tập".
             </p>
             <Button type="primary" size="large" block icon={<CalendarOutlined />}
               onClick={() => navigate('/workout')}>
@@ -212,26 +278,50 @@ export default function BookingPage() {
               <p className="text-sm text-[var(--gs-text-muted)] mt-2">Chọn hình thức tập luyện phù hợp với bạn</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <button type="button" onClick={() => setBookingType('group')}
-                className="group relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left transition-all duration-200 hover:scale-[1.03] hover:border-[var(--theme-accent)] hover:shadow-lg cursor-pointer">
-                <div className="text-5xl mb-4 text-[var(--theme-accent)]"><TeamOutlined /></div>
-                <h3 className="text-xl font-bold text-[var(--gs-text)] mb-2">Đăng ký tập luyện nhóm</h3>
-                <p className="text-sm text-[var(--gs-text-muted)] leading-relaxed">
-                  Tập luyện theo nhóm, huấn luyện viên hỗ trợ giáo án cá nhân hóa, tiết kiệm chi phí.
-                </p>
-              </button>
-              <div className="relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left opacity-60 pointer-events-none">
-                <div className="absolute -top-2.5 right-4 z-10">
-                  <span className="inline-block rounded-full bg-gradient-to-r from-orange-400 to-pink-500 px-3 py-1 text-[11px] font-bold text-white uppercase tracking-wide shadow-md">
-                    Sắp ra mắt
-                  </span>
+              <Tooltip title={canBookGroup ? undefined : 'Gói tập của bạn không hỗ trợ tập nhóm'}>
+                <button type="button"
+                  onClick={() => canBookGroup && setBookingType('group')}
+                  disabled={!canBookGroup}
+                  className={`group relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left transition-all duration-200 ${
+                    canBookGroup
+                      ? 'hover:scale-[1.03] hover:border-[var(--theme-accent)] hover:shadow-lg cursor-pointer'
+                      : 'opacity-60 cursor-not-allowed'
+                  }`}>
+                  <div className="text-5xl mb-4 text-[var(--theme-accent)]"><TeamOutlined /></div>
+                  <h3 className="text-xl font-bold text-[var(--gs-text)] mb-2">Đăng ký tập luyện nhóm</h3>
+                  <p className="text-sm text-[var(--gs-text-muted)] leading-relaxed">
+                    Tập luyện theo nhóm, huấn luyện viên hỗ trợ giáo án cá nhân hóa, tiết kiệm chi phí.
+                  </p>
+                  {!canBookGroup && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/5">
+                      <LockOutlined className="text-2xl text-[var(--gs-text-muted)]" />
+                    </div>
+                  )}
+                </button>
+              </Tooltip>
+              <Tooltip title={canBookPTPrivate ? undefined : 'Gói tập của bạn không hỗ trợ PT riêng 1-1'}>
+                <div className={`relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left transition-all duration-200 ${
+                  canBookPTPrivate ? 'hover:scale-[1.03] hover:border-[var(--theme-accent)] hover:shadow-lg cursor-pointer' : 'opacity-60'
+                }`}>
+                  {!canBookPTPrivate && (
+                    <div className="absolute -top-2.5 right-4 z-10">
+                      <span className="inline-block rounded-full bg-gradient-to-r from-orange-400 to-pink-500 px-3 py-1 text-[11px] font-bold text-white uppercase tracking-wide shadow-md">
+                        {featuresLoading ? 'Sắp ra mắt' : 'Không khả dụng'}
+                      </span>
+                    </div>
+                  )}
+                  {!canBookPTPrivate && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/5 z-0">
+                      <LockOutlined className="text-2xl text-[var(--gs-text-muted)]" />
+                    </div>
+                  )}
+                  <div className="text-5xl mb-4 text-[var(--gs-text-muted)]"><UserOutlined /></div>
+                  <h3 className="text-xl font-bold text-[var(--gs-text)] mb-2">Đăng ký PT riêng 1-1</h3>
+                  <p className="text-sm text-[var(--gs-text-muted)] leading-relaxed">
+                    1 kèm 1 với huấn luyện viên cá nhân, cam kết đầu ra, thiết lập giáo án chuẩn xác 100% cho riêng bạn.
+                  </p>
                 </div>
-                <div className="text-5xl mb-4 text-[var(--gs-text-muted)]"><UserOutlined /></div>
-                <h3 className="text-xl font-bold text-[var(--gs-text)] mb-2">Đăng ký PT riêng 1-1</h3>
-                <p className="text-sm text-[var(--gs-text-muted)] leading-relaxed">
-                  1 kèm 1 với huấn luyện viên cá nhân, cam kết đầu ra, thiết lập giáo án chuẩn xác 100% cho riêng bạn.
-                </p>
-              </div>
+              </Tooltip>
             </div>
           </div>
         ) : (
@@ -317,9 +407,9 @@ export default function BookingPage() {
                       <button
                         key={g.value}
                         type="button"
-                        onClick={() => setGoal(g.value)}
+                        onClick={() => setGoals((prev) => prev.includes(g.value) ? prev.filter((x) => x !== g.value) : [...prev, g.value])}
                         className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-all ${
-                          goal === g.value
+                          goals.includes(g.value)
                             ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
                             : 'border-[var(--theme-border)] text-[var(--gs-text)] hover:border-[var(--theme-accent)]'
                         }`}
@@ -335,8 +425,20 @@ export default function BookingPage() {
                 {/* Sessions per week */}
                 <div>
                   <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Số buổi mong muốn mỗi tuần *</label>
-                  <Select value={desiredSessions} onChange={setDesiredSessions} style={{ width: 200 }}
-                    options={[1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: n, label: `${n} buổi/tuần` }))} />
+                  <Radio.Group onChange={(e) => setDesiredSessions(e.target.value)} value={desiredSessions}>
+                    <div className="flex flex-col gap-2">
+                      <Radio value={3}>
+                        <span className="text-sm">3 buổi/tuần <span className="text-[var(--gs-text-muted)] text-xs">(Khuyến nghị)</span></span>
+                      </Radio>
+                      <Radio value={4}>
+                        <span className="text-sm">4 buổi/tuần</span>
+                      </Radio>
+                      <Radio value={5}>
+                        <span className="text-sm">5 buổi/tuần</span>
+                      </Radio>
+                    </div>
+                  </Radio.Group>
+                  <p className="text-xs text-[var(--gs-text-muted)] mt-2">Khuyến nghị tập từ 3–5 buổi/tuần để đạt hiệu quả luyện tập tốt nhất.</p>
                 </div>
 
                 {/* Time slots */}
@@ -362,7 +464,7 @@ export default function BookingPage() {
 
                 {/* Days of week */}
                 <div>
-                  <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Ngày có thể tập</label>
+                  <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Ngày có thể tập *</label>
                   <div className="flex flex-wrap gap-2">
                     {DAYS.map((d) => (
                       <button
@@ -379,6 +481,9 @@ export default function BookingPage() {
                       </button>
                     ))}
                   </div>
+                  <p className="text-xs text-[var(--gs-text-muted)] mt-2">
+                    Đây chỉ là các ngày bạn có thể tham gia tập. Lịch tập chính thức sẽ được Admin sắp xếp dựa trên lịch trống của PT và lớp học.
+                  </p>
                 </div>
 
                 {/* New to gym */}

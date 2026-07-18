@@ -205,7 +205,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
     },
     {
       title: 'Gói tập', dataIndex: 'planId', key: 'planId', width: 120,
-      render: (plan: any) => plan?.nameVi || plan?.nameEn || '-',
+      render: (plan: any) => plan?.nameVi || '-',
     },
     {
       title: 'Số tiền', key: 'refundAmount', width: 200,
@@ -269,7 +269,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
     },
     {
       title: 'Gói tập', dataIndex: 'planId', key: 'planId', width: 120,
-      render: (plan: any) => plan?.nameVi || plan?.nameEn || '-',
+      render: (plan: any) => plan?.nameVi || '-',
     },
     {
       title: 'Số tiền', key: 'refundAmount', width: 200,
@@ -600,7 +600,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
                     {detailRR.memberId?.fullName || detailRR.memberId?.name || '-'}
                     <span className="ml-2 text-xs text-[var(--gs-text-muted)]">({detailRR.memberId?.email})</span>
                   </Descriptions.Item>
-                  <Descriptions.Item label="Gói tập">{detailRR.planId?.nameVi || detailRR.planId?.nameEn || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="Gói tập">{detailRR.planId?.nameVi || '-'}</Descriptions.Item>
                   <Descriptions.Item label="Chi tiết hoàn tiền">
                     {(() => {
                       const { primaryAmount, pendingTotal, total, hasPending, pendingCount } = getRefundBreakdown(detailRR)

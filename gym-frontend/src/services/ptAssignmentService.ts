@@ -63,14 +63,51 @@ export interface PTAssignment {
   ptId: string | PTAssignmentPT
   membershipId?: string
   workoutId?: string | PTAssignedWorkout
+  classId?: string | { _id: string; name?: string; code?: string }
+  classEnrollment?: { _id: string; code: string; name: string } | null
+  specialization?: string
+  goals?: string[]
   status: 'active' | 'cancelled' | 'completed'
   startDate: string
   endDate?: string
   cancelledAt?: string
   cancelReason?: string
   scheduleCount?: number
+  _fromClass?: boolean
   createdAt?: string
   updatedAt?: string
+}
+
+export interface HistoryEntry {
+  _type: 'workout_end' | 'assignment_end'
+  _id: string
+  memberId: string | PTAssignmentMember
+  ptId: string | PTAssignmentPT
+  // Workout end
+  workoutName?: string
+  endedAt?: string
+  endedBy?: string | { _id: string; name?: string; fullName?: string }
+  // Assignment end
+  classId?: string | { _id: string; name?: string; code?: string }
+  reasonType?: string
+  reasonDetail?: string
+  requestedAt?: string
+  approvedAt?: string
+  approvedBy?: string | { _id: string; name?: string; fullName?: string }
+  createdAt?: string
+}
+
+export interface PendingApproval {
+  _id: string
+  memberId: string | PTAssignmentMember
+  ptId: string | PTAssignmentPT
+  assignmentId?: string | { _id: string; workoutId?: string }
+  classId?: string | { _id: string; name?: string; code?: string }
+  reasonType: string
+  reasonDetail?: string
+  status: 'pending' | 'approved' | 'rejected'
+  workoutData?: { name: string; goal?: string }
+  createdAt: string
 }
 
 export const ptAssignmentService = {
@@ -78,8 +115,11 @@ export const ptAssignmentService = {
 
   getPTClients: () => api.get<{ assignments: PTAssignment[] }>('/pt-assignments/pt/clients'),
 
-  getPTHistory: (params?: { page?: number; limit?: number }) =>
-    api.get<{ items: PTAssignment[]; pagination: { total: number; page: number; limit: number; totalPages: number } }>(
+  getPTPendingApprovals: () =>
+    api.get<{ items: PendingApproval[] }>('/pt-assignments/pt/pending-approvals'),
+
+  getPTHistory: (params?: { page?: number; limit?: number; type?: string; fromDate?: string; toDate?: string; search?: string }) =>
+    api.get<{ items: HistoryEntry[]; pagination: { total: number; page: number; limit: number; totalPages: number } }>(
       '/pt-assignments/pt/history',
       { params },
     ),
@@ -104,8 +144,105 @@ export const ptAssignmentService = {
   createScheduleAndAssignWorkout: (assignmentId: string, data: {
     templateId: string
     memberId: string
+    weekIndex?: number
+    totalWeeks?: number
     sessions: { dayOrder: number; date: string; time: string; title: string; muscleGroup: string; exercises: { name: string; note?: string }[] }[]
   }) => api.post<{ message: string; schedule: import('./workoutService').WorkoutSchedule; assignment: PTAssignment }>(
     `/pt-assignments/${assignmentId}/create-schedule-and-assign`, data,
   ),
+
+  getWorkoutProgress: (assignmentId: string, scheduleId?: string) =>
+    api.get<{ assignment: PTAssignment; schedule: import('./workoutService').WorkoutSchedule | null }>(
+      `/pt-assignments/${assignmentId}/progress`, { params: scheduleId ? { scheduleId } : {} }),
+
+  endWorkout: (assignmentId: string, scheduleId?: string, memberId?: string, confirm?: boolean) =>
+    api.post<{
+      message: string
+      assignment?: PTAssignment
+      schedule?: import('./workoutService').WorkoutSchedule
+      // For endAll dry-check / confirm responses:
+      dryCheck?: boolean
+      canEnd?: boolean
+      allComplete?: boolean
+      modifiedCount?: number
+      endedAt?: string
+      preview?: {
+        scheduleCount: number
+        totalSessions: number
+        totalCompletedSessions: number
+        totalIncomplete: number
+        perSchedule: Array<{
+          scheduleId: string
+          weekLabel: string
+          totalSessions: number
+          completedSessions: number
+          incompleteSessions: number
+        }>
+      }
+    }>(
+      `/pt-assignments/${assignmentId}/end-workout`,
+      memberId
+        ? { memberId, endAll: true, confirm: confirm === true }
+        : scheduleId
+          ? { scheduleId }
+          : {}),
 }
+
+// ============================================================
+// Class enrollment: Transfer / Leave class (tường minh)
+// ============================================================
+
+export interface EnrollmentPreviewClass {
+  _id: string
+  code: string
+  name: string
+  specialization: string
+  daysOfWeek: number[]
+  startTime: string | null
+  endTime: string | null
+  pt?: { _id: string; name?: string; fullName?: string } | null
+  floor?: { _id: string; name?: string } | null
+  zone?: { _id: string; name?: string; maxCapacity?: number } | null
+  current: number
+  max: number
+  isFull: boolean
+  isCurrent: boolean
+}
+
+export interface EnrollmentPreviewResponse {
+  currentEnrollment: {
+    enrollmentId: string
+    classId: string
+    code?: string
+    name?: string
+    joinedAt?: string
+  } | null
+  availableClasses: EnrollmentPreviewClass[]
+}
+
+export interface TransferClassResponse {
+  message: string
+  transferredFrom: string | null
+  transferredTo: string
+  endedOld: number
+  createdNew: boolean
+}
+
+export interface LeaveClassResponse {
+  message: string
+  leftClassId: string | null
+  modifiedCount: number
+}
+
+const enrollmentService = {
+  getPreview: (memberId: string) =>
+    api.get<EnrollmentPreviewResponse>('/pt-assignments/enrollment/preview', { params: { memberId } }),
+
+  transferClass: (data: { memberId: string; toClassId: string; reason?: string }) =>
+    api.post<TransferClassResponse>('/pt-assignments/enrollment/transfer', data),
+
+  leaveClass: (data: { memberId: string; reason?: string }) =>
+    api.post<LeaveClassResponse>('/pt-assignments/enrollment/leave', data),
+}
+
+export { enrollmentService }

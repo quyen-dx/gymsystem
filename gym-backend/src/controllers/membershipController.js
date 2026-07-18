@@ -19,6 +19,11 @@ import {
   renewMembershipWithWallet,
   subscribeWithWallet,
 } from '../services/membershipService.js'
+import Plan from '../models/Plan.js'
+import PlanFeature from '../models/PlanFeature.js'
+import Membership from '../models/Membership.js'
+import ClassEnrollment from '../models/ClassEnrollment.js'
+import PTAssignment from '../models/PTAssignment.js'
 
 const sendServiceError = (res, error, next) => {
   if (error.statusCode) {
@@ -236,5 +241,77 @@ export const stripeMembershipWebhook = async (req, res, next) => {
       return res.status(400).json({ success: false, message: `Webhook Error: ${error.message}` })
     }
     return next(error)
+  }
+}
+
+/**
+ * Admin: lấy danh sách hội viên đang chờ xếp lớp PT hoặc PT 1-1
+ * (sau khi case 3 hoặc 4 xảy ra: đổi gói nhưng chưa được xếp lớp/PT mới).
+ */
+export const getPendingPTPlacements = async (req, res) => {
+  try {
+    const features = await PlanFeature.find({
+      code: { $in: ['BOOK_PT_GROUP', 'BOOK_PT_PRIVATE'] },
+    }).lean()
+    const featureIds = features.map(f => f._id.toString())
+    const featureCodeMap = {}
+    for (const f of features) featureCodeMap[f._id.toString()] = f.code
+
+    const plans = await Plan.find({ featureIds: { $in: features.map(f => f._id) } }).lean()
+    const planIds = plans.map(p => p._id)
+
+    const memberships = await Membership.find({
+      planId: { $in: planIds },
+      status: { $in: ['active', 'pending_cancel'] },
+    })
+      .populate('memberId', 'name fullName memberCode email phone')
+      .populate('planId')
+      .lean()
+
+    const pending = []
+    for (const m of memberships) {
+      const memberId = m.memberId?._id || m.memberId
+      const plan = m.planId
+      if (!plan || !memberId) continue
+
+      const planFeatureObjectIds = (plan.featureIds || []).map(id =>
+        typeof id === 'object' ? id._id || id : id
+      ).map(id => id.toString())
+
+      const planCodes = planFeatureObjectIds
+        .map(id => featureCodeMap[id])
+        .filter(Boolean)
+
+      const hasGroup = planCodes.includes('BOOK_PT_GROUP')
+      const hasPrivate = planCodes.includes('BOOK_PT_PRIVATE')
+
+      if (hasGroup) {
+        const enrollment = await ClassEnrollment.findOne({ memberId, status: 'active' }).lean()
+        if (!enrollment) {
+          pending.push({
+            memberId: m.memberId,
+            planName: plan.nameVi,
+            missingType: 'group_class',
+            label: 'Chờ xếp lớp PT nhóm',
+          })
+        }
+      }
+
+      if (hasPrivate) {
+        const assignment = await PTAssignment.findOne({ memberId, status: 'active' }).lean()
+        if (!assignment) {
+          pending.push({
+            memberId: m.memberId,
+            planName: plan.nameVi,
+            missingType: 'private_pt',
+            label: 'Chờ xếp PT 1-1',
+          })
+        }
+      }
+    }
+
+    res.json({ items: pending, total: pending.length })
+  } catch (error) {
+    return res.status(500).json({ message: error.message })
   }
 }

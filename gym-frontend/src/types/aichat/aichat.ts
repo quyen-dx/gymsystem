@@ -1,13 +1,10 @@
 export type PlanPayloadPlan = {
     _id: string
     nameVi: string
-    nameEn: string
     price: number
     durationDays: number
     descriptionVi?: string
-    descriptionEn?: string
     featuresVi?: string[]
-    featuresEn?: string[]
     color: string
 }
 

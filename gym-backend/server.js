@@ -12,11 +12,8 @@ import { handleStripeWebhook } from './src/controllers/walletController.js'
 import { stripeMembershipWebhook } from './src/controllers/membershipController.js'
 import { protect, sellerOnly } from './src/middlewares/authMiddleware.js'
 import { maintenanceModeGuard } from './src/middlewares/maintenanceMiddleware.js'
-import { blockWritesInFallback } from './src/middlewares/fallbackMiddleware.js'
 import sendError from './src/utils/sendError.js'
 import addressRoutes from './src/routes/addressRoutes.js'
-import adminAiRoutes from './src/routes/adminAiRoutes.js'
-import aiRoutes from './src/routes/aiRoutes.js'
 import auditLogRoutes from './src/routes/auditLogRoutes.js'
 import authRoutes from './src/routes/authRoutes.js'
 import checkInRoutes from './src/routes/checkInRoutes.js'
@@ -27,6 +24,7 @@ import ptRoutes from './src/routes/ptRoutes.js'
 import orderRoutes from './src/routes/orderRoutes.js'
 import partnershipRequestRoutes from './src/routes/partnershipRequestRoutes.js'
 import planRoutes from './src/routes/planRoutes.js'
+import planFeatureRoutes from './src/routes/planFeatureRoutes.js'
 import productRoutes from './src/routes/productRoutes.js'
 import sellerRoutes from './src/routes/sellerRoutes.js'
 import shopRoutes from './src/routes/shopRoutes.js'
@@ -37,8 +35,13 @@ import bookingRoutes from './src/routes/bookingRoutes.js'
 import policyConsentRoutes from './src/routes/policyConsentRoutes.js'
 import healthRoutes from './src/routes/healthRoutes.js'
 import workoutRoutes from './src/routes/workoutRoutes.js'
+import workoutLibraryRoutes from './src/routes/workoutLibraryRoutes.js'
+import workoutImprovementRoutes from './src/routes/workoutImprovementRoutes.js'
+import workoutReportRoutes from './src/routes/workoutReportRoutes.js'
+import specializationRoutes from './src/routes/specializationRoutes.js'
 import scheduleRoutes from './src/routes/scheduleRoutes.js'
 import ptAssignmentRoutes from './src/routes/ptAssignmentRoutes.js'
+import ptAssignmentEndRoutes from './src/routes/ptAssignmentEndRoutes.js'
 import trainingRequestRoutes from './src/routes/trainingRequestRoutes.js'
 import trainingAssignmentRoutes from './src/routes/trainingAssignmentRoutes.js'
 import trainingClassRoutes from './src/routes/trainingClassRoutes.js'
@@ -50,7 +53,6 @@ import shiftSwapRoutes from './src/routes/shiftSwapRoutes.js'
 import groupClassRoutes from "./src/routes/groupClassRoutes.js"
 import reportRoutes from "./src/routes/reportRoutes.js"
 import notificationRoutes from "./src/routes/notificationRoutes.js"
-import vectorStoreRoutes from './src/routes/vectorStoreRoutes.js'
 import { startMembershipReminderScheduler } from './src/services/membershipReminderScheduler.js'
 import { initSocketIO } from './src/services/socketService.js'
 
@@ -94,7 +96,6 @@ app.use(passport.initialize())
 app.use(passport.session())
 
 app.use(maintenanceModeGuard)
-app.use(blockWritesInFallback)
 
 app.use('/api/auth', authRoutes)
 app.use('/api/cms', cmsRoutes)
@@ -105,6 +106,7 @@ app.use('/api/staff/checkin', checkInRoutes)
 app.use('/api/audit-logs', auditLogRoutes)
 app.get('/api/my-products', protect, sellerOnly, getMyProducts)
 app.use('/api/plans', planRoutes)
+app.use('/api/plan-features', planFeatureRoutes)
 app.use('/api/products', productRoutes)
 app.use('/api/shops', shopRoutes)
 app.use('/api/wallet', walletRoutes)
@@ -114,16 +116,19 @@ app.use('/api/seller', sellerRoutes)
 app.use('/api/memberships', membershipRoutes)
 app.use('/api/partnership-requests', partnershipRequestRoutes)
 app.use('/api/pts', ptRoutes)
-app.use('/api/ai-assistant', aiRoutes)
-app.use('/api/admin/ai', adminAiRoutes)
 app.use('/api/system-experience', systemExperienceRoutes)
 app.use('/api/system-settings', systemSettingsRoutes)
 app.use('/api/bookings', bookingRoutes)
 app.use('/api/policy-consents', policyConsentRoutes)
 app.use('/api/workouts', workoutRoutes)
 app.use('/api/workout', workoutRoutes)
+app.use('/api/workout-library', workoutLibraryRoutes)
+app.use('/api/workout-improvements', workoutImprovementRoutes)
+app.use('/api/workout-reports', workoutReportRoutes)
+app.use('/api/specializations', specializationRoutes)
 app.use('/api/schedules', scheduleRoutes)
 app.use('/api/pt-assignments', ptAssignmentRoutes)
+app.use('/api/pt-assignment-end-requests', ptAssignmentEndRoutes)
 app.use('/api/training-requests', trainingRequestRoutes)
 app.use('/api/training-assignments', trainingAssignmentRoutes)
 app.use('/api/training-classes', trainingClassRoutes)
@@ -135,7 +140,6 @@ app.use('/api/health', healthRoutes)
 app.use("/api/group-classes", groupClassRoutes)
 app.use("/api/admin/reports", reportRoutes)
 app.use("/api/notifications", notificationRoutes)
-app.use('/api/admin/vector-store', vectorStoreRoutes)
 
 app.get('/api/system/status', (_req, res) => {
   res.json({
@@ -171,37 +175,10 @@ initSocketIO(httpServer)
 
 httpServer.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
-  console.log('Gemini:', !!process.env.GEMINI_API_KEY)
-  console.log('Gemini Admin:', !!process.env.GEMINI_API_KEY_ADMIN)
-  console.log('OpenRouter:', !!process.env.OPENROUTER_API_KEY)
-  console.log('Groq:', !!process.env.GROQ_API_KEY)
 })
 
 connectDB()
-  .then(async () => {
-    const { setupVectorHooks } = await import('./src/models/vectorHooks.js')
-    try {
-      setupVectorHooks()
-    } catch (hookErr) {
-      console.warn('[VECTOR_HOOKS] Failed to attach hooks:', hookErr.message)
-    }
-
-    const { moduleDiscovery } = await import('./src/ai/services/moduleDiscoveryService.js')
-    const modules = await moduleDiscovery.discoverAll()
-    ;(async () => {
-      try {
-        const { startupSync } = await import('./src/ai/services/vectorSyncService.js')
-        const results = await startupSync()
-        console.log('[SERVER] Vector sync completed')
-      } catch (err) {
-        console.log('[VECTOR_STORE] Setup skipped:', err.message)
-        console.log('[VECTOR_STORE] To use vector search, create the Atlas Search index:')
-        console.log('[VECTOR_STORE]   npm run create-vector-index')
-        console.log('[VECTOR_STORE]   Or create manually in Atlas UI: Services > Atlas Search > Create Index > Vector Search')
-        console.log('[VECTOR_STORE]   Database: gym, Collection: vectordocuments, Name: vector_index')
-        console.log('[VECTOR_STORE]   Dimensions: 768, Similarity: cosine, Filters: source, language')
-      }
-    })()
+  .then(() => {
     startMembershipReminderScheduler()
   })
   .catch((error) => {

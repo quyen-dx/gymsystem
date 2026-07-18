@@ -30,21 +30,15 @@ const formatDuration = (days: number, lang: 'vi' | 'en'): string => {
   return lang === 'en' ? `${days} days` : `${days} ngày`
 }
 
-const planName = (plan: PlanPayloadPlan, lang: 'vi' | 'en') => (
-  lang === 'vi' ? (plan.nameVi || plan.nameEn) : (plan.nameEn || plan.nameVi)
-)
+const planName = (plan: PlanPayloadPlan) => plan.nameVi
 
-const planDescription = (plan: PlanPayloadPlan, lang: 'vi' | 'en') => (
-  lang === 'vi' ? (plan.descriptionVi || plan.descriptionEn) : (plan.descriptionEn || plan.descriptionVi)
-)
+const planDescription = (plan: PlanPayloadPlan) => plan.descriptionVi
 
-const planFeatures = (plan: PlanPayloadPlan, lang: 'vi' | 'en') => (
-  lang === 'vi' ? (plan.featuresVi || plan.featuresEn || []) : (plan.featuresEn || plan.featuresVi || [])
-)
+const planFeatures = (plan: PlanPayloadPlan) => plan.featuresVi || []
 
 const suitability = (plan: PlanPayloadPlan, otherPlan: PlanPayloadPlan, lang: 'vi' | 'en') => {
-  const featureCount = Math.max(plan.featuresVi?.length || 0, plan.featuresEn?.length || 0)
-  const otherFeatureCount = Math.max(otherPlan.featuresVi?.length || 0, otherPlan.featuresEn?.length || 0)
+  const featureCount = plan.featuresVi?.length || 0
+  const otherFeatureCount = otherPlan.featuresVi?.length || 0
   if ((plan.price || 0) < (otherPlan.price || 0)) return lang === 'en' ? 'Best for saving cost or trying first.' : 'Phù hợp nếu muốn tiết kiệm hoặc tập thử.'
   if ((plan.durationDays || 0) > (otherPlan.durationDays || 0)) return lang === 'en' ? 'Best for longer commitment.' : 'Phù hợp nếu muốn tập lâu dài.'
   if (featureCount > otherFeatureCount) return lang === 'en' ? 'Best for more services and benefits.' : 'Phù hợp nếu muốn nhiều quyền lợi hơn.'
@@ -57,12 +51,12 @@ export function CompareTwoPlansCard({ plans, conclusion, lang = 'vi' }: Props) {
   const planA = plans[0]
   const planB = plans[1]
 
-  const nameA = planName(planA, lang)
-  const nameB = planName(planB, lang)
-  const descA = planDescription(planA, lang)
-  const descB = planDescription(planB, lang)
-  const featuresA = planFeatures(planA, lang)
-  const featuresB = planFeatures(planB, lang)
+  const nameA = planName(planA)
+  const nameB = planName(planB)
+  const descA = planDescription(planA)
+  const descB = planDescription(planB)
+  const featuresA = planFeatures(planA)
+  const featuresB = planFeatures(planB)
   const t = labels[lang]
 
   const colorA = planA.color || 'var(--theme-accent)'

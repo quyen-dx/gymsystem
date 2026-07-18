@@ -176,7 +176,7 @@ export default function OfflineRegisterPage() {
                         className={`cursor-pointer rounded-xl border-2 p-4 transition-all ${active ? 'border-[var(--gs-accent)] bg-[var(--gs-accent-muted)]' : 'border-[var(--gs-border)] hover:border-[var(--gs-accent)]'}`}
                         onClick={() => { setSelectedPlan(plan); setAmountPaid(String(plan.price)) }}
                       >
-                        <div className="mb-2 text-base font-semibold">{plan.nameVi || plan.nameEn}</div>
+                        <div className="mb-2 text-base font-semibold">{plan.nameVi}</div>
                         <div className="mb-1 text-lg font-bold text-[var(--gs-accent)]">{formatMoney(plan.price)}</div>
                         <div className="mb-2 text-xs text-[var(--gs-text-muted)]">{plan.durationDays} ngày</div>
                         {plan.featuresVi?.slice(0, 3).map((f, i) => (
@@ -244,7 +244,7 @@ export default function OfflineRegisterPage() {
               />
               <Statistic
                 title="Gói tập"
-                value={selectedPlan?.nameVi || selectedPlan?.nameEn || 'Chưa chọn'}
+                value={selectedPlan?.nameVi || 'Chưa chọn'}
                 valueStyle={{ fontSize: 14, fontWeight: 600 }}
                 className="mt-3"
               />

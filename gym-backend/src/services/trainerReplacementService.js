@@ -1,20 +1,35 @@
 import TrainerReplacementRequest from '../models/TrainerReplacementRequest.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import ScheduleOverride from '../models/ScheduleOverride.js'
-import Notification from '../models/Notification.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
 import User from '../models/User.js'
 import { emitTrainerReplacementNotification } from './socketService.js'
 
 const DAY_LABELS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
 
 export const createReplacementRequest = async ({ scheduleId, originalTrainerId, date, reason }) => {
-  return TrainerReplacementRequest.create({
+  const request = await TrainerReplacementRequest.create({
     scheduleId,
     originalTrainerId,
     date: new Date(date),
     reason,
     status: 'pending',
   })
+
+  createNotification({
+    receiverId: null,
+    receiverRole: 'admin',
+    notificationType: NOTIFICATION_TYPES.TRAINER_REPLACEMENT_ASSIGNED,
+    title: 'Yêu cầu thay ca mới',
+    content: `Có một yêu cầu thay ca mới cần được xử lý.`,
+    relatedId: request._id,
+    relatedType: 'TrainerReplacementRequest',
+    redirectUrl: '/admin/trainer-replacements',
+    createdBy: 'PT',
+  }).catch(err => console.error('Notify trainer replacement request failed:', err.message))
+
+  return request
 }
 
 export const getMyRequests = async ({ trainerId, status }) => {
@@ -113,10 +128,16 @@ export const approveRequest = async ({ requestId, replacementTrainerId, handledB
         const replacementPtName = replacementPt?.fullName || replacementPt?.name || 'PT'
 
         // Thông báo cho PT thay thế (PT B)
-        const notifReplacement = await Notification.create({
-          userId: replacementTrainerId,
+        const notifReplacement = await createNotification({
+          receiverId: replacementTrainerId,
+          receiverRole: 'pt',
+          notificationType: NOTIFICATION_TYPES.TRAINER_REPLACEMENT_ASSIGNED,
           title: 'Lịch dạy thay mới',
           content: `Bạn được xếp dạy thay ${originalPtName} vào ${dayLabel}, ngày ${dateStr}. ${sessionDetails ? `Chi tiết: ${sessionDetails}.` : ''} Hội viên: ${memberName}.`,
+          relatedId: requestId,
+          relatedType: 'TrainerReplacementRequest',
+          createdBy: 'Admin',
+          sendEmail: false,
         })
 
         emitTrainerReplacementNotification({
@@ -125,10 +146,16 @@ export const approveRequest = async ({ requestId, replacementTrainerId, handledB
         })
 
         // Thông báo cho PT gốc (PT A) - biết ai đã nhận thay
-        const notifOriginal = await Notification.create({
-          userId: request.originalTrainerId,
+        const notifOriginal = await createNotification({
+          receiverId: request.originalTrainerId,
+          receiverRole: 'pt',
+          notificationType: NOTIFICATION_TYPES.TRAINER_REPLACEMENT_ASSIGNED,
           title: 'Đã có PT dạy thay',
           content: `Yêu cầu thay ca của bạn vào ${dayLabel}, ngày ${dateStr} đã được duyệt. PT ${replacementPtName} sẽ dạy thay bạn. ${sessionDetails ? `Chi tiết: ${sessionDetails}.` : ''} Hội viên: ${memberName}.`,
+          relatedId: requestId,
+          relatedType: 'TrainerReplacementRequest',
+          createdBy: 'Admin',
+          sendEmail: false,
         })
 
         emitTrainerReplacementNotification({
@@ -157,10 +184,16 @@ export const rejectRequest = async ({ requestId, handledBy, reason = '' }) => {
       const dayLabel = DAY_LABELS[targetDate.getDay()]
       const dateStr = targetDate.toLocaleDateString('vi-VN')
 
-      const notif = await Notification.create({
-        userId: request.originalTrainerId,
+      const notif = await createNotification({
+        receiverId: request.originalTrainerId,
+        receiverRole: 'pt',
+        notificationType: NOTIFICATION_TYPES.TRAINER_REPLACEMENT_REJECTED,
         title: 'Yêu cầu thay ca bị từ chối',
         content: `Yêu cầu thay ca của bạn vào ${dayLabel}, ngày ${dateStr} đã bị từ chối. ${reason ? `Lý do: ${reason}` : 'Vui lòng liên hệ admin để biết thêm chi tiết.'}`,
+        relatedId: requestId,
+        relatedType: 'TrainerReplacementRequest',
+        createdBy: 'Admin',
+        sendEmail: false,
       })
 
       emitTrainerReplacementNotification({

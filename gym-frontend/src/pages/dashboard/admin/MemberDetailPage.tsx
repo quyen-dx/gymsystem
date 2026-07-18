@@ -107,7 +107,7 @@ export default function MemberDetailPage() {
       render: (_: unknown, record: MemberMembership) => (
         <Space size={4}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: record.planId?.color || '#3B82F6' }} />
-          <span>{record.planId?.nameVi || record.planId?.nameEn || '—'}</span>
+          <span>{record.planId?.nameVi || '—'}</span>
         </Space>
       ),
     },
@@ -263,7 +263,7 @@ export default function MemberDetailPage() {
                 <Text type="secondary" style={{ fontSize: 12 }}>Thông tin gói tập</Text>
                 <div style={{ marginTop: 8 }}>
                   <div style={{ fontWeight: 600, fontSize: 16 }}>
-                    {activeMembership.planId?.nameVi || activeMembership.planId?.nameEn}
+                    {activeMembership.planId?.nameVi}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--gs-text-muted)', marginTop: 4 }}>
                     {new Date(activeMembership.startDate).toLocaleDateString('vi-VN')} → {new Date(activeMembership.endDate).toLocaleDateString('vi-VN')}
@@ -350,7 +350,7 @@ export default function MemberDetailPage() {
         memberName={getUserDisplayName(member, member.memberCode)}
         currentEndDate={activeMembership?.endDate || ''}
         currentStartDate={activeMembership?.startDate || ''}
-        currentPlanName={activeMembership?.planId?.nameVi || activeMembership?.planId?.nameEn || ''}
+        currentPlanName={activeMembership?.planId?.nameVi || ''}
         currentPlanId={activeMembership?.planId?._id || ''}
         onClose={() => setRenewModalOpen(false)}
         onSuccess={() => { setRenewModalOpen(false); fetchMember() }}

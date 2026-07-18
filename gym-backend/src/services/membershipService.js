@@ -8,6 +8,8 @@ import MembershipCancellationRequest from '../models/MembershipCancellationReque
 import MembershipRegistration from '../models/MembershipRegistration.js'
 import Payment from '../models/Payment.js'
 import Plan from '../models/Plan.js'
+import PlanFeature from '../models/PlanFeature.js'
+import ClassEnrollment from '../models/ClassEnrollment.js'
 import RefundRequest from '../models/RefundRequest.js'
 import Transaction from '../models/Transaction.js'
 import User from '../models/User.js'
@@ -18,8 +20,8 @@ import Workout from '../models/Workout.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import PTAssignment from '../models/PTAssignment.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
+import { endEnrollments as endClassEnrollments } from './classEnrollmentService.js'
 import { getSystemSettingsValue } from './systemSettingsService.js'
-import { invalidatePersonalContextCache } from './conversationContextCache.js'
 import { recordUserActivity } from './userActivityService.js'
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
 import { assertPolicyConsent } from '../utils/policyConsent.js'
@@ -30,6 +32,8 @@ import {
   calculateRemainingDays,
   calcMembershipEndDate,
 } from '../utils/dateUtils.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
 
@@ -118,6 +122,7 @@ const serializePlan = (plan) => ({
   descriptionEn: plan?.descriptionEn,
   featuresVi: plan?.featuresVi || [],
   featuresEn: plan?.featuresEn || [],
+  featureIds: plan?.featureIds || [],
   color: plan?.color,
 })
 
@@ -429,6 +434,56 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
     await session.commitTransaction()
     committed = true
 
+    if (isRenew) {
+      createNotification({
+        receiverId: memberId,
+        receiverRole: 'member',
+        notificationType: NOTIFICATION_TYPES.MEMBERSHIP_RENEWAL_SUCCESS,
+        title: 'Gia hạn gói tập thành công',
+        content: `Bạn đã gia hạn thành công gói "${plan.nameVi || plan.nameEn}".`,
+        relatedId: membership._id,
+        relatedType: 'Membership',
+        redirectUrl: '/my-membership',
+        createdBy: 'System',
+      }).catch(err => console.error('Notify renewal failed:', err.message))
+
+      createNotification({
+        receiverId: memberId,
+        receiverRole: 'member',
+        notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+        title: 'Thanh toán gia hạn thành công',
+        content: `Bạn đã thanh toán ${amount.toLocaleString('vi-VN')}đ để gia hạn gói tập.`,
+        relatedId: payment._id,
+        relatedType: 'Payment',
+        redirectUrl: '/my-membership',
+        createdBy: 'System',
+      }).catch(err => console.error('Notify payment failed:', err.message))
+    } else {
+      createNotification({
+        receiverId: memberId,
+        receiverRole: 'member',
+        notificationType: NOTIFICATION_TYPES.MEMBERSHIP_ACTIVATED,
+        title: 'Gói tập đã được kích hoạt',
+        content: `Gói "${plan.nameVi || plan.nameEn}" đã được kích hoạt thành công.`,
+        relatedId: membership._id,
+        relatedType: 'Membership',
+        redirectUrl: '/my-membership',
+        createdBy: 'System',
+      }).catch(err => console.error('Notify membership activated failed:', err.message))
+
+      createNotification({
+        receiverId: memberId,
+        receiverRole: 'member',
+        notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+        title: 'Thanh toán gói tập thành công',
+        content: `Bạn đã thanh toán ${amount.toLocaleString('vi-VN')}đ cho gói "${plan.nameVi || plan.nameEn}".`,
+        relatedId: payment._id,
+        relatedType: 'Payment',
+        redirectUrl: '/my-membership',
+        createdBy: 'System',
+      }).catch(err => console.error('Notify payment failed:', err.message))
+    }
+
     if (!isRenew) {
       await cleanupMemberPTData({ memberId })
     }
@@ -441,7 +496,6 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
         description: `${isRenew ? 'Gia hạn' : 'Đăng ký'} gói "${plan.nameVi}" bằng ví tài khoản`,
         metadata: { membershipId: membership._id, planId: plan._id, paymentId: payment._id, paymentMethod: 'WALLET' },
       })
-      invalidatePersonalContextCache(user._id)
     } catch (activityError) {
       console.error('Không thể ghi hoạt động đăng ký gói tập:', activityError.message)
     }
@@ -551,7 +605,18 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
       description: `Đăng ký gói "${plan.nameVi}" - ${plan.durationDays} ngày`,
       metadata: { membershipId: membership._id, planId: plan._id, source },
     })
-    invalidatePersonalContextCache(user._id)
+
+    createNotification({
+      receiverId: user._id,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.MEMBERSHIP_ACTIVATED,
+      title: 'Gói tập đã được kích hoạt',
+      content: `Gói "${plan.nameVi || plan.nameEn}" đã được kích hoạt thành công.`,
+      relatedId: membership._id,
+      relatedType: 'Membership',
+      redirectUrl: '/my-membership',
+      createdBy: source === 'staff' ? 'Staff' : 'System',
+    }).catch(err => console.error('Notify membership activated failed:', err.message))
 
     const populated = await Membership.findById(membership._id).populate('planId')
     return serializeMembership({ ...populated.toObject(), planId: plan.toObject() })
@@ -619,7 +684,18 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
     description: `Gia hạn gói "${plan.nameVi}" thêm ${plan.durationDays} ngày`,
     metadata: { membershipId: existingActive._id, planId: plan._id, source },
   })
-  invalidatePersonalContextCache(user._id)
+
+  createNotification({
+    receiverId: user._id,
+    receiverRole: 'member',
+    notificationType: NOTIFICATION_TYPES.MEMBERSHIP_RENEWAL_SUCCESS,
+    title: 'Gia hạn gói tập thành công',
+    content: `Bạn đã gia hạn thành công gói "${plan.nameVi || plan.nameEn}".`,
+    relatedId: existingActive._id,
+    relatedType: 'Membership',
+    redirectUrl: '/my-membership',
+    createdBy: source === 'staff' ? 'Staff' : 'System',
+  }).catch(err => console.error('Notify renewal failed:', err.message))
 
   if (user.email) {
     const nextPeriodIndex = await MembershipPeriod.countDocuments({ membershipId: existingActive._id }) + 1
@@ -820,6 +896,19 @@ const completeStripeCheckoutSession = async (session) => {
 
   payment.membershipId = membership.id
   await payment.save()
+
+  createNotification({
+    receiverId: payment.userId,
+    receiverRole: 'member',
+    notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+    title: 'Thanh toán Stripe thành công',
+    content: `Thanh toán gói tập qua Stripe đã hoàn tất.`,
+    relatedId: membership.id,
+    relatedType: 'Membership',
+    redirectUrl: '/my-membership',
+    createdBy: 'System',
+  }).catch(err => console.error('Notify stripe success failed:', err.message))
+
   return payment
 }
 
@@ -872,6 +961,18 @@ const confirmRegistration = async ({ registrationId, staffId }) => {
   registration.membershipId = membership.id
   await registration.save()
 
+  createNotification({
+    receiverId: registration.userId,
+    receiverRole: 'member',
+    notificationType: NOTIFICATION_TYPES.MEMBERSHIP_ACTIVATED,
+    title: 'Gói tập đã được kích hoạt',
+    content: `Yêu cầu đăng ký gói tập của bạn đã được staff xác nhận.`,
+    relatedId: membership.id,
+    relatedType: 'Membership',
+    redirectUrl: '/my-membership',
+    createdBy: 'Staff',
+  }).catch(err => console.error('Notify confirm registration failed:', err.message))
+
   await Payment.updateOne(
     { registrationId: registration._id, status: 'PENDING' },
     { $set: { status: 'PAID', paidAt: new Date(), membershipId: membership.id } },
@@ -903,6 +1004,18 @@ const cancelRegistration = async ({ registrationId, staffId, reason = '' }) => {
     { registrationId: registration._id, status: 'PENDING' },
     { $set: { status: 'FAILED' } },
   )
+
+  createNotification({
+    receiverId: registration.userId,
+    receiverRole: 'member',
+    notificationType: NOTIFICATION_TYPES.MEMBERSHIP_ACTIVATED,
+    title: 'Yêu cầu đăng ký gói tập bị từ chối',
+    content: `Yêu cầu đăng ký gói tập của bạn đã bị từ chối. Lý do: ${reason || 'Không có lý do.'}`,
+    relatedId: registration._id,
+    relatedType: 'MembershipRegistration',
+    redirectUrl: '/plans',
+    createdBy: 'Staff',
+  }).catch(err => console.error('Notify cancel registration failed:', err.message))
 
   return registration
 }
@@ -1049,7 +1162,7 @@ const getMyMembership = async ({ userId }) => {
 
   const membership = await Membership.findOne({ memberId, status: { $in: ['active', 'pending_cancel', 'cancel_requested'] } })
     .sort({ endDate: -1 })
-    .populate('planId')
+    .populate({ path: 'planId', populate: { path: 'featureIds', model: 'PlanFeature' } })
 
   let canRenew = !!membership
 
@@ -1235,7 +1348,17 @@ const cancelRenewal = async ({ userId, renewalId }) => {
     await session.commitTransaction()
     committed = true
 
-    invalidatePersonalContextCache(memberId)
+    createNotification({
+      receiverId: memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.REFUND_APPROVED,
+      title: 'Hủy gia hạn và hoàn tiền',
+      content: `Bạn đã hủy lần gia hạn +${renewal.days} ngày. Đã hoàn ${refundAmount.toLocaleString('vi-VN')}đ vào ví.`,
+      relatedId: renewal._id,
+      relatedType: 'MembershipRenewal',
+      redirectUrl: '/my-membership',
+      createdBy: 'System',
+    }).catch(err => console.error('Notify cancel renewal failed:', err.message))
 
     const planName = renewal.planId?.nameVi || renewal.planId?.nameEn || ''
     const cancelUser = await User.findById(memberId).select('email fullName name')
@@ -1828,9 +1951,9 @@ const getMembershipInfo = async ({ userId }) => {
   }
 }
 
-export const cleanupMemberPTData = async ({ memberId, session }) => {
+export const cleanupMemberPTData = async ({ memberId, session, sourceReason = 'ended_by_admin', note }) => {
   const opts = session ? { session } : {}
-  const reason = 'Gói tập đã kết thúc'
+  const reason = note || 'Gói tập đã kết thúc'
 
   await WorkoutSchedule.updateMany(
     { memberId, status: 'active' },
@@ -1873,6 +1996,222 @@ export const cleanupMemberPTData = async ({ memberId, session }) => {
     },
     opts,
   )
+
+  // End ClassEnrollment (member leaves all classes when membership expired)
+  await endClassEnrollments({
+    memberId,
+    sourceReason: sourceReason || 'ended_by_admin',
+    note: note || reason,
+    session,
+  })
+
+  // Notifications
+  const m = await User.findById(memberId).select('name fullName').lean()
+  const mName = m?.fullName || m?.name || 'Hội viên'
+
+  await createNotification({
+    receiverId: memberId,
+    receiverRole: 'member',
+    notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+    title: 'Quyền lợi PT đã kết thúc',
+    content: `Gói tập của bạn đã kết thúc/hủy. Toàn bộ quyền lợi PT, lớp học và giáo án đã được đóng lại.`,
+    redirectUrl: '/my-membership',
+    createdBy: 'System',
+  }).catch(() => {})
+
+  const ptAss = await PTAssignment.findOne({ memberId }).select('ptId').lean()
+  if (ptAss?.ptId) {
+    await createNotification({
+      receiverId: ptAss.ptId,
+      receiverRole: 'pt',
+      notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+      title: 'Hội viên đã kết thúc/hủy gói tập',
+      content: `Hội viên ${mName} đã kết thúc/hủy gói tập và không còn trong lớp PT của bạn.`,
+      relatedId: memberId,
+      relatedType: 'User',
+      redirectUrl: '/pt/clients',
+      createdBy: 'System',
+    }).catch(() => {})
+  }
+}
+
+/**
+ * Determine PT benefit type from a plan's features.
+ * Returns 'group' (BOOK_PT_GROUP), 'private' (BOOK_PT_PRIVATE), or 'none'.
+ */
+async function getPlanPTBenefitType(plan) {
+  const featureIds = plan.featureIds || []
+  if (featureIds.length === 0) return 'none'
+
+  const codes = featureIds
+    .map(f => (typeof f === 'object' && f.code) ? f.code : null)
+    .filter(Boolean)
+
+  if (codes.length > 0) {
+    if (codes.includes('BOOK_PT_PRIVATE')) return 'private'
+    if (codes.includes('BOOK_PT_GROUP')) return 'group'
+    return 'none'
+  }
+
+  const features = await PlanFeature.find({ _id: { $in: featureIds } }).lean()
+  const featureCodes = features.map(f => f.code)
+  if (featureCodes.includes('BOOK_PT_PRIVATE')) return 'private'
+  if (featureCodes.includes('BOOK_PT_GROUP')) return 'group'
+  return 'none'
+}
+
+/**
+ * Handle PT data cleanup + notifications when a membership plan changes.
+ * Must be called AFTER the plan change transaction is committed.
+ * Handles 4 cases:
+ *   Case 2: group/private → none (lose PT benefit)
+ *   Case 3: private → group (switch PT type, need class assignment)
+ *   Case 4: group → private (switch PT type, need 1-1 assignment)
+ *   Case 1 (cancellation): handled by cleanupMemberPTData separately
+ */
+export async function handlePTDataOnPlanChange({ memberId, oldPlan, newPlan, session }) {
+  const opts = session ? { session } : {}
+
+  const [oldType, newType] = await Promise.all([
+    getPlanPTBenefitType(oldPlan),
+    getPlanPTBenefitType(newPlan),
+  ])
+
+  const newPlanName = newPlan?.nameVi || 'gói mới'
+
+  const member = await User.findById(memberId).select('name fullName').lean()
+  const mName = member?.fullName || member?.name || 'Hội viên'
+
+  // Case 2: Lost PT benefit (group/private → none)
+  if ((oldType === 'group' || oldType === 'private') && newType === 'none') {
+    const reason = `Hạ cấp gói: ${newPlanName}`
+
+    if (oldType === 'group') {
+      const enrollments = await ClassEnrollment.find({ memberId, status: 'active' })
+        .populate('classId', 'code name')
+        .lean()
+
+      for (const e of enrollments) {
+        const cls = e.classId
+        const className = cls ? `[${cls.code}] ${cls.name}` : 'lớp'
+
+        const ptAss = await PTAssignment.findOne({ memberId, status: 'active' }).select('ptId').lean()
+        if (ptAss?.ptId) {
+          await createNotification({
+            receiverId: ptAss.ptId,
+            receiverRole: 'pt',
+            notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+            title: 'Hội viên đã rời lớp do hạ cấp gói tập',
+            content: `Hội viên ${mName} đã hạ cấp xuống gói "${newPlanName}" (không PT) và bị xóa khỏi lớp ${className}.`,
+            relatedId: cls?._id || memberId,
+            relatedType: 'TrainingClass',
+            redirectUrl: '/pt/clients',
+            createdBy: 'System',
+          }).catch(() => {})
+        }
+      }
+    }
+
+    await PTAssignment.updateMany(
+      { memberId, status: 'active' },
+      { $set: { status: 'cancelled', cancelledAt: new Date(), cancelReason: reason } },
+      opts,
+    )
+
+    if (oldType === 'group') {
+      await endClassEnrollments({ memberId, sourceReason: 'package_downgraded', note: reason, session })
+    }
+
+    await createNotification({
+      receiverId: memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+      title: 'Thay đổi quyền lợi PT',
+      content: `Bạn đã chuyển sang gói "${newPlanName}" - gói này không bao gồm quyền lợi PT. Bạn đã được rời khỏi lớp PT.`,
+      redirectUrl: '/my-membership',
+      createdBy: 'System',
+    }).catch(() => {})
+
+    return
+  }
+
+  // Case 4: Group PT → 1-1 PT
+  if (oldType === 'group' && newType === 'private') {
+    const enrollments = await ClassEnrollment.find({ memberId, status: 'active' })
+      .populate('classId', 'code name')
+      .lean()
+
+    const className = enrollments.length > 0 && enrollments[0].classId
+      ? `[${enrollments[0].classId.code}] ${enrollments[0].classId.name}`
+      : 'lớp'
+
+    await endClassEnrollments({ memberId, sourceReason: 'package_switched_to_1on1', note: 'Chuyển sang gói PT 1-1', session })
+
+    await createNotification({
+      receiverId: null, receiverRole: 'admin',
+      notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+      title: 'Hội viên cần xếp PT 1-1 mới',
+      content: `Hội viên ${mName} đã chuyển từ gói PT nhóm (${className}) sang PT 1-1. Cần xếp PT 1-1 phù hợp.`,
+      relatedId: memberId, relatedType: 'User',
+      redirectUrl: '/admin/members',
+      createdBy: 'System',
+    }).catch(() => {})
+
+    await createNotification({
+      receiverId: memberId, receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+      title: 'Chuyển sang gói PT 1-1',
+      content: `Bạn đã chuyển sang gói PT 1-1. Admin sẽ sắp xếp PT phù hợp cho bạn trong thời gian sớm nhất.`,
+      redirectUrl: '/my-membership', createdBy: 'System',
+    }).catch(() => {})
+
+    return
+  }
+
+  // Case 3: 1-1 PT → Group PT
+  if (oldType === 'private' && newType === 'group') {
+    const oldAssignment = await PTAssignment.findOne({ memberId, status: 'active' })
+      .populate('ptId', 'name fullName')
+      .lean()
+
+    await PTAssignment.updateMany(
+      { memberId, status: 'active' },
+      { $set: { status: 'cancelled', cancelledAt: new Date(), cancelReason: 'Chuyển sang gói PT nhóm' } },
+      opts,
+    )
+
+    if (oldAssignment?.ptId) {
+      const ptInfo = typeof oldAssignment.ptId === 'object' ? oldAssignment.ptId : null
+      await createNotification({
+        receiverId: typeof oldAssignment.ptId === 'object' ? oldAssignment.ptId._id : oldAssignment.ptId,
+        receiverRole: 'pt',
+        notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+        title: 'Hội viên đã chuyển sang PT nhóm',
+        content: `Hội viên ${mName} đã chuyển từ PT 1-1 sang gói PT nhóm. Bạn không còn phụ trách 1-1 hội viên này.`,
+        relatedId: memberId, relatedType: 'User',
+        redirectUrl: '/pt/clients', createdBy: 'System',
+      }).catch(() => {})
+    }
+
+    await createNotification({
+      receiverId: null, receiverRole: 'admin',
+      notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+      title: 'Hội viên cần xếp lớp PT nhóm',
+      content: `Hội viên ${mName} đã chuyển sang gói PT nhóm. Cần xếp hội viên vào lớp tập phù hợp.`,
+      relatedId: memberId, relatedType: 'User',
+      redirectUrl: '/admin/training-classes', createdBy: 'System',
+    }).catch(() => {})
+
+    await createNotification({
+      receiverId: memberId, receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+      title: 'Chuyển sang gói PT nhóm',
+      content: `Bạn đã chuyển sang gói PT nhóm. Admin sẽ xếp bạn vào lớp tập phù hợp trong thời gian sớm nhất.`,
+      redirectUrl: '/my-membership', createdBy: 'System',
+    }).catch(() => {})
+
+    return
+  }
 }
 
 export {

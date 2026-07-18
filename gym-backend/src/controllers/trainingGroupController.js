@@ -1,4 +1,6 @@
 import * as trainingGroupService from '../services/trainingGroupService.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
 
 export const createGroup = async (req, res) => {
   try {
@@ -40,7 +42,19 @@ export const updateGroup = async (req, res) => {
 
 export const addMember = async (req, res) => {
   try {
-    const group = await trainingGroupService.addMember({ groupId: req.params.id, memberId: req.body.memberId })
+    const memberId = req.body.memberId
+    const group = await trainingGroupService.addMember({ groupId: req.params.id, memberId })
+    createNotification({
+      receiverId: memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.CLASS_ASSIGNED,
+      title: 'Bạn đã được thêm vào nhóm tập',
+      content: 'Bạn đã được thêm vào nhóm tập mới.',
+      relatedId: group._id,
+      relatedType: 'TrainingGroup',
+      redirectUrl: '/my-groups',
+      createdBy: 'PT',
+    }).catch(err => console.error('Notify group member added failed:', err.message))
     res.json({ message: 'Đã thêm thành viên', group })
   } catch (error) {
     res.status(error.message.includes('đủ sĩ số') ? 400 : 500).json({ message: error.message })
@@ -49,7 +63,19 @@ export const addMember = async (req, res) => {
 
 export const removeMember = async (req, res) => {
   try {
-    const group = await trainingGroupService.removeMember({ groupId: req.params.id, memberId: req.params.memberId })
+    const memberId = req.params.memberId
+    const group = await trainingGroupService.removeMember({ groupId: req.params.id, memberId })
+    createNotification({
+      receiverId: memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+      title: 'Bạn đã bị xóa khỏi nhóm tập',
+      content: 'Bạn đã bị xóa khỏi nhóm tập.',
+      relatedId: group._id,
+      relatedType: 'TrainingGroup',
+      redirectUrl: '/my-groups',
+      createdBy: 'PT',
+    }).catch(err => console.error('Notify group member removed failed:', err.message))
     res.json({ message: 'Đã xóa thành viên', group })
   } catch (error) {
     res.status(500).json({ message: error.message })

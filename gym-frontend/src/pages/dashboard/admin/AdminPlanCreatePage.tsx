@@ -1,4 +1,3 @@
-import { PlusOutlined } from '@ant-design/icons'
 import {
   Button,
   Checkbox,
@@ -7,81 +6,57 @@ import {
   Input,
   InputNumber,
   Space,
-  message
+  message,
 } from 'antd'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import api from '../../../services/api'
-import { DEFAULT_FEATURES, DEFAULT_SPECIALIZATIONS, PRESET_COLORS } from './plan/constants'
+import { planFeatureService, type PlanFeature } from '../../../services/planFeatureService'
+import { PRESET_COLORS } from './planColors'
 
 export default function AdminPlanCreatePage() {
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [submitLoading, setSubmitLoading] = useState(false)
-  const [allFeatures, setAllFeatures] = useState<string[]>(DEFAULT_FEATURES)
-  const [newFeatureInput, setNewFeatureInput] = useState('')
-  const [allSpecializations, setAllSpecializations] = useState<string[]>(DEFAULT_SPECIALIZATIONS)
-  const [newSpecializationInput, setNewSpecializationInput] = useState('')
+  const [allFeatures, setAllFeatures] = useState<PlanFeature[]>([])
+  const [selectedFeatureIds, setSelectedFeatureIds] = useState<string[]>([])
+  const [featuresLoading, setFeaturesLoading] = useState(true)
   const [selectedColor, setSelectedColor] = useState('#3B82F6')
+
+  useEffect(() => {
+    planFeatureService.getAll({ isActive: true })
+      .then((res) => setAllFeatures(res.data.data || []))
+      .catch(() => message.error('Không thể tải danh sách quyền lợi'))
+      .finally(() => setFeaturesLoading(false))
+  }, [])
 
   const updateColor = (color: string) => {
     setSelectedColor(color)
     form.setFieldsValue({ color })
   }
 
-  const handleAddFeature = () => {
-    const val = newFeatureInput.trim()
-    if (!val) return
-    if (allFeatures.includes(val)) {
-      message.info('Quyền lợi này đã có trong danh sách')
-      setNewFeatureInput('')
-      return
-    }
-    setAllFeatures((prev) => [...prev, val])
-    const current = form.getFieldValue('featuresVi') || []
-    form.setFieldsValue({ featuresVi: [...current, val] })
-    setNewFeatureInput('')
-  }
-
-  const handleAddSpecialization = () => {
-    const val = newSpecializationInput.trim()
-    if (!val) return
-    if (allSpecializations.includes(val)) {
-      message.info('Chuyên môn này đã có trong danh sách')
-      setNewSpecializationInput('')
-      return
-    }
-    setAllSpecializations((prev) => [...prev, val])
-    const current = form.getFieldValue('applicableSpecializations') || []
-    form.setFieldsValue({ applicableSpecializations: [...current, val] })
-    setNewSpecializationInput('')
-  }
-
   const handleSubmit = async (values: any) => {
+    if (selectedFeatureIds.length === 0) {
+      message.warning('Vui lòng chọn ít nhất 1 quyền lợi')
+      return
+    }
+
     setSubmitLoading(true)
     try {
-      const features = values.featuresVi || []
-      if (features.length === 0) {
-        message.warning('Vui lòng chọn ít nhất 1 quyền lợi')
-        setSubmitLoading(false)
-        return
-      }
+      const featureNames = allFeatures
+        .filter((f) => selectedFeatureIds.includes(f._id))
+        .map((f) => f.name)
 
       const payload = {
         nameVi: values.nameVi,
-        nameEn: values.nameVi,
         price: values.price,
         durationDays: values.durationDays,
         descriptionVi: values.descriptionVi || '',
-        descriptionEn: values.descriptionVi || '',
-        featuresVi: features,
-        featuresEn: features,
-        applicableSpecializations: values.applicableSpecializations || [],
+        featuresVi: featureNames,
+        featureIds: selectedFeatureIds,
         isActive: true,
-        color: typeof values.color === 'string'
-          ? values.color
-          : values.color?.toHexString?.() || '#3B82F6',
+        color: typeof values.color === 'string' ? values.color : values.color?.toHexString?.() || '#3B82F6',
       }
 
       await api.post('/plans', payload)
@@ -103,7 +78,7 @@ export default function AdminPlanCreatePage() {
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
         <Form layout="vertical" form={form} onFinish={handleSubmit}
-          initialValues={{ color: '#3B82F6', featuresVi: [], applicableSpecializations: [] }}
+          initialValues={{ color: '#3B82F6' }}
         >
           <div className="grid grid-cols-2 gap-x-4">
             <Form.Item
@@ -141,10 +116,7 @@ export default function AdminPlanCreatePage() {
               />
             </Form.Item>
 
-            <Form.Item
-              label="Màu sắc"
-              name="color"
-            >
+            <Form.Item label="Màu sắc" name="color">
               <div className="flex items-center gap-2">
                 {PRESET_COLORS.map((c) => (
                   <div
@@ -162,74 +134,40 @@ export default function AdminPlanCreatePage() {
             </Form.Item>
           </div>
 
-          <Form.Item
-            label="Mô tả ngắn"
-            name="descriptionVi"
-          >
+          <Form.Item label="Mô tả" name="descriptionVi">
             <Input.TextArea rows={4} placeholder="Mô tả gói tập (không bắt buộc)" />
           </Form.Item>
 
-          <Form.Item
-            label="Quyền lợi"
-            name="featuresVi"
-            rules={[{ required: true, type: 'array', min: 1, message: 'Vui lòng chọn ít nhất 1 quyền lợi' }]}
-          >
-            <Checkbox.Group>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                {allFeatures.map((f) => (
-                  <Checkbox key={f} value={f}>{f}</Checkbox>
-                ))}
+          <Form.Item label="Quyền lợi" required>
+            {featuresLoading ? (
+              <div className="text-sm text-[var(--gs-text-muted)]">Đang tải quyền lợi...</div>
+            ) : allFeatures.length === 0 ? (
+              <div className="text-sm text-[var(--gs-text-muted)]">
+                Chưa có quyền lợi nào.{' '}
+                <a href="/admin/features" className="text-[var(--theme-accent)]">Thêm quyền lợi</a>
               </div>
-            </Checkbox.Group>
+            ) : (
+              <Checkbox.Group value={selectedFeatureIds} onChange={(v) => setSelectedFeatureIds(v as string[])}>
+                <div className="grid grid-cols-1 gap-y-3">
+                  {allFeatures.map((f) => (
+                    <div key={f._id} className="flex items-start gap-3">
+                      <Checkbox value={f._id} />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold text-[var(--gs-text)]">{f.name}</span>
+                        {f.description && (
+                          <p className="m-0 mt-0.5 text-xs text-[var(--gs-text-muted)]">{f.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Checkbox.Group>
+            )}
           </Form.Item>
-
-          <div className="flex items-center gap-2 mb-4">
-            <Input
-              size="small"
-              style={{ width: 260 }}
-              placeholder="Nhập quyền lợi mới..."
-              value={newFeatureInput}
-              onChange={(e) => setNewFeatureInput(e.target.value)}
-              onPressEnter={handleAddFeature}
-            />
-            <Button size="small" icon={<PlusOutlined />} onClick={handleAddFeature}>
-              Thêm quyền lợi mới
-            </Button>
-          </div>
-
-          <Form.Item
-            label="Chuyên môn áp dụng"
-            name="applicableSpecializations"
-            rules={[{ required: true, message: 'Vui lòng chọn chuyên môn' }]}
-          >
-            <Checkbox.Group>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                {allSpecializations.map((s) => (
-                  <Checkbox key={s} value={s}>{s}</Checkbox>
-                ))}
-              </div>
-            </Checkbox.Group>
-          </Form.Item>
-
-          <div className="flex items-center gap-2 mb-4">
-            <Input
-              size="small"
-              style={{ width: 260 }}
-              placeholder="Nhập chuyên môn mới..."
-              value={newSpecializationInput}
-              onChange={(e) => setNewSpecializationInput(e.target.value)}
-              onPressEnter={handleAddSpecialization}
-            />
-            <Button size="small" icon={<PlusOutlined />} onClick={handleAddSpecialization}>
-              Thêm chuyên môn mới
-            </Button>
-          </div>
 
           <div style={{ marginTop: 24, textAlign: 'right' }}>
             <Space>
-              <Button onClick={() => navigate('/admin/plans')}>
-                Đóng
-              </Button>
+              <Button onClick={() => navigate('/admin/plans')}>Đóng</Button>
               <Button type="primary" htmlType="submit" loading={submitLoading}>
                 Tạo gói tập
               </Button>

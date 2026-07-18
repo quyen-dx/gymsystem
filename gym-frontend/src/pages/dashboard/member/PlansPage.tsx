@@ -36,9 +36,9 @@ export default function PlansPage() {
 
 
 
-  const getName = (plan: MembershipPlan) => plan.nameVi || plan.nameEn
-  const getDesc = (plan: MembershipPlan) => plan.descriptionVi || plan.descriptionEn
-  const getFeatures = (plan: MembershipPlan) => plan.featuresVi || plan.featuresEn || []
+  const getName = (plan: MembershipPlan) => plan.nameVi
+  const getDesc = (plan: MembershipPlan) => plan.descriptionVi
+  const getFeatures = (plan: MembershipPlan) => plan.featuresVi || []
 
   const handleRegister = async () => {
     if (!selectedPlan) return

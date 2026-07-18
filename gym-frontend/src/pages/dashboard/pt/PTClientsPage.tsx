@@ -4,26 +4,51 @@ import {
   DeleteOutlined,
   PlusOutlined,
   ReloadOutlined,
+  SearchOutlined,
 } from '@ant-design/icons'
 import {
   Button,
+  DatePicker,
   Empty,
+  Input,
+  Modal,
   Popconfirm,
+  Radio,
+  Select,
   Space,
   Table,
   Tag,
   Tooltip,
   message,
 } from 'antd'
+import dayjs from 'dayjs'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { useAuth } from '../../../hooks/useAuth'
-import { ptAssignmentService, type PTAssignment, type PTAssignmentMember } from '../../../services/ptAssignmentService'
+import { socketService } from '../../../services/socketService'
+import {
+  ptAssignmentService,
+  enrollmentService,
+  type EnrollmentPreviewClass,
+  type HistoryEntry,
+  type PendingApproval,
+  type PTAssignment,
+  type PTAssignmentMember,
+} from '../../../services/ptAssignmentService'
+import { ptAssignmentEndService } from '../../../services/ptAssignmentEndService'
 import { scheduleService } from '../../../services/scheduleService'
 import { workoutService, type WorkoutSchedule } from '../../../services/workoutService'
 import { getUserDisplayName } from '../../../utils/userDisplay'
+
+const REASON_LABELS: Record<string, string> = {
+  MEMBER_COMPLETED: 'Hội viên hoàn thành khóa học',
+  MEMBER_REQUEST_CHANGE_PT: 'Hội viên yêu cầu đổi PT',
+  MEMBER_QUIT: 'Hội viên xin nghỉ tập',
+  PT_NO_LONGER_TEACHES: 'PT không còn phụ trách lớp',
+  OTHER: 'Khác',
+}
 
 interface ClientInfo {
   _id: string
@@ -35,6 +60,10 @@ interface ClientInfo {
   avatar?: string
   preferredTime?: string
   assignmentId?: string
+  classId?: string | { _id: string; name?: string; code?: string }
+  classEnrollment?: { _id: string; code: string; name: string } | null
+  specialization?: string
+  goals?: string[]
   workout?: { _id: string; name: string; goal?: string } | null
   scheduleCount?: number
   cancelledAt?: string
@@ -58,6 +87,10 @@ function extractClient(assignment: PTAssignment): ClientInfo | null {
     avatar: member.avatar,
     preferredTime: member.preferredTime,
     assignmentId: assignment._id,
+    classId: assignment.classId,
+    classEnrollment: assignment.classEnrollment || null,
+    specialization: assignment.specialization || '',
+    goals: assignment.goals || [],
     workout,
     scheduleCount: assignment.scheduleCount ?? 0,
     cancelledAt: assignment.cancelledAt,
@@ -65,22 +98,73 @@ function extractClient(assignment: PTAssignment): ClientInfo | null {
   }
 }
 
+const FORMAT_DATE = 'DD/MM/YYYY HH:mm'
+
+function fmt(d: string | undefined | null): string {
+  if (!d) return '—'
+  return dayjs(d).format(FORMAT_DATE)
+}
+
 export default function PTClientsPage() {
   useAuth()
   const navigate = useNavigate()
 
-  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active')
+  const [activeTab, setActiveTab] = useState<'active' | 'pending' | 'history'>('active')
 
+  // Tab 1: Active clients
   const [clients, setClients] = useState<ClientInfo[]>([])
-  const [historyClients, setHistoryClients] = useState<ClientInfo[]>([])
-  const [historyPagination, setHistoryPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 1 })
-  const [loading, setLoading] = useState(false)
+  const [clientsLoading, setClientsLoading] = useState(false)
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null)
   const [clientSchedules, setClientSchedules] = useState<Record<string, WorkoutSchedule[]>>({})
   const [schedulesLoading, setSchedulesLoading] = useState<string | null>(null)
+  const [filterClass, setFilterClass] = useState<string | undefined>(undefined)
+  const [filterSpecialization, setFilterSpecialization] = useState<string | undefined>(undefined)
+  const [filterGoals, setFilterGoals] = useState<string[]>([])
+
+  // Tab 2: Pending approvals
+  const [pendingItems, setPendingItems] = useState<PendingApproval[]>([])
+  const [pendingLoading, setPendingLoading] = useState(false)
+
+  // Tab 3: History
+  const [historyItems, setHistoryItems] = useState<HistoryEntry[]>([])
+  const [historyPagination, setHistoryPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 1 })
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyType, setHistoryType] = useState<string | undefined>(undefined)
+  const [historyFromDate, setHistoryFromDate] = useState<string | undefined>(undefined)
+  const [historyToDate, setHistoryToDate] = useState<string | undefined>(undefined)
+  const [historySearch, setHistorySearch] = useState('')
+
+  // End request modal
+  const [endRequestModal, setEndRequestModal] = useState<{ open: boolean; client: ClientInfo | null }>({ open: false, client: null })
+  const [endReason, setEndReason] = useState<string>('MEMBER_COMPLETED')
+  const [endDetail, setEndDetail] = useState('')
+  const [submittingEnd, setSubmittingEnd] = useState(false)
+
+  // Class enrollment modal (transfer / leave)
+  const [classModal, setClassModal] = useState<{
+    open: boolean
+    client: ClientInfo | null
+    mode: 'transfer' | 'leave' | null
+  }>({ open: false, client: null, mode: null })
+  const [enrollmentPreview, setEnrollmentPreview] = useState<{
+    currentEnrollment: {
+      enrollmentId: string
+      classId: string
+      code?: string
+      name?: string
+      joinedAt?: string
+    } | null
+    availableClasses: EnrollmentPreviewClass[]
+  } | null>(null)
+  const [enrollmentLoading, setEnrollmentLoading] = useState(false)
+  const [selectedTargetClass, setSelectedTargetClass] = useState<string | null>(null)
+  const [classActionReason, setClassActionReason] = useState('')
+  const [submittingClassAction, setSubmittingClassAction] = useState(false)
+
+  // ============ FETCH ============
 
   const fetchClients = useCallback(async () => {
-    setLoading(true)
+    setClientsLoading(true)
     try {
       const res = await ptAssignmentService.getPTClients()
       const assignments = res.data?.assignments || []
@@ -89,29 +173,68 @@ export default function PTClientsPage() {
     } catch {
       message.error('Không thể tải danh sách khách hàng')
     } finally {
-      setLoading(false)
+      setClientsLoading(false)
+    }
+  }, [])
+
+  const fetchPending = useCallback(async () => {
+    setPendingLoading(true)
+    try {
+      const res = await ptAssignmentService.getPTPendingApprovals()
+      setPendingItems(res.data?.items || [])
+    } catch {
+      message.error('Không thể tải danh sách chờ duyệt')
+    } finally {
+      setPendingLoading(false)
     }
   }, [])
 
   const fetchHistory = useCallback(async (page = 1) => {
+    setHistoryLoading(true)
     try {
-      const res = await ptAssignmentService.getPTHistory({ page, limit: 20 })
+      const params: Record<string, unknown> = { page, limit: 20 }
+      if (historyType) params.type = historyType
+      if (historyFromDate) params.fromDate = historyFromDate
+      if (historyToDate) params.toDate = historyToDate
+      if (historySearch.trim()) params.search = historySearch.trim()
+      const res = await ptAssignmentService.getPTHistory(params)
       const { items, pagination } = res.data
-      const members = items.map(extractClient).filter(Boolean) as ClientInfo[]
-      setHistoryClients(members)
+      setHistoryItems(items || [])
       setHistoryPagination(pagination)
     } catch {
-      message.error('Không thể tải lịch sử khách hàng')
+      message.error('Không thể tải lịch sử')
+    } finally {
+      setHistoryLoading(false)
     }
-  }, [])
+  }, [historyType, historyFromDate, historyToDate, historySearch])
 
   useEffect(() => {
     if (activeTab === 'active') {
       fetchClients()
+    } else if (activeTab === 'pending') {
+      fetchPending()
     } else {
       fetchHistory()
     }
-  }, [activeTab, fetchClients, fetchHistory])
+  }, [activeTab, fetchClients, fetchPending, fetchHistory])
+
+  // Socket: lang nghe thay doi trang thai yeu cau ket thuc phu trach
+  useEffect(() => {
+    const handler = (data: { type: string; memberId: string }) => {
+      if (data.type === 'approved') {
+        if (activeTab === 'pending') fetchPending()
+        if (activeTab === 'active') fetchClients()
+      } else if (data.type === 'rejected') {
+        if (activeTab === 'pending') fetchPending()
+        if (activeTab === 'active') fetchClients()
+      }
+    }
+    socketService.connect()
+    socketService.on('pt_end_request:status_changed', handler)
+    return () => { socketService.off('pt_end_request:status_changed', handler) }
+  }, [activeTab, fetchClients, fetchPending])
+
+  // ============ SCHEDULE ============
 
   const fetchClientSchedules = useCallback(async (memberId: string) => {
     setSchedulesLoading(memberId)
@@ -142,19 +265,220 @@ export default function PTClientsPage() {
       await scheduleService.deleteSchedule(schedule._id)
       message.success('Đã xoá lịch tập')
       if (expandedMemberId) fetchClientSchedules(expandedMemberId)
+      fetchClients()
     } catch (error: any) {
       message.error(error?.response?.data?.message || 'Không thể xoá lịch tập')
     }
   }
 
-  const expandedScheduleColumns = [
+  // ============ END REQUEST ============
+
+  const handleEndRequest = async () => {
+    if (!endRequestModal.client) return
+
+    if (endReason === 'OTHER' && !endDetail.trim()) {
+      message.error('Vui lòng nhập lý do.')
+      return
+    }
+
+    setSubmittingEnd(true)
+    try {
+      const client = endRequestModal.client
+      const classId = client.classId && typeof client.classId === 'object'
+        ? (client.classId as { _id: string })._id
+        : client.classId
+      await ptAssignmentEndService.create({
+        memberId: client._id,
+        reasonType: endReason,
+        reasonDetail: endReason === 'OTHER' ? endDetail.trim() : undefined,
+        assignmentId: client.assignmentId,
+        classId,
+      })
+      message.success('Đã gửi yêu cầu kết thúc phụ trách')
+      setEndRequestModal({ open: false, client: null })
+      setEndReason('MEMBER_COMPLETED')
+      setEndDetail('')
+      // Remove member from active list immediately
+      if (endRequestModal.client) {
+        setClients((prev) => prev.filter((c) => c._id !== endRequestModal.client!._id))
+        if (expandedMemberId === endRequestModal.client._id) {
+          setExpandedMemberId(null)
+        }
+      }
+      fetchPending()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || 'Không thể gửi yêu cầu')
+    } finally {
+      setSubmittingEnd(false)
+    }
+  }
+
+  // ============ COLUMNS ============
+
+  const hasActiveSchedule = useCallback((client: ClientInfo) => {
+    const schedules = clientSchedules[client._id] || []
+    return schedules.some((s) => s.status === 'active')
+  }, [clientSchedules])
+
+  const handleEndAllWorkouts = useCallback(async (client: ClientInfo) => {
+    const schedules = clientSchedules[client._id] || []
+    const activeSchedules = schedules.filter((s) => s.status === 'active')
+    if (activeSchedules.length === 0) return
+
+    if (!client.assignmentId) {
+      message.error('Không tìm thấy assignmentId — không thể kết thúc giáo án')
+      return
+    }
+
+    // Step 1: dry-check with backend to get authoritative preview of incomplete sessions
+    let dryCheck: {
+      allComplete: boolean
+      totalSessions: number
+      totalCompletedSessions: number
+      totalIncomplete: number
+      perSchedule: Array<{
+        scheduleId: string
+        weekLabel: string
+        totalSessions: number
+        completedSessions: number
+        incompleteSessions: number
+      }>
+    } | null = null
+
+    try {
+      const { data } = await ptAssignmentService.endWorkout(client.assignmentId, undefined, client._id)
+      if (!data?.dryCheck) {
+        // Backend performed the end directly (unexpected in dry-check mode) — just refresh
+        message.success(data?.message || 'Đã kết thúc toàn bộ giáo án')
+        if (expandedMemberId) fetchClientSchedules(expandedMemberId)
+        fetchClients()
+        return
+      }
+      dryCheck = {
+        allComplete: !!data.allComplete,
+        totalSessions: data.preview?.totalSessions ?? 0,
+        totalCompletedSessions: data.preview?.totalCompletedSessions ?? 0,
+        totalIncomplete: data.preview?.totalIncomplete ?? 0,
+        perSchedule: data.preview?.perSchedule ?? [],
+      }
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Không thể kiểm tra trạng thái giáo án')
+      return
+    }
+
+    // Step 2: show modal with detailed preview from backend, then call confirm=true
+    const detailLines = dryCheck.perSchedule
+      .map((w) => w.incompleteSessions > 0
+        ? `${w.weekLabel}: còn thiếu ${w.incompleteSessions} buổi (đã hoàn thành ${w.completedSessions}/${w.totalSessions})`
+        : `${w.weekLabel}: đã hoàn thành ${w.completedSessions}/${w.totalSessions} buổi`)
+      .join('\n')
+
+    const content = dryCheck.allComplete
+      ? 'Tất cả buổi tập đã hoàn thành. Bạn có chắc muốn kết thúc TOÀN BỘ giáo án? Hành động này không thể hoàn tác.'
+      : `${detailLines}\n\nTổng cộng còn ${dryCheck.totalIncomplete} buổi chưa hoàn thành.\n\nNếu tiếp tục, các buổi chưa hoàn thành sẽ bị đánh dấu là đã kết thúc vĩnh viễn. Hành động này không thể hoàn tác.`
+
+    Modal.confirm({
+      title: dryCheck.allComplete ? 'Kết thúc toàn bộ giáo án?' : 'Vẫn kết thúc giáo án (cảnh báo)?',
+      content: <pre className="whitespace-pre-wrap text-sm text-[var(--gs-text)]">{content}</pre>,
+      okText: dryCheck.allComplete ? 'Kết thúc' : 'Vẫn kết thúc giáo án',
+      cancelText: 'Hủy',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          const { data: result } = await ptAssignmentService.endWorkout(
+            client.assignmentId!,
+            undefined,
+            client._id,
+            true, // confirm=true → actually perform the end
+          )
+          message.success(result?.message || 'Đã kết thúc toàn bộ giáo án')
+          if (expandedMemberId) fetchClientSchedules(expandedMemberId)
+          fetchClients()
+        } catch (err: any) {
+          message.error(err?.response?.data?.message || 'Không thể kết thúc giáo án')
+        }
+      },
+    })
+  }, [clientSchedules, expandedMemberId, fetchClientSchedules, fetchClients])
+
+  // ============ CLASS ENROLLMENT: Transfer / Leave ============
+
+  const openClassModal = useCallback(async (client: ClientInfo, mode: 'transfer' | 'leave') => {
+    setClassModal({ open: true, client, mode })
+    setEnrollmentPreview(null)
+    setSelectedTargetClass(null)
+    setClassActionReason('')
+    setEnrollmentLoading(true)
+    try {
+      const { data } = await enrollmentService.getPreview(client._id)
+      setEnrollmentPreview(data)
+      // Preselect first non-full class that is not current
+      if (mode === 'transfer') {
+        const first = data.availableClasses.find(c => !c.isFull && !c.isCurrent)
+        if (first) setSelectedTargetClass(first._id)
+      }
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Không thể tải thông tin lớp')
+      setClassModal({ open: false, client: null, mode: null })
+    } finally {
+      setEnrollmentLoading(false)
+    }
+  }, [])
+
+  const submitClassAction = useCallback(async () => {
+    const { client, mode } = classModal
+    if (!client || !mode) return
+
+    if (mode === 'transfer' && !selectedTargetClass) {
+      message.warning('Vui lòng chọn lớp đích')
+      return
+    }
+
+    setSubmittingClassAction(true)
+    try {
+      if (mode === 'transfer') {
+        const { data } = await enrollmentService.transferClass({
+          memberId: client._id,
+          toClassId: selectedTargetClass!,
+          reason: classActionReason || undefined,
+        })
+        message.success(data.message)
+      } else {
+        const { data } = await enrollmentService.leaveClass({
+          memberId: client._id,
+          reason: classActionReason || undefined,
+        })
+        message.success(data.message)
+      }
+      setClassModal({ open: false, client: null, mode: null })
+      // Refresh schedules for this member so the class label updates if expanded
+      if (expandedMemberId) fetchClientSchedules(expandedMemberId)
+      fetchClients()
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Không thể thực hiện thao tác')
+    } finally {
+      setSubmittingClassAction(false)
+    }
+  }, [classModal, selectedTargetClass, classActionReason, expandedMemberId, fetchClientSchedules, fetchClients])
+
+  const closeClassModal = useCallback(() => {
+    setClassModal({ open: false, client: null, mode: null })
+    setEnrollmentPreview(null)
+    setSelectedTargetClass(null)
+    setClassActionReason('')
+  }, [])
+
+  const expandedScheduleColumns = (client: ClientInfo) => [
     {
       title: 'Giáo án',
       render: (_: unknown, record: WorkoutSchedule) => {
         const tpl = record.templateId as any
+        const weekInfo = record.totalWeeks && record.totalWeeks > 1
+          ? ` - Tuần ${record.weekIndex || '?'}/${record.totalWeeks}`
+          : ''
         return (
           <div>
-            <div className="font-medium text-[var(--gs-text)]">{tpl?.name || 'Giáo án mẫu'}</div>
+            <div className="font-medium text-[var(--gs-text)]">{tpl?.name || 'Giáo án mẫu'}{weekInfo}</div>
             <div className="text-xs text-[var(--gs-text-muted)]">{tpl?.goal || ''}</div>
           </div>
         )
@@ -169,6 +493,16 @@ export default function PTClientsPage() {
       ),
     },
     {
+      title: 'Tiến độ',
+      width: 80,
+      align: 'center' as const,
+      render: (_: unknown, record: WorkoutSchedule) => {
+        const sessions = record.sessions || []
+        const done = sessions.filter((s) => s.status === 'completed').length
+        return <span>{done}/{sessions.length}</span>
+      },
+    },
+    {
       title: 'Trạng thái',
       width: 130,
       render: (_: unknown, record: WorkoutSchedule) => {
@@ -179,24 +513,34 @@ export default function PTClientsPage() {
     },
     {
       title: 'Thao tác',
-      width: 80,
+      width: 200,
       render: (_: unknown, record: WorkoutSchedule) => (
-        <Popconfirm
-          title="Xoá lịch tập này?"
-          okText="Xoá"
-          cancelText="Huỷ"
-          okButtonProps={{ danger: true }}
-          onConfirm={() => handleDeleteSchedule(record)}
-        >
-          <Tooltip title="Xoá lịch tập">
-            <Button size="small" danger icon={<DeleteOutlined />} />
-          </Tooltip>
-        </Popconfirm>
+        <Space size={4}>
+          <Button
+            size="small"
+            type="primary"
+            ghost
+            onClick={() => navigate(`/pt/clients/${client._id}/progress?assignmentId=${client.assignmentId || ''}&scheduleId=${record._id}`)}
+          >
+            Xem tiến độ
+          </Button>
+          <Popconfirm
+            title="Xoá lịch tập này?"
+            okText="Xoá"
+            cancelText="Huỷ"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => handleDeleteSchedule(record)}
+          >
+            <Tooltip title="Xoá lịch tập">
+              <Button size="small" danger icon={<DeleteOutlined />} />
+            </Tooltip>
+          </Popconfirm>
+        </Space>
       ),
     },
   ]
 
-  const columns = [
+  const activeColumns = [
     {
       title: 'Khách hàng',
       width: 280,
@@ -227,6 +571,44 @@ export default function PTClientsPage() {
           </div>
         </Space>
       ),
+    },
+    {
+      title: 'Lớp',
+      width: 140,
+      render: (_: unknown, record: ClientInfo) => {
+        const ce = record.classEnrollment
+        if (ce) {
+          return <span className="text-sm text-[var(--gs-text)]">[{ce.code}] {ce.name}</span>
+        }
+        return <span className="text-sm text-[var(--gs-text-muted)] italic">Chưa xếp lớp</span>
+      },
+    },
+    {
+      title: 'Chuyên môn',
+      width: 100,
+      render: (_: unknown, record: ClientInfo) => {
+        if (record.specialization) {
+          return <Tag color="blue">{record.specialization}</Tag>
+        }
+        return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
+      },
+    },
+    {
+      title: 'Mục tiêu',
+      width: 160,
+      render: (_: unknown, record: ClientInfo) => {
+        const goals = record.goals || []
+        if (goals.length > 0) {
+          return (
+            <Space size={4} wrap>
+              {goals.map((g, i) => (
+                <Tag key={i} color="green">{g}</Tag>
+              ))}
+            </Space>
+          )
+        }
+        return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
+      },
     },
     {
       title: 'Lịch tập',
@@ -271,63 +653,239 @@ export default function PTClientsPage() {
     },
   ]
 
-  const historyColumns = [
+  const pendingColumns = [
     {
-      title: 'Khách hàng',
-      width: 280,
-      render: (_: unknown, record: ClientInfo) => (
-        <Space>
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: record.avatar
-                ? `url(${record.avatar}) center/cover`
-                : 'var(--gs-border)',
-              flexShrink: 0,
-            }}
-          />
+      title: 'Hội viên',
+      width: 200,
+      render: (_: unknown, record: PendingApproval) => {
+        const member = typeof record.memberId === 'object' ? record.memberId as PTAssignmentMember : null
+        return (
           <div>
-            <div
-              style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--gs-text)' }}
-              onClick={() => navigate(`/admin/members/${record._id}`)}
-            >
-              {getUserDisplayName(record, 'Thành viên')}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--gs-text-muted)' }}>
-              {record.phone || record.email || '—'}
-            </div>
+            <div className="font-medium text-[var(--gs-text)]">{getUserDisplayName(member, '—')}</div>
+            {member?.memberCode && (
+              <div className="text-xs text-[var(--gs-text-muted)]">{member.memberCode}</div>
+            )}
           </div>
-        </Space>
-      ),
+        )
+      },
     },
     {
-      title: 'Ngày kết thúc',
-      width: 130,
-      render: (_: unknown, record: ClientInfo) => (
-        <span className="text-sm text-[var(--gs-text-muted)]">
-          {record.cancelledAt ? new Date(record.cancelledAt).toLocaleDateString('vi-VN') : '—'}
-        </span>
+      title: 'Lớp',
+      width: 160,
+      render: (_: unknown, record: PendingApproval) => {
+        const cls = typeof record.classId === 'object' ? record.classId : null
+        return cls
+          ? <span className="text-sm text-[var(--gs-text)]">[{cls.code}] {cls.name}</span>
+          : <span className="text-sm text-[var(--gs-text-muted)]">—</span>
+      },
+    },
+    {
+      title: 'Giáo án hiện tại',
+      width: 160,
+      render: (_: unknown, record: PendingApproval) => {
+        if (record.workoutData) {
+          return (
+            <div>
+              <div className="text-sm font-medium text-[var(--gs-text)]">{record.workoutData.name}</div>
+              {record.workoutData.goal && <div className="text-xs text-[var(--gs-text-muted)]">{record.workoutData.goal}</div>}
+            </div>
+          )
+        }
+        const ass = typeof record.assignmentId === 'object' ? record.assignmentId : null
+        if (ass?.workoutId) return <span className="text-sm text-[var(--gs-text-muted)]">Đã gán</span>
+        return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
+      },
+    },
+    {
+      title: 'Ngày gửi yêu cầu',
+      width: 140,
+      render: (_: unknown, record: PendingApproval) => (
+        <span className="text-sm text-[var(--gs-text-muted)]">{fmt(record.createdAt)}</span>
       ),
     },
     {
       title: 'Lý do',
-      render: (_: unknown, record: ClientInfo) => (
-        <span className="text-sm text-[var(--gs-text-muted)]">
-          {record.cancelReason || '—'}
-        </span>
+      width: 220,
+      render: (_: unknown, record: PendingApproval) => {
+        const label = REASON_LABELS[record.reasonType] || record.reasonType
+        if (record.reasonType === 'OTHER' && record.reasonDetail) {
+          return <span className="text-sm text-[var(--gs-text)]">{record.reasonDetail}</span>
+        }
+        return <span className="text-sm text-[var(--gs-text)]">{label}</span>
+      },
+    },
+    {
+      title: 'Trạng thái',
+      width: 140,
+      render: () => (
+        <Tag color="orange" icon={<ClockCircleOutlined />}>Đang chờ Admin phê duyệt</Tag>
       ),
     },
   ]
 
-  const activeTabEl = activeTab === 'active' ? (
+  const historyColumns = [
+    {
+      title: 'Hội viên',
+      width: 180,
+      render: (_: unknown, record: HistoryEntry) => {
+        const member = typeof record.memberId === 'object' ? record.memberId as PTAssignmentMember : null
+        return (
+          <div>
+            <div className="font-medium text-[var(--gs-text)]">{getUserDisplayName(member, '—')}</div>
+            {member?.memberCode && (
+              <div className="text-xs text-[var(--gs-text-muted)]">{member.memberCode}</div>
+            )}
+          </div>
+        )
+      },
+    },
+    {
+      title: 'Loại',
+      width: 150,
+      render: (_: unknown, record: HistoryEntry) => {
+        if (record._type === 'workout_end') {
+          return <Tag color="blue">Kết thúc giáo án</Tag>
+        }
+        return <Tag color="purple">Kết thúc phụ trách</Tag>
+      },
+    },
+    {
+      title: 'Giáo án',
+      width: 160,
+      render: (_: unknown, record: HistoryEntry) => {
+        if (record._type === 'workout_end') {
+          return <span className="text-sm text-[var(--gs-text)]">{record.workoutName || '—'}</span>
+        }
+        return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
+      },
+    },
+    {
+      title: 'Lớp',
+      width: 140,
+      render: (_: unknown, record: HistoryEntry) => {
+        if (record._type === 'assignment_end') {
+          const cls = typeof record.classId === 'object' ? record.classId : null
+          return cls
+            ? <span className="text-sm text-[var(--gs-text)]">[{cls.code}] {cls.name}</span>
+            : <span className="text-sm text-[var(--gs-text-muted)]">—</span>
+        }
+        return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
+      },
+    },
+    {
+      title: 'Ngày giờ',
+      width: 150,
+      render: (_: unknown, record: HistoryEntry) => {
+        if (record._type === 'workout_end') {
+          return <span className="text-sm text-[var(--gs-text-muted)]">{fmt(record.endedAt)}</span>
+        }
+        return (
+          <div>
+            <div className="text-xs text-[var(--gs-text-muted)]">Gửi yêu cầu: {fmt(record.requestedAt)}</div>
+            <div className="text-xs text-[var(--gs-text-muted)]">Phê duyệt: {fmt(record.approvedAt)}</div>
+          </div>
+        )
+      },
+    },
+    {
+      title: 'Lý do',
+      width: 220,
+      render: (_: unknown, record: HistoryEntry) => {
+        if (record._type === 'workout_end') {
+          return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
+        }
+        const label = REASON_LABELS[record.reasonType || ''] || record.reasonType || '—'
+        if (record.reasonType === 'OTHER' && record.reasonDetail) {
+          return <span className="text-sm text-[var(--gs-text)]">{record.reasonDetail}</span>
+        }
+        return <span className="text-sm text-[var(--gs-text)]">{label}</span>
+      },
+    },
+    {
+      title: 'PT',
+      width: 120,
+      render: (_: unknown, record: HistoryEntry) => {
+        const pt = typeof record.ptId === 'object' ? record.ptId : null
+        return <span className="text-sm text-[var(--gs-text-muted)]">{pt ? getUserDisplayName(pt, '—') : '—'}</span>
+      },
+    },
+  ]
+
+  const endRequestReasons = [
+    { value: 'MEMBER_COMPLETED', label: 'Hội viên hoàn thành khóa học' },
+    { value: 'MEMBER_REQUEST_CHANGE_PT', label: 'Hội viên yêu cầu đổi PT' },
+    { value: 'MEMBER_QUIT', label: 'Hội viên xin nghỉ tập' },
+    { value: 'PT_NO_LONGER_TEACHES', label: 'PT không còn phụ trách lớp' },
+    { value: 'OTHER', label: 'Khác' },
+  ]
+
+  // ============ RENDER TABS ============
+
+  // Derive filter options from clients
+  const classOptions = Array.from(new Map(
+    clients.map(c => {
+      const ce = c.classEnrollment
+      return ce ? [ce._id, { value: ce._id, label: `[${ce.code}] ${ce.name}` }] as const : null
+    }).filter(Boolean) as Array<readonly [string, { value: string; label: string }]>
+  ).values()).sort((a, b) => a.label.localeCompare(b.label))
+
+  const specializationOptions = Array.from(new Set(
+    clients.map(c => c.specialization).filter(Boolean)
+  )).sort().map(s => ({ value: s, label: s }))
+
+  const goalOptions = Array.from(new Set(
+    clients.flatMap(c => c.goals || [])
+  )).sort().map(g => ({ value: g, label: g }))
+
+  const filteredClients = clients.filter(c => {
+    if (filterClass) {
+      const ce = c.classEnrollment
+      if (!ce || ce._id !== filterClass) return false
+    }
+    if (filterSpecialization) {
+      if (c.specialization !== filterSpecialization) return false
+    }
+    if (filterGoals.length > 0) {
+      const cGoals = c.goals || []
+      if (!filterGoals.some(g => cGoals.includes(g))) return false
+    }
+    return true
+  })
+
+  const activeTabEl = (
     <div className="member-scroll-x">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Select
+          style={{ minWidth: 200 }}
+          placeholder="Lọc theo lớp"
+          allowClear
+          value={filterClass}
+          onChange={(v) => setFilterClass(v || undefined)}
+          options={classOptions}
+        />
+        <Select
+          style={{ minWidth: 150 }}
+          placeholder="Lọc theo chuyên môn"
+          allowClear
+          value={filterSpecialization}
+          onChange={(v) => setFilterSpecialization(v || undefined)}
+          options={specializationOptions}
+        />
+        <Select
+          style={{ minWidth: 200 }}
+          placeholder="Lọc theo mục tiêu"
+          allowClear
+          mode="multiple"
+          value={filterGoals}
+          onChange={(v) => setFilterGoals(v || [])}
+          options={goalOptions}
+        />
+      </div>
       <Table
-        dataSource={clients}
-        columns={columns}
+        dataSource={filteredClients}
+        columns={activeColumns}
         rowKey="_id"
-        loading={loading}
+        loading={clientsLoading}
         pagination={{ pageSize: 15 }}
         locale={{ emptyText: <Empty description="Chưa có học viên nào" /> }}
         expandable={{
@@ -347,19 +905,43 @@ export default function PTClientsPage() {
                     >
                       Tải lại
                     </Button>
+                    {hasActiveSchedule(record) && (
+                      <Button
+                        size="small"
+                        danger
+                        onClick={() => handleEndAllWorkouts(record)}
+                      >
+                        Kết thúc toàn bộ lịch tập
+                      </Button>
+                    )}
                     <Button
                       size="small"
-                      type="primary"
-                      icon={<PlusOutlined />}
-                      onClick={() => navigate(`/pt/clients/${record._id}/create-schedule`)}
+                      onClick={() => openClassModal(record, 'transfer')}
                     >
-                      Tạo lịch tập
+                      Chuyển lớp
+                    </Button>
+                    <Button
+                      size="small"
+                      onClick={() => openClassModal(record, 'leave')}
+                    >
+                      Rời lớp
+                    </Button>
+                    <Button
+                      size="small"
+                      danger
+                      onClick={() => {
+                        setEndRequestModal({ open: true, client: record })
+                        setEndReason('MEMBER_COMPLETED')
+                        setEndDetail('')
+                      }}
+                    >
+                      Kết thúc phụ trách
                     </Button>
                   </Space>
                 </div>
                 <Table
                   dataSource={schedules}
-                  columns={expandedScheduleColumns}
+                  columns={expandedScheduleColumns(record)}
                   rowKey="_id"
                   loading={schedulesLoading === record._id}
                   pagination={false}
@@ -373,23 +955,78 @@ export default function PTClientsPage() {
         }}
       />
     </div>
-  ) : (
+  )
+
+  const pendingTabEl = (
     <div className="member-scroll-x">
       <Table
-        dataSource={historyClients}
-        columns={historyColumns}
+        dataSource={pendingItems}
+        columns={pendingColumns}
         rowKey="_id"
-        loading={loading}
-        pagination={{
-          pageSize: historyPagination.limit,
-          current: historyPagination.page,
-          total: historyPagination.total,
-          onChange: (p) => fetchHistory(p),
-        }}
-        locale={{ emptyText: <Empty description="Chưa có học viên đã kết thúc" /> }}
+        loading={pendingLoading}
+        pagination={{ pageSize: 20 }}
+        locale={{ emptyText: <Empty description="Không có yêu cầu chờ duyệt" /> }}
       />
     </div>
   )
+
+  const historyTabEl = (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Select
+          allowClear
+          placeholder="Loại kết thúc"
+          style={{ width: 180 }}
+          value={historyType}
+          onChange={(v) => setHistoryType(v)}
+          options={[
+            { value: 'workout_end', label: 'Kết thúc giáo án' },
+            { value: 'assignment_end', label: 'Kết thúc phụ trách' },
+          ]}
+        />
+        <DatePicker
+          placeholder="Từ ngày"
+          format="DD/MM/YYYY"
+          onChange={(d) => setHistoryFromDate(d?.startOf('day').toISOString() || undefined)}
+        />
+        <DatePicker
+          placeholder="Đến ngày"
+          format="DD/MM/YYYY"
+          onChange={(d) => setHistoryToDate(d?.endOf('day').toISOString() || undefined)}
+        />
+        <Input
+          placeholder="Tìm kiếm..."
+          prefix={<SearchOutlined />}
+          style={{ width: 220 }}
+          value={historySearch}
+          onChange={(e) => setHistorySearch(e.target.value)}
+          onPressEnter={() => fetchHistory(1)}
+        />
+        <Button type="primary" onClick={() => fetchHistory(1)}>
+          Tìm kiếm
+        </Button>
+      </div>
+      <div className="member-scroll-x">
+        <Table
+          dataSource={historyItems}
+          columns={historyColumns}
+          rowKey={(r) => `${r._type}_${r._id}`}
+          loading={historyLoading}
+          pagination={{
+            pageSize: historyPagination.limit,
+            current: historyPagination.page,
+            total: historyPagination.total,
+            onChange: (p) => fetchHistory(p),
+          }}
+          locale={{ emptyText: <Empty description="Chưa có dữ liệu" /> }}
+        />
+      </div>
+    </div>
+  )
+
+  const tabContent = activeTab === 'active' ? activeTabEl : activeTab === 'pending' ? pendingTabEl : historyTabEl
+
+  // ============ RENDER ============
 
   return (
     <DashboardLayout>
@@ -399,7 +1036,9 @@ export default function PTClientsPage() {
           Học viên của tôi
         </h1>
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
-          {activeTab === 'active' ? `${clients.length} học viên` : `${historyPagination.total} học viên`}
+          {activeTab === 'active' ? `${clients.length} học viên` :
+           activeTab === 'pending' ? `${pendingItems.length} yêu cầu` :
+           `${historyPagination.total} mục`}
         </p>
       </div>
 
@@ -415,6 +1054,16 @@ export default function PTClientsPage() {
           Đang hướng dẫn
         </button>
         <button
+          onClick={() => setActiveTab('pending')}
+          className={`pb-3 font-semibold transition ${
+            activeTab === 'pending'
+              ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-accent)]'
+              : 'text-[var(--gs-text-muted)] hover:text-[var(--gs-text)]'
+          }`}
+        >
+          Chờ Admin phê duyệt
+        </button>
+        <button
           onClick={() => setActiveTab('history')}
           className={`pb-3 font-semibold transition ${
             activeTab === 'history'
@@ -427,8 +1076,128 @@ export default function PTClientsPage() {
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
-        {activeTabEl}
+        {tabContent}
       </div>
+
+      <Modal
+        title="Kết thúc phụ trách"
+        open={endRequestModal.open}
+        onCancel={() => {
+          setEndRequestModal({ open: false, client: null })
+          setEndReason('MEMBER_COMPLETED')
+          setEndDetail('')
+        }}
+        okText="Gửi yêu cầu"
+        cancelText="Hủy"
+        confirmLoading={submittingEnd}
+        onOk={handleEndRequest}
+      >
+        <p className="mb-4 text-sm text-[var(--gs-text-muted)]">
+          Bạn có chắc muốn kết thúc việc phụ trách hội viên này?
+        </p>
+        <div className="mb-4">
+          <label className="mb-2 block text-sm font-medium text-[var(--gs-text)]">Lý do</label>
+          <Radio.Group value={endReason} onChange={(e) => setEndReason(e.target.value)}>
+            <Space direction="vertical">
+              {endRequestReasons.map((r) => (
+                <Radio key={r.value} value={r.value}>{r.label}</Radio>
+              ))}
+            </Space>
+          </Radio.Group>
+        </div>
+        {endReason === 'OTHER' && (
+          <div className="mb-4">
+            <label className="mb-2 block text-sm font-medium text-[var(--gs-text)]">
+              Lý do khác <span className="text-red-500">*</span>
+            </label>
+            <Input.TextArea
+              rows={3}
+              value={endDetail}
+              onChange={(e) => setEndDetail(e.target.value)}
+              placeholder="Vui lòng nhập lý do..."
+            />
+          </div>
+        )}
+      </Modal>
+
+      {/* ============ CHUYỂN LỚP / RỜI LỚP MODAL ============ */}
+      <Modal
+        open={classModal.open}
+        title={classModal.mode === 'transfer' ? 'Chuyển lớp cho hội viên' : 'Rời khỏi lớp hiện tại'}
+        okText={classModal.mode === 'transfer' ? 'Chuyển lớp' : 'Rời lớp'}
+        cancelText="Hủy"
+        confirmLoading={submittingClassAction}
+        onOk={submitClassAction}
+        onCancel={closeClassModal}
+        okButtonProps={classModal.mode === 'leave' ? { danger: true } : undefined}
+      >
+        {enrollmentLoading ? (
+          <p className="text-sm text-[var(--gs-text-muted)]">Đang tải dữ liệu lớp...</p>
+        ) : (
+          <>
+            <div className="mb-4">
+              <label className="mb-1 block text-sm font-medium text-[var(--gs-text)]">Hội viên</label>
+              <p className="text-sm text-[var(--gs-text)]">
+                {classModal.client?.fullName || classModal.client?.name}
+                {classModal.client?.memberCode ? ` (${classModal.client.memberCode})` : ''}
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="mb-1 block text-sm font-medium text-[var(--gs-text)]">Lớp hiện tại</label>
+              {enrollmentPreview?.currentEnrollment ? (
+                <p className="text-sm text-[var(--gs-text)]">
+                  [{enrollmentPreview.currentEnrollment.code}] {enrollmentPreview.currentEnrollment.name}
+                </p>
+              ) : (
+                <p className="text-sm text-[var(--gs-text-muted)] italic">Không có lớp active</p>
+              )}
+            </div>
+
+            {classModal.mode === 'transfer' && (
+              <div className="mb-4">
+                <label className="mb-2 block text-sm font-medium text-[var(--gs-text)]">
+                  Chọn lớp đích <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  style={{ width: '100%' }}
+                  placeholder="Chọn lớp..."
+                  value={selectedTargetClass || undefined}
+                  onChange={(v) => setSelectedTargetClass(v)}
+                  options={(enrollmentPreview?.availableClasses || []).map((c) => ({
+                    value: c._id,
+                    label: `[${c.code}] ${c.name}${c.isCurrent ? ' (lớp hiện tại)' : c.isFull ? ' (đã đầy)' : ''} — ${c.current}/${c.max}`,
+                    disabled: c.isFull || c.isCurrent,
+                  }))}
+                />
+              </div>
+            )}
+
+            <div className="mb-2">
+              <label className="mb-1 block text-sm font-medium text-[var(--gs-text)]">
+                Lý do (tùy chọn)
+              </label>
+              <Input.TextArea
+                rows={3}
+                value={classActionReason}
+                onChange={(e) => setClassActionReason(e.target.value)}
+                placeholder="Ghi chú/lý do chuyển hoặc rời lớp..."
+              />
+            </div>
+
+            {classModal.mode === 'leave' && (
+              <p className="mt-3 text-xs text-amber-600">
+                Lưu ý: Rời lớp KHÔNG kết thúc phụ trách. PT vẫn tiếp tục hướng dẫn hội viên này; chỉ gán enrollment lớp sẽ bị đóng.
+              </p>
+            )}
+            {classModal.mode === 'transfer' && (
+              <p className="mt-3 text-xs text-[var(--gs-text-muted)]">
+                Việc chuyển lớp sẽ tự đóng enrollment ở lớp cũ và tạo enrollment active ở lớp mới. Sức chứa lớp mới sẽ được kiểm tra.
+              </p>
+            )}
+          </>
+        )}
+      </Modal>
 
     </DashboardLayout>
   )

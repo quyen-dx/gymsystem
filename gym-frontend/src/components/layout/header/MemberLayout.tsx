@@ -1,16 +1,16 @@
 import {
+  BellOutlined,
   CalendarOutlined,
   CommentOutlined,
   CreditCardOutlined,
   DashboardOutlined,
   FileTextOutlined,
   FundOutlined,
-  HeartOutlined,
   HomeOutlined,
   MenuOutlined,
   QuestionCircleOutlined,
   ShopOutlined,
-  ShoppingCartOutlined,
+  ShoppingCartOutlined
 } from '@ant-design/icons'
 import {
   Avatar,
@@ -23,14 +23,15 @@ import {
 } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useCart } from '../../../context/useCart'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
+import { useCart } from '../../../context/useCart'
 import { useWallet } from '../../../context/WalletProvider'
 import { useAuth } from '../../../hooks/useAuth'
+import { notificationService } from '../../../services/notificationService'
 import { getShops } from '../../../services/shopService'
+import { socketService } from '../../../services/socketService'
 import type { ProductShop } from '../../../types/member/product'
 import { getUserDisplayName, getUserInitialName } from '../../../utils/userDisplay'
-import AiChatWidget from '../../chat/AiChatWidget'
 import MemberFooter from '../footer/MemberFooter'
 
 const { Header, Content } = Layout
@@ -43,6 +44,8 @@ const MEMBER_INTERACTION_LOCK_ROUTES = [
   '/cart',
   '/workout',
   '/checkin',
+  '/checkin/scan',
+  '/checkin/sessions',
 ]
 
 const shouldLockMemberInteractions = (pathname: string) => (
@@ -72,12 +75,37 @@ export default function MemberLayout({
   const { wallet } = useWallet()
   const navigate = useNavigate()
   const location = useLocation()
+
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0)
+
+  useEffect(() => {
+    const fetchNotifCount = async () => {
+      try {
+        const res = await notificationService.getMyNotifications()
+        const items = res.data?.data || []
+        setUnreadNotifCount(items.filter((n: any) => !n.isRead).length)
+      } catch { /* ignore */ }
+    }
+    fetchNotifCount()
+    const interval = setInterval(fetchNotifCount, 30000)
+
+    // Socket: lang nghe notification moi
+    socketService.connect()
+    const handler = () => {
+      setUnreadNotifCount((prev) => prev + 1)
+    }
+    socketService.on('notification:new', handler)
+
+    return () => {
+      clearInterval(interval)
+      socketService.off('notification:new', handler)
+    }
+  }, [])
   const navItems = [
     { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
     ...(isEnabled('shop.productStoreEnabled') ? [{ key: '/store', label: 'Cửa hàng', icon: <ShopOutlined /> }] : []),
     ...(isEnabled('billing.allowPlanPurchase') ? [{ key: '/my-membership', label: 'Gói tập', icon: <CalendarOutlined /> }] : []),
     ...(isEnabled('pt.moduleEnabled') ? [{ key: '/booking', label: 'Đặt lịch PT', icon: <CalendarOutlined /> }] : []),
-    ...(isEnabled('workout.healthLogEnabled') ? [{ key: '/health', label: 'Sức khỏe', icon: <HeartOutlined /> }] : []),
     ...(isEnabled('workout.workoutPlanEnabled') ? [{ key: '/workout', label: 'Lịch tập', icon: <FundOutlined /> }] : []),
     ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/checkin', label: 'Check-in', icon: <CreditCardOutlined /> }] : []),
   ]
@@ -331,7 +359,16 @@ export default function MemberLayout({
         )}
 
         <div className="member-shell-desktop-actions">
-
+          <Badge count={unreadNotifCount} size="small" offset={[2, -2]}>
+            <Button
+              type="text"
+              icon={<BellOutlined style={{ fontSize: 18 }} />}
+              onClick={() => goTo('/notifications')}
+              style={navbarIconButtonStyle}
+              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
+            />
+          </Badge>
           {isEnabled('billing.qrPaymentEnabled') && (
             <div
               className="member-shell-wallet-pill"
@@ -365,6 +402,8 @@ export default function MemberLayout({
             </Badge>
           )}
 
+
+
           <div
             className="member-shell-user"
             onClick={openProfilePage}
@@ -394,6 +433,16 @@ export default function MemberLayout({
         </div>
 
         <div className="member-shell-mobile-actions">
+          <Badge count={unreadNotifCount} size="small" offset={[2, -2]}>
+            <Button
+              type="text"
+              icon={<BellOutlined style={{ fontSize: 18 }} />}
+              onClick={() => goTo('/member/notifications')}
+              style={navbarIconButtonStyle}
+              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}
+            />
+          </Badge>
           {isEnabled('shop.cartEnabled') && (
             <Badge count={cartCount} size="small">
               <Button
@@ -501,7 +550,6 @@ export default function MemberLayout({
 
       </Drawer>
 
-      {!menuOpen && settings.ai.systemAiEnabled && settings.ai.memberAiEnabled && location.pathname !== '/ai-chat' && <AiChatWidget />}
     </Layout >
   )
 }

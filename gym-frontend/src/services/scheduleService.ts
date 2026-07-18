@@ -4,6 +4,8 @@ import type { WorkoutSchedule } from './workoutService'
 export type CreateSchedulePayload = {
   templateId: string
   memberId: string
+  weekIndex?: number
+  totalWeeks?: number
   sessions: {
     dayOrder: number
     date: string

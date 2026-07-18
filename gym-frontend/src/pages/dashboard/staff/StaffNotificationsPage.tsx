@@ -1,3 +1,4 @@
+import NotificationCenter from '../../../components/notifications/NotificationCenter'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 
 export default function StaffNotificationsPage() {
@@ -6,8 +7,9 @@ export default function StaffNotificationsPage() {
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">THÔNG BÁO</p>
         <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">Thông báo</h1>
-        <p className="mt-2 text-sm text-[var(--gs-text-muted)]">Trang đang được phát triển</p>
+        <p className="mt-2 text-sm text-[var(--gs-text-muted)]">Trung tâm thông báo</p>
       </div>
+      <NotificationCenter role="staff" />
     </DashboardLayout>
   )
 }

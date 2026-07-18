@@ -40,9 +40,9 @@ export function PlanCompareTable({ plans, lang = 'vi' }: Props) {
       <div className="ai-plan-compare-heading">{t.heading}</div>
       <div className="ai-plan-compare">
         {plans.map((plan) => {
-        const name = lang === 'vi' ? (plan.nameVi || plan.nameEn) : (plan.nameEn || plan.nameVi)
-        const description = lang === 'vi' ? (plan.descriptionVi || plan.descriptionEn) : (plan.descriptionEn || plan.descriptionVi)
-        const features = lang === 'vi' ? (plan.featuresVi || plan.featuresEn) : (plan.featuresEn || plan.featuresVi)
+        const name = plan.nameVi
+        const description = plan.descriptionVi
+        const features = plan.featuresVi
         const accentColor = plan.color || 'var(--theme-accent)'
 
         return (

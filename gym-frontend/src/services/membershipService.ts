@@ -4,13 +4,12 @@ export interface MembershipPlan {
   _id: string
   id?: string
   nameVi: string
-  nameEn: string
   price: number
   durationDays: number
   descriptionVi?: string
-  descriptionEn?: string
   featuresVi?: string[]
-  featuresEn?: string[]
+  featureIds?: string[]
+  features?: Array<{ _id: string; code: string; name: string; icon: string; color: string; category: string }>
   color?: string
   isActive?: boolean
   memberCount?: number
@@ -53,6 +52,8 @@ export interface CancellationRequest {
   hasUsedBenefits?: boolean
   currentRefundEligible?: boolean
   ineligibilityReason?: string | null
+  activePT?: { ptName: string; assignmentId: string } | null
+  activeClass?: { className: string; enrollmentId: string } | null
 }
 
 export interface MembershipPeriod {
@@ -100,7 +101,6 @@ export interface MyMembership {
   planId?: string
   plan?: MembershipPlan
   planNameVi?: string
-  planNameEn?: string
   price?: number
   durationDays?: number
   startDate: string

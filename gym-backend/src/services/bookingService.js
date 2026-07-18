@@ -1,7 +1,6 @@
 import mongoose from 'mongoose'
 import Booking from '../models/Booking.js'
 import User from '../models/User.js'
-import { invalidatePersonalContextCache } from './conversationContextCache.js'
 
 const toObjectId = (value, fieldName) => {
   if (!mongoose.Types.ObjectId.isValid(value)) {
@@ -93,7 +92,6 @@ export const createBookingRequest = async ({ userId, ptId, date, slot, note = ''
     slot: normalizedSlot,
     note: String(note || '').slice(0, 500),
   })
-  invalidatePersonalContextCache(memberId)
 
   return {
     created: true,

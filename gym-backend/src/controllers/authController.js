@@ -1,5 +1,3 @@
-import { invalidateAiPTCache } from '../ai/services/context/contextDataService.js'
-import { invalidateAiDomainCache } from '../services/aiCacheService.js'
 import { buildClientUrl } from '../config/appUrls.js'
 import Address from '../models/Address.js'
 import Booking from '../models/Booking.js'
@@ -8,7 +6,6 @@ import Order from '../models/Order.js'
 import Shop from '../models/Shop.js'
 import User from '../models/User.js'
 import { recordAuditLog } from '../services/auditLogService.js'
-import { invalidateContextCache } from '../services/conversationContextCache.js'
 import {
   consumeOtp,
   hashPendingPassword,
@@ -645,13 +642,6 @@ export const updateProfile = async (req, res) => {
     if (!user) {
       throw new AppError('Không tìm thấy người dùng để cập nhật', 404)
     }
-    // Invalidate AI cache if user is PT and profile was updated
-    if (user.role === 'pt') {
-      invalidateAiPTCache()
-      invalidateContextCache('ptList')
-      invalidateContextCache('ptAvailability', { userId: String(user._id) })
-      invalidateAiDomainCache('pts')
-    }
     return res.json({ message: 'Cập nhật thông tin thành công', user })
   } catch (error) {
     return sendError(res, error)
@@ -1136,12 +1126,6 @@ export const updateUserRole = async (req, res) => {
       details: `Đổi role từ ${previousRole} sang ${normalizedRole}`,
     })
 
-    // Invalidate AI PT cache if role changed to/from PT
-    if (previousRole === 'pt' || normalizedRole === 'pt') {
-      invalidateAiPTCache()
-      invalidateContextCache('ptAvailability', { userId: String(user._id) })
-    }
-
     return res.json({ message: 'Cập nhật role thành công', user })
   } catch (error) {
     return sendError(res, error)
@@ -1173,12 +1157,6 @@ export const toggleUserStatus = async (req, res) => {
       entity: user,
       details: user.isActive ? 'Mở khóa tài khoản' : 'Khóa tài khoản',
     })
-
-    // Invalidate AI cache if PT is locked/unlocked (changes visibility in AI response)
-    if (user.role === 'pt') {
-      invalidateAiPTCache()
-      invalidateContextCache('ptAvailability', { userId: String(user._id) })
-    }
 
     return res.json({
       message: `Tài khoản đã được ${user.isActive ? 'mở khóa' : 'khóa'}`,

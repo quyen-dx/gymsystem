@@ -1,7 +1,6 @@
 export interface MemberPlan {
   _id: string
   nameVi: string
-  nameEn: string
   price: number
   durationDays: number
   color: string

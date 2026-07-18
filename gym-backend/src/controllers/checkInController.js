@@ -4,6 +4,8 @@ import Membership from '../models/Membership.js'
 import User from '../models/User.js'
 import Plan from '../models/Plan.js'
 import { recordUserActivity } from '../services/userActivityService.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
 import AppError from '../utils/appError.js'
 import sendError from '../utils/sendError.js'
 
@@ -119,6 +121,7 @@ const formatHistoryItem = (checkin, membershipByMemberId = {}) => {
   const staff = checkin.staffId || {}
   const membership = membershipByMemberId[String(member._id)] || null
   const plan = membership?.planId
+  const dailyQR = checkin.dailyQRCodeId || {}
 
   return {
     checkinId: checkin._id,
@@ -135,6 +138,14 @@ const formatHistoryItem = (checkin, membershipByMemberId = {}) => {
     status: checkin.status,
     errorNote: checkin.errorNote || '',
     streakDay: checkin.streakDay || 0,
+    checkinSource: checkin.checkinSource || 'staff_qr',
+    sessionType: checkin.sessionType || null,
+    sessionTitle: checkin.sessionTitle || null,
+    sessionTime: checkin.sessionTime || null,
+    classCode: checkin.classCode || null,
+    scheduleId: checkin.scheduleId || null,
+    dailyQRDate: dailyQR.date || null,
+    dailyQRCreatedAt: dailyQR.createdAt || null,
   }
 }
 
@@ -278,6 +289,18 @@ export const staffVerifyCheckin = async (req, res) => {
       metadata: { checkinId: checkin._id, staffId },
     })
 
+    await createNotification({
+      receiverId: member._id,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.CHECKIN_SUCCESS,
+      title: 'Check-in thành công',
+      content: `Bạn đã check-in thành công tại phòng gym. Streak: ${streakDay} ngày.`,
+      relatedId: checkin._id,
+      relatedType: 'CheckIn',
+      redirectUrl: '/checkin-history',
+      createdBy: 'Staff',
+    }).catch(err => console.error('Notify checkin failed:', err.message))
+
     res.status(201).json({
       message: 'Check-in thành công',
       checkin: {
@@ -312,6 +335,7 @@ export const getStaffCheckinHistory = async (req, res) => {
       keyword = '',
       page = 1,
       limit = 20,
+      sessionType,
     } = req.query
 
     console.log('[staff-checkin-history] query:', req.query)
@@ -351,6 +375,10 @@ export const getStaffCheckinHistory = async (req, res) => {
       filter.memberId = { $in: members.map((member) => member._id) }
     }
 
+    if (sessionType === 'scheduled' || sessionType === 'free_workout') {
+      filter.sessionType = sessionType
+    }
+
     const pageNumber = Math.max(1, Number(page) || 1)
     const limitNumber = Math.max(1, Math.min(100, Number(limit) || 20))
     const skip = (pageNumber - 1) * limitNumber
@@ -360,6 +388,7 @@ export const getStaffCheckinHistory = async (req, res) => {
       CheckIn.find(filter)
         .populate('memberId', 'name fullName email phone avatar memberCode memberNumber')
         .populate('staffId', 'name fullName email')
+        .populate('dailyQRCodeId', 'date createdAt token')
         .sort({ checkinTime: -1 })
         .skip(skip)
         .limit(limitNumber)

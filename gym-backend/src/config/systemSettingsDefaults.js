@@ -94,11 +94,6 @@ export const SYSTEM_SETTINGS_DEFAULTS = {
     productReviewsEnabled: true,
     productDetailPageEnabled: true,
   },
-  ai: {
-    systemAiEnabled: true,
-    memberAiEnabled: true,
-    adminAiEnabled: true,
-  },
   landing: {
     statsSectionEnabled: true,
     servicesSectionEnabled: true,

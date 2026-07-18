@@ -106,7 +106,7 @@ export default function BookingDetailPage() {
       const res = await membershipService.getMyMembership()
       const m = res.data.membership
       if (m) {
-        const name = m.planNameVi || m.plan?.nameVi || m.planNameEn || m.plan?.nameEn || 'Gói PT'
+        const name = m.planNameVi || m.plan?.nameVi || 'Gói PT'
         setMembershipInfo({
           planName: name,
           remainingSessions: m.remainingSessions ?? m.remainingDays ?? 0,

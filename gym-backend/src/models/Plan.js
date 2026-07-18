@@ -4,12 +4,7 @@ const planSchema = new mongoose.Schema(
   {
     nameVi: {
       type: String,
-      required: [true, 'Tên gói (VI) là bắt buộc'],
-      trim: true,
-    },
-    nameEn: {
-      type: String,
-      required: [true, 'Plan name (EN) is required'],
+      required: [true, 'Tên gói tập là bắt buộc'],
       trim: true,
     },
     price: {
@@ -27,19 +22,6 @@ const planSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
-    descriptionEn: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-    featuresVi: {
-      type: [String],
-      default: [],
-    },
-    featuresEn: {
-      type: [String],
-      default: [],
-    },
     color: {
       type: String,
       default: '#3B82F6',
@@ -49,10 +31,7 @@ const planSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    applicableSpecializations: {
-      type: [String],
-      default: [],
-    },
+    featureIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'PlanFeature', default: [] }],
   },
   { timestamps: true }
 );

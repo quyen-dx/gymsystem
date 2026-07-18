@@ -31,18 +31,16 @@ const formatDuration = (days: number, lang: 'vi' | 'en'): string => {
   return lang === 'en' ? `${days} days` : `${days} ngày`
 }
 
-const getPlanText = (plan: PlanPayloadPlan, key: 'name' | 'description', lang: 'vi' | 'en') => (
+const getPlanText = (plan: PlanPayloadPlan, key: 'name' | 'description') => (
   key === 'name'
-    ? (lang === 'en' ? (plan.nameEn || plan.nameVi || '') : (plan.nameVi || plan.nameEn || ''))
-    : (lang === 'en' ? (plan.descriptionEn || plan.descriptionVi || '') : (plan.descriptionVi || plan.descriptionEn || ''))
+    ? (plan.nameVi || '')
+    : (plan.descriptionVi || '')
 )
 
-const getFeatures = (plan: PlanPayloadPlan, lang: 'vi' | 'en') => (
-  lang === 'en'
-    ? (Array.isArray(plan.featuresEn) && plan.featuresEn.length > 0 ? plan.featuresEn : Array.isArray(plan.featuresVi) ? plan.featuresVi : [])
-    : Array.isArray(plan.featuresVi) && plan.featuresVi.length > 0
-    ? plan.featuresVi
-    : Array.isArray(plan.featuresEn) ? plan.featuresEn : []
+const getFeatures = (plan: PlanPayloadPlan) => (
+  Array.isArray(plan.featuresVi) && plan.featuresVi.length > 0
+  ? plan.featuresVi
+  : []
 )
 
 export function MembershipPlanCards({ plans, excludeIds = [], lang = 'vi', compact = false }: Props) {
@@ -55,9 +53,9 @@ export function MembershipPlanCards({ plans, excludeIds = [], lang = 'vi', compa
       {!compact && !excludeIds.length && <div className="mpc-heading">{t.heading}</div>}
       <div className="mpc-wrapper">
         {filtered.map((plan) => {
-          const name = getPlanText(plan, 'name', lang)
-          const description = getPlanText(plan, 'description', lang)
-          const features = getFeatures(plan, lang).slice(0, 3)
+          const name = getPlanText(plan, 'name')
+          const description = getPlanText(plan, 'description')
+          const features = getFeatures(plan).slice(0, 3)
           const accent = plan.color || 'var(--theme-accent)'
           return (
             <div

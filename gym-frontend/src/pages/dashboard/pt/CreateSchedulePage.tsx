@@ -32,10 +32,21 @@ import { workoutService, type TemplateDay, type TemplateDayExercise, type Workou
 const DAY_LABEL_MAP = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
 const DAY_SHORT = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
 
-const nearestSunday = (d: dayjs.Dayjs) => {
-  const dow = d.day() // 0=Sun
-  if (dow === 0) return d // already Sunday
-  return d.add(7 - dow, 'day') // next Sunday
+const BUFFER_HOURS = 12
+
+const findNearestTrainingDay = (preferredDays: number[]): dayjs.Dayjs => {
+  const now = dayjs()
+  const candidateDays = preferredDays.length > 0 ? preferredDays : [0, 1, 2, 3, 4, 5, 6]
+  const cutoff = now.add(BUFFER_HOURS, 'hour')
+
+  for (let offset = 0; offset < 21; offset++) {
+    const candidate = cutoff.add(offset, 'day')
+    if (candidateDays.includes(candidate.day())) {
+      return candidate.startOf('day')
+    }
+  }
+
+  return cutoff.add(21, 'day').startOf('day')
 }
 
 interface ScheduleDayEntry {
@@ -130,7 +141,8 @@ export default function CreateSchedulePage() {
     const entries: ScheduleDayEntry[] = []
 
     for (let c = 0; c < cycles; c++) {
-      const weekStart = startDate.add(c * 7, 'day')
+      const weekFirst = startDate.add(c * 7, 'day')
+      const weekStart = weekFirst.subtract(weekFirst.day(), 'day')
 
       for (let i = 0; i < templateDays.length; i++) {
         const dof = i + 1
@@ -176,7 +188,7 @@ export default function CreateSchedulePage() {
 
   const handleTemplateChange = (id: string) => {
     setSelectedTemplateId(id)
-    setStartDate(nearestSunday(dayjs()))
+    setStartDate(findNearestTrainingDay(preferredDaysOfWeek))
     setDayOrderDow(new Map())
     slotInfoRef.current = new Map()
     setCollapsedWeeks(new Set())
@@ -220,6 +232,7 @@ export default function CreateSchedulePage() {
 
       const weekPromises: Promise<any>[] = []
       let weekNum = 0
+      const totalWeeks = cycles.size
       for (const [_, items] of cycles) {
         weekNum++
         const sessions = items.map(d => ({
@@ -229,9 +242,15 @@ export default function CreateSchedulePage() {
           muscleGroup: d.muscleGroup, exercises: d.exercises,
         }))
         if (assignmentId && weekNum === 1) {
-          weekPromises.push(ptAssignmentService.createScheduleAndAssignWorkout(assignmentId, { templateId: selectedTemplateId, memberId, sessions }))
+          weekPromises.push(ptAssignmentService.createScheduleAndAssignWorkout(assignmentId, {
+            templateId: selectedTemplateId, memberId, sessions,
+            weekIndex: weekNum, totalWeeks,
+          }))
         } else {
-          weekPromises.push(scheduleService.createSchedule({ templateId: selectedTemplateId, memberId, sessions }))
+          weekPromises.push(scheduleService.createSchedule({
+            templateId: selectedTemplateId, memberId, sessions,
+            weekIndex: weekNum, totalWeeks,
+          }))
         }
       }
       await Promise.all(weekPromises)
@@ -249,6 +268,43 @@ export default function CreateSchedulePage() {
     for (const d of scheduleDays) { if (!map.has(d.cycleIndex)) map.set(d.cycleIndex, []); map.get(d.cycleIndex)!.push(d) }
     return Array.from(map.entries()).sort(([a], [b]) => a - b)
   }, [scheduleDays])
+
+  const allSpecialties = useMemo(() => {
+    const set = new Set(templates.map((t) => t.specializationId).filter(Boolean))
+    return Array.from(set).sort()
+  }, [templates])
+
+  const allGoals = useMemo(() => {
+    const set = new Set(templates.map((t) => t.goal).filter(Boolean))
+    return Array.from(set).sort()
+  }, [templates])
+
+  const allSessionCounts = useMemo(() => {
+    const set = new Set(templates.map((t) => t.days?.length || 0))
+    return Array.from(set).sort((a, b) => a - b)
+  }, [templates])
+
+  // Filter state — init from memberPrefs when it loads
+  const [filterSpecialty, setFilterSpecialty] = useState<string>('')
+  const [filterGoals, setFilterGoals] = useState<string[]>([])
+  const [filterSessions, setFilterSessions] = useState<number>(0)
+
+  useEffect(() => {
+    if (memberPrefs) {
+      setFilterSpecialty(memberPrefs.specialization || '')
+      setFilterGoals(memberPrefs.goals || [])
+      setFilterSessions(memberPrefs.desiredSessions || 0)
+    }
+  }, [memberPrefs])
+
+  const filteredTemplates = useMemo(() => {
+    return templates.filter((t) => {
+      if (filterSpecialty && t.specializationId !== filterSpecialty) return false
+      if (filterGoals.length > 0 && !filterGoals.includes(t.goal)) return false
+      if (filterSessions > 0 && (t.days?.length || 0) !== filterSessions) return false
+      return true
+    })
+  }, [templates, filterSpecialty, filterGoals, filterSessions])
 
   const allFilled = scheduleDays.length > 0 && scheduleDays.every(d => d.time)
   const neededSlots = templateDays?.length || 0
@@ -311,26 +367,74 @@ export default function CreateSchedulePage() {
 
           {/* ── Section 2: Template + start + repeat ── */}
           <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-5 space-y-4">
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-[var(--gs-text)]">Chọn giáo án mẫu</label>
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-[var(--gs-text)]">Chọn giáo án mẫu</label>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[140px]">
+                  <label className="mb-1 block text-[11px] font-medium text-[var(--gs-text-muted)]">Chuyên môn</label>
+                  <Select className="w-full" size="small" value={filterSpecialty} onChange={(v) => { setFilterSpecialty(v); setSelectedTemplateId(undefined) }}
+                    options={[
+                      { value: '', label: 'Tất cả' },
+                      ...allSpecialties.map((s) => ({ value: s, label: s })),
+                    ]} />
+                </div>
+                <div className="flex-1 min-w-[180px]">
+                  <label className="mb-1 block text-[11px] font-medium text-[var(--gs-text-muted)]">Mục tiêu</label>
+                  <Select className="w-full" size="small" mode="multiple" value={filterGoals} onChange={(v) => { setFilterGoals(v); setSelectedTemplateId(undefined) }}
+                    maxTagCount={2}
+                    options={allGoals.map((g) => ({ value: g, label: g }))} />
+                </div>
+                <div className="w-[120px]">
+                  <label className="mb-1 block text-[11px] font-medium text-[var(--gs-text-muted)]">Số buổi/tuần</label>
+                  <Select className="w-full" size="small" value={filterSessions} onChange={(v) => { setFilterSessions(v); setSelectedTemplateId(undefined) }}
+                    options={[
+                      { value: 0, label: 'Tất cả' },
+                      ...allSessionCounts.map((n) => ({ value: n, label: `${n} buổi` })),
+                    ]} />
+                </div>
+              </div>
               <Select className="w-full" placeholder="Chọn giáo án mẫu..." value={selectedTemplateId} onChange={handleTemplateChange}
-                options={templates.map((t) => ({ value: t._id, label: `${t.workoutName || t.name} (${t.days?.length || 0} buổi)` }))} />
+                notFoundContent={
+                  <div className="py-4 text-center">
+                    <p className="text-sm text-[var(--gs-text-muted)]">Không có giáo án nào khớp với bộ lọc hiện tại.</p>
+                    <p className="mt-1 text-xs text-[var(--gs-text-muted)]">Hãy thử điều chỉnh lại bộ lọc hoặc tạo giáo án mới.</p>
+                    <div className="mt-3 flex justify-center gap-2">
+                      {filterSpecialty && <Button size="small" onClick={() => setFilterSpecialty('')}>Bỏ lọc chuyên môn</Button>}
+                      {filterGoals.length > 0 && <Button size="small" onClick={() => setFilterGoals([])}>Bỏ lọc mục tiêu</Button>}
+                      {filterSessions > 0 && <Button size="small" onClick={() => setFilterSessions(0)}>Bỏ lọc số buổi</Button>}
+                    </div>
+                  </div>
+                }>
+                {filteredTemplates.length > 0 ? filteredTemplates.map((t) => (
+                  <Select.Option key={t._id} value={t._id}>
+                    {t.workoutName || t.name} ({t.days?.length || 0} buổi{t.goal ? ` — ${t.goal}` : ''})
+                  </Select.Option>
+                )) : (
+                  <Select.Option key="__empty" value="__empty" disabled style={{ display: 'none' }} />
+                )}
+              </Select>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--gs-text-muted)]">{filteredTemplates.length} giáo án khớp</span>
+                {(filterSpecialty || filterGoals.length > 0 || filterSessions > 0) && (
+                  <Button size="small" type="link" className="!text-xs" onClick={() => {
+                    if (memberPrefs) {
+                      setFilterSpecialty(memberPrefs.specialization || '')
+                      setFilterGoals(memberPrefs.goals || [])
+                      setFilterSessions(memberPrefs.desiredSessions || 0)
+                    }
+                  }}>Đặt lại theo hội viên</Button>
+                )}
+              </div>
             </div>
 
             {selectedTemplateId && templateDays && (
               <>
                 <div className="flex flex-wrap gap-4 items-end">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-[var(--gs-text-muted)]">Ngày bắt đầu <span className="text-[var(--gs-text-soft)]">(mốc đầu tuần)</span></label>
+                    <label className="mb-1 block text-xs font-medium text-[var(--gs-text-muted)]">Ngày bắt đầu</label>
                     <DatePicker value={startDate} onChange={(val) => {
                       if (val) {
-                        const sun = nearestSunday(val)
-                        if (!sun.isSame(val, 'day')) {
-                          setStartDate(sun)
-                          message.info(`Đã tự động điều chỉnh về Chủ nhật ${sun.format('DD/MM')} — mốc đầu tuần`)
-                        } else {
-                          setStartDate(sun)
-                        }
+                        setStartDate(val)
                       } else {
                         setStartDate(null)
                       }
@@ -339,8 +443,8 @@ export default function CreateSchedulePage() {
                       style={{ width: 180 }} placeholder="Chọn ngày bắt đầu" disabledDate={(d) => d.isBefore(dayjs(), 'day')} />
                     {startDate && (
                       <p className="mt-1 text-[11px] text-[var(--gs-text-muted)]">
-                        {DAY_LABEL_MAP[startDate.day()]}, {startDate.format('DD/MM/YYYY')}
-                        <span className="ml-1 text-[var(--gs-text-soft)]">— buổi tập đầu tiên sẽ vào thứ trong tuần này</span>
+                        Buổi tập đầu tiên: {DAY_LABEL_MAP[startDate.day()]}, {startDate.format('DD/MM/YYYY')}
+                        <span className="ml-1 text-[var(--gs-text-soft)]">— cách hiện tại ít nhất {BUFFER_HOURS} giờ</span>
                       </p>
                     )}
                   </div>
@@ -383,7 +487,11 @@ export default function CreateSchedulePage() {
                 const noSlots = matched.length === 0 && unmatched.length === 0
 
                 const renderSlotBtn = (slot: SuggestedSlot) => {
-                  const usedByDayOrder = Array.from(dayOrderDow.entries()).find(([_, dow]) => dow === slot.dayOfWeek)?.[0]
+                  const usedByDayOrder = Array.from(dayOrderDow.entries()).find(([dayOrder, dow]) => {
+                    if (dow !== slot.dayOfWeek) return false
+                    const si = slotInfoRef.current.get(dayOrder)
+                    return si?.startTime === slot.startTime && si?.endTime === slot.endTime
+                  })?.[0]
                   return (
                     <button key={`${slot.dayOfWeek}-${slot.time}`} type="button"
                       onClick={() => {

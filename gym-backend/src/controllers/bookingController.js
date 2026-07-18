@@ -4,6 +4,9 @@ import Waitlist from '../models/Waitlist.js'
 import PT from '../models/PT.js'
 import mongoose from 'mongoose'
 import { applyWalletTransaction } from '../services/walletService.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
+import { checkMemberFeature } from '../utils/featureCheck.js'
 
 const activeStatus = ['pending', 'awaiting_payment', 'confirmed']
 
@@ -110,6 +113,20 @@ export const createBooking = async (req, res) => {
 
     const bookingDate = normalizeDate(date)
 
+    // Validate plan feature for booking type
+    if (finalTrainingType === 'one_to_one') {
+      const featureCheck = await checkMemberFeature(req.user._id, 'BOOK_PT_PRIVATE')
+      if (!featureCheck.allowed) {
+        return res.status(403).json({ message: featureCheck.reason })
+      }
+    }
+    if (finalTrainingType === 'group') {
+      const featureCheck = await checkMemberFeature(req.user._id, 'BOOK_PT_GROUP')
+      if (!featureCheck.allowed) {
+        return res.status(403).json({ message: featureCheck.reason })
+      }
+    }
+
     const pt = await PT.findOne({ userId: ptId })
 
       if (!pt) {
@@ -163,6 +180,18 @@ export const createBooking = async (req, res) => {
       status: 'pending',
     })
 
+    await createNotification({
+      receiverId: ptId,
+      receiverRole: 'pt',
+      notificationType: NOTIFICATION_TYPES.BOOKING_CONFIRMED,
+      title: 'Có lịch đặt mới',
+      content: `Hội viên đã đặt lịch tập vào ${bookingDate.toLocaleDateString('vi-VN')}, slot ${slot}.`,
+      relatedId: booking._id,
+      relatedType: 'Booking',
+      redirectUrl: '/pt/bookings',
+      createdBy: 'System',
+    })
+
     return res.status(201).json({
       message: 'Đặt lịch thành công, chờ PT xác nhận',
       booking,
@@ -188,6 +217,11 @@ export const createRecurringBooking = async (req, res) => {
     const lastBookingDate = normalizeDate(date)
     lastBookingDate.setDate(lastBookingDate.getDate() + (Number(weeks) - 1) * 7)
     if (!(await requireActiveMembershipForDate(req.user._id, lastBookingDate, res))) return
+
+    const featureCheck = await checkMemberFeature(req.user._id, 'PT_BOOK_PRIVATE')
+    if (!featureCheck.allowed) {
+      return res.status(403).json({ message: featureCheck.reason })
+    }
 
     const createdBookings = []
     const conflicts = []
@@ -266,6 +300,11 @@ export const scheduleWeeklyBooking = async (req, res) => {
       return res.status(400).json({
         message: 'Thiếu thông tin: ptId, daysOfWeek, time',
       })
+    }
+
+    const featureCheck = await checkMemberFeature(req.user._id, 'PT_BOOK_PRIVATE')
+    if (!featureCheck.allowed) {
+      return res.status(403).json({ message: featureCheck.reason })
     }
 
     const results = []
@@ -430,6 +469,18 @@ export const confirmBooking = async (req, res) => {
     booking.status = 'awaiting_payment'
     await booking.save()
 
+    await createNotification({
+      receiverId: booking.memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.BOOKING_CONFIRMED,
+      title: 'Lịch tập đã được PT xác nhận',
+      content: `Lịch tập của bạn đã được PT xác nhận. Vui lòng thanh toán để hoàn tất đặt lịch.`,
+      relatedId: booking._id,
+      relatedType: 'Booking',
+      redirectUrl: '/my-bookings',
+      createdBy: 'PT',
+    })
+
     const { createAssignment } = await import('../services/ptAssignmentService.js')
     await createAssignment({
       memberId: booking.memberId,
@@ -466,6 +517,18 @@ export const rejectBooking = async (req, res) => {
     booking.status = 'cancelled'
     booking.rejectReason = reason || 'PT từ chối lịch'
     await booking.save()
+
+    await createNotification({
+      receiverId: booking.memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.BOOKING_REJECTED,
+      title: 'Lịch tập bị PT từ chối',
+      content: `Lịch tập của bạn đã bị PT từ chối. Lý do: ${reason || 'Không có lý do.'}`,
+      relatedId: booking._id,
+      relatedType: 'Booking',
+      redirectUrl: '/my-bookings',
+      createdBy: 'PT',
+    })
 
     return res.json({
       message: 'Đã từ chối lịch',
@@ -548,6 +611,18 @@ export const completeBooking = async (req, res) => {
     booking.completedAt = new Date()
 
     await booking.save()
+
+    await createNotification({
+      receiverId: booking.memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.PT_SESSION_COMPLETED,
+      title: 'Buổi tập đã hoàn thành',
+      content: `PT đã đánh dấu buổi tập của bạn là hoàn thành.`,
+      relatedId: booking._id,
+      relatedType: 'Booking',
+      redirectUrl: '/my-bookings',
+      createdBy: 'PT',
+    })
 
     return res.json({
       message: 'Đã hoàn thành buổi tập',
@@ -697,6 +772,18 @@ export const payBooking = async (req, res) => {
     await booking.save({ session })
 
     await session.commitTransaction()
+
+    await createNotification({
+      receiverId: req.user._id,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+      title: 'Thanh toán đặt lịch thành công',
+      content: `Bạn đã thanh toán thành công lịch tập PT.`,
+      relatedId: booking._id,
+      relatedType: 'Booking',
+      redirectUrl: '/my-bookings',
+      createdBy: 'System',
+    })
 
     return res.json({
       message: 'Thanh toán đặt lịch thành công',

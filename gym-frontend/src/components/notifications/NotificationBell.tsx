@@ -24,11 +24,14 @@ function formatTime(dateStr: string) {
 
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
   const initialLoadDone = useRef(false)
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length
+  useEffect(() => {
+    setUnreadCount(notifications.filter((n) => !n.isRead).length)
+  }, [notifications])
 
   const fetchNotifications = async () => {
     try {
@@ -44,6 +47,9 @@ export default function NotificationBell() {
       initialLoadDone.current = true
       fetchNotifications()
     }
+    notificationService.getUnreadCount().then(res => {
+      if (res.data?.count !== undefined) setUnreadCount(res.data.count)
+    }).catch(() => {})
   }, [])
 
   // Socket listener for real-time notifications
@@ -71,7 +77,11 @@ export default function NotificationBell() {
 
   const handleSeeAll = () => {
     setOpen(false)
-    const role = window.location.pathname.startsWith('/pt') ? 'pt' : 'staff'
+    const pathname = window.location.pathname
+    const role = pathname.startsWith('/admin') ? 'admin'
+      : pathname.startsWith('/staff') ? 'staff'
+      : pathname.startsWith('/pt') ? 'pt'
+      : 'member'
     navigate(`/${role}/notifications`)
   }
 

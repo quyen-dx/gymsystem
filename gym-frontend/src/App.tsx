@@ -19,6 +19,7 @@ import MemberDetailPage from './pages/dashboard/admin/MemberDetailPage'
 import AdminPartnershipRequestsPage from './pages/dashboard/admin/AdminPartnershipRequestsPage'
 import AdminPlanCreatePage from './pages/dashboard/admin/AdminPlanCreatePage'
 import AdminPlansPage from './pages/dashboard/admin/AdminPlansPage'
+import AdminFeatureManagePage from './pages/dashboard/admin/AdminFeatureManagePage'
 import AdminReports from './pages/dashboard/admin/AdminReports'
 import AdminTrainersPage from './pages/dashboard/admin/AdminTrainersPage'
 import AdminTrainersCreatePage from './pages/dashboard/admin/AdminTrainersCreatePage'
@@ -33,17 +34,18 @@ import FeedbackManagerPage from './pages/dashboard/admin/FeedbackManagerPage'
 import PolicyCreatePage from './pages/dashboard/admin/PolicyCreatePage'
 import PolicyManagerPage from './pages/dashboard/admin/PolicyManagerPage'
 import SystemSettingsPage from './pages/dashboard/admin/SystemSettingsPage'
-import AiChatPage from './pages/dashboard/member/AiChatPage'
 import BookingPage from './pages/dashboard/member/BookingPage'
 import CartPage from './pages/dashboard/member/CartPage'
 import MemberCheckinPage from './pages/dashboard/member/MemberCheckinPage'
+import MemberScanPage from './pages/dashboard/member/MemberScanPage'
+import MemberSessionSelectPage from './pages/dashboard/member/MemberSessionSelectPage'
 import CheckoutPage from './pages/dashboard/member/CheckoutPage'
 import DepositPage from './pages/dashboard/member/DepositPage'
-import HealthPage from './pages/dashboard/member/HealthPage'
 import MemberDashboard from './pages/dashboard/member/MemberDashboard'
 import MemberStorePage from './pages/dashboard/member/MemberStorePage'
 import MyActivityPage from './pages/dashboard/member/MyActivityPage'
 import MyFeedbackPage from './pages/dashboard/member/MyFeedbackPage'
+import MemberNotificationsPage from './pages/dashboard/member/MemberNotificationsPage'
 import MyMembershipPage from './pages/dashboard/member/MyMembershipPage'
 import CancelMembershipPage from './pages/dashboard/member/CancelMembershipPage'
 import RenewMembershipPage from './pages/dashboard/member/RenewMembershipPage'
@@ -59,10 +61,15 @@ import AdminTrainerSchedulesPage from './pages/dashboard/admin/AdminTrainerSched
 import AdminReplacementRequestsPage from './pages/dashboard/admin/AdminReplacementRequestsPage'
 import PTClientsPage from './pages/dashboard/pt/PTClientsPage'
 import CreateSchedulePage from './pages/dashboard/pt/CreateSchedulePage'
+import PTWorkoutProgressPage from './pages/dashboard/pt/PTWorkoutProgressPage'
 import PTSchedulePage from './pages/dashboard/pt/PTSchedulePage'
 import PTNotificationsPage from './pages/dashboard/pt/PTNotificationsPage'
 import PTWorkoutFormPage from './pages/dashboard/pt/PTWorkoutFormPage'
 import PTWorkoutsPage from './pages/dashboard/pt/PTWorkoutsPage'
+import PTWorkoutViewPage from './pages/dashboard/pt/PTWorkoutViewPage'
+import AdminWorkoutReportsPage from './pages/dashboard/admin/AdminWorkoutReportsPage'
+import AdminPTAssignmentEndRequestsPage from './pages/dashboard/admin/AdminPTAssignmentEndRequestsPage'
+import AdminNotificationsPage from './pages/dashboard/admin/AdminNotificationsPage'
 import SellerOrdersPage from './pages/dashboard/seller/SellerOrdersPage'
 import SellerProductCreatePage from './pages/dashboard/seller/SellerProductCreatePage'
 import SellerProductEditPage from './pages/dashboard/seller/SellerProductEditPage'
@@ -281,6 +288,7 @@ function AppWithTheme() {
         <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
         <Route path="/admin/plans/create" element={<PrivateRoute feature="billing.allowPlanPurchase"><AdminPlanCreatePage /></PrivateRoute>} />
         <Route path="/admin/plans" element={<PrivateRoute feature="billing.allowPlanPurchase"><AdminPlansPage /></PrivateRoute>} />
+        <Route path="/admin/features" element={<PrivateRoute><AdminFeatureManagePage /></PrivateRoute>} />
         <Route path="/admin/partnerships" element={<PrivateRoute><AdminPartnershipRequestsPage /></PrivateRoute>} />
         <Route path="/admin/shop" element={<Navigate to="/admin/partnerships" />} />
         <Route path="/admin/users" element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
@@ -296,19 +304,24 @@ function AppWithTheme() {
         <Route path="/admin/pts" element={<Navigate to="/admin/trainers" replace />} />
         <Route path="/admin/reports" element={<PrivateRoute feature="reports.revenueChartEnabled"><AdminReports /></PrivateRoute>} />
         <Route path="/admin/checkin" element={<PrivateRoute><AdminCheckinPage /></PrivateRoute>} />
+        <Route path="/admin/checkin-history" element={<Navigate to="/admin/checkin?tab=history" replace />} />
+        <Route path="/admin/daily-qr" element={<Navigate to="/admin/checkin?tab=qr" replace />} />
         <Route path="/admin/system-settings" element={<PrivateRoute><SystemSettingsPage /></PrivateRoute>} />
         <Route path="/admin/faqs/create" element={<PrivateRoute><FAQCreatePage /></PrivateRoute>} />
         <Route path="/admin/faqs/:faqId/edit" element={<PrivateRoute><FAQCreatePage /></PrivateRoute>} />
         <Route path="/admin/faqs" element={<PrivateRoute><FAQManagerPage /></PrivateRoute>} />
         <Route path="/admin/feedback" element={<PrivateRoute><FeedbackManagerPage /></PrivateRoute>} />
         <Route path="/admin/training-classes" element={<PrivateRoute><AdminTrainingClassesPage /></PrivateRoute>} />
-
         <Route path="/admin/floors-zones" element={<PrivateRoute><AdminFloorsZonesPage /></PrivateRoute>} />
         <Route path="/admin/trainer-schedules" element={<PrivateRoute feature="pt.scheduleEnabled"><AdminTrainerSchedulesPage /></PrivateRoute>} />
         <Route path="/admin/replacement-requests" element={<PrivateRoute feature="pt.scheduleEnabled"><AdminReplacementRequestsPage /></PrivateRoute>} />
         <Route path="/admin/policies/create" element={<PrivateRoute><PolicyCreatePage /></PrivateRoute>} />
         <Route path="/admin/policies/:policyId/edit" element={<PrivateRoute><PolicyCreatePage /></PrivateRoute>} />
         <Route path="/admin/policies" element={<PrivateRoute><PolicyManagerPage /></PrivateRoute>} />
+        <Route path="/admin/workout-reports" element={<PrivateRoute feature="pt.moduleEnabled"><AdminWorkoutReportsPage /></PrivateRoute>} />
+        <Route path="/admin/pt-assignment-end-requests" element={<PrivateRoute><AdminPTAssignmentEndRequestsPage /></PrivateRoute>} />
+        <Route path="/admin/trainer-end-requests" element={<PrivateRoute><AdminPTAssignmentEndRequestsPage /></PrivateRoute>} />
+        <Route path="/admin/notifications" element={<PrivateRoute><AdminNotificationsPage /></PrivateRoute>} />
         {/* SELLER */}
         <Route path="/seller" element={<Navigate to="/seller/products" />} />
         <Route path="/seller/products" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerProductsPage /></PrivateRoute>} />
@@ -334,10 +347,12 @@ function AppWithTheme() {
 
         <Route path="/pt/clients" element={<PrivateRoute feature="pt.moduleEnabled"><PTClientsPage /></PrivateRoute>} />
         <Route path="/pt/clients/:memberId/create-schedule" element={<PrivateRoute feature="pt.moduleEnabled"><CreateSchedulePage /></PrivateRoute>} />
+        <Route path="/pt/clients/:memberId/progress" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutProgressPage /></PrivateRoute>} />
         <Route path="/pt/student" element={<Navigate to="/pt/clients" replace />} />
         <Route path="/pt/workouts" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutsPage /></PrivateRoute>} />
         <Route path="/pt/workouts/create" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutFormPage /></PrivateRoute>} />
         <Route path="/pt/workouts/edit/:id" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutFormPage /></PrivateRoute>} />
+        <Route path="/pt/workouts/view/:id" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutViewPage /></PrivateRoute>} />
         <Route path="/pt/notifications" element={<PrivateRoute><PTNotificationsPage /></PrivateRoute>} />
 
         {/* ACCOUNT */}
@@ -346,7 +361,6 @@ function AppWithTheme() {
         {/* MEMBER */}
         <Route path="/" element={<HomeRoute />} />
         <Route path="/dashboard" element={<PrivateRoute><MemberDashboard /></PrivateRoute>} />
-        <Route path="/ai-chat" element={<PrivateRoute feature={["ai.systemAiEnabled", "ai.memberAiEnabled"]}><AiChatPage /></PrivateRoute>} />
         <Route path="/deposit" element={<PrivateRoute feature="billing.qrPaymentEnabled"><DepositPage /></PrivateRoute>} />
         <Route path="/checkout" element={<PrivateRoute feature="shop.cartEnabled"><CheckoutPage /></PrivateRoute>} />
         <Route path="/orders" element={<PrivateRoute><OrderHistoryPage /></PrivateRoute>} />
@@ -361,10 +375,11 @@ function AppWithTheme() {
         <Route path="/product/:id" element={<PrivateRoute feature={['shop.productStoreEnabled', 'shop.productDetailPageEnabled']}><ProductDetailPage /></PrivateRoute>} />
         <Route path="/booking" element={<PrivateRoute feature="pt.memberBookingEnabled"><BookingPage /></PrivateRoute>} />
         <Route path="/booking/:ptId" element={<BookingDetailPage />} />
-        <Route path="/health" element={<PrivateRoute feature="workout.healthLogEnabled"><HealthPage /></PrivateRoute>} />
         <Route path="/workout" element={<PrivateRoute feature="workout.workoutPlanEnabled"><WorkoutPage /></PrivateRoute>} />
         <Route path="/checkin" element={<PrivateRoute feature="checkin.qrCheckinEnabled"><MemberCheckinPage /></PrivateRoute>} />
-        <Route path="/member/checkin" element={<Navigate to="/checkin" replace />} />
+        <Route path="/checkin/scan" element={<PrivateRoute><MemberScanPage /></PrivateRoute>} />
+        <Route path="/checkin/sessions" element={<PrivateRoute><MemberSessionSelectPage /></PrivateRoute>} />
+        <Route path="/notifications" element={<PrivateRoute><MemberNotificationsPage /></PrivateRoute>} />
         <Route path="/feedback" element={<PrivateRoute><MyFeedbackPage /></PrivateRoute>} />
         <Route path="/my-feedback" element={<PrivateRoute><MyFeedbackPage /></PrivateRoute>} />
         <Route path="/my-activity" element={<PrivateRoute><MyActivityPage /></PrivateRoute>} />

@@ -208,7 +208,7 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
               <section className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-5">
                 <h2 className="mb-4 text-lg font-semibold">Thông tin gói hiện tại</h2>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                  <div><span className="block text-sm text-[var(--gs-text-muted)]">Tên gói</span><b>{activeMembership.planId?.nameVi || activeMembership.planId?.nameEn || '—'}</b></div>
+                  <div><span className="block text-sm text-[var(--gs-text-muted)]">Tên gói</span><b>{activeMembership.planId?.nameVi || '—'}</b></div>
                   <div><span className="block text-sm text-[var(--gs-text-muted)]">Ngày bắt đầu</span><b>{formatDate(activeMembership.startDate)}</b></div>
                   <div><span className="block text-sm text-[var(--gs-text-muted)]">Ngày hết hạn</span><b>{formatDate(activeMembership.endDate)}</b></div>
                   <div><span className="block text-sm text-[var(--gs-text-muted)]">Số ngày còn lại</span><b>{member.remainingDays} ngày</b></div>
@@ -221,7 +221,7 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {availablePlans.map((plan) => {
                   const selected = selectedPlanId === plan._id
-                  const features = plan.featuresVi?.length ? plan.featuresVi : plan.featuresEn || []
+                  const features = plan.featuresVi || []
                   return (
                     <button
                       type="button"
@@ -233,7 +233,7 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
                     >
                       <div className="mb-2 flex items-start justify-between gap-3">
                         <div>
-                          <div className="font-semibold">{plan.nameVi || plan.nameEn}</div>
+                          <div className="font-semibold">{plan.nameVi}</div>
                           <div className="mt-1 text-xl font-bold text-[var(--theme-accent)]">{formatVND(plan.price)}</div>
                         </div>
                         {selected && <CheckCircleOutlined className="text-lg text-[var(--theme-accent)]" />}
@@ -288,7 +288,7 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
 
               {selectedPlan && (
                 <div className="mt-5 rounded-lg bg-[var(--gs-card)] text-sm">
-                  <div className="flex justify-between"><span>Gói:</span><b>{selectedPlan.nameVi || selectedPlan.nameEn}</b></div>
+                  <div className="flex justify-between"><span>Gói:</span><b>{selectedPlan.nameVi}</b></div>
                   <div className="mt-2 flex justify-between"><span>Số tiền:</span><b>{formatVND(selectedPlan.price)}</b></div>
                   {isRenew && newEndDate && (
                     <>

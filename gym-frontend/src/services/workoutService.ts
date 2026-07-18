@@ -98,6 +98,7 @@ export type WorkoutPlan = {
 
 export type WorkoutPlanPayload = {
   workoutName: string
+  specializationId?: string
   goal: string
   durationWeeks: number
   startDate?: string
@@ -155,6 +156,8 @@ export type WorkoutSchedule = {
   templateId: string | { _id: string; name?: string; goal?: string; description?: string }
   assignedBy: string | { _id: string; name?: string; email?: string }
   startDate: string
+  weekIndex?: number
+  totalWeeks?: number
   status: 'active' | 'completed' | 'archived'
   sessions: ScheduleSession[]
   createdAt?: string
@@ -170,6 +173,76 @@ export type SessionFeedbackPayload = {
   recommendation?: string
 }
 
+export type LibraryWorkout = {
+  _id: string
+  name?: string
+  workoutName: string
+  goal: string
+  specializationId?: string
+  totalSessions: number
+  assignmentCount: number
+  version: number
+  templateStatus: 'published' | 'under_review' | 'hidden' | 'deleted'
+  durationWeeks: number
+  description?: string
+  ptId: string | { _id: string; name?: string; fullName?: string; email?: string; avatar?: string }
+  weeks: WorkoutWeek[]
+  days?: TemplateDay[]
+  isTemplate?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type LibraryQuery = {
+  search?: string
+  specializationId?: string
+  goal?: string
+  createdBy?: string
+  trainerId?: string
+  mine?: string
+  totalSessions?: number
+  status?: string
+  sortBy?: 'most_used' | 'newest'
+  page?: number
+  limit?: number
+}
+
+export type LibraryResponse = {
+  workouts: LibraryWorkout[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
+export type ImprovementRequest = {
+  _id: string
+  workoutTemplateId: string | { _id: string; name: string; goal?: string; specializationId?: string }
+  senderTrainerId: string | { _id: string; name?: string; fullName?: string; email?: string; avatar?: string }
+  receiverTrainerId: string | { _id: string; name?: string; fullName?: string; email?: string; avatar?: string }
+  title: string
+  content: string
+  status: 'pending' | 'accepted' | 'rejected'
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type WorkoutReport = {
+  _id: string
+  workoutTemplateId: string | { _id: string; name: string; goal?: string; specializationId?: string; ptId?: any; templateStatus?: string }
+  reporterTrainerId: string | { _id: string; name?: string; fullName?: string; email?: string; avatar?: string }
+  reason: string
+  detail: string
+  status: 'pending' | 'reviewed' | 'resolved' | 'rejected'
+  resolvedBy?: string | { _id: string; name?: string; fullName?: string }
+  resolution?: string
+  resolvedAt?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 export const workoutService = {
   getWorkouts(params?: Record<string, unknown>) {
     return api.get<WorkoutPlan[]>('/workouts', { params })
@@ -178,7 +251,6 @@ export const workoutService = {
   getTemplates(params?: Record<string, unknown>) {
     return api.get<WorkoutPlan[]>('/workouts', { params: { ...params, isTemplate: 'true' } })
   },
-
 
   getWorkoutById(id: string) {
     return api.get<{ workout?: WorkoutPlan; data?: WorkoutPlan }>(`/workouts/${id}`)
@@ -194,6 +266,91 @@ export const workoutService = {
 
   deleteWorkout(id: string) {
     return api.delete(`/workouts/${id}`)
+  },
+
+  // Shared library
+  getSharedTemplates(params?: LibraryQuery) {
+    return api.get<LibraryResponse>('/workout-library/templates', { params })
+  },
+
+  getSpecializations() {
+    return api.get<{ specializations: string[] }>('/workout-library/specializations')
+  },
+
+  getGoals() {
+    return api.get<{ goals: string[] }>('/workout-library/goals')
+  },
+
+  getGoalsBySpecializationFilter(specializationId?: string) {
+    return api.get<{ goals: string[] }>('/workout-library/goals-by-specialization', {
+      params: specializationId ? { specializationId } : {},
+    })
+  },
+
+  getTrainersWithWorkouts() {
+    return api.get<{ trainers: { _id: string; name: string; fullName?: string; email?: string; avatar?: string }[] }>('/workout-library/trainers-with-workouts')
+  },
+
+  getGoalsBySpecialization(specializationId: string) {
+    return api.get<{ goals: string[] }>(`/specializations/${encodeURIComponent(specializationId)}/goals`)
+  },
+
+  assignWorkout(data: { workoutTemplateId: string; memberId: string }) {
+    return api.post('/workout-library/assign', data)
+  },
+
+  getWorkoutAssignments(id: string) {
+    return api.get(`/workout-library/${id}/assignments`)
+  },
+
+  hideWorkout(id: string, reason?: string) {
+    return api.put(`/workout-library/${id}/hide`, { reason })
+  },
+
+  restoreWorkout(id: string) {
+    return api.put(`/workout-library/${id}/restore`)
+  },
+
+  // Improvements
+  submitImprovement(data: { workoutTemplateId: string; title: string; content: string }) {
+    return api.post('/workout-improvements', data)
+  },
+
+  getReceivedImprovements(params?: { status?: string }) {
+    return api.get<{ improvements: ImprovementRequest[] }>('/workout-improvements/received', { params })
+  },
+
+  getSentImprovements(params?: { status?: string }) {
+    return api.get<{ improvements: ImprovementRequest[] }>('/workout-improvements/sent', { params })
+  },
+
+  acceptImprovement(id: string) {
+    return api.put(`/workout-improvements/${id}/accept`)
+  },
+
+  rejectImprovement(id: string) {
+    return api.put(`/workout-improvements/${id}/reject`)
+  },
+
+  // Reports
+  reportWorkout(data: { workoutTemplateId: string; reason: string; detail?: string }) {
+    return api.post('/workout-reports', data)
+  },
+
+  getWorkoutReports(params?: { status?: string; page?: number; limit?: number }) {
+    return api.get<{ reports: WorkoutReport[]; pagination: any }>('/workout-reports', { params })
+  },
+
+  getReportSummary() {
+    return api.get<{ summary: any[] }>('/workout-reports/summary')
+  },
+
+  resolveReport(id: string, data?: { action?: string; resolution?: string }) {
+    return api.put(`/workout-reports/${id}/resolve`, data)
+  },
+
+  rejectReport(id: string, data?: { resolution?: string }) {
+    return api.put(`/workout-reports/${id}/reject`, data)
   },
 
   getHistory(params?: { period?: string; limit?: number }) {

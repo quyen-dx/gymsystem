@@ -81,7 +81,7 @@ export default function MemberRenewPlanModal({ open, memberId, memberName, curre
 
   const remainingDays = calculateRemainingDays()
   const newEndDate = calculateNewEndDate()
-  const planLabel = selectedPlan ? `${selectedPlan.nameVi || selectedPlan.nameEn} (${selectedPlan.durationDays} ngày)` : ''
+  const planLabel = selectedPlan ? `${selectedPlan.nameVi} (${selectedPlan.durationDays} ngày)` : ''
 
   return (
     <Modal
@@ -108,7 +108,7 @@ export default function MemberRenewPlanModal({ open, memberId, memberName, curre
           <div style={{ fontSize: 13, lineHeight: 2 }}>
             <div>
               <span style={{ color: 'var(--gs-text-muted)', display: 'inline-block', width: 130 }}>Tên gói:</span>
-              <span style={{ fontWeight: 500 }}>{currentPlanName || selectedPlan?.nameVi || selectedPlan?.nameEn || '—'}</span>
+              <span style={{ fontWeight: 500 }}>{currentPlanName || selectedPlan?.nameVi || '—'}</span>
             </div>
             <div>
               <span style={{ color: 'var(--gs-text-muted)', display: 'inline-block', width: 130 }}>Ngày bắt đầu:</span>

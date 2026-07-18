@@ -28,6 +28,8 @@ const workoutScheduleSchema = new mongoose.Schema({
   classId: { type: mongoose.Schema.Types.ObjectId, ref: 'TrainingClass', default: null, index: true },
   trainerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   startDate: { type: Date, required: true },
+  weekIndex: { type: Number, default: 1 },
+  totalWeeks: { type: Number, default: 1 },
   status: { type: String, enum: ['active', 'completed', 'archived', 'cancelled'], default: 'active' },
   sessions: { type: [scheduleSessionSchema], default: [] },
 }, { timestamps: true })

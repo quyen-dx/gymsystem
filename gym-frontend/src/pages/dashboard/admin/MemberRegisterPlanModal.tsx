@@ -72,7 +72,7 @@ export default function MemberRegisterPlanModal({ open, memberId, memberName, on
             style={{ width: '100%' }}
             options={plans.map(p => ({
               value: p._id,
-              label: `${p.nameVi || p.nameEn} — ${p.durationDays} ngày — ${(p.price || 0).toLocaleString('vi-VN')}đ`,
+              label: `${p.nameVi} — ${p.durationDays} ngày — ${(p.price || 0).toLocaleString('vi-VN')}đ`,
             }))}
           />
         </div>
@@ -85,7 +85,7 @@ export default function MemberRegisterPlanModal({ open, memberId, memberName, on
             background: 'var(--gs-card)',
           }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
-              {selectedPlan.nameVi || selectedPlan.nameEn}
+              {selectedPlan.nameVi}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13 }}>
               <span style={{ color: 'var(--gs-text-muted)' }}>Thời hạn:</span>

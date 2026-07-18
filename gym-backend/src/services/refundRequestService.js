@@ -8,8 +8,9 @@ import Transaction from '../models/Transaction.js'
 import CheckIn from '../models/CheckIn.js'
 import Booking from '../models/Booking.js'
 import { rebuildMembershipTimeline } from './membershipService.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
 import { recordUserActivity } from './userActivityService.js'
-import { invalidatePersonalContextCache } from './conversationContextCache.js'
 import { emitRefundRequestUpdate } from './socketService.js'
 import { sendRefundRequestSubmittedEmail, sendRefundRequestProcessedEmail } from './emailService.js'
 
@@ -193,6 +194,18 @@ export const createRefundRequest = async ({ userId, periodId, reason = '' }) => 
 
   emitRefundRequestUpdate().catch(() => {})
 
+  createNotification({
+    receiverId: null,
+    receiverRole: 'admin',
+    notificationType: NOTIFICATION_TYPES.REFUND_REQUEST,
+    title: 'Yêu cầu hoàn tiền mới',
+    content: `Hội viên đã gửi yêu cầu hoàn tiền kỳ hạn (+${period.totalDays} ngày). Lý do: ${reason || 'Không có lý do.'}`,
+    relatedId: refundRequest._id,
+    relatedType: 'RefundRequest',
+    redirectUrl: '/admin/refund-requests',
+    createdBy: 'System',
+  }).catch(err => console.error('Notify refund request failed:', err.message))
+
   await recordUserActivity({
     userId: memberId,
     type: 'membership',
@@ -204,8 +217,6 @@ export const createRefundRequest = async ({ userId, periodId, reason = '' }) => 
       membershipId: period.membershipId,
     },
   })
-
-  invalidatePersonalContextCache(memberId)
 
   const planName = period.planId?.nameVi || period.planId?.nameEn || ''
   const refundUser = await User.findById(memberId).select('email fullName name')
@@ -405,7 +416,35 @@ export const approveRefundRequest = async ({ refundRequestId, staffId, staffNote
 
     await session.commitTransaction()
     committed = true
-    invalidatePersonalContextCache(period.memberId)
+
+    const memberId = refundRequest.memberId
+    createNotification({
+      receiverId: refundRequest.memberId,
+      receiverRole: 'member',
+      notificationType: totalRefundAmount > 0 ? NOTIFICATION_TYPES.REFUND_APPROVED : NOTIFICATION_TYPES.REFUND_REJECTED,
+      title: totalRefundAmount > 0 ? 'Yêu cầu hoàn tiền đã được duyệt' : 'Yêu cầu hủy kỳ hạn đã được duyệt',
+      content: totalRefundAmount > 0
+        ? `Yêu cầu hoàn tiền của bạn đã được duyệt. ${totalRefundAmount.toLocaleString('vi-VN')}đ đã được hoàn vào ví.`
+        : `Yêu cầu hủy kỳ hạn của bạn đã được duyệt (không hoàn tiền).`,
+      relatedId: refundRequest._id,
+      relatedType: 'RefundRequest',
+      redirectUrl: '/my-membership',
+      createdBy: 'Staff',
+    }).catch(err => console.error('Notify refund approved failed:', err.message))
+
+    if (totalRefundAmount > 0) {
+      createNotification({
+        receiverId: refundRequest.memberId,
+        receiverRole: 'member',
+        notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+        title: 'Hoàn tiền thành công',
+        content: `${totalRefundAmount.toLocaleString('vi-VN')}đ đã được hoàn vào ví của bạn.`,
+        relatedId: refundRequest._id,
+        relatedType: 'RefundRequest',
+        redirectUrl: '/my-wallet',
+        createdBy: 'System',
+      }).catch(err => console.error('Notify refund payment failed:', err.message))
+    }
 
     emitRefundRequestUpdate().catch(() => {})
 
@@ -461,6 +500,18 @@ export const rejectRefundRequest = async ({ refundRequestId, staffId, reason = '
   refundRequest.reviewedAt = new Date()
   await refundRequest.save()
 
+  createNotification({
+    receiverId: refundRequest.memberId,
+    receiverRole: 'member',
+    notificationType: NOTIFICATION_TYPES.REFUND_REJECTED,
+    title: 'Yêu cầu hủy kỳ hạn bị từ chối',
+    content: `Yêu cầu hủy kỳ hạn của bạn đã bị từ chối. Lý do: ${reason || 'Không có lý do.'}`,
+    relatedId: refundRequest._id,
+    relatedType: 'RefundRequest',
+    redirectUrl: '/my-membership',
+    createdBy: 'Staff',
+  }).catch(err => console.error('Notify refund rejected failed:', err.message))
+
   const period = await MembershipPeriod.findById(refundRequest.membershipPeriodId)
   if (period) {
     if (period.status === 'CANCEL_REQUESTED') {
@@ -486,8 +537,6 @@ export const rejectRefundRequest = async ({ refundRequestId, staffId, reason = '
       reason: reason || '',
     },
   })
-
-  invalidatePersonalContextCache(refundRequest.memberId)
 
   emitRefundRequestUpdate().catch(() => {})
 

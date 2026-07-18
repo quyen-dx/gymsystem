@@ -9,10 +9,13 @@ import Transaction from '../models/Transaction.js';
 import CheckIn from '../models/CheckIn.js';
 import Booking from '../models/Booking.js';
 import { recordUserActivity } from '../services/userActivityService.js';
-import { invalidatePersonalContextCache } from '../services/conversationContextCache.js';
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js';
 import { assertPolicyConsent } from '../utils/policyConsent.js';
 import { cleanupMemberPTData } from '../services/membershipService.js';
+import ClassEnrollment from '../models/ClassEnrollment.js';
+import PTAssignment from '../models/PTAssignment.js';
+import { NOTIFICATION_TYPES } from '../models/Notification.js';
+import { createNotification } from '../services/notificationService.js';
 import { sendRefundRequestSubmittedEmail, sendRefundRequestProcessedEmail } from '../services/emailService.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -213,8 +216,6 @@ export const createCancellationRequest = async (req, res, next) => {
       session.endSession();
     }
 
-    invalidatePersonalContextCache(memberId);
-
     const planName = plan.nameVi || plan.nameEn || ''
     if (req.user.email) {
       sendRefundRequestSubmittedEmail({
@@ -325,6 +326,30 @@ export const listCancellationRequests = async (req, res, next) => {
         const memberObjId = memberDoc?._id;
         raw.memberId = normalizeUserMemberIdentity(memberDoc);
 
+        let activePT = null, activeClass = null;
+        if (memberObjId) {
+          const [enrollment, assignment] = await Promise.all([
+            ClassEnrollment.findOne({ memberId: memberObjId, status: 'active' })
+              .populate('classId', 'code name').lean(),
+            PTAssignment.findOne({ memberId: memberObjId, status: 'active' })
+              .populate('ptId', 'name fullName').lean(),
+          ]);
+          if (enrollment) {
+            activeClass = {
+              className: enrollment.classId ? `[${enrollment.classId.code}] ${enrollment.classId.name}` : '',
+              enrollmentId: enrollment._id,
+            };
+          }
+          if (assignment) {
+            activePT = {
+              ptName: assignment.ptId?.fullName || assignment.ptId?.name || '',
+              assignmentId: assignment._id,
+            };
+          }
+        }
+        raw.activePT = activePT;
+        raw.activeClass = activeClass;
+
         const purchaseDate = raw.registeredAt;
         if (purchaseDate && memberObjId) {
           const purchaseTime = new Date(purchaseDate).getTime();
@@ -375,6 +400,8 @@ export const listCancellationRequests = async (req, res, next) => {
       } catch (err) {
         const raw = item.toObject ? item.toObject() : item;
         raw.memberId = normalizeUserMemberIdentity(raw.memberId);
+        raw.activePT = null;
+        raw.activeClass = null;
         return raw;
       }
     }));
@@ -549,7 +576,72 @@ export const approveCancellationRequest = async (req, res, next) => {
         session,
       });
 
-      await cleanupMemberPTData({ memberId: cancellationRequest.memberId, session });
+      // Check & cleanup active PT/class if member has any
+      const [activeEnrollment, activeAssignment] = await Promise.all([
+        ClassEnrollment.findOne({ memberId: cancellationRequest.memberId, status: 'active' })
+          .populate('classId', 'code name').lean(),
+        PTAssignment.findOne({ memberId: cancellationRequest.memberId, status: 'active' })
+          .populate('ptId', 'name fullName').lean(),
+      ]);
+
+      if (activeEnrollment) {
+        await ClassEnrollment.updateOne(
+          { _id: activeEnrollment._id },
+          {
+            $set: {
+              status: 'ended',
+              leftAt: new Date(),
+              sourceReason: 'member_cancelled_plan',
+              note: 'Hội viên hủy gói tập',
+            },
+          },
+          { session },
+        )
+      }
+
+      if (activeAssignment) {
+        await PTAssignment.updateOne(
+          { _id: activeAssignment._id },
+          {
+            $set: {
+              status: 'cancelled',
+              cancelledAt: new Date(),
+              cancelReason: 'Hội viên hủy gói tập',
+            },
+          },
+          { session },
+        )
+      }
+
+      if (activeEnrollment || activeAssignment) {
+        const memberUser = await User.findById(cancellationRequest.memberId)
+          .select('name fullName').lean()
+        const mName = memberUser?.fullName || memberUser?.name || 'Hội viên'
+
+        await createNotification({
+          receiverId: cancellationRequest.memberId,
+          receiverRole: 'member',
+          notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+          title: 'Quyền lợi PT đã kết thúc',
+          content: 'Gói tập của bạn đã được duyệt hủy. Quyền lợi PT và lớp học đã được đóng lại.',
+          redirectUrl: '/my-membership',
+          createdBy: 'System',
+        })
+
+        if (activeAssignment?.ptId?._id) {
+          await createNotification({
+            receiverId: activeAssignment.ptId._id,
+            receiverRole: 'pt',
+            notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+            title: 'Hội viên đã hủy gói tập',
+            content: `Hội viên ${mName} đã hủy gói tập. Vui lòng xác nhận kết thúc phụ trách đối với hội viên này.`,
+            relatedId: cancellationRequest.memberId,
+            relatedType: 'User',
+            redirectUrl: '/pt/clients',
+            createdBy: 'System',
+          })
+        }
+      }
 
       await session.commitTransaction();
     } catch (error) {
@@ -558,8 +650,6 @@ export const approveCancellationRequest = async (req, res, next) => {
     } finally {
       session.endSession();
     }
-
-    invalidatePersonalContextCache(cancellationRequest.memberId);
 
     const planName = cancellationRequest.planId?.nameVi || cancellationRequest.planId?.nameEn || ''
     const approveUser = await User.findById(cancellationRequest.memberId).select('email fullName name')
@@ -644,8 +734,6 @@ export const rejectCancellationRequest = async (req, res, next) => {
     } finally {
       session.endSession();
     }
-
-    invalidatePersonalContextCache(cancellationRequest.memberId);
 
     const planName = cancellationRequest.planId?.nameVi || cancellationRequest.planId?.nameEn || ''
     const rejectUser = await User.findById(cancellationRequest.memberId).select('email fullName name')

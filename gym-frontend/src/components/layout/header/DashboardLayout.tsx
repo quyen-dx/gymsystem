@@ -5,8 +5,11 @@ import {
   CommentOutlined,
   CreditCardOutlined,
   DashboardOutlined,
+  ExclamationCircleOutlined,
   FileTextOutlined,
   HomeOutlined,
+  QrcodeOutlined,
+  SearchOutlined,
   LogoutOutlined,
   MenuOutlined,
   QuestionCircleOutlined,
@@ -27,13 +30,14 @@ import { useEffect, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
-import AdminAIChatWidget from '../../chat/AdminAIChatWidget'
-import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
-import { trainingRequestService } from '../../../services/trainingRequestService'
-import { shiftSwapService } from '../../../services/shiftSwapService'
 import { membershipService } from '../../../services/membershipService'
 import { notificationService } from '../../../services/notificationService'
+import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
+import { shiftSwapService } from '../../../services/shiftSwapService'
+import { ptAssignmentEndService } from '../../../services/ptAssignmentEndService'
 import { socketService } from '../../../services/socketService'
+import { trainingRequestService } from '../../../services/trainingRequestService'
+import NotificationBell from '../../notifications/NotificationBell'
 import { getUserDisplayName, getUserInitialName } from '../../../utils/userDisplay'
 
 const { Text } = Typography
@@ -56,6 +60,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [pendingRefundCount, setPendingRefundCount] = useState(0)
   const [pendingTrainingCount, setPendingTrainingCount] = useState(0)
   const [pendingSwapCount, setPendingSwapCount] = useState(0)
+  const [pendingEndRequestCount, setPendingEndRequestCount] = useState(0)
   const [pendingNotificationCount, setPendingNotificationCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -103,7 +108,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     shiftSwapService.getAll({ status: 'cho_duyet', limit: 1 })
       .then((res) => setPendingSwapCount(res.data.total || 0))
-      .catch(() => {})
+      .catch(() => { })
 
     const countHandler = (data: { pendingCount: number }) => setPendingSwapCount(data.pendingCount)
     const newHandler = (_data: { requestingPtName: string; targetDate: string }) => {
@@ -117,6 +122,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [user?.role])
 
+  // PT end request count: fetch + socket
+  useEffect(() => {
+    if (!['admin', 'super_admin'].includes(user?.role || '')) return
+
+    ptAssignmentEndService.getAllRequests({ status: 'pending', limit: 1 })
+      .then((res) => setPendingEndRequestCount(res.data?.pagination?.total || 0))
+      .catch(() => {})
+
+    const handler = (data: { pendingCount: number }) => setPendingEndRequestCount(data.pendingCount)
+    socketService.on('pt_end_request:count_updated', handler)
+    return () => { socketService.off('pt_end_request:count_updated', handler) }
+  }, [user?.role])
+
   // Notifications: fetch unread count + realtime via socket
   useEffect(() => {
     if (user?.role !== 'pt') return
@@ -127,7 +145,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           const data = res.data.data || []
           setPendingNotificationCount(data.filter((n: any) => !n.isRead).length)
         })
-        .catch(() => {})
+        .catch(() => { })
     }
 
     fetchUnreadCount()
@@ -166,7 +184,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     admin: [
       { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
       { key: '/admin', label: 'Tổng quan', icon: <DashboardOutlined /> },
-      
+
       { key: '/admin/checkin', label: 'Quản lý Check-in', icon: <CalendarOutlined /> },
 
       { key: '/admin/users', label: 'Người dùng', icon: <UserOutlined /> },
@@ -205,13 +223,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       { key: '/admin/members', label: badgeLabel('Hội viên', pendingTrainingCount), icon: <TeamOutlined /> },
       ...(isEnabled('pt.moduleEnabled') ? [
-        { key: '/admin/trainers', label: badgeLabel('Huấn luyện viên (PT)', pendingSwapCount), icon: <UserOutlined /> },
+        { key: '/admin/trainers', label: badgeLabel('Huấn luyện viên (PT)', pendingSwapCount + pendingEndRequestCount), icon: <UserOutlined /> },
       ] : []),
       { key: '/admin/floors-zones', label: 'Tầng & Khu vực', icon: <DashboardOutlined /> },
       ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: 'Báo cáo', icon: <BarChartOutlined /> }] : []),
       { key: '/admin/faqs', label: 'Quản lý FAQ', icon: <QuestionCircleOutlined /> },
       { key: '/admin/feedback', label: 'Quản lý phản hồi', icon: <CommentOutlined /> },
       { key: '/admin/policies', label: 'Chính sách', icon: <FileTextOutlined /> },
+      ...(isEnabled('pt.moduleEnabled') ? [
+        { key: '/admin/workout-reports', label: 'Giáo án của PT', icon: <ExclamationCircleOutlined /> },
+      ] : []),
+      { key: '/admin/notifications', label: 'Thông báo', icon: <BellOutlined /> },
       { key: '/admin/system-settings', label: 'Cài đặt hệ thống', icon: <SettingOutlined /> },
     ],
     staff: [
@@ -225,10 +247,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span>{'Thanh toán'}</span>
             {pendingRefundCount > 0 && (
               <span style={{
-              position: 'absolute', top: '50%', right: 0, transform: 'translateY(-50%)',
-              minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#f5222d',
-              color: '#fff', fontSize: 10, lineHeight: '18px', textAlign: 'center',
-              padding: '0 4px', fontWeight: 600,
+                position: 'absolute', top: '50%', right: 0, transform: 'translateY(-50%)',
+                minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#f5222d',
+                color: '#fff', fontSize: 10, lineHeight: '18px', textAlign: 'center',
+                padding: '0 4px', fontWeight: 600,
               }}>
                 {pendingRefundCount > 99 ? '99+' : pendingRefundCount}
               </span>
@@ -247,7 +269,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ] : []),
       ...(isEnabled('pt.moduleEnabled') ? [
         { key: '/pt/clients', label: 'Khách hàng', icon: <TeamOutlined /> },
-        { key: '/pt/workouts', label: 'Giáo án', icon: <FileTextOutlined /> },
+        { key: '/pt/workouts', label: 'Thư viện giáo án', icon: <FileTextOutlined /> },
       ] : []),
       { key: '/pt/notifications', label: badgeLabel('Thông báo', pendingNotificationCount), icon: <BellOutlined /> },
     ],
@@ -369,15 +391,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: 2, color: 'var(--theme-text)' }}>
             {settings.general.siteName}
           </div>
-          <Avatar
-            size={32}
-            src={
-              user?.avatar ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarName)}`
-            }
-            style={{ cursor: 'pointer' }}
-            onClick={() => navigate('/account/profile')}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {['admin', 'super_admin', 'staff'].includes(user?.role || '') && <NotificationBell />}
+            <Avatar
+              size={32}
+              src={
+                user?.avatar ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarName)}`
+              }
+              style={{ cursor: 'pointer' }}
+              onClick={() => navigate('/account/profile')}
+            />
+          </div>
         </div>
 
         <Drawer
@@ -427,7 +452,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
 
-      {settings.ai.systemAiEnabled && settings.ai.adminAiEnabled && <AdminAIChatWidget />}
     </div>
   )
 }

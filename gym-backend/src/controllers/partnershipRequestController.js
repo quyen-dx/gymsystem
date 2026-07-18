@@ -4,6 +4,8 @@ import Shop from '../models/Shop.js'
 import User from '../models/User.js'
 import { recordAuditLog } from '../services/auditLogService.js'
 import { sendPartnershipRequestEmail } from '../services/emailService.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
+import { createNotification } from '../services/notificationService.js'
 import AppError from '../utils/appError.js'
 
 const REQUIRED_FIELDS = ['brand_name', 'category', 'contact_name', 'phone', 'email']
@@ -49,6 +51,18 @@ export const createPartnershipRequest = async (req, res, next) => {
     } catch (emailErr) {
       console.error('Failed to send partnership request email:', emailErr)
     }
+
+    createNotification({
+      receiverId: null,
+      receiverRole: 'admin',
+      notificationType: NOTIFICATION_TYPES.PARTNERSHIP_REQUEST,
+      title: 'Yêu cầu hợp tác mới',
+      content: 'Có một yêu cầu hợp tác mới cần được xử lý.',
+      relatedId: partnershipRequest._id,
+      relatedType: 'PartnershipRequest',
+      redirectUrl: '/admin/partnerships',
+      createdBy: 'System',
+    }).catch(err => console.error('Notify partnership request failed:', err.message))
 
     res.status(201).json({
       message: 'Chúng tôi sẽ liên hệ với bạn trong 1-3 ngày làm việc',
@@ -138,6 +152,20 @@ export const approvePartnershipRequest = async (req, res, next) => {
       details: `Duyệt yêu cầu hợp tác từ "${request.brand_name}" — đã tạo shop "${shop.name}"`,
     })
 
+    if (user) {
+      createNotification({
+        receiverId: user._id,
+        receiverRole: user.role || 'member',
+        notificationType: NOTIFICATION_TYPES.PARTNERSHIP_REQUEST,
+        title: 'Yêu cầu hợp tác đã được duyệt',
+        content: 'Yêu cầu hợp tác của bạn đã được Admin duyệt.',
+        relatedId: request._id,
+        relatedType: 'PartnershipRequest',
+        redirectUrl: '/partnerships',
+        createdBy: 'Admin',
+      }).catch(err => console.error('Notify partnership approved failed:', err.message))
+    }
+
     res.json({ message: 'Đã duyệt yêu cầu và tạo shop', request, shop })
   } catch (err) {
     next(err)
@@ -151,6 +179,26 @@ export const rejectPartnershipRequest = async (req, res, next) => {
 
     request.status = 'rejected'
     await request.save()
+
+    const partnerUser = await User.findOne({
+      $or: [
+        { email: request.email },
+        { phone: request.phone },
+      ],
+    })
+    if (partnerUser) {
+      createNotification({
+        receiverId: partnerUser._id,
+        receiverRole: partnerUser.role || 'member',
+        notificationType: NOTIFICATION_TYPES.PARTNERSHIP_REQUEST,
+        title: 'Yêu cầu hợp tác bị từ chối',
+        content: 'Yêu cầu hợp tác của bạn đã bị từ chối.',
+        relatedId: request._id,
+        relatedType: 'PartnershipRequest',
+        redirectUrl: '/partnerships',
+        createdBy: 'Admin',
+      }).catch(err => console.error('Notify partnership rejected failed:', err.message))
+    }
 
     res.json({ message: 'Đã từ chối yêu cầu hợp tác', request })
   } catch (err) {

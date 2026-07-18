@@ -153,7 +153,7 @@ export default function MatchmakingPage() {
 
                   <div>
                     <div className="text-xs text-[var(--gs-text-muted)] mb-1 uppercase tracking-wider">Chuyên môn</div>
-                    <Tag className="text-sm font-semibold px-3 py-1">{request.specialization || '—'}</Tag>
+                    <Tag className="text-sm font-semibold px-3 py-1" color="blue">{request.specialization || '—'}</Tag>
                   </div>
 
                   <div>
@@ -185,7 +185,7 @@ export default function MatchmakingPage() {
                     <div>
                       <div className="text-xs text-[var(--gs-text-muted)] mb-1 uppercase tracking-wider">Mục tiêu</div>
                       <div className="flex flex-wrap gap-1">
-                        {request.goals.map((g) => <Tag key={g} color="blue" className="text-sm">{g}</Tag>)}
+                        {request.goals.map((g) => <Tag key={g} color="purple" className="text-sm">{g}</Tag>)}
                       </div>
                     </div>
                   )}

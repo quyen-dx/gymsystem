@@ -35,7 +35,6 @@ import MemberRenewPlanModal from './MemberRenewPlanModal'
 interface PlanOption {
   _id: string
   nameVi: string
-  nameEn: string
 }
 
 const SPEC_LABELS: Record<string, string> = {
@@ -197,7 +196,7 @@ export default function AdminMembersPage() {
     setRenewMemberName(getUserDisplayName(member, member.memberCode))
     setRenewEndDate(member.activeMembership?.endDate || '')
     setRenewStartDate(member.activeMembership?.startDate || '')
-    setRenewPlanName(member.activeMembership?.planId?.nameVi || member.activeMembership?.planId?.nameEn || '')
+    setRenewPlanName(member.activeMembership?.planId?.nameVi || '')
     setRenewCurrentPlanId(member.activeMembership?.planId?._id || '')
     setRenewModalOpen(true)
   }
@@ -239,7 +238,7 @@ export default function AdminMembersPage() {
         return (
           <Space size={4}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: plan?.color || '#3B82F6', flexShrink: 0 }} />
-            <span>{plan?.nameVi || plan?.nameEn || '—'}</span>
+            <span>{plan?.nameVi || '—'}</span>
           </Space>
         )
       },
@@ -335,7 +334,7 @@ export default function AdminMembersPage() {
             style={{ minWidth: 160 }}
             onChange={handlePlanFilter}
             optionFilterProp="label"
-            options={plans.map((p) => ({ value: p._id, label: `${p.nameVi || p.nameEn}` }))}
+            options={plans.map((p) => ({ value: p._id, label: `${p.nameVi}` }))}
           />
           <Select
             allowClear
@@ -444,14 +443,19 @@ export default function AdminMembersPage() {
             {
               title: 'Chuyên môn & Mục tiêu',
               dataIndex: 'goals',
-              width: 220,
+              width: 260,
               render: (_: any, r: TrainingRequest) => {
                 const specName = SPEC_LABELS[r.specialization || 'GYM'] || r.specialization || 'GYM'
-                const goalText = r.goals?.[0]
                 return (
                   <div>
                     <div className="text-sm font-semibold text-[var(--gs-text)] uppercase">{specName}</div>
-                    {goalText && <div className="text-xs text-[var(--gs-text-muted)] mt-0.5">Mục tiêu: {goalText}</div>}
+                    {r.goals?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {r.goals.map((g, i) => (
+                          <Tag key={i} className="m-0 text-xs" color="purple">{g}</Tag>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               },
@@ -459,11 +463,12 @@ export default function AdminMembersPage() {
             {
               title: 'Lịch',
               key: 'schedule',
-              width: 260,
+              width: 280,
               render: (_: any, r: TrainingRequest) => (
-                <div className="text-xs text-[var(--gs-text-muted)]">
-                  {r.desiredSessions} buổi/tuần · {r.timeSlots?.join(', ')}<br />
-                  {r.daysOfWeek?.length > 0 ? r.daysOfWeek.map((d) => ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d]).join(', ') : 'Linh hoạt (Admin tự xếp ngày)'}
+                <div className="text-xs text-[var(--gs-text)] space-y-1">
+                  <div><span className="text-[var(--gs-text-muted)]">Số buổi:</span> {r.desiredSessions} buổi/tuần</div>
+                  <div><span className="text-[var(--gs-text-muted)]">Ngày:</span> {r.daysOfWeek?.length > 0 ? r.daysOfWeek.map((d) => ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d]).join(', ') : 'Linh hoạt'}</div>
+                  <div><span className="text-[var(--gs-text-muted)]">Giờ:</span> {r.timeSlots?.length > 0 ? r.timeSlots.join(', ') : 'Linh hoạt'}</div>
                 </div>
               ),
             },

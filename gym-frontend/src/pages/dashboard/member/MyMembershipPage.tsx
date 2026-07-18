@@ -1,12 +1,15 @@
-import { CalendarOutlined, CheckCircleFilled, CloseCircleOutlined, ExclamationCircleFilled, ExclamationCircleOutlined, InfoCircleOutlined, MailOutlined, WalletOutlined } from '@ant-design/icons'
-import { Button, Card, Descriptions, Empty, Modal, Progress, Radio, Spin, Tabs, Tag, Tooltip, message } from 'antd'
+import { ArrowUpOutlined, CalendarOutlined, CheckCircleFilled, CloseCircleOutlined, DownOutlined, ExclamationCircleFilled, ExclamationCircleOutlined, HistoryOutlined, InfoCircleOutlined, MailOutlined, SwapOutlined, WalletOutlined } from '@ant-design/icons'
+import { Button, Card, Descriptions, Empty, List, Modal, Progress, Radio, Spin, Table, Tabs, Tag, Tooltip, message } from 'antd'
+import dayjs from 'dayjs'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import PolicyConsentCard from '../../../components/wallet/PolicyConsentCard'
+import api from '../../../services/api'
 import { useWallet } from '../../../context/WalletProvider'
 import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 import { membershipService, type CancellationRequest, type MembershipPeriod, type MembershipRenewal, type MyMembership, type PendingCancelRequest } from '../../../services/membershipService'
+import { planFeatureService, type PlanFeature } from '../../../services/planFeatureService'
 
 const formatMoney = (value?: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString('vi-VN') : '-'
@@ -47,6 +50,14 @@ export default function MyMembershipPage() {
     walletBalance: number
     planName: string
   } | null>(null)
+  const [allFeatures, setAllFeatures] = useState<PlanFeature[]>([])
+  const [changeModalOpen, setChangeModalOpen] = useState(false)
+  const [availablePlans, setAvailablePlans] = useState<any>(null)
+  const [plansLoading, setPlansLoading] = useState(false)
+  const [changeLoading, setChangeLoading] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState<any>(null)
+  const [changeHistory, setChangeHistory] = useState<any[]>([])
+  const [activeTab, setActiveTab] = useState('info')
 
   useEffect(() => {
     if (renewModalOpen) {
@@ -89,10 +100,30 @@ export default function MyMembershipPage() {
 
   useEffect(loadData, [])
 
+  useEffect(() => {
+    planFeatureService.getAll({ isActive: true })
+      .then((res) => setAllFeatures(res.data.data || []))
+      .catch(() => {})
+  }, [])
+
+  const memberPlanFeatures = useMemo(() => {
+    const planFeatures = membership?.plan?.features || membership?.plan?.featureIds
+    if (!planFeatures || planFeatures.length === 0) return []
+    if (allFeatures.length === 0) return []
+
+    if (typeof planFeatures[0] === 'string') {
+      return allFeatures.filter((f) => planFeatures.includes(f._id))
+    }
+    return planFeatures.map((pf: any) => {
+      const match = allFeatures.find((af) => af._id === pf._id || af._id === pf)
+      return match || pf
+    })
+  }, [membership?.plan, allFeatures])
+
   const isCancelled = membership?.status === 'cancelled'
   const isPendingCancel = !!pendingCancel
   const isCancelRequested = membership?.status === 'cancel_requested'
-  const planName = membership?.plan?.nameVi || membership?.planNameVi || membership?.plan?.nameEn || membership?.planNameEn || '-'
+  const planName = membership?.plan?.nameVi || membership?.planNameVi || '-'
   const planPrice = membership?.price || membership?.plan?.price || 0
   const progressPercent = useMemo(() => {
     if (isCancelled || isCancelRequested) return 0
@@ -170,6 +201,50 @@ export default function MyMembershipPage() {
     } finally {
       setRenewing(false)
     }
+  }
+
+  const fetchAvailablePlans = async () => {
+    setPlansLoading(true)
+    try {
+      const { data } = await api.get('/memberships/available-plans')
+      setAvailablePlans(data)
+    } catch (err: any) {
+      message.error(err.response?.data?.message || 'Không thể tải danh sách gói')
+    } finally {
+      setPlansLoading(false)
+    }
+  }
+
+  const handleChangePlan = async () => {
+    if (!selectedPlan) return
+    setChangeLoading(true)
+    try {
+      const res = await api.post('/memberships/change-plan', { newPlanId: selectedPlan._id })
+      const d = res.data
+      const msg = d.creditToWallet > 0
+        ? `Đổi gói thành công! Đã hoàn ${formatMoney(d.creditToWallet)} vào ví.`
+        : d.amountToPay > 0
+          ? `Đổi gói thành công! Đã thanh toán ${formatMoney(d.amountToPay)}.`
+          : 'Đổi gói thành công!'
+      message.success(msg)
+      setChangeModalOpen(false)
+      setSelectedPlan(null)
+      setAvailablePlans(null)
+      loadData()
+      refreshWallet()
+      fetchChangeHistory()
+    } catch (err: any) {
+      message.error(err.response?.data?.message || 'Đổi gói thất bại')
+    } finally {
+      setChangeLoading(false)
+    }
+  }
+
+  const fetchChangeHistory = async () => {
+    try {
+      const { data } = await api.get('/memberships/change-history')
+      setChangeHistory(data.history || [])
+    } catch { /* ignore */ }
   }
 
   const balanceSufficient = (wallet?.balance || 0) >= planPrice * selectedMultiplier
@@ -308,6 +383,23 @@ export default function MyMembershipPage() {
               <Descriptions.Item label='Số ngày còn lại'>{membership.remainingDays}</Descriptions.Item>
               <Descriptions.Item label='Trạng thái'>Đang chờ hủy</Descriptions.Item>
             </Descriptions>
+
+            {memberPlanFeatures.length > 0 && (
+              <div className="mt-6">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--gs-text-soft)]">Quyền lợi</h4>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {memberPlanFeatures.map((f: any) => (
+                    <div key={f._id} className="flex items-center gap-2 rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
+                      <span className="text-sm font-medium text-[var(--gs-text)]">{f.name}</span>
+                      {f.category && (
+                        <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }} color="blue">{f.category}</Tag>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>
         ) : membership && isCancelRequested ? (
           <Card>
@@ -356,6 +448,23 @@ export default function MyMembershipPage() {
               <Descriptions.Item label='Số ngày còn lại'>{membership.remainingDays}</Descriptions.Item>
               <Descriptions.Item label='Trạng thái'>Đang chờ phê duyệt hủy</Descriptions.Item>
             </Descriptions>
+
+            {memberPlanFeatures.length > 0 && (
+              <div className="mt-6">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--gs-text-soft)]">Quyền lợi</h4>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {memberPlanFeatures.map((f: any) => (
+                    <div key={f._id} className="flex items-center gap-2 rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
+                      <span className="text-sm font-medium text-[var(--gs-text)]">{f.name}</span>
+                      {f.category && (
+                        <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }} color="blue">{f.category}</Tag>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>
         ) : membership && !isPendingCancel && !isCancelRequested ? (
           <Card>
@@ -369,10 +478,20 @@ export default function MyMembershipPage() {
                   <Tag icon={<CalendarOutlined />}>{`${membership.remainingDays} ngày còn lại`}</Tag>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button type="primary" icon={<WalletOutlined />} onClick={() => { setSelectedMultiplier(1); setRenewModalOpen(true) }}>
                   Gia hạn
                 </Button>
+                {membership?.status === 'active' && membership?.displayStatus !== 'expired' && (
+                  <Button icon={<SwapOutlined />} onClick={() => { setSelectedPlan(null); fetchAvailablePlans(); setChangeModalOpen(true) }}>
+                    Đổi gói tập
+                  </Button>
+                )}
+                {membership?.status === 'active' && membership?.displayStatus !== 'expired' && (
+                  <Button icon={<HistoryOutlined />} onClick={() => { setActiveTab('history'); fetchChangeHistory() }}>
+                    Lịch sử
+                  </Button>
+                )}
                 {membership?.status === 'active' && membership.remainingDays > 0 && (
                   <Button
                     danger
@@ -404,6 +523,23 @@ export default function MyMembershipPage() {
               <Descriptions.Item label='Số ngày còn lại'>{membership.remainingDays}</Descriptions.Item>
               <Descriptions.Item label='Trạng thái'>{(statusMeta[membership.displayStatus] || statusMeta.active).label}</Descriptions.Item>
             </Descriptions>
+
+            {memberPlanFeatures.length > 0 && (
+              <div className="mt-6">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--gs-text-soft)]">Quyền lợi</h4>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {memberPlanFeatures.map((f: any) => (
+                    <div key={f._id} className="flex items-center gap-2 rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
+                      <span className="text-sm font-medium text-[var(--gs-text)]">{f.name}</span>
+                      {f.category && (
+                        <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }} color="blue">{f.category}</Tag>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>
         ) : null}
 
@@ -812,6 +948,124 @@ export default function MyMembershipPage() {
               </div>
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* Change Plan Modal */}
+      <Modal title="Đổi gói tập" open={changeModalOpen} onCancel={() => { setChangeModalOpen(false); setSelectedPlan(null); setAvailablePlans(null) }} footer={null} width={640}>
+        <Spin spinning={plansLoading}>
+          {availablePlans ? (
+            <>
+              <Card size="small" className="mb-4 bg-[var(--gs-bg-subtle)]">
+                <Descriptions column={2} size="small">
+                  <Descriptions.Item label="Gói hiện tại">{availablePlans.currentPlan?.nameVi}</Descriptions.Item>
+                  <Descriptions.Item label="Còn lại">{availablePlans.remainingDays} ngày</Descriptions.Item>
+                </Descriptions>
+              </Card>
+              {availablePlans.plans?.length === 0 ? (
+                <Empty description="Không có gói nào khác" />
+              ) : (
+                <List
+                  dataSource={availablePlans.plans}
+                  renderItem={(plan: any) => {
+                    const isSelected = selectedPlan?._id === plan._id
+                    const needPay = plan.diff > 0
+                    return (
+                      <List.Item
+                        className={`cursor-pointer rounded-lg px-3 py-3 transition-colors ${isSelected ? 'bg-[var(--theme-accent)]/10 border border-[var(--theme-accent)]' : 'hover:bg-[var(--gs-border)]/20'}`}
+                        onClick={() => setSelectedPlan(plan)}
+                      >
+                        <div className="flex w-full items-center justify-between">
+                          <div>
+                            <span className="font-semibold">{plan.nameVi}</span>
+                            <div className="text-sm text-[var(--gs-text-muted)]">{formatMoney(plan.price)} / {plan.durationDays} ngày</div>
+                            {plan.featureIds?.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {plan.featureIds.slice(0, 3).map((f: any) => (
+                                  <Tag key={f._id || f} style={{ fontSize: 10 }}>{f.name || '...'}</Tag>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            {needPay ? (
+                              <>
+                                <div className="text-xs text-[var(--gs-text-muted)]">Cần thanh toán</div>
+                                <div className="font-bold text-[var(--theme-accent)]">{formatMoney(Math.abs(plan.diff))}</div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="text-xs text-[var(--gs-text-muted)]">Hoàn vào ví</div>
+                                <div className="font-bold text-green-600">{formatMoney(Math.abs(plan.diff))}</div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </List.Item>
+                    )
+                  }}
+                />
+              )}
+              {selectedPlan && (
+                <div className="mt-4 rounded-xl border border-[var(--gs-border)] p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Tag>{availablePlans.currentPlan?.nameVi}</Tag>
+                    <ArrowUpOutlined className="text-[var(--gs-text-muted)]" />
+                    <Tag color="blue">{selectedPlan.nameVi}</Tag>
+                  </div>
+                  <div className="flex justify-between text-sm"><span>Giá gói hiện tại</span><span>{formatMoney(availablePlans.currentPlan?.price)}</span></div>
+                  <div className="flex justify-between text-sm"><span>Giá gói mới</span><span>{formatMoney(selectedPlan.price)}</span></div>
+                  {selectedPlan.diff > 0 ? (
+                    <>
+                      <hr className="my-2" />
+                      <div className="flex justify-between font-bold"><span>Thanh toán thêm</span><span className="text-[var(--theme-accent)]">{formatMoney(Math.abs(selectedPlan.diff))}</span></div>
+                      <div className="mt-1 text-xs text-[var(--gs-text-muted)]">Số dư ví: {formatMoney(wallet?.balance)}</div>
+                      <Button type="primary" block className="mt-3" loading={changeLoading} onClick={handleChangePlan}
+                        disabled={wallet ? wallet.balance < Math.abs(selectedPlan.diff) : true}
+                      >
+                        Thanh toán và đổi gói
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <hr className="my-2" />
+                      <div className="flex justify-between font-bold"><span>Hoàn vào Ví GymPro</span><span className="text-green-600">{formatMoney(Math.abs(selectedPlan.diff))}</span></div>
+                      <div className="mt-1 text-xs text-[var(--gs-text-muted)]">Bạn không cần thanh toán thêm. Tiền dư sẽ được cộng vào ví.</div>
+                      <Button type="primary" block className="mt-3" loading={changeLoading} onClick={handleChangePlan}>
+                        Xác nhận đổi gói
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <Empty description="Không có dữ liệu" />
+          )}
+        </Spin>
+      </Modal>
+
+      {/* Change History Modal */}
+      <Modal title="Lịch sử thay đổi gói" open={activeTab === 'history'} onCancel={() => setActiveTab('info')} footer={null} width={700}
+        afterOpenChange={(open) => { if (open) fetchChangeHistory() }}
+      >
+        {changeHistory.length === 0 ? (
+          <Empty description="Chưa có lịch sử thay đổi gói" />
+        ) : (
+          <Table
+            dataSource={changeHistory}
+            rowKey="_id"
+            pagination={false}
+            size="small"
+            columns={[
+              { title: 'Ngày', dataIndex: 'createdAt', render: (v: string) => dayjs(v).format('DD/MM/YYYY HH:mm') },
+              { title: 'Từ gói', dataIndex: ['fromPlanId', 'nameVi'], render: (v: string, r: any) => <Tag>{v || r.fromPlanId?.nameVi}</Tag> },
+              { title: 'Sang gói', dataIndex: ['toPlanId', 'nameVi'], render: (v: string, r: any) => <Tag color="blue">{v || r.toPlanId?.nameVi}</Tag> },
+              { title: 'Loại', dataIndex: 'changeType', render: (v: string) => v === 'upgrade' ? <Tag color="green">Nâng cấp</Tag> : v === 'downgrade' ? <Tag color="orange">Hạ cấp</Tag> : <Tag>Gia hạn</Tag> },
+              { title: 'Thanh toán', dataIndex: 'amount', render: (v: number) => v > 0 ? formatMoney(v) : '—' },
+              { title: 'Hoàn ví', dataIndex: 'walletCredit', render: (v: number) => v > 0 ? <span className="text-green-600">{formatMoney(v)}</span> : '—' },
+            ]}
+          />
         )}
       </Modal>
 

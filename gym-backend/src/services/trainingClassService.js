@@ -1,5 +1,6 @@
 import TrainingClass from '../models/TrainingClass.js'
-import TrainingAssignment from '../models/TrainingAssignment.js'
+import ClassEnrollment from '../models/ClassEnrollment.js'
+import { getActiveCountMap as getActiveEnrollmentCountMap } from './classEnrollmentService.js'
 
 const SPECIALIZATION_LABELS = {
   YOGA: 'Yoga',
@@ -117,23 +118,17 @@ export const updateClass = async ({ classId, data }) => {
 
 export const getAllClasses = async ({ page = 1, limit = 50 }) => {
   const skip = (Number(page) - 1) * Number(limit)
-  const [items, total, assignmentCounts] = await Promise.all([
+
+  const [items, total] = await Promise.all([
     TrainingClass.find()
       .populate(POPULATE_FIELDS)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit)),
     TrainingClass.countDocuments({}),
-    TrainingAssignment.aggregate([
-      { $match: { status: 'active' } },
-      { $group: { _id: '$classId', count: { $sum: 1 } } },
-    ]),
   ])
 
-  const countMap = {}
-  for (const a of assignmentCounts) {
-    countMap[String(a._id)] = a.count
-  }
+  const countMap = await getActiveEnrollmentCountMap(items.map(c => c._id))
 
   return {
     classes: items.map((cls) => serializeClass(cls, countMap[String(cls._id)] || 0)),
@@ -144,16 +139,16 @@ export const getAllClasses = async ({ page = 1, limit = 50 }) => {
 /**
  * Get real-time occupancy for a single class.
  * Shared function used by both PT modal and admin pages.
+ *
+ * Source of truth: ClassEnrollment.status='active' for this class.
  */
 export const getClassOccupancy = async (classId) => {
   const cls = await TrainingClass.findById(classId).populate('zoneId', 'maxCapacity').lean()
   if (!cls) return null
   const max = cls.zoneId?.maxCapacity || 0
-  const [current] = await TrainingAssignment.aggregate([
-    { $match: { classId: cls._id, status: 'active' } },
-    { $group: { _id: null, count: { $sum: 1 } } },
-  ])
-  const count = current?.count || 0
+
+  const count = await ClassEnrollment.countDocuments({ classId, status: 'active' })
+
   return {
     classId: cls._id,
     code: cls.code,

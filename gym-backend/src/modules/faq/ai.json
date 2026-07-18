@@ -1,13 +1,6 @@
 {
   "module": "faq",
-  "description": "FAQ, chính sách phòng gym và điều hướng UI",
-  "tools": ["searchFaqs", "searchPolicies"],
-  "examples": [
-    "Giờ mở cửa là mấy giờ?",
-    "Chính sách hoàn tiền",
-    "Cách đặt lịch PT",
-    "Quên mật khẩu",
-    "Làm sao để đổi thông tin cá nhân",
-    "Cách thanh toán"
-  ]
+  "description": "FAQ và chính sách phòng gym",
+  "tools": [],
+  "examples": []
 }

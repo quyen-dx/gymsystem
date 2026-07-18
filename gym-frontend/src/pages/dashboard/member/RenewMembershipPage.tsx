@@ -67,7 +67,7 @@ export default function RenewMembershipPage() {
       .finally(() => setLoading(false))
   }, [navigate, refreshWallet])
 
-  const planName = membership?.plan?.nameVi || membership?.planNameVi || membership?.plan?.nameEn || membership?.planNameEn || '-'
+  const planName = membership?.plan?.nameVi || membership?.planNameVi || '-'
 
   const handleRenew = async () => {
     setSubmitting(true)

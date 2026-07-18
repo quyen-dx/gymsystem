@@ -14,6 +14,7 @@ import {
   getMyMembership,
   getMyPeriodsHandler,
   getMyRenewalsHandler,
+  getPendingPTPlacements,
   renewMembershipByWallet,
   renewMembershipByWalletWithDuration,
   renewMyMembership,
@@ -33,12 +34,20 @@ import {
   listRefundRequestsHandler,
   rejectRefundRequestHandler,
 } from '../controllers/refundRequestController.js'
+import {
+  changePlan,
+  downgradePlan,
+  getAvailablePlans,
+  getChangeHistory,
+  upgradePlan,
+} from '../controllers/planChangeController.js'
 import { adminOrStaff, protect } from '../middlewares/authMiddleware.js'
 import { requireFeature } from '../middlewares/systemSettingsMiddleware.js'
 
 const router = express.Router()
 
 router.use(protect)
+router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next() })
 router.get('/my', getMyMembership)
 router.post('/subscribe', requireFeature('billing.allowPlanPurchase'), subscribeMembership)
 router.post('/', requireFeature('billing.allowPlanPurchase'), createMembership)
@@ -71,6 +80,13 @@ router.get('/staff/refund-requests/count', adminOrStaff, countPendingRefundReque
 router.get('/staff/refund-requests', adminOrStaff, listRefundRequestsHandler)
 router.post('/staff/refund-requests/:id/approve', adminOrStaff, approveRefundRequestHandler)
 router.post('/staff/refund-requests/:id/reject', adminOrStaff, rejectRefundRequestHandler)
+
+router.get('/available-plans', getAvailablePlans)
+router.post('/change-plan', changePlan)
+router.post('/upgrade', upgradePlan)
+router.post('/downgrade', downgradePlan)
+router.get('/change-history', getChangeHistory)
+router.get('/admin/pending-pt-placements', adminOrStaff, getPendingPTPlacements)
 
 // Routes có tham số động — đặt cuối cùng để tránh nuốt route tĩnh
 router.get('/:membershipId', getMembershipDetailHandler)

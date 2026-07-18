@@ -38,7 +38,7 @@ export function ComboRecommendCard({ data, lang: propLang }: Props) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div className="ai-plan-name" style={{ fontSize: 14 }}>
-                  {lang === 'en' ? plan.nameEn || plan.nameVi : plan.nameVi || plan.nameEn}
+                  {plan.nameVi}
                 </div>
                 <div className="ai-plan-price" style={{ fontSize: 13 }}>{fmtPrice(plan.price)} / {lang === 'en' ? `${plan.durationDays} days` : `${plan.durationDays} ngày`}</div>
               </div>
@@ -53,7 +53,7 @@ export function ComboRecommendCard({ data, lang: propLang }: Props) {
             )}
             {Array.isArray(plan.featuresVi) && plan.featuresVi.length > 0 && (
               <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {(lang === 'en' ? plan.featuresEn || plan.featuresVi : plan.featuresVi || plan.featuresEn)?.slice(0, 3).map((f, i) => (
+                {(plan.featuresVi)?.slice(0, 3).map((f, i) => (
                   <span key={i} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.08)' }}>{f}</span>
                 ))}
               </div>
@@ -113,7 +113,7 @@ export function ComboRecommendCard({ data, lang: propLang }: Props) {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {data.alternatives.plans.slice(0, 2).map((p) => (
               <span key={p._id} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.08)' }}>
-                {lang === 'en' ? p.nameEn || p.nameVi : p.nameVi || p.nameEn}
+                {p.nameVi}
               </span>
             ))}
             {data.alternatives.pts.slice(0, 1).map((p) => (

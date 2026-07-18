@@ -1,6 +1,7 @@
 import TrainingRequest from '../models/TrainingRequest.js'
 import TrainingClass from '../models/TrainingClass.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
+import { ensureEnrollment as ensureClassEnrollment } from './classEnrollmentService.js'
 
 export const createRequest = async ({ memberId, data }) => {
   const request = await TrainingRequest.create({
@@ -94,6 +95,7 @@ export const assignToClass = async ({ requestId, classId, assignedBy }) => {
   )
 
   if (request) {
+    // Legacy TrainingAssignment record (kept for backward compat)
     await TrainingAssignment.create({
       memberId: request.memberId,
       classId,
@@ -102,6 +104,13 @@ export const assignToClass = async ({ requestId, classId, assignedBy }) => {
       assignedBy: assignedBy || undefined,
       status: 'active',
       startDate: new Date(),
+    })
+
+    // Authoritative ClassEnrollment (idempotent)
+    await ensureClassEnrollment({
+      classId,
+      memberId: request.memberId,
+      sourceReason: 'assigned_by_pt',
     })
   }
 
