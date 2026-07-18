@@ -48,6 +48,9 @@ export const checkInService = {
   submitDailyQRCheckin: (data: { token: string; scheduleId?: string; sessionIndex?: number }) =>
     api.post<{ message: string; checkin: any }>('/checkin/daily-qr/checkin', data),
 
+  getMyCheckinHistory: (params?: Record<string, any>) =>
+    api.get<{ checkins: any[]; pagination: any }>('/checkin/my-history', { params }),
+
   verifyStaffCheckin: (data: { token?: string; memberId?: string }) =>
     api.post<StaffVerifyCheckinResponse>('/staff/checkin/verify', data),
 

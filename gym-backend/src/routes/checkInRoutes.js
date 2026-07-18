@@ -2,6 +2,7 @@ import express from 'express'
 import {
   generateQRToken,
   getCheckinHeatmap,
+  getMyCheckinHistory,
   getStaffCheckinHistory,
   getCheckinStats,
   getMemberStreak,
@@ -27,6 +28,9 @@ router.post('/daily-qr/generate', adminOrStaff, generateDailyQR)
 router.get('/daily-qr/active', adminOrStaff, getActiveDailyQR)
 router.post('/daily-qr/verify', verifyDailyQRAndGetSessions)
 router.post('/daily-qr/checkin', submitDailyQRCheckin)
+
+// Member's own check-in history
+router.get('/my-history', getMyCheckinHistory)
 
 router.post('/verify', adminOrStaff, staffVerifyCheckin)
 router.get('/staff/history', adminOrStaff, getStaffCheckinHistory)

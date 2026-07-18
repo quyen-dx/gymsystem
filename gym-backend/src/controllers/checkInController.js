@@ -325,6 +325,66 @@ export const staffVerifyCheckin = async (req, res) => {
   }
 }
 
+/**
+ * Member: Get own check-in history (no admin/staff required).
+ */
+export const getMyCheckinHistory = async (req, res) => {
+  try {
+    const { page = 1, limit = 50, mode = 'all', date, toDate } = req.query
+    const memberId = req.user._id
+
+    const filter = { memberId, status: 'success' }
+
+    if ((mode === 'custom' || date) && date) {
+      const start = new Date(date)
+      start.setHours(0, 0, 0, 0)
+      if (toDate) {
+        const end = new Date(toDate)
+        end.setHours(23, 59, 59, 999)
+        filter.checkinTime = { $gte: start, $lte: end }
+      } else {
+        const end = new Date(date)
+        end.setHours(23, 59, 59, 999)
+        filter.checkinTime = { $gte: start, $lte: end }
+      }
+    }
+
+    const pageNumber = Math.max(1, Number(page) || 1)
+    const limitNumber = Math.max(1, Math.min(100, Number(limit) || 50))
+    const skip = (pageNumber - 1) * limitNumber
+
+    const [total, checkins] = await Promise.all([
+      CheckIn.countDocuments(filter),
+      CheckIn.find(filter)
+        .sort({ checkinTime: -1 })
+        .skip(skip)
+        .limit(limitNumber)
+        .lean(),
+    ])
+
+    // Format with membership plan info
+    const memberships = await Membership.find({ memberId, status: 'active' })
+      .populate('planId', 'nameVi nameEn')
+      .sort({ endDate: -1 })
+      .lean()
+    const membershipByMemberId = {}
+    if (memberships.length > 0) {
+      membershipByMemberId[String(memberId)] = memberships[0]
+    }
+    const memberMap = {}
+    for (const m of memberships) {
+      memberMap[String(m.memberId)] = m
+    }
+
+    res.json({
+      checkins: checkins.map((c) => formatHistoryItem(c, memberMap)),
+      pagination: { total, page: pageNumber, limit: limitNumber, totalPages: Math.ceil(total / limitNumber) },
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
 export const getStaffCheckinHistory = async (req, res) => {
   try {
     const {
