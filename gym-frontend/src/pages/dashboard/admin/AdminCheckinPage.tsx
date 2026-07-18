@@ -8,7 +8,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Button, Card, Col, DatePicker, Input, Row, Segmented, Select, Space, Spin, Statistic, Table, Tag, Tooltip, message } from 'antd'
-import { QRCode } from 'antd'
+import { QRCodeSVG } from 'qrcode.react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
@@ -347,7 +347,7 @@ function QRTab() {
 
             <div className="flex justify-center py-8">
               <div className="bg-white p-8 rounded-2xl shadow-lg" style={{ maxWidth: 500 }}>
-                <QRCode value={qrData.token} size={380} level="L" includeMargin />
+                <QRCodeSVG value={qrData.token} size={380} level="L" includeMargin />
                 <p className="text-center text-sm text-gray-500 mt-4 font-mono break-all">{qrData.token}</p>
               </div>
             </div>
