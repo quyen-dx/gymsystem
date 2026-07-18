@@ -1,7 +1,7 @@
 import { LoadingOutlined } from '@ant-design/icons'
 import { Button, Input, Space, Typography, message } from 'antd'
 import { Html5Qrcode } from 'html5-qrcode'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { checkInService } from '../../../services/checkInService'
@@ -14,11 +14,23 @@ export default function MemberScanPage() {
   const [manualToken, setManualToken] = useState('')
   const [verifying, setVerifying] = useState(false)
 
+  const cleanupCamera = useCallback(async () => {
+    if (cameraRef.current) {
+      try {
+        await cameraRef.current.stop()
+      } catch { /* already stopped */ }
+      cameraRef.current = null
+    }
+    setCameraReady(false)
+  }, [])
+
   useEffect(() => {
-    startCamera()
+    const timer = setTimeout(() => startCamera(), 300)
     return () => {
+      clearTimeout(timer)
       if (cameraRef.current) {
         cameraRef.current.stop().catch(() => {})
+        cameraRef.current = null
       }
     }
   }, [])
@@ -26,6 +38,14 @@ export default function MemberScanPage() {
   const startCamera = async () => {
     setCameraError(null)
     try {
+      if (cameraRef.current) {
+        await cameraRef.current.stop().catch(() => {})
+      }
+      // Remove any leftover container from previous scans
+      const oldContainer = document.getElementById('member-scanner-container')
+      if (oldContainer) {
+        oldContainer.innerHTML = ''
+      }
       const qrCode = new Html5Qrcode('member-scanner-container')
       cameraRef.current = qrCode
       await qrCode.start(
@@ -35,9 +55,8 @@ export default function MemberScanPage() {
           qrbox: { width: 280, height: 280 },
           aspectRatio: 1,
         },
-        (decodedText) => {
-          qrCode.stop().catch(() => {})
-          setCameraReady(false)
+        async (decodedText) => {
+          await cleanupCamera()
           verifyToken(decodedText)
         },
         () => {},
@@ -48,12 +67,8 @@ export default function MemberScanPage() {
     }
   }
 
-  const stopCamera = () => {
-    if (cameraRef.current) {
-      cameraRef.current.stop().catch(() => {})
-      cameraRef.current = null
-    }
-    setCameraReady(false)
+  const stopCamera = async () => {
+    await cleanupCamera()
   }
 
   const verifyToken = async (token: string) => {
@@ -61,11 +76,10 @@ export default function MemberScanPage() {
     try {
       const res = await checkInService.verifyDailyQR(token)
       if (res.data.valid) {
-        navigate(`/checkin/sessions?token=${encodeURIComponent(token)}`)
+        navigate(`/checkin/sessions?token=${encodeURIComponent(token)}`, { replace: true })
       }
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Mã QR không hợp lệ.')
-      // Allow re-scan after error
       setVerifying(false)
       startCamera()
     }
@@ -74,6 +88,7 @@ export default function MemberScanPage() {
   const handleManualSubmit = () => {
     const t = manualToken.trim()
     if (!t) { message.warning('Vui lòng nhập mã QR.'); return }
+    cleanupCamera()
     verifyToken(t)
   }
 
@@ -94,7 +109,6 @@ export default function MemberScanPage() {
           </div>
         ) : (
           <>
-            {/* Camera view */}
             <div className="relative mx-auto max-w-sm">
               {cameraError && (
                 <div className="rounded-2xl border-2 border-dashed border-[var(--gs-border)] p-12 text-center">
@@ -111,10 +125,9 @@ export default function MemberScanPage() {
 
               <div id="member-scanner-container" className={`w-full rounded-2xl overflow-hidden ${cameraError ? 'hidden' : ''}`} />
 
-              {/* Scan frame overlay */}
               {cameraReady && (
-                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                  <div className="border-2 border-white/60 rounded-xl" style={{ width: 280, height: 280 }} />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="rounded-xl border-2 border-white/60" style={{ width: 280, height: 280 }} />
                 </div>
               )}
 
@@ -125,7 +138,6 @@ export default function MemberScanPage() {
               )}
             </div>
 
-            {/* Manual fallback */}
             <div className="mt-6 border-t border-[var(--gs-border)] pt-6">
               <Typography.Text type="secondary" className="block text-center mb-3">
                 Camera không hoạt động? Nhập mã thủ công
@@ -141,7 +153,7 @@ export default function MemberScanPage() {
               </Space.Compact>
               {cameraError && (
                 <div className="mt-3 text-center">
-                  <Button type="link" onClick={() => { stopCamera(); startCamera() }}>
+                  <Button type="link" onClick={() => { stopCamera().then(() => startCamera()) }}>
                     Thử lại camera
                   </Button>
                 </div>

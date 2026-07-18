@@ -194,10 +194,8 @@ export default function MemberSessionSelectPage() {
             </div>
 
             {!hasSessions && !freeCheckedIn && (
-              <div className="text-center py-4">
-                <Typography.Text type="secondary">
-                  Bạn không có lịch tập PT hôm nay. Bạn có thể chọn "Tập tự do" để check-in.
-                </Typography.Text>
+              <div className="text-center py-4 text-[var(--gs-text-muted)] text-sm">
+                {'Hôm nay bạn không có buổi tập theo lịch.'}
               </div>
             )}
           </div>
