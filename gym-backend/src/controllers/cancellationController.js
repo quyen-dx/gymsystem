@@ -12,6 +12,8 @@ import { recordUserActivity } from '../services/userActivityService.js';
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js';
 import { assertPolicyConsent } from '../utils/policyConsent.js';
 import { cleanupMemberPTData } from '../services/membershipService.js';
+import MembershipCycle from '../models/MembershipCycle.js';
+import PlanChangeHistory from '../models/PlanChangeHistory.js';
 import ClassEnrollment from '../models/ClassEnrollment.js';
 import PTAssignment from '../models/PTAssignment.js';
 import { NOTIFICATION_TYPES } from '../models/Notification.js';
@@ -451,17 +453,19 @@ export const approveCancellationRequest = async (req, res, next) => {
       ? maxRefundAmount
       : Number(finalRefundAmount);
     const refundAmount = Math.max(0, Math.min(Number.isFinite(requestedRefundAmount) ? requestedRefundAmount : maxRefundAmount, maxRefundAmount));
-    const refundMethod = cancellationRequest.refundEligible && refundAmount > 0 ? 'WALLET' : 'NONE';
 
     const session = await mongoose.startSession();
     try {
       session.startTransaction();
 
-      await assertRefundEligibility({
-        membership,
+      // === Read MembershipCycle.refundEligible ===
+      const cycle = await MembershipCycle.findOne({
         memberId: cancellationRequest.memberId,
-        session,
-      });
+        status: 'active',
+      }).session(session).sort({ createdAt: -1 }).lean()
+
+      const cycleRefundEligible = cycle?.refundEligible ?? false
+      const refundMethod = cycleRefundEligible && refundAmount > 0 ? 'WALLET' : 'NONE'
 
       membership.status = refundAmount > 0 ? 'refunded' : 'cancelled';
       membership.cancelledAt = new Date();
@@ -469,6 +473,30 @@ export const approveCancellationRequest = async (req, res, next) => {
       membership.cancelHandledBy = staffId;
       membership.cancelHandledAt = new Date();
       await membership.save({ session });
+
+      // Update cycle status
+      if (cycle) {
+        await MembershipCycle.updateOne(
+          { _id: cycle._id },
+          { $set: { status: 'cancelled' } },
+        ).session(session)
+      }
+
+      // PlanChangeHistory(cancel)
+      await PlanChangeHistory.create([{
+        memberId: cancellationRequest.memberId,
+        membershipId: membership._id,
+        fromPlanId: cancellationRequest.planId?._id || cancellationRequest.planId,
+        toPlanId: null,
+        changedAt: new Date(),
+        changeType: 'cancel',
+        type: 'cancel',
+        amount: 0,
+        priceDifference: 0,
+        proratedValue: 0,
+        proratedCredit: 0,
+        walletCredit: 0,
+      }], { session })
 
       cancellationRequest.status = 'approved';
       cancellationRequest.finalRefundAmount = refundAmount;

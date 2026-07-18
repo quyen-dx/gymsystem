@@ -437,7 +437,7 @@ export default function MemberLayout({
             <Button
               type="text"
               icon={<BellOutlined style={{ fontSize: 18 }} />}
-              onClick={() => goTo('/member/notifications')}
+              onClick={() => goTo('/notifications')}
               style={navbarIconButtonStyle}
               onMouseEnter={(e) => e.currentTarget.style.color = 'var(--theme-accent)'}
               onMouseLeave={(e) => e.currentTarget.style.color = 'var(--theme-text)'}

@@ -112,3 +112,10 @@ export const emitPTEndRequestStatusChange = ({ userId, data }) => {
   if (!io || !userId) return
   io.to(userId.toString()).emit('pt_end_request:status_changed', data)
 }
+
+export const emitWorkoutReportCountUpdate = async () => {
+  if (!io) return
+  const { default: WorkoutReport } = await import('../models/WorkoutReport.js')
+  const count = await WorkoutReport.countDocuments({ status: 'pending' })
+  io.to('staff').emit('workout_report:count_updated', { pendingCount: count })
+}

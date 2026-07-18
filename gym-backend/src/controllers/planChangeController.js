@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import Plan from '../models/Plan.js'
 import Membership from '../models/Membership.js'
+import MembershipCycle from '../models/MembershipCycle.js'
 import PlanChangeHistory from '../models/PlanChangeHistory.js'
 import Payment from '../models/Payment.js'
 import Wallet from '../models/Wallet.js'
@@ -143,6 +144,22 @@ export const upgradePlan = async (req, res) => {
       paymentId: payment._id,
     }], { session })
 
+    // === MembershipCycle integration (upgrade) ===
+    const upCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+      .session(session).sort({ createdAt: -1 }).lean()
+    if (upCycle) {
+      await MembershipCycle.updateOne(
+        { _id: upCycle._id },
+        {
+          $set: {
+            currentMembershipId: membership._id,
+            currentPlanId: newPlan._id,
+          },
+        },
+      ).session(session)
+    }
+    // === end MembershipCycle integration ===
+
     // Handle PT data changes WITHIN transaction so that failure rolls back plan change
     try {
       await handlePTDataOnPlanChange({ memberId, oldPlan, newPlan, session })
@@ -250,6 +267,22 @@ export const downgradePlan = async (req, res) => {
       changeType: 'downgrade',
       walletCredit: creditToWallet,
     }], { session })
+
+    // === MembershipCycle integration (downgrade) ===
+    const downCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+      .session(session).sort({ createdAt: -1 }).lean()
+    if (downCycle) {
+      await MembershipCycle.updateOne(
+        { _id: downCycle._id },
+        {
+          $set: {
+            currentMembershipId: membership._id,
+            currentPlanId: newPlan._id,
+          },
+        },
+      ).session(session)
+    }
+    // === end MembershipCycle integration ===
 
     // Handle PT data changes WITHIN transaction
     try {
@@ -392,6 +425,22 @@ export const changePlan = async (req, res) => {
       amount: amountToPay, walletCredit: creditToWallet,
       paymentId: payment?._id || null,
     }], { session })
+
+    // === MembershipCycle integration (change) ===
+    const chCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+      .session(session).sort({ createdAt: -1 }).lean()
+    if (chCycle) {
+      await MembershipCycle.updateOne(
+        { _id: chCycle._id },
+        {
+          $set: {
+            currentMembershipId: membership._id,
+            currentPlanId: newPlan._id,
+          },
+        },
+      ).session(session)
+    }
+    // === end MembershipCycle integration ===
 
     // Handle PT data changes WITHIN transaction
     try {

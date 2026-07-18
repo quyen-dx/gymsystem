@@ -3,6 +3,7 @@ import WorkoutReport from '../models/WorkoutReport.js'
 import Workout from '../models/Workout.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
+import { emitWorkoutReportCountUpdate } from '../services/socketService.js'
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id)
 const isAdminRole = (role) => role === 'super_admin' || role === 'admin'
@@ -82,6 +83,8 @@ export const reportWorkout = async (req, res) => {
       createdBy: 'System',
       sendEmail: false,
     })
+
+    emitWorkoutReportCountUpdate()
 
     return res.status(201).json({ message: 'Da gui bao cao', report })
   } catch (error) {
@@ -184,6 +187,8 @@ export const resolveReport = async (req, res) => {
     report.resolvedAt = new Date()
     await report.save()
 
+    emitWorkoutReportCountUpdate()
+
     return res.status(200).json({ message: 'Da xu ly bao cao', report })
   } catch (error) {
     return res.status(500).json({ message: 'Khong the xu ly bao cao', error: error.message })
@@ -218,6 +223,8 @@ export const rejectReport = async (req, res) => {
         await workout.save()
       }
     }
+
+    emitWorkoutReportCountUpdate()
 
     return res.status(200).json({ message: 'Da tu choi bao cao', report })
   } catch (error) {

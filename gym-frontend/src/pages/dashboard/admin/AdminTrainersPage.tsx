@@ -26,6 +26,7 @@ import { trainerScheduleService } from '../../../services/trainerScheduleService
 import { ptAssignmentEndService } from '../../../services/ptAssignmentEndService'
 import { trainerReplacementService, type TrainerReplacementRequest } from '../../../services/trainerReplacementService'
 import { shiftSwapService, type ShiftSwapRequest, type ShiftSwapItem } from '../../../services/shiftSwapService'
+import { workoutService } from '../../../services/workoutService'
 import { socketService } from '../../../services/socketService'
 import type { PT } from '../../../types/admin/trainer'
 import { getUserDisplayName } from '../../../utils/userDisplay'
@@ -56,6 +57,7 @@ export default function AdminTrainersPage() {
   const [replacementsOpen, setReplacementsOpen] = useState(false)
   const [pendingSwapCount, setPendingSwapCount] = useState(0)
   const [pendingEndRequestCount, setPendingEndRequestCount] = useState(0)
+  const [pendingWorkoutReportCount, setPendingWorkoutReportCount] = useState(0)
 
   const fetchPTs = useCallback(async (p = page, s = search, sp = specialtyFilter) => {
     setLoading(true)
@@ -93,6 +95,16 @@ export default function AdminTrainersPage() {
     const handler = (data: { pendingCount: number }) => setPendingEndRequestCount(data.pendingCount)
     socketService.on('pt_end_request:count_updated', handler)
     return () => { socketService.off('pt_end_request:count_updated', handler) }
+  }, [])
+
+  // Socket: listen for workout report count updates
+  useEffect(() => {
+    workoutService.getWorkoutReports({ status: 'pending', limit: 1 })
+      .then(res => setPendingWorkoutReportCount(res.data.pagination?.total || 0))
+      .catch(() => {})
+    const handler = (data: { pendingCount: number }) => setPendingWorkoutReportCount(data.pendingCount)
+    socketService.on('workout_report:count_updated', handler)
+    return () => { socketService.off('workout_report:count_updated', handler) }
   }, [])
 
   const handleSearch = (value: string) => {
@@ -180,6 +192,15 @@ export default function AdminTrainersPage() {
             {pendingEndRequestCount > 0 && (
               <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#f5222d] text-white text-[10px] font-bold px-1">
                 {pendingEndRequestCount > 99 ? '99+' : pendingEndRequestCount}
+              </span>
+            )}
+          </button>
+          <button type="button" onClick={() => navigate('/admin/workout-reports')}
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white">
+            Báo cáo giáo án
+            {pendingWorkoutReportCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#f5222d] text-white text-[10px] font-bold px-1">
+                {pendingWorkoutReportCount > 99 ? '99+' : pendingWorkoutReportCount}
               </span>
             )}
           </button>

@@ -1,18 +1,85 @@
 import mongoose from 'mongoose'
 
 const planChangeHistorySchema = new mongoose.Schema({
-  memberId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  membershipId: { type: mongoose.Schema.Types.ObjectId, ref: 'Membership', required: true },
-  fromPlanId: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan', required: true },
-  toPlanId: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan', required: true },
-  changeType: { type: String, enum: ['upgrade', 'downgrade', 'renewal'], required: true },
-  amount: { type: Number, default: 0 },
-  proratedCredit: { type: Number, default: 0 },
-  walletCredit: { type: Number, default: 0 },
-  paymentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment', default: null },
+  // New fields (Membership Cycle)
+  cycleId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'MembershipCycle',
+    default: null,
+    index: true,
+  },
+  // Legacy fields (kept for backwards compatibility)
+  memberId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  },
+  membershipId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Membership',
+    default: null,
+  },
+  fromPlanId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Plan',
+    default: null,
+  },
+  toPlanId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Plan',
+    default: null
+  },
+  changedAt: {
+    type: Date,
+    default: Date.now,
+  },
+  // Unified type field
+  changeType: {
+    type: String,
+    enum: ['purchase', 'upgrade', 'downgrade', 'renew', 'renewal','change_plan', 'cancel'],
+    default: 'purchase',
+  },
+  type: {
+    type: String,
+     enum: ['purchase', 'upgrade', 'downgrade', 'renew', 'change_plan', 'cancel'],
+    default: 'purchase',
+  },
+  // Financial fields (new naming)
+  priceDifference: {
+    type: Number,
+    default: 0,
+  },
+  proratedValue: {
+    type: Number,
+    default: 0,
+  },
+  // Financial fields (legacy naming)
+  amount: {
+    type: Number,
+    default: 0,
+  },
+  proratedCredit: {
+    type: Number,
+    default: 0,
+  },
+  walletCredit: {
+    type: Number,
+    default: 0,
+  },
+  paymentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Payment',
+    default: null,
+  },
+  note: {
+    type: String,
+    default: '',
+  },
 }, { timestamps: true })
 
 planChangeHistorySchema.index({ memberId: 1, createdAt: -1 })
 planChangeHistorySchema.index({ membershipId: 1 })
+planChangeHistorySchema.index({ cycleId: 1, changedAt: -1 })
 
 export default mongoose.model('PlanChangeHistory', planChangeHistorySchema)

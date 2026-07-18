@@ -20,6 +20,8 @@ import Workout from '../models/Workout.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import PTAssignment from '../models/PTAssignment.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
+import MembershipCycle from '../models/MembershipCycle.js'
+import PlanChangeHistory from '../models/PlanChangeHistory.js'
 import { endEnrollments as endClassEnrollments } from './classEnrollmentService.js'
 import { getSystemSettingsValue } from './systemSettingsService.js'
 import { recordUserActivity } from './userActivityService.js'
@@ -431,6 +433,50 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
       await rebuildMembershipTimeline({ membershipId: membership._id, session })
     }
 
+    // === MembershipCycle integration ===
+    const activeCycle = await MembershipCycle.findOne({
+      memberId, status: 'active',
+    }).session(session).sort({ createdAt: -1 }).lean()
+
+    if (activeCycle) {
+      await MembershipCycle.updateOne(
+        { _id: activeCycle._id },
+        {
+          $set: {
+            currentMembershipId: membership._id,
+            currentPlanId: planObjectId,
+            endDate: membership.endDate,
+          },
+        },
+      ).session(session)
+    } else {
+      await MembershipCycle.create([{
+        memberId,
+        currentMembershipId: membership._id,
+        currentPlanId: planObjectId,
+        startDate: membership.startDate,
+        endDate: membership.endDate,
+        status: 'active',
+        refundEligible: true,
+      }], { session })
+    }
+
+    await PlanChangeHistory.create([{
+      memberId,
+      membershipId: membership._id,
+      fromPlanId: null,
+      toPlanId: planObjectId,
+      changedAt: new Date(),
+      changeType: isRenew ? 'renew' : 'purchase',
+      type: isRenew ? 'renew' : 'purchase',
+      amount: amount || 0,
+      priceDifference: 0,
+      proratedValue: 0,
+      proratedCredit: 0,
+      walletCredit: 0,
+    }], { session })
+    // === end MembershipCycle integration ===
+
     await session.commitTransaction()
     committed = true
 
@@ -618,6 +664,50 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
       createdBy: source === 'staff' ? 'Staff' : 'System',
     }).catch(err => console.error('Notify membership activated failed:', err.message))
 
+    // === MembershipCycle integration (register) ===
+    const activeCycle = await MembershipCycle.findOne({
+      memberId, status: 'active',
+    }).sort({ createdAt: -1 }).lean()
+
+    if (activeCycle) {
+      await MembershipCycle.updateOne(
+        { _id: activeCycle._id },
+        {
+          $set: {
+            currentMembershipId: membership._id,
+            currentPlanId: planObjectId,
+            endDate: membership.endDate,
+          },
+        },
+      )
+    } else {
+      await MembershipCycle.create({
+        memberId,
+        currentMembershipId: membership._id,
+        currentPlanId: planObjectId,
+        startDate: membership.startDate,
+        endDate: membership.endDate,
+        status: 'active',
+        refundEligible: true,
+      })
+    }
+
+    await PlanChangeHistory.create({
+      memberId,
+      membershipId: membership._id,
+      fromPlanId: null,
+      toPlanId: planObjectId,
+      changedAt: new Date(),
+      changeType: 'purchase',
+      type: 'purchase',
+      amount: plan.price || 0,
+      priceDifference: 0,
+      proratedValue: 0,
+      proratedCredit: 0,
+      walletCredit: 0,
+    })
+    // === end MembershipCycle integration ===
+
     const populated = await Membership.findById(membership._id).populate('planId')
     return serializeMembership({ ...populated.toObject(), planId: plan.toObject() })
   }
@@ -707,6 +797,50 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
       periodIndex: nextPeriodIndex,
     }).catch((e) => console.error('Gửi email gia hạn thất bại:', e.message))
   }
+
+  // === MembershipCycle integration (renew) ===
+  const activeCycle = await MembershipCycle.findOne({
+    memberId, status: 'active',
+  }).sort({ createdAt: -1 }).lean()
+
+  if (activeCycle) {
+    await MembershipCycle.updateOne(
+      { _id: activeCycle._id },
+      {
+        $set: {
+          currentMembershipId: existingActive._id,
+          currentPlanId: planObjectId,
+          endDate: periodEnd,
+        },
+      },
+    )
+  } else {
+    await MembershipCycle.create({
+      memberId,
+      currentMembershipId: existingActive._id,
+      currentPlanId: planObjectId,
+      startDate: existingActive.startDate,
+      endDate: periodEnd,
+      status: 'active',
+      refundEligible: true,
+    })
+  }
+
+  await PlanChangeHistory.create({
+    memberId,
+    membershipId: existingActive._id,
+    fromPlanId: null,
+    toPlanId: planObjectId,
+    changedAt: new Date(),
+    changeType: 'renew',
+    type: 'renew',
+    amount: plan.price || 0,
+    priceDifference: 0,
+    proratedValue: 0,
+    proratedCredit: 0,
+    walletCredit: 0,
+  })
+  // === end MembershipCycle integration ===
 
   const populated = await Membership.findById(existingActive._id).populate('planId')
   return serializeMembership({ ...populated.toObject(), planId: plan.toObject() })

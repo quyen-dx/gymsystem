@@ -7,6 +7,7 @@ import { applyWalletTransaction } from '../services/walletService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import { checkMemberFeature } from '../utils/featureCheck.js'
+import { markBenefitUsed } from '../services/membershipCycleService.js'
 
 const activeStatus = ['pending', 'awaiting_payment', 'confirmed']
 
@@ -192,6 +193,10 @@ export const createBooking = async (req, res) => {
       createdBy: 'System',
     })
 
+    // === MembershipCycle benefit tracking ===
+    const benefitType = finalTrainingType === 'one_to_one' ? 'pt_1on1' : 'pt_group'
+    markBenefitUsed(req.user._id, benefitType)
+
     return res.status(201).json({
       message: 'Đặt lịch thành công, chờ PT xác nhận',
       booking,
@@ -264,6 +269,8 @@ export const createRecurringBooking = async (req, res) => {
         note,
         status: 'pending',
       })
+
+      markBenefitUsed(req.user._id, 'pt_1on1')
 
       createdBookings.push(booking)
     }
@@ -339,6 +346,8 @@ export const scheduleWeeklyBooking = async (req, res) => {
         note,
         status: 'pending',
       })
+
+      markBenefitUsed(req.user._id, 'pt_1on1')
 
       results.push(booking)
     }

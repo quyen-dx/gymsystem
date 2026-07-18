@@ -1,5 +1,5 @@
 import { ArrowUpOutlined, CalendarOutlined, CheckCircleFilled, CloseCircleOutlined, DownOutlined, ExclamationCircleFilled, ExclamationCircleOutlined, HistoryOutlined, InfoCircleOutlined, MailOutlined, SwapOutlined, WalletOutlined } from '@ant-design/icons'
-import { Button, Card, Descriptions, Empty, List, Modal, Progress, Radio, Spin, Table, Tabs, Tag, Tooltip, message } from 'antd'
+import { Button, Card, Descriptions, Empty, List, Modal, Radio, Spin, Table, Tabs, Tag, Tooltip, message } from 'antd'
 import dayjs from 'dayjs'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -13,6 +13,15 @@ import { planFeatureService, type PlanFeature } from '../../../services/planFeat
 
 const formatMoney = (value?: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString('vi-VN') : '-'
+
+function InfoCell({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+  return (
+    <div className={`flex flex-col gap-0.5 bg-[var(--gs-card)] px-4 py-3.5 ${wide ? 'sm:col-span-2 lg:col-span-1' : ''}`}>
+      <span className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">{label}</span>
+      <span className="text-sm font-semibold text-[var(--gs-text)] break-all">{value}</span>
+    </div>
+  )
+}
 
 export default function MyMembershipPage() {
   const { wallet, refreshWallet } = useWallet()
@@ -375,14 +384,12 @@ export default function MyMembershipPage() {
               </div>
             </div>
 
-            <Descriptions bordered column={{ xs: 1, sm: 2, lg: 3 }}>
-              <Descriptions.Item label='Gói tập'>{planName}</Descriptions.Item>
-              <Descriptions.Item label='Giá'>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
-              <Descriptions.Item label='Ngày bắt đầu'>{formatDate(membership.startDate)}</Descriptions.Item>
-              <Descriptions.Item label='Ngày kết thúc'>{formatDate(membership.endDate)}</Descriptions.Item>
-              <Descriptions.Item label='Số ngày còn lại'>{membership.remainingDays}</Descriptions.Item>
-              <Descriptions.Item label='Trạng thái'>Đang chờ hủy</Descriptions.Item>
-            </Descriptions>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px rounded-xl border border-[var(--gs-border)] overflow-hidden bg-[var(--gs-border)]">
+              <InfoCell label="Gói tập" value={planName} />
+              <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
+              <InfoCell label="Thời hạn" value={`${formatDate(membership.startDate)} → ${formatDate(membership.endDate)}`} wide />
+              <InfoCell label="Số ngày còn lại" value={`${membership.remainingDays} ngày`} />
+            </div>
 
             {memberPlanFeatures.length > 0 && (
               <div className="mt-6">
@@ -440,14 +447,12 @@ export default function MyMembershipPage() {
               </div>
             )}
 
-            <Descriptions bordered column={{ xs: 1, sm: 2, lg: 3 }}>
-              <Descriptions.Item label='Gói tập'>{planName}</Descriptions.Item>
-              <Descriptions.Item label='Giá'>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
-              <Descriptions.Item label='Ngày bắt đầu'>{formatDate(membership.startDate)}</Descriptions.Item>
-              <Descriptions.Item label='Ngày kết thúc'>{formatDate(membership.endDate)}</Descriptions.Item>
-              <Descriptions.Item label='Số ngày còn lại'>{membership.remainingDays}</Descriptions.Item>
-              <Descriptions.Item label='Trạng thái'>Đang chờ phê duyệt hủy</Descriptions.Item>
-            </Descriptions>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px rounded-xl border border-[var(--gs-border)] overflow-hidden bg-[var(--gs-border)]">
+              <InfoCell label="Gói tập" value={planName} />
+              <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
+              <InfoCell label="Thời hạn" value={`${formatDate(membership.startDate)} → ${formatDate(membership.endDate)}`} wide />
+              <InfoCell label="Số ngày còn lại" value={`${membership.remainingDays} ngày`} />
+            </div>
 
             {memberPlanFeatures.length > 0 && (
               <div className="mt-6">
@@ -467,18 +472,37 @@ export default function MyMembershipPage() {
             )}
           </Card>
         ) : membership && !isPendingCancel && !isCancelRequested ? (
-          <Card>
+          <Card className="overflow-hidden">
+            {/* Header: plan name + status badge */}
             <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="m-0 text-2xl font-semibold">{planName}</h2>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Tag color={(statusMeta[membership.displayStatus] || statusMeta.active).color}>
+                <h1 className="m-0 text-3xl font-bold text-[var(--gs-text)]">{planName}</h1>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-semibold ${
+                    membership.displayStatus === 'expiring_soon'
+                      ? 'bg-amber-500/15 text-amber-600'
+                      : membership.displayStatus === 'expired'
+                        ? 'bg-red-500/15 text-red-600'
+                        : 'bg-green-500/15 text-green-600'
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${
+                      membership.displayStatus === 'expiring_soon'
+                        ? 'bg-amber-500'
+                        : membership.displayStatus === 'expired'
+                          ? 'bg-red-500'
+                          : 'bg-green-500'
+                    }`} />
                     {(statusMeta[membership.displayStatus] || statusMeta.active).label}
-                  </Tag>
-                  <Tag icon={<CalendarOutlined />}>{`${membership.remainingDays} ngày còn lại`}</Tag>
+                  </span>
+                  <span className="text-sm text-[var(--gs-text-muted)]">
+                    <CalendarOutlined className="mr-1" />
+                    {membership.remainingDays > 0
+                      ? `${membership.remainingDays} ngày còn lại`
+                      : 'Đã hết hạn'}
+                  </span>
                 </div>
               </div>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap items-center">
                 <Button type="primary" icon={<WalletOutlined />} onClick={() => { setSelectedMultiplier(1); setRenewModalOpen(true) }}>
                   Gia hạn
                 </Button>
@@ -493,17 +517,21 @@ export default function MyMembershipPage() {
                   </Button>
                 )}
                 {membership?.status === 'active' && membership.remainingDays > 0 && (
-                  <Button
-                    danger
-                    icon={<CloseCircleOutlined />}
-                    onClick={() => navigate('/my-membership/cancel-request')}
-                  >
-                    Hủy gói
-                  </Button>
+                  <>
+                    <div className="h-6 w-px bg-[var(--gs-border)]" />
+                    <Button
+                      danger
+                      icon={<CloseCircleOutlined />}
+                      onClick={() => navigate('/my-membership/cancel-request')}
+                    >
+                      Hủy gói
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
 
+            {/* Expired warning */}
             {membership?.status === 'active' && membership.remainingDays <= 0 && (
               <div className="mb-5 rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-4">
                 <div className="flex items-center gap-2 text-[var(--gs-warning)]">
@@ -513,33 +541,55 @@ export default function MyMembershipPage() {
               </div>
             )}
 
-            <Progress percent={progressPercent} status={membership.displayStatus === 'expired' ? 'exception' : 'active'} />
+            {/* Progress bar: theme-colored gradient */}
+            <div className="mb-6">
+              <div className="flex items-center justify-end mb-1.5">
+                <span className="text-xs font-medium text-[var(--gs-text-soft)]">{progressPercent}%</span>
+              </div>
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-[var(--gs-border)]">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${progressPercent}%`,
+                    background: progressPercent <= 20
+                      ? 'linear-gradient(90deg, #f87171, #ef4444)'
+                      : `linear-gradient(90deg, var(--theme-accent), color-mix(in srgb, var(--theme-accent) 70%, #000))`,
+                  }}
+                />
+              </div>
+            </div>
 
-            <Descriptions bordered column={{ xs: 1, sm: 2, lg: 3 }} className="mt-6">
-              <Descriptions.Item label='Gói tập'>{planName}</Descriptions.Item>
-              <Descriptions.Item label='Giá'>{formatMoney(membership.price || membership.plan?.price)}</Descriptions.Item>
-              <Descriptions.Item label='Ngày bắt đầu'>{formatDate(membership.startDate)}</Descriptions.Item>
-              <Descriptions.Item label='Ngày kết thúc'>{formatDate(membership.endDate)}</Descriptions.Item>
-              <Descriptions.Item label='Số ngày còn lại'>{membership.remainingDays}</Descriptions.Item>
-              <Descriptions.Item label='Trạng thái'>{(statusMeta[membership.displayStatus] || statusMeta.active).label}</Descriptions.Item>
-            </Descriptions>
+            {/* Info grid: responsive, replaces Descriptions */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px rounded-xl border border-[var(--gs-border)] overflow-hidden bg-[var(--gs-border)]">
+              <InfoCell label="Gói tập" value={planName} />
+              <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
+              <InfoCell label="Thời hạn" value={`${formatDate(membership.startDate)} → ${formatDate(membership.endDate)}`} wide />
+              <InfoCell label="Số ngày còn lại" value={`${membership.remainingDays} ngày`} />
+              <InfoCell label="Ngày đăng ký" value={formatDate(membership.createdAt)} />
+            </div>
 
+            {/* Features with icons */}
             {memberPlanFeatures.length > 0 && (
               <div className="mt-6">
                 <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--gs-text-soft)]">Quyền lợi</h4>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {memberPlanFeatures.map((f: any) => (
-                    <div key={f._id} className="flex items-center gap-2 rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
-                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
-                      <span className="text-sm font-medium text-[var(--gs-text)]">{f.name}</span>
-                      {f.category && (
-                        <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }} color="blue">{f.category}</Tag>
-                      )}
+                    <div key={f._id} className="flex items-center gap-3 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg" style={{ background: 'var(--theme-accent-muted)', color: 'var(--theme-accent)' }}>
+                        {f.icon ? <span className="text-lg">{f.icon}</span> : <CheckCircleFilled />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold text-[var(--gs-text)]">{f.name}</div>
+                        {f.category && (
+                          <span className="text-xs text-[var(--gs-text-muted)]">{f.category}</span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+
           </Card>
         ) : null}
 

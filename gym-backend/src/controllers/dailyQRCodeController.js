@@ -5,6 +5,7 @@ import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import CheckIn from '../models/CheckIn.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
+import { markBenefitUsed } from '../services/membershipCycleService.js'
 
 function startOfDay(date) {
   const d = new Date(date)
@@ -289,6 +290,8 @@ export const submitDailyQRCheckin = async (req, res) => {
         sessionType: 'scheduled',
       })
 
+      markBenefitUsed(memberId, 'checkin')
+
       res.json({
         message: 'Check-in thành công.',
         checkin: {
@@ -332,6 +335,8 @@ export const submitDailyQRCheckin = async (req, res) => {
         sessionType: 'free_workout',
         checkinSource: 'daily_qr',
       })
+
+      markBenefitUsed(memberId, 'checkin')
 
       res.json({
         message: 'Check-in thành công.',

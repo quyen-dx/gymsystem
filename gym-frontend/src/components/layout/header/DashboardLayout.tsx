@@ -5,11 +5,8 @@ import {
   CommentOutlined,
   CreditCardOutlined,
   DashboardOutlined,
-  ExclamationCircleOutlined,
   FileTextOutlined,
   HomeOutlined,
-  QrcodeOutlined,
-  SearchOutlined,
   LogoutOutlined,
   MenuOutlined,
   QuestionCircleOutlined,
@@ -35,6 +32,7 @@ import { notificationService } from '../../../services/notificationService'
 import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
 import { shiftSwapService } from '../../../services/shiftSwapService'
 import { ptAssignmentEndService } from '../../../services/ptAssignmentEndService'
+import { workoutService } from '../../../services/workoutService'
 import { socketService } from '../../../services/socketService'
 import { trainingRequestService } from '../../../services/trainingRequestService'
 import NotificationBell from '../../notifications/NotificationBell'
@@ -61,6 +59,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [pendingTrainingCount, setPendingTrainingCount] = useState(0)
   const [pendingSwapCount, setPendingSwapCount] = useState(0)
   const [pendingEndRequestCount, setPendingEndRequestCount] = useState(0)
+  const [pendingWorkoutReportCount, setPendingWorkoutReportCount] = useState(0)
   const [pendingNotificationCount, setPendingNotificationCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -133,6 +132,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const handler = (data: { pendingCount: number }) => setPendingEndRequestCount(data.pendingCount)
     socketService.on('pt_end_request:count_updated', handler)
     return () => { socketService.off('pt_end_request:count_updated', handler) }
+  }, [user?.role])
+
+  // Workout report count: fetch + socket
+  useEffect(() => {
+    if (!['admin', 'super_admin'].includes(user?.role || '')) return
+
+    workoutService.getWorkoutReports({ status: 'pending', limit: 1 })
+      .then((res) => setPendingWorkoutReportCount(res.data.pagination?.total || 0))
+      .catch(() => {})
+
+    const handler = (data: { pendingCount: number }) => setPendingWorkoutReportCount(data.pendingCount)
+    socketService.on('workout_report:count_updated', handler)
+    return () => { socketService.off('workout_report:count_updated', handler) }
   }, [user?.role])
 
   // Notifications: fetch unread count + realtime via socket
@@ -223,16 +235,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       { key: '/admin/members', label: badgeLabel('Hội viên', pendingTrainingCount), icon: <TeamOutlined /> },
       ...(isEnabled('pt.moduleEnabled') ? [
-        { key: '/admin/trainers', label: badgeLabel('Huấn luyện viên (PT)', pendingSwapCount + pendingEndRequestCount), icon: <UserOutlined /> },
+        { key: '/admin/trainers', label: badgeLabel('Huấn luyện viên (PT)', pendingSwapCount + pendingEndRequestCount + pendingWorkoutReportCount), icon: <UserOutlined /> },
       ] : []),
       { key: '/admin/floors-zones', label: 'Tầng & Khu vực', icon: <DashboardOutlined /> },
       ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: 'Báo cáo', icon: <BarChartOutlined /> }] : []),
       { key: '/admin/faqs', label: 'Quản lý FAQ', icon: <QuestionCircleOutlined /> },
       { key: '/admin/feedback', label: 'Quản lý phản hồi', icon: <CommentOutlined /> },
       { key: '/admin/policies', label: 'Chính sách', icon: <FileTextOutlined /> },
-      ...(isEnabled('pt.moduleEnabled') ? [
-        { key: '/admin/workout-reports', label: 'Giáo án của PT', icon: <ExclamationCircleOutlined /> },
-      ] : []),
+      ...(isEnabled('pt.moduleEnabled') ? [] : []),
       { key: '/admin/notifications', label: 'Thông báo', icon: <BellOutlined /> },
       { key: '/admin/system-settings', label: 'Cài đặt hệ thống', icon: <SettingOutlined /> },
     ],
