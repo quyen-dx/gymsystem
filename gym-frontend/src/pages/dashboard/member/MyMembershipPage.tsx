@@ -308,12 +308,102 @@ export default function MyMembershipPage() {
           )}
         </div>
 
-        {/* Không có membership */}
-        {!membership && (
+        {/* Không có membership + không có pending cycle */}
+        {!membership && !cycle && (
           <Card>
             <Empty description="Bạn hiện chưa có gói tập đang hoạt động.">
               <Button type="primary" href="/plans">Đăng ký gói</Button>
             </Empty>
+          </Card>
+        )}
+
+        {/* Pending initial activation: đã đăng ký, chờ check-in lần đầu */}
+        {membership && cycle?.status === 'pending_initial_activation' && (
+          <Card>
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="m-0 text-2xl font-semibold text-[var(--gs-text)]">{planName}</h2>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-0.5 text-xs font-semibold text-amber-600">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    Chờ kích hoạt
+                  </span>
+                </div>
+              </div>
+              <Button href="/plans">Xem gói tập</Button>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-4">
+              <div className="flex gap-2">
+                <InfoCircleOutlined className="mt-0.5 text-[var(--gs-warning)]" />
+                <div className="text-sm text-[var(--gs-text)] whitespace-pre-line">
+                  Gói tập đã được đăng ký thành công.{'\n'}Vui lòng Check-in lần đầu để kích hoạt.
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px rounded-xl border border-[var(--gs-border)] overflow-hidden bg-[var(--gs-border)]">
+              <InfoCell label="Gói tập" value={planName} />
+              <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
+              <InfoCell label="Ngày đăng ký" value={formatDate(cycle?.purchasedAt || membership?.createdAt)} />
+              <InfoCell label="Quyền hoàn tiền" value={
+                cycle?.refundEligible
+                  ? `🟢 Có thể hoàn tiền trong vòng ${(() => {
+                      const daysSince = Math.floor((Date.now() - new Date(cycle.purchasedAt || membership?.createdAt).getTime()) / 86400000)
+                      const remaining = 7 - daysSince
+                      return remaining > 0 ? `${remaining} ngày` : '0 ngày (đã hết hạn)'
+                    })()}`
+                  : '🔒 Đã hết hiệu lực'
+              } wide />
+            </div>
+
+            {memberPlanFeatures.length > 0 && (
+              <div className="mt-6">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--gs-text-soft)]">Quyền lợi</h4>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {memberPlanFeatures.map((f: any) => (
+                    <div key={f._id} className="flex items-center gap-2 rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
+                      <span className="text-sm font-medium text-[var(--gs-text)]">{f.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* Pending renewal activation: đã gia hạn, chờ cycle cũ kết thúc */}
+        {membership && cycle?.status === 'pending_renewal_activation' && (
+          <Card>
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="m-0 text-2xl font-semibold text-[var(--gs-text)]">{planName}</h2>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-500/15 px-3 py-0.5 text-xs font-semibold text-purple-600">
+                    <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                    Chờ gia hạn
+                  </span>
+                </div>
+              </div>
+              <Button href="/plans">Xem gói tập</Button>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-[var(--gs-info-border)] bg-[var(--gs-info-bg)] p-4">
+              <div className="flex gap-2">
+                <InfoCircleOutlined className="mt-0.5 text-[var(--gs-info)]" />
+                <div className="text-sm text-[var(--gs-text)] whitespace-pre-line">
+                  Sẽ tự động kích hoạt khi chu kỳ hiện tại kết thúc.
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px rounded-xl border border-[var(--gs-border)] overflow-hidden bg-[var(--gs-border)]">
+              <InfoCell label="Gói tập" value={planName} />
+              <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
+              <InfoCell label="Ngày đăng ký" value={formatDate(cycle?.purchasedAt || membership?.createdAt)} />
+              <InfoCell label="Thời hạn" value={`${formatDate(cycle?.startDate)} → ${formatDate(cycle?.expiresAt)}`} wide />
+            </div>
           </Card>
         )}
 
@@ -475,7 +565,7 @@ export default function MyMembershipPage() {
               </div>
             )}
           </Card>
-        ) : membership && !isPendingCancel && !isCancelRequested ? (
+        ) : membership && cycle?.status === 'active' && !isPendingCancel && !isCancelRequested ? (
           <Card className="overflow-hidden">
             {/* Header: plan name + status badge */}
             <div className="mb-6 flex flex-wrap items-start justify-between gap-4">

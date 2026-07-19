@@ -1302,18 +1302,33 @@ export const getUserById = async (req, res) => {
 
     // Fetch related data
     const addresses = await Address.find({ userId: user._id })
-    const activeCycle = await MembershipCycle.findOne({
+    // Priority: active → pending_initial_activation → pending_renewal_activation
+    let displayCycle = await MembershipCycle.findOne({
       memberId: user._id,
       status: 'active',
     }).populate('currentPlanId').lean()
 
-    const activeMembership = activeCycle ? {
-      _id: activeCycle.currentMembershipId,
+    if (!displayCycle) {
+      displayCycle = await MembershipCycle.findOne({
+        memberId: user._id,
+        status: 'pending_initial_activation',
+      }).populate('currentPlanId').lean()
+    }
+
+    if (!displayCycle) {
+      displayCycle = await MembershipCycle.findOne({
+        memberId: user._id,
+        status: 'pending_renewal_activation',
+      }).populate('currentPlanId').lean()
+    }
+
+    const activeMembership = displayCycle ? {
+      _id: displayCycle.currentMembershipId,
       memberId: user._id,
-      planId: activeCycle.currentPlanId,
-      status: 'active',
-      startDate: activeCycle.startDate,
-      endDate: activeCycle.expiresAt,
+      planId: displayCycle.currentPlanId,
+      status: displayCycle.status === 'active' ? 'active' : 'pending_activation',
+      startDate: displayCycle.startDate,
+      endDate: displayCycle.expiresAt,
     } : null
 
     const membershipHistory = await Membership.find({

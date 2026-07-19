@@ -1362,23 +1362,41 @@ const listPayments = async ({ page = 1, limit = 20, status }) => {
 const getMyMembership = async ({ userId }) => {
   const memberId = toObjectId(userId, 'userId')
 
-  // Lấy active cycle (nguồn sự thật duy nhất)
-  const activeCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+  // Priority query: active → pending_initial_activation → pending_renewal_activation
+  // KHÔNG dùng $in vì nếu member có cả active + pending, findOne có thể trả sai cycle
+  let displayCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
     .populate({ path: 'currentPlanId', populate: { path: 'featureIds', model: 'PlanFeature' } })
     .sort({ createdAt: -1 })
     .lean()
 
+  if (!displayCycle) {
+    displayCycle = await MembershipCycle.findOne({ memberId, status: 'pending_initial_activation' })
+      .populate({ path: 'currentPlanId', populate: { path: 'featureIds', model: 'PlanFeature' } })
+      .sort({ createdAt: -1 })
+      .lean()
+  }
+
+  if (!displayCycle) {
+    displayCycle = await MembershipCycle.findOne({ memberId, status: 'pending_renewal_activation' })
+      .populate({ path: 'currentPlanId', populate: { path: 'featureIds', model: 'PlanFeature' } })
+      .sort({ createdAt: -1 })
+      .lean()
+  }
+
   // Membership container (cho serializeMembership và cancel request)
-  const membership = activeCycle
-    ? await Membership.findById(activeCycle.currentMembershipId)
+  const membership = displayCycle
+    ? await Membership.findById(displayCycle.currentMembershipId)
         .populate({ path: 'planId', populate: { path: 'featureIds', model: 'PlanFeature' } })
     : null
 
-  // Pending cycles (chờ kích hoạt)
-  const pendingCycles = await MembershipCycle.find({
-    memberId,
-    status: { $in: ['pending_initial_activation', 'pending_renewal_activation'] },
-  }).sort({ createdAt: 1 }).lean()
+  // Pending cycles (chờ kích hoạt) — exclude the one we're already displaying
+  const pendingCycles = displayCycle && (displayCycle.status === 'active' || displayCycle.status === 'pending_renewal_activation')
+    ? await MembershipCycle.find({
+        memberId,
+        status: { $in: ['pending_initial_activation', 'pending_renewal_activation'] },
+        _id: { $ne: displayCycle._id },
+      }).sort({ createdAt: 1 }).lean()
+    : []
 
   // Cancel request pending (Commit 6 sẽ refactor)
   let pendingCancelRequest = null
@@ -1400,7 +1418,7 @@ const getMyMembership = async ({ userId }) => {
   }
 
   // Estimated dates cho pending cycles
-  let lastEndDate = activeCycle?.expiresAt || null
+  let lastEndDate = displayCycle?.expiresAt || null
   const pendingWithEstimates = pendingCycles.map((c) => {
     let estimatedActivation = null
     let estimatedExpiry = null
@@ -1421,21 +1439,23 @@ const getMyMembership = async ({ userId }) => {
     }
   })
 
+  const isActive = displayCycle?.status === 'active'
+
   return {
-    membership: serializeMembership(membership, activeCycle),
-    canRenew: !!activeCycle,
+    membership: serializeMembership(membership, displayCycle),
+    canRenew: isActive,
     renewalThresholdDays: membership ? await getRenewalThresholdDays() : 7,
     pendingCancelRequest,
-    cycle: activeCycle ? {
-      purchasedAt: activeCycle.purchasedAt,
-      activatedAt: activeCycle.activatedAt,
-      expiresAt: activeCycle.expiresAt,
-      refundEligible: activeCycle.refundEligible,
-      refundExpiredAt: activeCycle.refundExpiredAt,
-      durationDays: activeCycle.durationDays,
-      startDate: activeCycle.startDate,
-      status: activeCycle.status,
-      currentPlanId: activeCycle.currentPlanId?._id || activeCycle.currentPlanId,
+    cycle: displayCycle ? {
+      purchasedAt: displayCycle.purchasedAt,
+      activatedAt: displayCycle.activatedAt,
+      expiresAt: displayCycle.expiresAt,
+      refundEligible: displayCycle.refundEligible,
+      refundExpiredAt: displayCycle.refundExpiredAt,
+      durationDays: displayCycle.durationDays,
+      startDate: displayCycle.startDate,
+      status: displayCycle.status,
+      currentPlanId: displayCycle.currentPlanId?._id || displayCycle.currentPlanId,
     } : null,
     pendingCycles: pendingWithEstimates,
   }
