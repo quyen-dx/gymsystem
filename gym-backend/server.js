@@ -53,7 +53,6 @@ import shiftSwapRoutes from './src/routes/shiftSwapRoutes.js'
 import groupClassRoutes from "./src/routes/groupClassRoutes.js"
 import reportRoutes from "./src/routes/reportRoutes.js"
 import notificationRoutes from "./src/routes/notificationRoutes.js"
-import { startMembershipReminderScheduler } from './src/services/membershipReminderScheduler.js'
 import { initSocketIO } from './src/services/socketService.js'
 
 const app = express()
@@ -173,14 +172,26 @@ const PORT = process.env.PORT || 5000
 const httpServer = http.createServer(app)
 initSocketIO(httpServer)
 
+// Schedule daily jobs
+import cron from 'node-cron'
+import { runRefundReminderJob } from './src/jobs/refundReminderJob.js'
+import { runActivateRenewalCyclesJob } from './src/jobs/activateRenewalCyclesJob.js'
+cron.schedule('0 1 * * *', () => {
+  console.log('[Cron] Running refundReminderJob...')
+  runRefundReminderJob().catch(err => console.error('[Cron] refundReminderJob failed:', err))
+})
+console.log('[Cron] refundReminderJob scheduled daily at 08:00 VN time')
+cron.schedule('0 */6 * * *', () => {
+  console.log('[Cron] Running activateRenewalCyclesJob...')
+  runActivateRenewalCyclesJob().catch(err => console.error('[Cron] activateRenewalCyclesJob failed:', err))
+})
+console.log('[Cron] activateRenewalCyclesJob scheduled every 6 hours')
+
 httpServer.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
 })
 
 connectDB()
-  .then(() => {
-    startMembershipReminderScheduler()
-  })
   .catch((error) => {
     console.error('Kết nối MongoDB thất bại:', error.message)
   })

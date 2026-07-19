@@ -21,9 +21,14 @@ const dropStaleIndexes = async (db) => {
   }
 }
 
+const MONGO_OPTIONS = {
+  retryWrites: true,
+  w: 'majority',
+}
+
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI)
+    await mongoose.connect(process.env.MONGO_URI, MONGO_OPTIONS)
     console.log(`✅ Atlas connected: ${mongoose.connection.host}`)
     _isFallback = false
     _fallbackError = null
@@ -33,7 +38,7 @@ const connectDB = async () => {
     console.log('↳ Falling back to local MongoDB (127.0.0.1:27017)...')
     try { await mongoose.disconnect() } catch {}
     try {
-      await mongoose.connect(FALLBACK_URI)
+      await mongoose.connect(FALLBACK_URI, MONGO_OPTIONS)
       console.log(`✅ Local MongoDB connected (read-only mode)`)
       _isFallback = true
       _fallbackError = error.message
@@ -51,7 +56,7 @@ export const getFallbackError = () => _fallbackError
 export const reconnectToPrimary = async () => {
   try {
     await mongoose.disconnect()
-    await mongoose.connect(process.env.MONGO_URI)
+    await mongoose.connect(process.env.MONGO_URI, MONGO_OPTIONS)
     console.log(`✅ Reconnected to Atlas: ${mongoose.connection.host}`)
     _isFallback = false
     _fallbackError = null

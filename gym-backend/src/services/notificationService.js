@@ -2,6 +2,9 @@ import Notification, { NOTIFICATION_TYPES, getCategory } from '../models/Notific
 import User from '../models/User.js'
 import { getIO } from './socketService.js'
 import { transporter } from './emailService.js'
+// TODO: Consider adding a retry/queue mechanism for notification delivery failures
+// Currently, fire-and-forget notification calls at ~30+ call sites silently drop errors.
+// A background queue (e.g., Bull/BullMQ) would ensure reliable delivery.
 
 const SITE_NAME = process.env.SITE_NAME || 'GymPro'
 const FROM_EMAIL = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@gympro.com'

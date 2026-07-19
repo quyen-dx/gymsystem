@@ -128,20 +128,18 @@ export interface CancelPeriodDetail {
 export interface CancelInfo {
   membership: MyMembership
   period: {
-    _id: string
-    startDate: string
-    endDate: string
+    startDate: string | null
+    endDate: string | null
     totalDays: number
     price: number
-    activatedAt?: string
-  }
+    activatedAt: string | null
+  } | null
   refundInfo: {
     eligibleForRefund: boolean
-    isWithinWindow: boolean
-    hasUsedBenefits: boolean
-    refundDeadline: string
     estimatedRefundAmount: number
     reason: string
+    purchasedAt: string | null
+    activatedAt: string | null
   }
   pendingPeriods: Array<{
     _id: string
@@ -150,7 +148,7 @@ export interface CancelInfo {
     totalDays: number
     price: number
   }>
-  periodsDetail: CancelPeriodDetail[]
+  periodsDetail: any[]
   totalEstimatedRefund: number
 }
 
@@ -192,13 +190,30 @@ export interface RefundRequest {
   policyVersion: string
   pendingPeriodsTotal?: number
   pendingPeriodsCount?: number
+
+  // Cancellation-specific fields (from MembershipCancellationRequest)
+  __source?: 'cancellation'
+  cancellationRequestId?: string
+  cycle?: {
+    _id: string
+    activatedAt: string | null
+    refundEligible: boolean | null
+    firstBenefitType?: string | null
+    firstBenefitUsedAt?: string | null
+    purchasedAt: string | null
+    startDate: string | null
+    expiresAt: string | null
+    durationDays: number | null
+  } | null
+  activationStatus?: 'pending' | 'activated'
+  remainingRefundDays?: number
 }
 
 export const membershipService = {
   getPlans: (params?: Record<string, any>) => api.get<{ plans: MembershipPlan[] }>('/plans', { params: { limit: 100, ...params } }),
   registerPlan: (planId: string) => api.post('/memberships', { planId }),
   subscribePlan: (planId: string) => api.post('/memberships/subscribe', { planId }),
-  getMyMembership: () => api.get<{ membership: MyMembership | null; canRenew: boolean; renewalThresholdDays: number; pendingCancelRequest: PendingCancelRequest | null }>('/memberships/my'),
+  getMyMembership: () => api.get<{ membership: MyMembership | null; canRenew: boolean; renewalThresholdDays: number; pendingCancelRequest: PendingCancelRequest | null; cycle: { purchasedAt: string | null; activatedAt: string | null; expiresAt: string | null; refundEligible: boolean | null; refundExpiredAt: string | null } | null }>('/memberships/my'),
   getMyRenewals: () => api.get<{ renewals: MembershipRenewal[] }>('/memberships/my/renewals'),
   getMyPeriods: () => api.get<{ periods: MembershipPeriod[] }>('/memberships/my/periods'),
   cancelRenewal: (renewalId: string) =>

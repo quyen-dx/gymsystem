@@ -12,17 +12,9 @@ const membershipSchema = new mongoose.Schema(
       ref: 'Plan',
       required: true,
     },
-    startDate: {
-      type: Date,
-      required: true,
-    },
-    endDate: {
-      type: Date,
-      required: true,
-    },
     status: {
       type: String,
-      enum: ['active', 'pending_cancel', 'expired', 'cancelled', 'refunded', 'cancel_requested'],
+      enum: ['active', 'expired', 'cancelled'],
       default: 'active',
     },
     source: {
@@ -33,24 +25,6 @@ const membershipSchema = new mongoose.Schema(
     paymentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Payment',
-      default: null,
-    },
-    cancelledAt: {
-      type: Date,
-      default: null,
-    },
-    cancelReason: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-    cancelHandledBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      default: null,
-    },
-    cancelHandledAt: {
-      type: Date,
       default: null,
     },
     remindersSent: {
@@ -64,7 +38,5 @@ const membershipSchema = new mongoose.Schema(
 // Index để tìm kiếm nhanh
 membershipSchema.index({ memberId: 1, status: 1 });
 membershipSchema.index({ planId: 1, status: 1 });
-membershipSchema.index({ endDate: 1 }); // Dùng cho cảnh báo hết hạn (Module 2)
-
 const Membership = mongoose.model('Membership', membershipSchema);
 export default Membership;

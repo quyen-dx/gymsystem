@@ -1,6 +1,6 @@
 import Plan from '../models/Plan.js';
 import PlanFeature from '../models/PlanFeature.js';
-import Membership from '../models/Membership.js';
+import MembershipCycle from '../models/MembershipCycle.js';
 import { recordAuditLog } from '../services/auditLogService.js';
 
 // ==================== TẠO GÓI TẬP ====================
@@ -69,8 +69,8 @@ export const getPlans = async (req, res) => {
 
     const plansWithMemberCount = await Promise.all(
       plans.map(async (plan) => {
-        const memberCount = await Membership.countDocuments({
-          planId: plan._id,
+        const memberCount = await MembershipCycle.countDocuments({
+          currentPlanId: plan._id,
           status: 'active',
         });
         return { ...plan.toObject(), memberCount };
@@ -99,8 +99,8 @@ export const getPlanById = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy gói tập' });
     }
 
-    const memberCount = await Membership.countDocuments({
-      planId: plan._id,
+    const memberCount = await MembershipCycle.countDocuments({
+      currentPlanId: plan._id,
       status: 'active',
     });
 
@@ -154,8 +154,8 @@ export const updatePlan = async (req, res) => {
 // ==================== XOÁ GÓI TẬP ====================
 export const deletePlan = async (req, res) => {
   try {
-    const activeCount = await Membership.countDocuments({
-      planId: req.params.id,
+    const activeCount = await MembershipCycle.countDocuments({
+      currentPlanId: req.params.id,
       status: 'active',
     });
 

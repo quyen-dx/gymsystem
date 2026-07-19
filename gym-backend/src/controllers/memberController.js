@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import User from '../models/User.js'
 import Membership from '../models/Membership.js'
+import MembershipCycle from '../models/MembershipCycle.js'
 import Payment from '../models/Payment.js'
 import Plan from '../models/Plan.js'
 import UserActivity from '../models/UserActivity.js'
@@ -111,12 +112,12 @@ export const getMembers = async (req, res) => {
 
     const membersWithMembership = await Promise.all(
       users.map(async (user) => {
-        const activeMembership = await Membership.findOne({
+        const activeCycle = await MembershipCycle.findOne({
           memberId: user._id,
-          status: { $in: ['active', 'expired'] },
+          status: 'active',
         })
-          .populate('planId', 'nameVi nameEn price durationDays color')
-          .sort({ endDate: -1 })
+          .populate('currentPlanId', 'nameVi nameEn price durationDays color')
+          .sort({ createdAt: -1 })
           .lean()
 
         const membershipHistory = await Membership.find({ memberId: user._id })
@@ -125,8 +126,8 @@ export const getMembers = async (req, res) => {
           .lean()
 
         let remainingDays = 0
-        if (activeMembership) {
-          remainingDays = calculateRemainingDays(activeMembership.endDate)
+        if (activeCycle) {
+          remainingDays = calculateRemainingDays(activeCycle.expiresAt)
         }
 
         const checkinCount = await UserActivity.countDocuments({
@@ -134,11 +135,11 @@ export const getMembers = async (req, res) => {
           type: 'checkin',
         })
 
-        const membershipExpired = Boolean(activeMembership && (activeMembership.status === 'expired' || new Date(activeMembership.endDate) < new Date()))
-        const hasActivePlan = Boolean(activeMembership && activeMembership.status === 'active' && !membershipExpired && remainingDays > 0)
+        const membershipExpired = Boolean(activeCycle && (!activeCycle.expiresAt || new Date(activeCycle.expiresAt) < new Date()))
+        const hasActivePlan = Boolean(activeCycle && !membershipExpired && remainingDays > 0)
         let matchFilter = false
-        if (planId && activeMembership) {
-          matchFilter = activeMembership.planId?._id?.toString() === planId
+        if (planId && activeCycle) {
+          matchFilter = activeCycle.currentPlanId?._id?.toString() === planId
         } else if (planId) {
           matchFilter = false
         } else {
@@ -147,10 +148,10 @@ export const getMembers = async (req, res) => {
 
         if (remainingDaysMin && remainingDays < Number(remainingDaysMin)) matchFilter = false
         if (remainingDaysMax && remainingDays > Number(remainingDaysMax)) matchFilter = false
-        if (remainingDaysFilter === 'under7' && (!activeMembership || membershipExpired || remainingDays >= 7)) matchFilter = false
-        if (remainingDaysFilter === 'under15' && (!activeMembership || membershipExpired || remainingDays >= 15)) matchFilter = false
-        if (remainingDaysFilter === 'under30' && (!activeMembership || membershipExpired || remainingDays >= 30)) matchFilter = false
-        if (membershipStatus === 'no_plan' && activeMembership) matchFilter = false
+        if (remainingDaysFilter === 'under7' && (!activeCycle || membershipExpired || remainingDays >= 7)) matchFilter = false
+        if (remainingDaysFilter === 'under15' && (!activeCycle || membershipExpired || remainingDays >= 15)) matchFilter = false
+        if (remainingDaysFilter === 'under30' && (!activeCycle || membershipExpired || remainingDays >= 30)) matchFilter = false
+        if (membershipStatus === 'no_plan' && activeCycle) matchFilter = false
         if (membershipStatus === 'active' && !hasActivePlan) matchFilter = false
         if (membershipStatus === 'expiring' && (!hasActivePlan || remainingDays > 7)) matchFilter = false
         if (membershipStatus === 'expired' && !membershipExpired) matchFilter = false
@@ -160,7 +161,15 @@ export const getMembers = async (req, res) => {
         return {
           ...normalizeUserMemberIdentity(user),
           remainingDays,
-          activeMembership,
+          activeMembership: activeCycle ? {
+            _id: activeCycle.currentMembershipId,
+            memberId: user._id,
+            planId: activeCycle.currentPlanId,
+            status: 'active',
+            startDate: activeCycle.startDate,
+            endDate: activeCycle.expiresAt,
+            remainingDays,
+          } : null,
           membershipHistory,
           checkinCount,
           membershipExpired,
@@ -196,19 +205,22 @@ export const getMemberStats = async (req, res) => {
     const sevenDaysFromNow = new Date(now)
     sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7)
 
-    const [totalMembers, newThisMonth, expiredMemberships, lockedMembers] = await Promise.all([
+    const [totalMembers, newThisMonth, lockedMembers] = await Promise.all([
       User.countDocuments({ role: 'member' }),
       User.countDocuments({ role: 'member', createdAt: { $gte: startOfMonth } }),
-      Membership.countDocuments({ status: 'expired' }),
       User.countDocuments({ role: 'member', isActive: false }),
     ])
 
-    const expiringMemberships = await Membership.find({
-      status: 'active',
-      endDate: { $gte: now, $lte: sevenDaysFromNow },
-    }).countDocuments()
+    const expiredMemberships = await MembershipCycle.countDocuments({
+      status: 'completed',
+    })
 
-    const activeMemberships = await Membership.countDocuments({ status: 'active' })
+    const expiringMemberships = await MembershipCycle.countDocuments({
+      status: 'active',
+      expiresAt: { $gte: now, $lte: sevenDaysFromNow },
+    })
+
+    const activeMemberships = await MembershipCycle.countDocuments({ status: 'active' })
 
     res.json({
       stats: {
@@ -231,22 +243,22 @@ export const getExpiringMembers = async (req, res) => {
     const sevenDaysFromNow = new Date(now)
     sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7)
 
-    const memberships = await Membership.find({
+    const cycles = await MembershipCycle.find({
       status: 'active',
-      endDate: { $gte: now, $lte: sevenDaysFromNow },
+      expiresAt: { $gte: now, $lte: sevenDaysFromNow },
     })
       .populate('memberId', 'name email phone avatar')
-      .populate('planId', 'nameVi nameEn durationDays price')
-      .sort({ endDate: 1 })
+      .populate('currentPlanId', 'nameVi nameEn durationDays price')
+      .sort({ expiresAt: 1 })
       .lean()
 
-    const members = memberships.map((m) => ({
-      ...m.memberId,
+    const members = cycles.map((c) => ({
+      ...c.memberId,
       membership: {
-        plan: m.planId,
-        startDate: m.startDate,
-        endDate: m.endDate,
-        remainingDays: calculateRemainingDays(m.endDate),
+        plan: c.currentPlanId,
+        startDate: c.startDate,
+        endDate: c.expiresAt,
+        remainingDays: calculateRemainingDays(c.expiresAt),
       },
     }))
 
@@ -263,10 +275,10 @@ export const getMemberById = async (req, res) => {
       throw new AppError('Không tìm thấy member', 404)
     }
 
-    const [activeMembership, membershipHistory] = await Promise.all([
-      Membership.findOne({ memberId: user._id, status: 'active' })
-        .populate('planId')
-        .sort({ endDate: -1 })
+    const [activeCycle, membershipHistory] = await Promise.all([
+      MembershipCycle.findOne({ memberId: user._id, status: 'active' })
+        .populate('currentPlanId')
+        .sort({ createdAt: -1 })
         .lean(),
       Membership.find({ memberId: user._id })
         .populate('planId', 'nameVi nameEn durationDays price color')
@@ -274,9 +286,19 @@ export const getMemberById = async (req, res) => {
         .lean(),
     ])
 
-    const remainingDays = activeMembership
-      ? calculateRemainingDays(activeMembership.endDate)
+    const remainingDays = activeCycle
+      ? calculateRemainingDays(activeCycle.expiresAt)
       : 0
+
+    const activeMembership = activeCycle ? {
+      _id: activeCycle.currentMembershipId,
+      memberId: user._id,
+      planId: activeCycle.currentPlanId,
+      status: 'active',
+      startDate: activeCycle.startDate,
+      endDate: activeCycle.expiresAt,
+      remainingDays,
+    } : null
 
     res.json({
       member: {
@@ -553,11 +575,10 @@ export const registerPlanForMember = async (req, res) => {
     const plan = await Plan.findOne({ _id: planId, isActive: true })
     if (!plan) throw new AppError('Không tìm thấy gói tập hợp lệ', 404)
 
-    const existingActive = await Membership.findOne({
+    const existingActive = await MembershipCycle.findOne({
       memberId: member._id,
       status: 'active',
-      endDate: { $gte: new Date() },
-    }).sort({ endDate: -1 })
+    })
 
     if (existingActive) {
       throw new AppError('Member đang có gói tập active. Hãy gia hạn hoặc đợi hết hạn.', 400)
@@ -581,11 +602,21 @@ export const registerPlanForMember = async (req, res) => {
     const membership = await Membership.create({
       memberId: member._id,
       planId: plan._id,
-      startDate,
-      endDate,
       status: 'active',
       source: 'staff',
       paymentId: payment._id,
+    })
+
+    const cycle = await MembershipCycle.create({
+      memberId: member._id,
+      currentMembershipId: membership._id,
+      currentPlanId: plan._id,
+      startDate,
+      expiresAt: endDate,
+      durationDays: plan.durationDays,
+      status: 'active',
+      purchasedAt: new Date(),
+      activatedAt: new Date(),
     })
 
     payment.membershipId = membership._id
@@ -617,8 +648,8 @@ export const registerPlanForMember = async (req, res) => {
       membership: {
         id: membership._id,
         plan: { nameVi: plan.nameVi, nameEn: plan.nameEn, durationDays: plan.durationDays },
-        startDate: membership.startDate,
-        endDate: membership.endDate,
+        startDate: cycle.startDate,
+        endDate: cycle.expiresAt,
         remainingDays: calculateRemainingDays(endDate),
         status: membership.status,
       },
@@ -642,18 +673,18 @@ export const renewPlanForMember = async (req, res) => {
     const plan = await Plan.findOne({ _id: planId, isActive: true })
     if (!plan) throw new AppError('Không tìm thấy gói tập hợp lệ', 404)
 
-    const activeMembership = await Membership.findOne({
+    const activeCycle = await MembershipCycle.findOne({
       memberId: member._id,
       status: 'active',
-    }).sort({ endDate: -1 }).populate('planId')
+    }).populate('currentPlanId')
 
-    if (activeMembership) {
-      const currentPlanId = String(activeMembership.planId?._id || activeMembership.planId)
-      if (currentPlanId !== String(plan._id)) {
-        throw new AppError('Chỉ có thể gia hạn gói tập hiện tại của hội viên.', 400)
-      }
-    } else {
+    if (!activeCycle) {
       throw new AppError('Hội viên chưa có gói tập để gia hạn.', 400)
+    }
+
+    const currentPlanId = String(activeCycle.currentPlanId?._id || activeCycle.currentPlanId)
+    if (currentPlanId !== String(plan._id)) {
+      throw new AppError('Chỉ có thể gia hạn gói tập hiện tại của hội viên.', 400)
     }
 
     const payment = await getPlanPurchasePayment({ paymentId, memberId: member._id, planId: plan._id })
@@ -667,8 +698,8 @@ export const renewPlanForMember = async (req, res) => {
     now.setHours(0, 0, 0, 0)
 
     let startDate
-    if (activeMembership && renewFrom === 'endDate') {
-      const prevEnd = new Date(activeMembership.endDate)
+    if (renewFrom === 'endDate') {
+      const prevEnd = new Date(activeCycle.expiresAt)
       prevEnd.setHours(0, 0, 0, 0)
       prevEnd.setDate(prevEnd.getDate() + 1)
       startDate = prevEnd
@@ -683,11 +714,22 @@ export const renewPlanForMember = async (req, res) => {
     const membership = await Membership.create({
       memberId: member._id,
       planId: plan._id,
-      startDate,
-      endDate,
       status: 'active',
       source: 'staff',
       paymentId: payment._id,
+    })
+
+    const cycle = await MembershipCycle.create({
+      memberId: member._id,
+      currentMembershipId: membership._id,
+      currentPlanId: plan._id,
+      startDate,
+      expiresAt: endDate,
+      durationDays: plan.durationDays,
+      status: 'active',
+      purchasedAt: new Date(),
+      activatedAt: new Date(),
+      previousCycleId: activeCycle._id,
     })
 
     payment.membershipId = membership._id
@@ -719,7 +761,7 @@ export const renewPlanForMember = async (req, res) => {
         toEmail: member.email,
         userName: member.fullName || member.name || member.email,
         planName: plan.nameVi || plan.nameEn,
-        endDate: membership.endDate,
+        endDate: cycle.expiresAt,
       }).catch((e) => console.error('Gửi email gia hạn thất bại:', e.message))
     }
 
@@ -728,8 +770,8 @@ export const renewPlanForMember = async (req, res) => {
       membership: {
         id: membership._id,
         plan: { nameVi: plan.nameVi, nameEn: plan.nameEn, durationDays: plan.durationDays },
-        startDate: membership.startDate,
-        endDate: membership.endDate,
+        startDate: cycle.startDate,
+        endDate: cycle.expiresAt,
         remainingDays: calculateRemainingDays(endDate),
         status: membership.status,
       },
@@ -757,34 +799,33 @@ export const batchRenewMembers = async (req, res) => {
 
     const results = []
     for (const member of members) {
-      const existingMembership = await Membership.findOne({
+      const existingCycle = await MembershipCycle.findOne({
         memberId: member._id,
-        planId: plan._id,
         status: 'active',
-      }).sort({ endDate: -1 }).populate('planId')
+      }).populate('currentPlanId')
 
-      if (!existingMembership) {
-        const anyActive = await Membership.findOne({ memberId: member._id, status: 'active' })
-        if (anyActive) {
-          results.push({
-            memberId: member._id,
-            memberName: member.name,
-            error: 'Hội viên đang dùng gói tập khác, không thể gia hạn hàng loạt.',
-          })
-          continue
-        } else {
-          results.push({
-            memberId: member._id,
-            memberName: member.name,
-            error: 'Hội viên chưa có gói tập để gia hạn.',
-          })
-          continue
-        }
+      if (!existingCycle) {
+        results.push({
+          memberId: member._id,
+          memberName: member.name,
+          error: 'Hội viên chưa có gói tập để gia hạn.',
+        })
+        continue
+      }
+
+      const existingPlanId = String(existingCycle.currentPlanId?._id || existingCycle.currentPlanId)
+      if (existingPlanId !== String(plan._id)) {
+        results.push({
+          memberId: member._id,
+          memberName: member.name,
+          error: 'Hội viên đang dùng gói tập khác, không thể gia hạn hàng loạt.',
+        })
+        continue
       }
 
       let startDate
       if (renewFrom === 'endDate') {
-        const prevEnd = new Date(existingMembership.endDate)
+        const prevEnd = new Date(existingCycle.expiresAt)
         prevEnd.setHours(0, 0, 0, 0)
         prevEnd.setDate(prevEnd.getDate() + 1)
         startDate = prevEnd
@@ -799,9 +840,20 @@ export const batchRenewMembers = async (req, res) => {
       const membership = await Membership.create({
         memberId: member._id,
         planId: plan._id,
-        startDate,
-        endDate,
         status: 'active',
+      })
+
+      const cycle = await MembershipCycle.create({
+        memberId: member._id,
+        currentMembershipId: membership._id,
+        currentPlanId: plan._id,
+        startDate,
+        expiresAt: endDate,
+        durationDays: plan.durationDays,
+        status: 'active',
+        purchasedAt: new Date(),
+        activatedAt: new Date(),
+        previousCycleId: existingCycle._id,
       })
 
       if (member.email) {
@@ -809,7 +861,7 @@ export const batchRenewMembers = async (req, res) => {
           toEmail: member.email,
           userName: member.fullName || member.name || member.email,
           planName: plan.nameVi || plan.nameEn,
-          endDate: membership.endDate,
+          endDate: cycle.expiresAt,
         }).catch((e) => console.error('Gửi email gia hạn thất bại:', e.message))
       }
 
@@ -817,7 +869,7 @@ export const batchRenewMembers = async (req, res) => {
         memberId: member._id,
         memberName: member.name,
         membershipId: membership._id,
-        endDate: membership.endDate,
+        endDate: cycle.expiresAt,
         remainingDays: calculateRemainingDays(endDate),
       })
     }
@@ -894,27 +946,27 @@ export const getMemberHealthScore = async (req, res) => {
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-    const [checkinCount, activeMembership] = await Promise.all([
+    const [checkinCount, activeCycle] = await Promise.all([
       UserActivity.countDocuments({
         user: member._id,
         type: 'checkin',
         createdAt: { $gte: thirtyDaysAgo },
       }),
-      Membership.findOne({ memberId: member._id, status: 'active' }).populate('planId').lean(),
+      MembershipCycle.findOne({ memberId: member._id, status: 'active' }).populate('currentPlanId').lean(),
     ])
 
     const expectedCheckins = 15
     const checkinScore = Math.min(100, (checkinCount / expectedCheckins) * 100)
 
     let workoutCompletionScore = 0
-    if (activeMembership) {
+    if (activeCycle) {
       const completedWorkouts = await UserActivity.countDocuments({
         user: member._id,
         type: 'workout_complete',
         createdAt: { $gte: thirtyDaysAgo },
       })
-      const expectedWorkouts = activeMembership.planId?.durationDays
-        ? Math.min(30, Math.ceil(activeMembership.planId.durationDays / 2))
+      const expectedWorkouts = activeCycle.currentPlanId?.durationDays
+        ? Math.min(30, Math.ceil(activeCycle.currentPlanId.durationDays / 2))
         : 15
       workoutCompletionScore = Math.min(100, (completedWorkouts / expectedWorkouts) * 100)
     }
@@ -997,9 +1049,19 @@ export const createMemberAndRegister = async (req, res) => {
     const membership = await Membership.create({
       memberId: user._id,
       planId: plan._id,
-      startDate,
-      endDate,
       status: 'active',
+    })
+
+    const cycle = await MembershipCycle.create({
+      memberId: user._id,
+      currentMembershipId: membership._id,
+      currentPlanId: plan._id,
+      startDate,
+      expiresAt: endDate,
+      durationDays: plan.durationDays,
+      status: 'active',
+      purchasedAt: new Date(),
+      activatedAt: new Date(),
     })
 
     const payment = await Payment.create({
@@ -1045,8 +1107,8 @@ export const createMemberAndRegister = async (req, res) => {
       membership: {
         id: membership._id,
         plan: { nameVi: plan.nameVi, nameEn: plan.nameEn, durationDays: plan.durationDays },
-        startDate: membership.startDate,
-        endDate: membership.endDate,
+        startDate: cycle.startDate,
+        endDate: cycle.expiresAt,
         remainingDays: calculateRemainingDays(endDate),
         status: membership.status,
       },
@@ -1094,39 +1156,42 @@ export const searchMembers = async (req, res) => {
       .lean()
 
     const memberIds = members.map((m) => m._id)
-    const activeMemberships = await Membership.find({
+    const activeCycles = await MembershipCycle.find({
       memberId: { $in: memberIds },
       status: 'active',
     })
-      .populate('planId', 'nameVi nameEn price durationDays')
-      .sort({ endDate: -1 })
+      .populate('currentPlanId', 'nameVi nameEn price durationDays')
+      .sort({ createdAt: -1 })
       .lean()
 
-    const membershipByMemberId = {}
-    for (const m of activeMemberships) {
-      if (!membershipByMemberId[String(m.memberId)]) {
-        membershipByMemberId[String(m.memberId)] = m
+    const cycleByMemberId = {}
+    for (const c of activeCycles) {
+      if (!cycleByMemberId[String(c.memberId)]) {
+        cycleByMemberId[String(c.memberId)] = c
       }
     }
 
-    const result = members.map((member) => ({
-      _id: member._id,
-      name: member.fullName || member.name,
-      email: member.email,
-      phone: member.phone,
-      memberCode: member.memberCode,
-      memberNumber: member.memberNumber,
-      isActive: member.isActive,
-      status: member.status,
-      currentPlan: membershipByMemberId[String(member._id)]
-        ? {
-            planName: membershipByMemberId[String(member._id)].planId?.nameVi || membershipByMemberId[String(member._id)].planId?.nameEn || '',
-            startDate: membershipByMemberId[String(member._id)].startDate,
-            endDate: membershipByMemberId[String(member._id)].endDate,
-            remainingDays: calculateRemainingDays(membershipByMemberId[String(member._id)].endDate),
-          }
-        : null,
-    }))
+    const result = members.map((member) => {
+      const cycle = cycleByMemberId[String(member._id)] || null
+      return {
+        _id: member._id,
+        name: member.fullName || member.name,
+        email: member.email,
+        phone: member.phone,
+        memberCode: member.memberCode,
+        memberNumber: member.memberNumber,
+        isActive: member.isActive,
+        status: member.status,
+        currentPlan: cycle
+          ? {
+              planName: cycle.currentPlanId?.nameVi || cycle.currentPlanId?.nameEn || '',
+              startDate: cycle.startDate,
+              endDate: cycle.expiresAt,
+              remainingDays: calculateRemainingDays(cycle.expiresAt),
+            }
+          : null,
+      }
+    })
 
     res.json({ members: result })
   } catch (error) {
@@ -1158,11 +1223,10 @@ export const offlineRegisterMembership = async (req, res) => {
       throw new AppError('Phương thức thanh toán không hợp lệ. Chấp nhận: CASH, BANK_TRANSFER, POS', 400)
     }
 
-    const existingActive = await Membership.findOne({
+    const existingActive = await MembershipCycle.findOne({
       memberId: member._id,
       status: 'active',
-      endDate: { $gte: new Date() },
-    }).sort({ endDate: -1 })
+    })
 
     if (existingActive) {
       throw new AppError('Hội viên đang có gói hoạt động. Vui lòng gia hạn trong mục Gói tập của tôi hoặc dùng chức năng gia hạn offline.', 400)
@@ -1178,9 +1242,19 @@ export const offlineRegisterMembership = async (req, res) => {
     const membership = await Membership.create({
       memberId: member._id,
       planId: plan._id,
-      startDate,
-      endDate,
       status: 'active',
+    })
+
+    const cycle = await MembershipCycle.create({
+      memberId: member._id,
+      currentMembershipId: membership._id,
+      currentPlanId: plan._id,
+      startDate,
+      expiresAt: endDate,
+      durationDays: plan.durationDays,
+      status: 'active',
+      purchasedAt: new Date(),
+      activatedAt: new Date(),
     })
 
     const payment = await Payment.create({
@@ -1225,8 +1299,8 @@ export const offlineRegisterMembership = async (req, res) => {
       membership: {
         id: membership._id,
         plan: { nameVi: plan.nameVi, nameEn: plan.nameEn, durationDays: plan.durationDays },
-        startDate: membership.startDate,
-        endDate: membership.endDate,
+        startDate: cycle.startDate,
+        endDate: cycle.expiresAt,
         remainingDays: calculateRemainingDays(endDate),
         status: membership.status,
       },

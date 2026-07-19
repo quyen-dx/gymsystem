@@ -14,6 +14,11 @@ const cancellationRequestSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    membershipCycleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MembershipCycle',
+      default: null,
+    },
     planId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Plan',

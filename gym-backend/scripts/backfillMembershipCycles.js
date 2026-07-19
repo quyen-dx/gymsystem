@@ -121,17 +121,27 @@ async function main() {
 
       if (!isCommit) continue
 
-      const cycle = await MembershipCycle.create({
+      const cycleData = {
         memberId,
         currentMembershipId: last._id,
         currentPlanId: last.planId?._id || last.planId,
-        startDate: cycleStart,
-        endDate: last.endDate || null,
         status: cycleStatus,
         refundEligible,
         firstBenefitUsedAt,
         firstBenefitType: firstBenefitUsedType,
-      })
+        purchasedAt: first.startDate,
+      }
+      // If there's benefit usage, set activation fields
+      if (firstBenefitUsedAt) {
+        cycleData.activatedAt = firstBenefitUsedAt
+        cycleData.startDate = firstBenefitUsedAt
+        if (last.planId?.durationDays) {
+          const exp = new Date(firstBenefitUsedAt)
+          exp.setDate(exp.getDate() + last.planId.durationDays)
+          cycleData.expiresAt = exp
+        }
+      }
+      const cycle = await MembershipCycle.create(cycleData)
       await PlanChangeHistory.create({
         cycleId: cycle._id, memberId, membershipId: first._id, fromPlanId: null,
         toPlanId: first.planId?._id || first.planId, changedAt: first.startDate,

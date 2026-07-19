@@ -19,16 +19,36 @@ const membershipCycleSchema = new mongoose.Schema({
   },
   startDate: {
     type: Date,
-    required: true,
+    default: null,
   },
   endDate: {
     type: Date,
     default: null,
   },
+  purchasedAt: {
+    type: Date,
+    default: null,
+  },
+  activatedAt: {
+    type: Date,
+    default: null,
+  },
+  expiresAt: {
+    type: Date,
+    default: null,
+  },
+  refundExpiredAt: {
+    type: Date,
+    default: null,
+  },
+  durationDays: {
+    type: Number,
+    default: 0,
+  },
   status: {
     type: String,
-    enum: ['active', 'completed', 'cancelled'],
-    default: 'active',
+    enum: ['pending_initial_activation', 'pending_renewal_activation', 'active', 'completed', 'cancelled', 'refunded'],
+    default: 'pending_initial_activation',
   },
   refundEligible: {
     type: Boolean,
@@ -42,6 +62,10 @@ const membershipCycleSchema = new mongoose.Schema({
     type: String,
     enum: ['checkin', 'pt_group', 'pt_1on1', 'body_scan', 'other'],
     default: null,
+  },
+  refundReminderSent: {
+    type: [Number],
+    default: [],
   },
   previousCycleId: {
     type: mongoose.Schema.Types.ObjectId,

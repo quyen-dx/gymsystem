@@ -2,6 +2,7 @@ import { buildClientUrl } from '../config/appUrls.js'
 import Address from '../models/Address.js'
 import Booking from '../models/Booking.js'
 import Membership from '../models/Membership.js'
+import MembershipCycle from '../models/MembershipCycle.js'
 import Order from '../models/Order.js'
 import Shop from '../models/Shop.js'
 import User from '../models/User.js'
@@ -1301,10 +1302,19 @@ export const getUserById = async (req, res) => {
 
     // Fetch related data
     const addresses = await Address.find({ userId: user._id })
-    const activeMembership = await Membership.findOne({
+    const activeCycle = await MembershipCycle.findOne({
       memberId: user._id,
       status: 'active',
-    }).populate('planId')
+    }).populate('currentPlanId').lean()
+
+    const activeMembership = activeCycle ? {
+      _id: activeCycle.currentMembershipId,
+      memberId: user._id,
+      planId: activeCycle.currentPlanId,
+      status: 'active',
+      startDate: activeCycle.startDate,
+      endDate: activeCycle.expiresAt,
+    } : null
 
     const membershipHistory = await Membership.find({
       memberId: user._id,

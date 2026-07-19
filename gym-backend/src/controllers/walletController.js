@@ -110,6 +110,7 @@ export const fakeDeposit = async (req, res, next) => {
             referenceId: `fake_deposit_${Date.now()}`,
             status: 'completed',
             metadata: { source: 'system' },
+            idempotencyKey: `fake_deposit_${userId}_${Date.now()}`,
         })
 
         return res.status(201).json({ success: true, data: result })

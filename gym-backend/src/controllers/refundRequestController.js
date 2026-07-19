@@ -32,8 +32,13 @@ export const createRefundRequestHandler = async (req, res, next) => {
 
 export const countPendingRefundRequestsHandler = async (req, res, next) => {
   try {
-    const count = await RefundRequest.countDocuments({ status: 'PENDING' })
-    return res.json({ count })
+    const [refundCount, cancelCount] = await Promise.all([
+      RefundRequest.countDocuments({ status: 'PENDING' }),
+      import('../models/MembershipCancellationRequest.js').then(mod =>
+        mod.default.countDocuments({ status: 'pending' })
+      ),
+    ])
+    return res.json({ count: refundCount + cancelCount })
   } catch (error) {
     return sendServiceError(res, error, next)
   }

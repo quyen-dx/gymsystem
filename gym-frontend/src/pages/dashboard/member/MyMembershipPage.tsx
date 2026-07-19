@@ -34,6 +34,7 @@ export default function MyMembershipPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [membership, setMembership] = useState<MyMembership | null>(null)
+  const [cycle, setCycle] = useState<{ purchasedAt: string | null; activatedAt: string | null; expiresAt: string | null; refundEligible: boolean | null; refundExpiredAt: string | null } | null>(null)
   const [loading, setLoading] = useState(true)
   const [pendingCancel, setPendingCancel] = useState<CancellationRequest | null>(null)
   const [, setLastCancelRequest] = useState<CancellationRequest | null>(null)
@@ -92,6 +93,9 @@ export default function MyMembershipPage() {
       .then(([membershipRes, cancelRes, renewalsRes, periodsRes]) => {
         const m = membershipRes.data.membership
         setMembership(m)
+        const cycleData = membershipRes.data.cycle
+        console.log('[DEBUG] cycle:', cycleData)
+        setCycle(cycleData || null)
         setCanRenew(membershipRes.data.canRenew)
         setRenewalThresholdDays(membershipRes.data.renewalThresholdDays ?? 7)
         setPendingCancelRequest(membershipRes.data.pendingCancelRequest || null)
@@ -479,20 +483,26 @@ export default function MyMembershipPage() {
                 <h1 className="m-0 text-3xl font-bold text-[var(--gs-text)]">{planName}</h1>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-semibold ${
-                    membership.displayStatus === 'expiring_soon'
+                    !cycle?.activatedAt && membership?.status !== 'cancelled'
                       ? 'bg-amber-500/15 text-amber-600'
-                      : membership.displayStatus === 'expired'
-                        ? 'bg-red-500/15 text-red-600'
-                        : 'bg-green-500/15 text-green-600'
+                      : membership.displayStatus === 'expiring_soon'
+                        ? 'bg-amber-500/15 text-amber-600'
+                        : membership.displayStatus === 'expired'
+                          ? 'bg-red-500/15 text-red-600'
+                          : 'bg-green-500/15 text-green-600'
                   }`}>
                     <span className={`h-1.5 w-1.5 rounded-full ${
-                      membership.displayStatus === 'expiring_soon'
+                      !cycle?.activatedAt && membership?.status !== 'cancelled'
                         ? 'bg-amber-500'
-                        : membership.displayStatus === 'expired'
-                          ? 'bg-red-500'
-                          : 'bg-green-500'
+                        : membership.displayStatus === 'expiring_soon'
+                          ? 'bg-amber-500'
+                          : membership.displayStatus === 'expired'
+                            ? 'bg-red-500'
+                            : 'bg-green-500'
                     }`} />
-                    {(statusMeta[membership.displayStatus] || statusMeta.active).label}
+                    {!cycle?.activatedAt && membership?.status !== 'cancelled' && membership?.status !== 'expired'
+                      ? 'Chờ kích hoạt'
+                      : (statusMeta[membership.displayStatus] || statusMeta.active).label}
                   </span>
                   <span className="text-sm text-[var(--gs-text-muted)]">
                     <CalendarOutlined className="mr-1" />
@@ -563,9 +573,26 @@ export default function MyMembershipPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px rounded-xl border border-[var(--gs-border)] overflow-hidden bg-[var(--gs-border)]">
               <InfoCell label="Gói tập" value={planName} />
               <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
-              <InfoCell label="Thời hạn" value={`${formatDate(membership.startDate)} → ${formatDate(membership.endDate)}`} wide />
-              <InfoCell label="Số ngày còn lại" value={`${membership.remainingDays} ngày`} />
-              <InfoCell label="Ngày đăng ký" value={formatDate(membership.createdAt)} />
+              <InfoCell label="Ngày đăng ký" value={formatDate(cycle?.purchasedAt || membership?.createdAt)} />
+              <InfoCell label="Ngày kích hoạt" value={cycle?.activatedAt ? formatDate(cycle.activatedAt) : 'Chưa kích hoạt'} />
+              <InfoCell label="Thời hạn sử dụng" value={cycle?.activatedAt ? `${formatDate(cycle.activatedAt)} → ${formatDate(cycle.expiresAt)}` : 'Chưa bắt đầu (sẽ tính từ lần check-in đầu)'} wide />
+              <InfoCell label="Quyền hoàn tiền" value={(() => {
+                if (!cycle) return '—'
+                if (cycle.activatedAt) return '🔒 Đã hết hiệu lực do gói tập đã được kích hoạt.'
+                if (cycle.refundEligible && (cycle.purchasedAt || membership?.createdAt)) {
+                  const purchasedAt = cycle.purchasedAt || membership?.createdAt
+                  const daysSince = Math.floor((Date.now() - new Date(purchasedAt).getTime()) / 86400000)
+                  const remaining = 7 - daysSince
+                  if (remaining <= 0) return '🔒 Đã hết hiệu lực do đã quá 07 ngày kể từ ngày đăng ký.'
+                  if (remaining === 1) return '🟢 Hôm nay là ngày cuối để yêu cầu hoàn tiền (nếu chưa kích hoạt gói tập).'
+                  return `🟢 Còn ${remaining} ngày để yêu cầu hoàn tiền (nếu chưa kích hoạt gói tập).`
+                }
+                if (!cycle.refundEligible) {
+                  if (cycle.refundExpiredAt) return '🔒 Đã hết hiệu lực do đã quá 07 ngày kể từ ngày đăng ký.'
+                  return '🔒 Đã hết hiệu lực.'
+                }
+                return '🔒 Đã hết hiệu lực.'
+              })()} wide />
             </div>
 
             {/* Features with icons */}

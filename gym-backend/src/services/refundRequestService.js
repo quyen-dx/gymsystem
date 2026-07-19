@@ -1,7 +1,7 @@
 import mongoose from 'mongoose'
 import RefundRequest from '../models/RefundRequest.js'
 import MembershipPeriod from '../models/MembershipPeriod.js'
-import Membership from '../models/Membership.js'
+import MembershipCycle from '../models/MembershipCycle.js'
 import User from '../models/User.js'
 import Wallet from '../models/Wallet.js'
 import Transaction from '../models/Transaction.js'
@@ -143,9 +143,7 @@ export const createRefundRequest = async ({ userId, periodId, reason = '' }) => 
   const periodDisplayStatus = computePeriodStatus(period)
   const isFullMembershipCancel = periodDisplayStatus === 'ACTIVE'
 
-  if (isFullMembershipCancel) {
-    await Membership.findByIdAndUpdate(period.membershipId, { $set: { status: 'cancel_requested' } })
-  } else {
+  if (!isFullMembershipCancel) {
     period.status = 'CANCEL_REQUESTED'
     await period.save()
   }
@@ -337,8 +335,7 @@ export const approveRefundRequest = async ({ refundRequestId, staffId, staffNote
     }
 
     // --- If full membership cancel, also process all PENDING periods ---
-    const membership = await Membership.findById(period.membershipId).session(session)
-    if (membership && membership.status === 'cancel_requested') {
+    if (isActivePeriod) {
       processedPendingPeriods = await MembershipPeriod.find({
         membershipId: period.membershipId,
         _id: { $ne: period._id },
@@ -367,23 +364,15 @@ export const approveRefundRequest = async ({ refundRequestId, staffId, staffNote
 
     await rebuildMembershipTimeline({ membershipId: period.membershipId, session })
 
-    // Update membership status
-    if (membership && membership.status === 'cancel_requested') {
-      membership.status = totalRefundAmount > 0 ? 'refunded' : 'cancelled'
-      membership.cancelledAt = new Date()
-      membership.cancelHandledAt = new Date()
-      membership.cancelHandledBy = toObjectId(staffId, 'staffId')
-      await membership.save({ session })
-    } else if (membership && (membership.status === 'active' || membership.status === 'pending_cancel')) {
-      const remainingPeriods = await MembershipPeriod.find({
-        membershipId: period.membershipId,
-        _id: { $ne: period._id },
-        status: { $in: ['PENDING', 'ACTIVE'] },
-      }).session(session)
-      if (remainingPeriods.length === 0) {
-        membership.status = 'cancelled'
-        membership.cancelledAt = new Date()
-        await membership.save({ session })
+    // Update cycle status when active period is refunded/cancelled
+    if (isActivePeriod) {
+      const cycle = await MembershipCycle.findOne({ currentMembershipId: period.membershipId })
+        .session(session).sort({ createdAt: -1 }).lean()
+      if (cycle) {
+        await MembershipCycle.updateOne(
+          { _id: cycle._id },
+          { $set: { status: totalRefundAmount > 0 ? 'refunded' : 'cancelled' } },
+        ).session(session)
       }
     }
 
@@ -513,15 +502,10 @@ export const rejectRefundRequest = async ({ refundRequestId, staffId, reason = '
   }).catch(err => console.error('Notify refund rejected failed:', err.message))
 
   const period = await MembershipPeriod.findById(refundRequest.membershipPeriodId)
-  if (period) {
-    if (period.status === 'CANCEL_REQUESTED') {
-      period.status = 'REJECTED'
-      await period.save()
-      await rebuildMembershipTimeline({ membershipId: period.membershipId })
-    } else {
-      // Full membership cancellation: restore membership status
-      await Membership.findByIdAndUpdate(refundRequest.membershipId, { $set: { status: 'active' } })
-    }
+  if (period && period.status === 'CANCEL_REQUESTED') {
+    period.status = 'REJECTED'
+    await period.save()
+    await rebuildMembershipTimeline({ membershipId: period.membershipId })
   }
 
   await recordUserActivity({
@@ -573,6 +557,7 @@ export const listRefundRequests = async ({ page = 1, limit = 20, status, search 
     else if (statuses.length > 1) filter.status = { $in: statuses }
   }
 
+  const memberFilter = {}
   if (search) {
     const keyword = String(search).trim()
     const User = (await import('../models/User.js')).default
@@ -586,25 +571,135 @@ export const listRefundRequests = async ({ page = 1, limit = 20, status, search 
       ],
     }).select('_id').lean()
     const userIds = matchingUsers.map((u) => u._id)
-    if (userIds.length) filter.memberId = { $in: userIds }
+    if (userIds.length) {
+      filter.memberId = { $in: userIds }
+      memberFilter.memberId = { $in: userIds }
+    }
   }
 
+  // Cancel status mapping: 'PENDING'/'pending'/'APPROVED'/'approved'/'REJECTED'/'rejected' or all when empty
+  const [cancelStatus, refundStatus] = status
+    ? String(status).toLowerCase() === 'pending'
+      ? ['pending', 'PENDING']
+      : [String(status).toLowerCase(), status]
+    : [null, null]
+
+  // Khi không có status filter, vẫn query cancellation requests (lấy tất cả)
+  // Khi có status filter, chỉ query cancellation requests theo status tương ứng
+  const cancelFilter = cancelStatus ? { status: cancelStatus } : {}
+  if (memberFilter.memberId) cancelFilter.memberId = memberFilter.memberId
+
+  const refundFilter = { ...filter }
+
   const skip = (Number(page) - 1) * Number(limit)
-  const [items, total] = await Promise.all([
-    RefundRequest.find(filter)
+  const limitNum = Number(limit)
+
+  const queryCancels = status ? cancelStatus !== null : true
+
+  const [cancelRequests, refundItems] = await Promise.all([
+    queryCancels
+      ? import('../models/MembershipCancellationRequest.js').then(mod =>
+          mod.default.find(cancelFilter)
+            .populate('memberId', 'name fullName email phone memberCode memberNumber avatar')
+            .populate('planId', 'nameVi nameEn price durationDays')
+            .populate('membershipCycleId', 'activatedAt refundEligible firstBenefitType firstBenefitUsedAt purchasedAt startDate expiresAt durationDays createdAt')
+            .sort({ createdAt: -1 })
+            .lean()
+        )
+      : Promise.resolve([]),
+    RefundRequest.find(refundFilter)
       .populate('memberId', 'name fullName email phone memberCode memberNumber avatar')
       .populate('planId', 'nameVi nameEn price durationDays')
-      .populate('membershipId', 'startDate endDate status')
+      .populate('membershipId', 'status')
       .populate('membershipPeriodId', 'startDate endDate totalDays price activatedAt')
       .populate('reviewedBy', 'name fullName')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(Number(limit)),
-    RefundRequest.countDocuments(filter),
+      .limit(limitNum)
+      .lean(),
   ])
 
+  // Debug logging
+  console.log(`[listRefundRequests] status=${status} cancelFilter=${JSON.stringify(cancelFilter)} refundFilter=${JSON.stringify(refundFilter)}`)
+  console.log(`[listRefundRequests] cancelRequests found: ${cancelRequests.length}, refundItems found: ${refundItems.length}`)
+
+  // Format CancellationRequest records to match RefundRequest shape
+  const now = Date.now()
+  const REFUND_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+  const formattedCancels = cancelRequests.map((cr) => {
+    const cycle = cr.membershipCycleId || null
+    const isActivated = !!cycle?.activatedAt
+    const effectivePurchaseDate = cycle?.purchasedAt || cycle?.startDate || cycle?.createdAt || cr.registeredAt || cr.createdAt
+    const purchaseTime = effectivePurchaseDate ? new Date(effectivePurchaseDate).getTime() : null
+    const isWithin7Days = purchaseTime ? (now - purchaseTime) < REFUND_WINDOW_MS : false
+    const isEligible = !isActivated && isWithin7Days
+
+    // Tính số ngày đã dùng dựa trên cycle
+    let daysUsedAtRequest = 0
+    if (cycle?.activatedAt) {
+      daysUsedAtRequest = Math.max(0, Math.floor((now - new Date(cycle.activatedAt).getTime()) / 86400000))
+    } else if (cycle?.firstBenefitUsedAt) {
+      // Có benefit usage nhưng chưa activate (vd: upgrade/downgrade) → không tính là đã dùng ngày
+      daysUsedAtRequest = 0
+    }
+
+    // Tính còn bao nhiêu ngày để refund
+    let remainingRefundDays = 0
+    if (purchaseTime && !isActivated) {
+      const elapsedDays = Math.floor((now - purchaseTime) / 86400000)
+      remainingRefundDays = Math.max(0, 7 - elapsedDays)
+    }
+
+    // Policy label: dùng từ cancellation request, nếu thiếu thì tính lại
+    let refundPolicyResult = cr.policyLabel || ''
+    if (!refundPolicyResult || refundPolicyResult === 'Không đủ thông tin để xét hoàn tiền.') {
+      if (isActivated) {
+        refundPolicyResult = 'Gói tập đã được kích hoạt.'
+      } else if (isEligible) {
+        refundPolicyResult = 'Đủ điều kiện hoàn tiền'
+      } else if (purchaseTime) {
+        refundPolicyResult = 'Đã quá 07 ngày kể từ ngày đăng ký.'
+      } else {
+        refundPolicyResult = 'Không đủ thông tin để xét hoàn tiền.'
+      }
+    }
+
+    return {
+      _id: cr._id,
+      memberId: cr.memberId,
+      planId: cr.planId,
+      reason: cr.reason,
+      refundAmount: cr.estimatedRefundAmount || 0,
+      status: cr.status === 'pending' ? 'PENDING' : cr.status === 'approved' ? 'APPROVED' : 'REJECTED',
+      requestedAt: cr.requestedAt || cr.createdAt,
+      reviewedBy: null,
+      reviewedAt: null,
+      staffNote: cr.staffNote || '',
+      daysUsedAtRequest,
+      eligibleWithin7Days: !isActivated && isWithin7Days,
+      usedCheckIn: false,
+      usedGym: false,
+      usedPT: false,
+      usedBenefits: false,
+      refundPolicyResult,
+      policyVersion: '1.0',
+      pendingPeriodsTotal: 0,
+      pendingPeriodsCount: 0,
+      __source: 'cancellation',
+      cancellationRequestId: cr._id,
+      cycle,
+      activationStatus: isActivated ? 'activated' : 'pending',
+      remainingRefundDays,
+    }
+  })
+
+  // Merge: cancellation requests first, then period refunds
+  const merged = [...formattedCancels, ...refundItems]
+
+  const total = cancelRequests.length + await RefundRequest.countDocuments(refundFilter)
+
   return {
-    refundRequests: items,
-    pagination: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) },
+    refundRequests: merged,
+    pagination: { total, page: Number(page), limit: limitNum, totalPages: Math.ceil(total / limitNum) },
   }
 }

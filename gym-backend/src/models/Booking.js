@@ -110,5 +110,16 @@ const bookingSchema = new mongoose.Schema(
 
 bookingSchema.index({ ptId: 1, date: 1, slot: 1, status: 1 })
 bookingSchema.index({ memberId: 1, date: 1, status: 1 })
+// Unique partial index to prevent double-booking of the same PT slot.
+// Only active-status bookings are constrained; cancelled/completed are ignored.
+bookingSchema.index(
+  { ptId: 1, date: 1, slot: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: ['pending', 'awaiting_payment', 'confirmed'] },
+    },
+  },
+)
 
 export default mongoose.model('Booking', bookingSchema)

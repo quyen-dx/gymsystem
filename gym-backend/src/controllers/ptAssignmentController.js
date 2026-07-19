@@ -407,6 +407,16 @@ export const endWorkout = async (req, res) => {
 
     // Neu co memberId (va endAll=true), ket thuc tat ca lich active cua member do, khong dong PTAssignment
     if (req.body.memberId && req.body.endAll) {
+      // FIX: Verify PT is assigned to this member before allowing operation
+      const ptAssignment = await PTAssignment.findOne({
+        memberId: req.body.memberId,
+        ptId: req.user._id,
+        status: 'active',
+      }).lean()
+      if (!ptAssignment) {
+        return res.status(403).json({ message: 'Bạn không phụ trách hội viên này' })
+      }
+
       // GUARD: dry-check (default). Caller MUST pass confirm=true to actually perform the update.
       // Front-end first calls without confirm=true to preview how many sessions are incomplete,
       // then displays a modal warning; user must accept before second call with confirm=true.
@@ -460,16 +470,31 @@ export const endWorkout = async (req, res) => {
         return res.status(400).json({ message: 'Không có lịch active nào để kết thúc' })
       }
 
-      const result = await WorkoutSchedule.updateMany(
-        { memberId: req.body.memberId, status: 'active' },
-        { $set: { status: 'completed' } },
-      )
+      let endAllResult
+      const endAllSession = await mongoose.startSession()
+      try {
+        endAllSession.startTransaction()
 
-      // All schedules ended → clear workoutId on PTAssignment
-      await PTAssignment.updateMany(
-        { memberId: req.body.memberId, status: 'active' },
-        { $set: { workoutId: null } },
-      )
+        endAllResult = await WorkoutSchedule.updateMany(
+          { memberId: req.body.memberId, status: 'active' },
+          { $set: { status: 'completed' } },
+          { session: endAllSession },
+        )
+
+        // All schedules ended → clear workoutId on PTAssignment
+        await PTAssignment.updateMany(
+          { memberId: req.body.memberId, status: 'active' },
+          { $set: { workoutId: null } },
+          { session: endAllSession },
+        )
+
+        await endAllSession.commitTransaction()
+      } catch (txErr) {
+        await endAllSession.abortTransaction()
+        throw txErr
+      } finally {
+        endAllSession.endSession()
+      }
 
       await createNotification({
         receiverId: req.body.memberId,
@@ -499,7 +524,7 @@ export const endWorkout = async (req, res) => {
 
       return res.json({
         message: 'Đã kết thúc toàn bộ giáo án thành công',
-        modifiedCount: result.modifiedCount,
+        modifiedCount: endAllResult.modifiedCount,
         endedAt: new Date().toISOString(),
         preview: {
           scheduleCount: preview.length,
@@ -655,25 +680,34 @@ export const getMemberEnrollmentPreview = async (req, res) => {
  *   - Enforce capacity of new class (safety)
  */
 export const transferMemberClass = async (req, res) => {
+  const transferSession = await mongoose.startSession()
   try {
+    transferSession.startTransaction()
+
     const { memberId, toClassId, reason } = req.body
     const actorId = req.user?._id
 
     if (!memberId || !toClassId) {
+      await transferSession.abortTransaction()
       return res.status(400).json({ message: 'Thiếu memberId hoặc toClassId' })
     }
 
     // Get current enrollment (for log)
     const current = await ClassEnrollment.findOne({ memberId, status: 'active' })
       .populate('classId', 'code name')
+      .session(transferSession)
       .lean()
 
     if (current && String(current.classId?._id) === String(toClassId)) {
+      await transferSession.abortTransaction()
       return res.status(400).json({ message: 'Hội viên đang ở lớp này rồi, không cần chuyển' })
     }
 
-    const targetClass = await TrainingClass.findById(toClassId).populate('zoneId', 'maxCapacity name').lean()
-    if (!targetClass) return res.status(404).json({ message: 'Không tìm thấy lớp đích' })
+    const targetClass = await TrainingClass.findById(toClassId).populate('zoneId', 'maxCapacity name').session(transferSession).lean()
+    if (!targetClass) {
+      await transferSession.abortTransaction()
+      return res.status(404).json({ message: 'Không tìm thấy lớp đích' })
+    }
 
     let result
     try {
@@ -683,10 +717,14 @@ export const transferMemberClass = async (req, res) => {
         toClassId,
         sourceReason: 'transfer_class',
         note: `Chuyển lớp bởi ${req.user?.role || 'system'}${reason ? ` — lý do: ${reason}` : ''}`,
+        session: transferSession,
       })
     } catch (e) {
+      await transferSession.abortTransaction()
       return res.status(e.statusCode || 409).json({ message: e.message })
     }
+
+    await transferSession.commitTransaction()
 
     await createNotification({
       receiverId: memberId,
@@ -726,7 +764,10 @@ export const transferMemberClass = async (req, res) => {
       createdNew: result.createdNew,
     })
   } catch (error) {
+    await transferSession.abortTransaction()
     return sendError(res, error)
+  } finally {
+    transferSession.endSession()
   }
 }
 
@@ -739,21 +780,33 @@ export const transferMemberClass = async (req, res) => {
  *   - KHÔNG đụng tới PTAssignment, WorkoutSchedule
  */
 export const leaveMemberClass = async (req, res) => {
+  const leaveSession = await mongoose.startSession()
   try {
+    leaveSession.startTransaction()
+
     const { memberId, reason } = req.body
     const actorRole = req.user?.role
 
-    if (!memberId) return res.status(400).json({ message: 'Thiếu memberId' })
+    if (!memberId) {
+      await leaveSession.abortTransaction()
+      return res.status(400).json({ message: 'Thiếu memberId' })
+    }
 
     const current = await ClassEnrollment.findOne({ memberId, status: 'active' })
       .populate('classId', 'code name')
+      .session(leaveSession)
       .lean()
-    if (!current) return res.status(404).json({ message: 'Hội viên không có lớp active nào để rời' })
+    if (!current) {
+      await leaveSession.abortTransaction()
+      return res.status(404).json({ message: 'Hội viên không có lớp active nào để rời' })
+    }
 
     const sourceReason = actorRole === 'member' ? 'member_request' : 'ended_by_pt'
     const note = `Rời lớp bởi ${actorRole || 'system'}${reason ? ` — lý do: ${reason}` : ''}`
 
-    const { modifiedCount } = await endClassEnrollments({ memberId, sourceReason, note })
+    const { modifiedCount } = await endClassEnrollments({ memberId, sourceReason, note, session: leaveSession })
+
+    await leaveSession.commitTransaction()
 
     await createNotification({
       receiverId: memberId,
@@ -791,6 +844,9 @@ export const leaveMemberClass = async (req, res) => {
       modifiedCount,
     })
   } catch (error) {
+    await leaveSession.abortTransaction()
     return sendError(res, error)
+  } finally {
+    leaveSession.endSession()
   }
 }

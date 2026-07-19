@@ -21,7 +21,7 @@ import {
 } from '../services/membershipService.js'
 import Plan from '../models/Plan.js'
 import PlanFeature from '../models/PlanFeature.js'
-import Membership from '../models/Membership.js'
+import MembershipCycle from '../models/MembershipCycle.js'
 import ClassEnrollment from '../models/ClassEnrollment.js'
 import PTAssignment from '../models/PTAssignment.js'
 
@@ -260,18 +260,18 @@ export const getPendingPTPlacements = async (req, res) => {
     const plans = await Plan.find({ featureIds: { $in: features.map(f => f._id) } }).lean()
     const planIds = plans.map(p => p._id)
 
-    const memberships = await Membership.find({
-      planId: { $in: planIds },
-      status: { $in: ['active', 'pending_cancel'] },
+    const cycles = await MembershipCycle.find({
+      currentPlanId: { $in: planIds },
+      status: 'active',
     })
       .populate('memberId', 'name fullName memberCode email phone')
-      .populate('planId')
+      .populate('currentPlanId')
       .lean()
 
     const pending = []
-    for (const m of memberships) {
-      const memberId = m.memberId?._id || m.memberId
-      const plan = m.planId
+    for (const c of cycles) {
+      const memberId = c.memberId?._id || c.memberId
+      const plan = c.currentPlanId
       if (!plan || !memberId) continue
 
       const planFeatureObjectIds = (plan.featureIds || []).map(id =>

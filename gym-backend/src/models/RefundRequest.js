@@ -15,7 +15,12 @@ const refundRequestSchema = new mongoose.Schema({
   membershipPeriodId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'MembershipPeriod',
-    required: true,
+    default: null,
+  },
+  cancellationRequestId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'MembershipCancellationRequest',
+    default: null,
   },
   planId: {
     type: mongoose.Schema.Types.ObjectId,

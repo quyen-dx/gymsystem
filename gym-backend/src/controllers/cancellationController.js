@@ -11,150 +11,90 @@ import Booking from '../models/Booking.js';
 import { recordUserActivity } from '../services/userActivityService.js';
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js';
 import { assertPolicyConsent } from '../utils/policyConsent.js';
-import { cleanupMemberPTData } from '../services/membershipService.js';
 import MembershipCycle from '../models/MembershipCycle.js';
 import PlanChangeHistory from '../models/PlanChangeHistory.js';
 import ClassEnrollment from '../models/ClassEnrollment.js';
 import PTAssignment from '../models/PTAssignment.js';
 import { NOTIFICATION_TYPES } from '../models/Notification.js';
 import { createNotification } from '../services/notificationService.js';
+import { emitRefundRequestUpdate } from '../services/socketService.js';
 import { sendRefundRequestSubmittedEmail, sendRefundRequestProcessedEmail } from '../services/emailService.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const REFUND_WINDOW_DAYS = 7;
-const REFUND_USED_ERROR = 'Gói tập đã được sử dụng, không đủ điều kiện hoàn tiền.';
-const REFUND_EXPIRED_ERROR = 'Đã quá thời hạn hoàn tiền (7 ngày).';
-
-const endOfDay = (date) => {
-  const value = new Date(date);
-  value.setHours(23, 59, 59, 999);
-  return value;
-};
-
-const calculateUsageSnapshot = (startDate, endDate) => {
-  const now = Date.now();
-  const start = new Date(startDate).getTime();
-  const end = endOfDay(endDate).getTime();
-  const totalDays = Math.max(1, Math.round((end - start) / MS_PER_DAY));
-  const usedDays = Math.max(0, Math.min(totalDays, Math.ceil((now - start) / MS_PER_DAY)));
-  const remainingDays = Math.max(0, Math.round((end - now) / MS_PER_DAY));
-  const usedPercent = Math.round((usedDays / totalDays) * 100);
-  return { usedDays, remainingDays, totalDays, usedPercent };
-};
-
-const getPurchaseDate = async (membership, session = null) => {
-  if (membership.paymentId) {
-    const query = Payment.findById(membership.paymentId).select('paidAt createdAt');
-    if (session) query.session(session);
-    const payment = await query.lean();
-    if (payment?.paidAt || payment?.createdAt) return new Date(payment.paidAt || payment.createdAt);
-  }
-
-  return new Date(membership.createdAt || membership.startDate);
-};
-
-const hasUsedMembershipBenefits = async ({ memberId, purchaseDate, session = null }) => {
-  const since = new Date(purchaseDate);
-  const now = new Date();
-
-  const checkInQuery = CheckIn.exists({
-    memberId,
-    status: 'success',
-    checkinTime: { $gte: since },
-  });
-  const bookingQuery = Booking.exists({
-    memberId,
-    status: { $in: ['completed', 'confirmed'] },
-    date: { $gte: since, $lte: now },
-  });
-
-  if (session) {
-    checkInQuery.session(session);
-    bookingQuery.session(session);
-  }
-
-  const [checkIn, booking] = await Promise.all([checkInQuery, bookingQuery]);
-  return Boolean(checkIn || booking);
-};
-
-const assertRefundEligibility = async ({ membership, memberId, session = null }) => {
-  const purchaseDate = await getPurchaseDate(membership, session);
-  const refundDeadline = new Date(purchaseDate.getTime() + REFUND_WINDOW_DAYS * MS_PER_DAY);
-
-  if (Date.now() > refundDeadline.getTime()) {
-    const error = new Error(REFUND_EXPIRED_ERROR);
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const hasUsedBenefits = await hasUsedMembershipBenefits({ memberId, purchaseDate, session });
-  if (hasUsedBenefits) {
-    const error = new Error(REFUND_USED_ERROR);
-    error.statusCode = 400;
-    throw error;
-  }
-
-  return {
-    purchaseDate,
-    refundDeadline,
-    policyCode: 'REFUND_100',
-    policyLabel: 'Hoàn 100% nếu chưa sử dụng và trong vòng 7 ngày',
-    refundRate: 1,
-  };
-};
 
 export const createCancellationRequest = async (req, res, next) => {
   try {
     await assertPolicyConsent(req.user._id, ['refund', 'membership'])
 
     const memberId = req.user._id;
-    const {
-      reason,
-      policyAccepted,
-    } = req.body;
+    const { reason, policyAccepted } = req.body;
 
     if (!policyAccepted) {
       return res.status(400).json({ message: 'Vui lòng xác nhận đã đọc chính sách hoàn tiền.' });
     }
 
-    const membership = await Membership.findOne({
-      memberId,
-      status: 'active',
-    }).sort({ endDate: -1 }).populate('planId');
-
-    if (!membership) {
-      return res.status(400).json({ message: 'Bạn chưa có gói tập nào đang hoạt động.' });
-    }
-
     const existingPending = await MembershipCancellationRequest.findOne({
-      memberId,
-      membershipId: membership._id,
-      status: 'pending',
-    });
-
+      memberId, status: 'pending',
+    })
     if (existingPending) {
       return res.status(400).json({ message: 'Bạn đã có yêu cầu hủy gói đang chờ xử lý.' });
     }
 
-    const plan = membership.planId;
+    // Find the active/pending cycle to cancel (exclude completed/cancelled/refunded)
+    const cycle = await MembershipCycle.findOne({
+      memberId,
+      status: { $nin: ['completed', 'cancelled', 'refunded'] },
+    }).sort({ createdAt: -1 }).lean()
+
+    if (!cycle) {
+      return res.status(400).json({ message: 'Không tìm thấy gói tập để hủy.' });
+    }
+
+    const membership = cycle.currentMembershipId
+      ? await Membership.findById(cycle.currentMembershipId).populate('planId')
+      : null
+
+    const plan = membership?.planId || (cycle.currentPlanId
+      ? await Plan.findById(cycle.currentPlanId).lean()
+      : null)
+
     if (!plan) {
       return res.status(404).json({ message: 'Không tìm thấy thông tin gói tập.' });
     }
 
-    const refundPolicy = await assertRefundEligibility({ membership, memberId });
+    // === Refund eligibility: based on purchasedAt + activatedAt ===
+    // purchasedAt có thể NULL nếu cycle được tạo từ backfill hoặc mua thêm lần 2,3 không cập nhật purchasedAt
+    // → dùng createdAt hoặc startDate làm fallback
+    const effectivePurchaseDate = cycle.purchasedAt || cycle.startDate || cycle.createdAt
+    let refundEligible = false
+    let estimatedRefundAmount = 0
+    let policyCode = 'NO_REFUND'
+    let policyLabel = 'Không đủ điều kiện hoàn tiền'
+    let refundRate = 0
 
-    const { usedDays, remainingDays, totalDays, usedPercent } = calculateUsageSnapshot(
-      membership.startDate,
-      membership.endDate,
-    );
-
-    const { purchaseDate, policyCode, policyLabel, refundRate } = refundPolicy;
-    const refundEligible = true;
-    const estimatedRefundAmount = Number(plan.price || 0);
+    if (cycle.activatedAt) {
+      // Đã kích hoạt → không hoàn tiền (trừ khi có xét thêm logic khác)
+      policyLabel = 'Gói tập đã được kích hoạt.'
+    } else if (effectivePurchaseDate) {
+      const daysSince = Math.floor((Date.now() - new Date(effectivePurchaseDate).getTime()) / 86400000)
+      const refundWindowDays = 7
+      if (daysSince < refundWindowDays) {
+        // Chưa kích hoạt + trong 7 ngày → đủ điều kiện hoàn 100%
+        refundEligible = true
+        estimatedRefundAmount = Number(plan.price || 0)
+        policyCode = 'REFUND_100'
+        policyLabel = 'Hoàn 100% nếu chưa kích hoạt và trong vòng 7 ngày'
+        refundRate = 1
+      } else {
+        policyLabel = `Đã quá ${refundWindowDays} ngày kể từ ngày đăng ký.`
+      }
+    } else {
+      policyLabel = 'Không đủ thông tin để xét hoàn tiền.'
+    }
 
     let determinedRefundMethod = 'NONE';
     let determinedRefundStatus = 'NOT_APPLICABLE';
-
     if (refundEligible && estimatedRefundAmount > 0) {
       determinedRefundMethod = 'WALLET';
       determinedRefundStatus = 'PENDING';
@@ -166,33 +106,29 @@ export const createCancellationRequest = async (req, res, next) => {
     try {
       session.startTransaction();
 
-      await assertRefundEligibility({ membership, memberId, session });
-
-      membership.status = 'pending_cancel';
-      await membership.save({ session });
-
       [cancellationRequest] = await MembershipCancellationRequest.create([{
-      memberId,
-      membershipId: membership._id,
-      planId: plan._id,
-      reason: String(reason || '').trim(),
-      usedDays,
-      remainingDays,
-      totalDays,
-      usedPercent,
-      policyCode,
-      policyLabel,
-      refundRate,
-      registeredAt: purchaseDate,
-      requestedAt: new Date(),
-      policyAccepted: true,
-      policyAcceptedAt: new Date(),
-      refundEligible,
-      estimatedRefundAmount,
-      finalRefundAmount: 0,
-      status: 'pending',
-      refundMethod: determinedRefundMethod,
-      refundStatus: determinedRefundStatus,
+        memberId,
+        membershipId: membership?._id || null,
+        membershipCycleId: cycle._id,
+        planId: plan._id,
+        reason: String(reason || '').trim(),
+        usedDays: 0,
+        remainingDays: 0,
+        totalDays: cycle.durationDays || 0,
+        usedPercent: 0,
+        policyCode,
+        policyLabel,
+        refundRate,
+        registeredAt: effectivePurchaseDate || cycle.purchasedAt || new Date(),
+        requestedAt: new Date(),
+        policyAccepted: true,
+        policyAcceptedAt: new Date(),
+        refundEligible,
+        estimatedRefundAmount,
+        finalRefundAmount: 0,
+        status: 'pending',
+        refundMethod: determinedRefundMethod,
+        refundStatus: determinedRefundStatus,
       }], { session });
 
       await recordUserActivity({
@@ -202,7 +138,7 @@ export const createCancellationRequest = async (req, res, next) => {
         description: `Yêu cầu hủy gói "${plan.nameVi || plan.nameEn}" - ${policyLabel}`,
         metadata: {
           cancellationRequestId: cancellationRequest._id,
-          membershipId: membership._id,
+          membershipId: membership?._id,
           planId: plan._id,
           policyCode,
           estimatedRefundAmount,
@@ -218,13 +154,32 @@ export const createCancellationRequest = async (req, res, next) => {
       session.endSession();
     }
 
+    // Notify staff + update badge
+    emitRefundRequestUpdate().catch(() => {})
+    createNotification({
+      receiverId: null,
+      receiverRole: 'staff',
+      notificationType: NOTIFICATION_TYPES.REFUND_REMINDER,
+      title: 'Yêu cầu hủy gói tập mới',
+      content: `Hội viên ${req.user.fullName || req.user.name || ''} yêu cầu hủy gói "${plan.nameVi || plan.nameEn}".`,
+      relatedId: cancellationRequest._id,
+      relatedType: 'MembershipCancellationRequest',
+      redirectUrl: '/staff/payments',
+      createdBy: 'System',
+    }).catch(() => {})
+
     const planName = plan.nameVi || plan.nameEn || ''
     if (req.user.email) {
+      const sd = cycle.startDate || cycle.purchasedAt || cycle.createdAt
+      const ed = cycle.expiresAt
+      const periodDetail = sd && ed
+        ? `Gói: ${planName} (${new Date(sd).toLocaleDateString('vi-VN')} → ${new Date(ed).toLocaleDateString('vi-VN')})`
+        : `Gói: ${planName}`
       sendRefundRequestSubmittedEmail({
         toEmail: req.user.email,
         userName: req.user.fullName || req.user.name || req.user.email,
         planName,
-        periodDetail: `Gói: ${planName} (${new Date(membership.startDate).toLocaleDateString('vi-VN')} → ${new Date(membership.endDate).toLocaleDateString('vi-VN')})`,
+        periodDetail,
         isFullCancel: true,
       }).catch((e) => console.error('Gửi email yêu cầu hủy gói thất bại:', e.message))
     }
@@ -243,7 +198,7 @@ export const getMyCancellationRequest = async (req, res, next) => {
     const memberId = req.user._id;
     const requests = await MembershipCancellationRequest.find({ memberId })
       .populate('planId', 'nameVi nameEn price durationDays')
-      .populate('membershipId', 'startDate endDate status')
+      .populate('membershipId', 'status')
       .sort({ createdAt: -1 });
     return res.json({ cancellationRequests: requests });
   } catch (error) {
@@ -313,7 +268,7 @@ export const listCancellationRequests = async (req, res, next) => {
       MembershipCancellationRequest.find(filter)
         .populate('memberId', 'name fullName email phone memberCode memberNumber avatar')
         .populate('planId', 'nameVi nameEn price durationDays')
-        .populate('membershipId', 'startDate endDate status')
+        .populate('membershipId', 'status')
         .populate('handledBy', 'name fullName')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -439,15 +394,6 @@ export const approveCancellationRequest = async (req, res, next) => {
       return res.status(400).json({ message: 'Yêu cầu hủy đã được xử lý.' });
     }
 
-    const membership = await Membership.findById(cancellationRequest.membershipId);
-    if (!membership) {
-      return res.status(404).json({ message: 'Không tìm thấy gói tập.' });
-    }
-
-    if (membership.status !== 'pending_cancel') {
-      return res.status(400).json({ message: 'Gói tập không ở trạng thái chờ hủy.' });
-    }
-
     const maxRefundAmount = Number(cancellationRequest.estimatedRefundAmount || 0);
     const requestedRefundAmount = finalRefundAmount === undefined || finalRefundAmount === null
       ? maxRefundAmount
@@ -458,34 +404,24 @@ export const approveCancellationRequest = async (req, res, next) => {
     try {
       session.startTransaction();
 
-      // === Read MembershipCycle.refundEligible ===
-      const cycle = await MembershipCycle.findOne({
-        memberId: cancellationRequest.memberId,
-        status: 'active',
-      }).session(session).sort({ createdAt: -1 }).lean()
+      const cycle = await MembershipCycle.findById(cancellationRequest.membershipCycleId)
+        .session(session).lean()
 
-      const cycleRefundEligible = cycle?.refundEligible ?? false
-      const refundMethod = cycleRefundEligible && refundAmount > 0 ? 'WALLET' : 'NONE'
+      const isCycleNotActivated = !cycle?.activatedAt
+      const canRefund = isCycleNotActivated && refundAmount > 0
+      const refundMethod = canRefund ? 'WALLET' : 'NONE'
 
-      membership.status = refundAmount > 0 ? 'refunded' : 'cancelled';
-      membership.cancelledAt = new Date();
-      membership.cancelReason = cancellationRequest.reason;
-      membership.cancelHandledBy = staffId;
-      membership.cancelHandledAt = new Date();
-      await membership.save({ session });
-
-      // Update cycle status
       if (cycle) {
         await MembershipCycle.updateOne(
           { _id: cycle._id },
-          { $set: { status: 'cancelled' } },
+          { $set: { status: refundAmount > 0 ? 'refunded' : 'cancelled' } },
         ).session(session)
       }
 
       // PlanChangeHistory(cancel)
       await PlanChangeHistory.create([{
         memberId: cancellationRequest.memberId,
-        membershipId: membership._id,
+        membershipId: cancellationRequest.membershipId,
         fromPlanId: cancellationRequest.planId?._id || cancellationRequest.planId,
         toPlanId: null,
         changedAt: new Date(),
@@ -530,7 +466,7 @@ export const approveCancellationRequest = async (req, res, next) => {
             completedAt: new Date(),
             metadata: {
               cancellationRequestId: cancellationRequest._id,
-              membershipId: membership._id,
+              membershipId: cancellationRequest.membershipId,
               planId: cancellationRequest.planId,
               policyCode: cancellationRequest.policyCode,
               estimatedRefundAmount: cancellationRequest.estimatedRefundAmount,
@@ -549,10 +485,10 @@ export const approveCancellationRequest = async (req, res, next) => {
 
       await cancellationRequest.save({ session });
 
-      if (refundAmount > 0) {
+      if (refundAmount > 0 && cancellationRequest.membershipId) {
         await Payment.updateMany(
           {
-            membershipId: membership._id,
+            membershipId: cancellationRequest.membershipId,
             status: { $in: ['PAID', 'paid'] },
           },
           {
@@ -568,7 +504,7 @@ export const approveCancellationRequest = async (req, res, next) => {
         await Payment.create(
           [{
             userId: cancellationRequest.memberId,
-            membershipId: membership._id,
+            membershipId: cancellationRequest.membershipId,
             planId: cancellationRequest.planId,
             amount: refundAmount,
             currency: 'vnd',
@@ -596,7 +532,7 @@ export const approveCancellationRequest = async (req, res, next) => {
         description: `Gói "${cancellationRequest.planId?.nameVi || cancellationRequest.planId?.nameEn}" đã được hủy bởi staff${refundAmount > 0 ? `. Hoàn tiền: ${refundAmount.toLocaleString('vi-VN')}đ` : ''}`,
         metadata: {
           cancellationRequestId: cancellationRequest._id,
-          membershipId: membership._id,
+          membershipId: cancellationRequest.membershipId,
           handledBy: staffId,
           finalRefundAmount: refundAmount,
           policyCode: cancellationRequest.policyCode,
@@ -734,12 +670,6 @@ export const rejectCancellationRequest = async (req, res, next) => {
       cancellationRequest.handledBy = staffId;
       cancellationRequest.handledAt = new Date();
       await cancellationRequest.save({ session });
-
-      const membership = await Membership.findById(cancellationRequest.membershipId).session(session);
-      if (membership?.status === 'pending_cancel') {
-        membership.status = new Date(membership.endDate) >= new Date() ? 'active' : 'expired';
-        await membership.save({ session });
-      }
 
       await recordUserActivity({
         userId: cancellationRequest.memberId,

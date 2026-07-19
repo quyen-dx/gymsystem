@@ -1,4 +1,4 @@
-import Membership from '../models/Membership.js'
+import MembershipCycle from '../models/MembershipCycle.js'
 import Plan from '../models/Plan.js'
 import PlanFeature from '../models/PlanFeature.js'
 
@@ -7,17 +7,17 @@ import PlanFeature from '../models/PlanFeature.js'
  * Returns { allowed: boolean, feature: object|null, plan: object|null, reason: string }
  */
 export async function checkMemberFeature(memberId, featureCode) {
-  const membership = await Membership.findOne({
+  const cycle = await MembershipCycle.findOne({
     memberId,
-    status: { $in: ['active', 'pending_cancel'] },
-    endDate: { $gte: new Date() },
-  }).populate('planId').lean()
+    status: 'active',
+    expiresAt: { $gte: new Date() },
+  }).populate('currentPlanId').lean()
 
-  if (!membership) {
+  if (!cycle) {
     return { allowed: false, feature: null, plan: null, reason: 'Không tìm thấy gói tập đang hoạt động' }
   }
 
-  const plan = membership.planId
+  const plan = cycle.currentPlanId
   if (!plan) {
     return { allowed: false, feature: null, plan: null, reason: 'Gói tập không có thông tin Plan' }
   }
@@ -50,18 +50,18 @@ export async function checkMemberFeature(memberId, featureCode) {
  * Get all features for a member's active plan
  */
 export async function getMemberFeatures(memberId) {
-  const membership = await Membership.findOne({
+  const cycle = await MembershipCycle.findOne({
     memberId,
-    status: { $in: ['active', 'pending_cancel'] },
-    endDate: { $gte: new Date() },
+    status: 'active',
+    expiresAt: { $gte: new Date() },
   }).populate({
-    path: 'planId',
+    path: 'currentPlanId',
     populate: { path: 'featureIds', model: 'PlanFeature' }
   }).lean()
 
-  if (!membership || !membership.planId) return []
+  if (!cycle || !cycle.currentPlanId) return []
 
-  const plan = membership.planId
+  const plan = cycle.currentPlanId
   if (plan.featureIds && plan.featureIds.length > 0) {
     return plan.featureIds
   }

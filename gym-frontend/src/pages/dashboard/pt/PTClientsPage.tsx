@@ -750,16 +750,6 @@ export default function PTClientsPage() {
       },
     },
     {
-      title: 'Giáo án',
-      width: 160,
-      render: (_: unknown, record: HistoryEntry) => {
-        if (record._type === 'workout_end') {
-          return <span className="text-sm text-[var(--gs-text)]">{record.workoutName || '—'}</span>
-        }
-        return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
-      },
-    },
-    {
       title: 'Lớp',
       width: 140,
       render: (_: unknown, record: HistoryEntry) => {

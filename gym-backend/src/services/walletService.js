@@ -41,15 +41,47 @@ export const applyWalletTransaction = async ({
         }
     }
 
-    const wallet = await getOrCreateWallet(userId, session)
-    const balanceBefore = wallet.balance
-    const balanceAfter = balanceBefore + transactionAmount
-    if (balanceAfter < 0) {
-        throw new AppError('Insufficient wallet balance', 400)
-    }
+    // ATOMIC: use findOneAndUpdate with $inc to prevent race condition
+    // The $gte guard ensures balance never goes negative, even under concurrent requests
+    let wallet
+    let balanceBefore
+    let balanceAfter
 
-    wallet.balance = balanceAfter
-    await wallet.save({ session })
+    if (transactionAmount >= 0) {
+        // Deposit: atomic increment, create wallet if not exists
+        wallet = await Wallet.findOneAndUpdate(
+            { userId },
+            { $inc: { balance: transactionAmount } },
+            { new: true, session },
+        )
+        if (!wallet) {
+            // Wallet doesn't exist yet - create with initial balance directly (saves one round-trip)
+            [wallet] = await Wallet.create([{ userId, balance: transactionAmount }], { session })
+            balanceBefore = 0
+            balanceAfter = transactionAmount
+        } else {
+            balanceBefore = wallet.balance - transactionAmount
+            balanceAfter = wallet.balance
+        }
+    } else {
+        // Withdrawal: atomic decrement with guard
+        const absAmount = -transactionAmount
+        wallet = await Wallet.findOneAndUpdate(
+            { userId, balance: { $gte: absAmount } },
+            { $inc: { balance: -absAmount } },
+            { new: true, session },
+        )
+        if (!wallet) {
+            // Check if wallet exists but insufficient balance
+            const existing = await Wallet.findOne({ userId }).session(session)
+            if (!existing) {
+                throw new AppError('Wallet not found', 404)
+            }
+            throw new AppError('Insufficient wallet balance', 400)
+        }
+        balanceBefore = wallet.balance + absAmount
+        balanceAfter = wallet.balance
+    }
 
     const transaction = await Transaction.create(
         [

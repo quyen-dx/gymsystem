@@ -3,9 +3,10 @@ import DailyQRCode from '../models/DailyQRCode.js'
 import ClassEnrollment from '../models/ClassEnrollment.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import CheckIn from '../models/CheckIn.js'
+import MembershipCycle from '../models/MembershipCycle.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
-import { markBenefitUsed } from '../services/membershipCycleService.js'
+import { activateCycle, markBenefitUsed } from '../services/membershipCycleService.js'
 
 function startOfDay(date) {
   const d = new Date(date)
@@ -273,7 +274,20 @@ export const submitDailyQRCheckin = async (req, res) => {
         })
       }
 
-      // 4. Create check-in record
+      // 4. Validate & activate membership before completing check-in
+      try {
+        const activated = await activateCycle(memberId)
+        if (!activated) {
+          const activeCycle = await MembershipCycle.findOne({ memberId, status: 'active' }).lean()
+          if (!activeCycle) {
+            return res.status(400).json({ message: 'Không có gói tập hợp lệ.' })
+          }
+        }
+      } catch (activationErr) {
+        return res.status(500).json({ message: activationErr.message })
+      }
+
+      // 5. Create check-in record
       const checkin = await CheckIn.create({
         memberId,
         staffId: null,
@@ -289,8 +303,6 @@ export const submitDailyQRCheckin = async (req, res) => {
         checkinSource: 'daily_qr',
         sessionType: 'scheduled',
       })
-
-      markBenefitUsed(memberId, 'checkin')
 
       res.json({
         message: 'Check-in thành công.',
@@ -325,6 +337,19 @@ export const submitDailyQRCheckin = async (req, res) => {
         })
       }
 
+      // Validate & activate membership before completing free workout check-in
+      try {
+        const activated = await activateCycle(memberId)
+        if (!activated) {
+          const activeCycle = await MembershipCycle.findOne({ memberId, status: 'active' }).lean()
+          if (!activeCycle) {
+            return res.status(400).json({ message: 'Không có gói tập hợp lệ.' })
+          }
+        }
+      } catch (activationErr) {
+        return res.status(500).json({ message: activationErr.message })
+      }
+
       const checkin = await CheckIn.create({
         memberId,
         staffId: null,
@@ -335,8 +360,6 @@ export const submitDailyQRCheckin = async (req, res) => {
         sessionType: 'free_workout',
         checkinSource: 'daily_qr',
       })
-
-      markBenefitUsed(memberId, 'checkin')
 
       res.json({
         message: 'Check-in thành công.',

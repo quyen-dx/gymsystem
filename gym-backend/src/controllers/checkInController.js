@@ -1,8 +1,9 @@
 import jwt from 'jsonwebtoken'
 import CheckIn from '../models/CheckIn.js'
-import Membership from '../models/Membership.js'
+import MembershipCycle from '../models/MembershipCycle.js'
 import User from '../models/User.js'
 import Plan from '../models/Plan.js'
+import { activateCycle } from '../services/membershipCycleService.js'
 import { recordUserActivity } from '../services/userActivityService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
@@ -71,13 +72,16 @@ const buildVietnamDateRange = ({ mode = 'today', date }) => {
   }
 }
 
-const getActiveMembership = (memberId) => Membership.findOne({
+const getActiveMembership = (memberId) => MembershipCycle.findOne({
   memberId,
-  status: 'active',
-  endDate: { $gte: new Date() },
+  status: { $in: ['active', 'pending_initial_activation'] },
+  $or: [
+    { status: 'pending_initial_activation' },
+    { status: 'active', expiresAt: { $gte: new Date() } },
+  ],
 })
-  .populate('planId', 'nameVi nameEn durationDays price color')
-  .sort({ endDate: -1 })
+  .populate('currentPlanId', 'nameVi nameEn durationDays price color')
+  .sort({ createdAt: -1 })
 
 const resolveMemberFromCheckinPayload = async ({ token, memberId }) => {
   if (token) {
@@ -119,8 +123,8 @@ const resolveMemberFromCheckinPayload = async ({ token, memberId }) => {
 const formatHistoryItem = (checkin, membershipByMemberId = {}) => {
   const member = checkin.memberId || {}
   const staff = checkin.staffId || {}
-  const membership = membershipByMemberId[String(member._id)] || null
-  const plan = membership?.planId
+  const cycle = membershipByMemberId[String(member._id)] || null
+  const plan = cycle?.currentPlanId
   const dailyQR = checkin.dailyQRCodeId || {}
 
   return {
@@ -186,10 +190,10 @@ export const generateQRToken = async (req, res) => {
   try {
     const memberId = req.user._id
 
-    const activeMembership = await Membership.findOne({
+    const activeMembership = await MembershipCycle.findOne({
       memberId,
       status: 'active',
-      endDate: { $gte: new Date() },
+      expiresAt: { $gte: new Date() },
     }).lean()
 
     if (!activeMembership) {
@@ -240,6 +244,7 @@ export const generateQRToken = async (req, res) => {
 }
 
 export const staffVerifyCheckin = async (req, res) => {
+  let mongoSession = null
   try {
     const { token, memberId } = req.body
     const staffId = req.user._id
@@ -258,6 +263,12 @@ export const staffVerifyCheckin = async (req, res) => {
       throw new AppError('Gói tập đã hết hạn. Vui lòng gia hạn để tiếp tục.', 403)
     }
 
+    // FIX: Wrapped activation + checkin creation + activity recording in a transaction
+    // MOVED duplicate check INSIDE transaction to prevent TOCTOU race condition
+    mongoSession = await mongoose.startSession()
+    mongoSession.startTransaction()
+
+    // Check duplicate INSIDE transaction so concurrent requests are serialized
     const today = getVietnamDateString()
     const todayStart = new Date(`${today}T00:00:00${VIETNAM_UTC_OFFSET}`)
     const todayEnd = new Date(`${today}T23:59:59.999${VIETNAM_UTC_OFFSET}`)
@@ -265,21 +276,33 @@ export const staffVerifyCheckin = async (req, res) => {
       memberId: member._id,
       checkinTime: { $gte: todayStart, $lte: todayEnd },
       status: 'success',
-    }).lean()
+    }).session(mongoSession).lean()
 
     if (recentCheckin) {
+      await mongoSession.abortTransaction()
       throw new AppError('Hội viên này đã check-in thành công trước đó!', 429, 'ALREADY_CHECKED_IN')
     }
 
+    // If cycle is pending_initial_activation, activate before completing check-in
+    if (activeMembership.status === 'pending_initial_activation') {
+      const activated = await activateCycle(member._id, { session: mongoSession })
+      if (!activated) {
+        await mongoSession.abortTransaction()
+        throw new AppError('Không thể kích hoạt gói tập. Vui lòng thử lại.', 500)
+      }
+      // Use activated cycle info for the response
+      activeMembership.status = 'active'
+    }
+
     const streakDay = (await calculateStreak(member._id)) + 1
-    const checkin = await CheckIn.create({
+    const [checkin] = await CheckIn.create([{
       memberId: member._id,
       staffId,
       checkinTime: new Date(),
       status: 'success',
       qrToken: token || undefined,
       streakDay,
-    })
+    }], { session: mongoSession })
 
     await recordUserActivity({
       userId: member._id,
@@ -287,8 +310,12 @@ export const staffVerifyCheckin = async (req, res) => {
       title: 'Điểm danh',
       description: `Check-in thành công tại quầy (staff: ${getUserDisplayName(req.user, staffId)})`,
       metadata: { checkinId: checkin._id, staffId },
+      session: mongoSession,
     })
 
+    await mongoSession.commitTransaction()
+
+    // Notification outside transaction (fire-and-forget, non-critical)
     await createNotification({
       receiverId: member._id,
       receiverRole: 'member',
@@ -312,7 +339,7 @@ export const staffVerifyCheckin = async (req, res) => {
         memberName: getUserDisplayName(member, 'Thành viên'),
         email: member.email,
         phone: member.phone,
-        planName: activeMembership.planId?.nameVi || activeMembership.planId?.nameEn,
+        planName: activeMembership.currentPlanId?.nameVi || activeMembership.currentPlanId?.nameEn,
         staffId,
         staffName: getUserDisplayName(req.user, 'Staff'),
         status: checkin.status,
@@ -321,7 +348,15 @@ export const staffVerifyCheckin = async (req, res) => {
       },
     })
   } catch (error) {
+    if (mongoSession) {
+      try { await mongoSession.abortTransaction() } catch {}
+      mongoSession.endSession()
+    }
     return sendError(res, error)
+  } finally {
+    if (mongoSession) {
+      mongoSession.endSession()
+    }
   }
 }
 
@@ -362,18 +397,18 @@ export const getMyCheckinHistory = async (req, res) => {
         .lean(),
     ])
 
-    // Format with membership plan info
-    const memberships = await Membership.find({ memberId, status: 'active' })
-      .populate('planId', 'nameVi nameEn')
-      .sort({ endDate: -1 })
+    // Format with cycle plan info
+    const cycles = await MembershipCycle.find({ memberId, status: 'active' })
+      .populate('currentPlanId', 'nameVi nameEn')
+      .sort({ expiresAt: -1 })
       .lean()
     const membershipByMemberId = {}
-    if (memberships.length > 0) {
-      membershipByMemberId[String(memberId)] = memberships[0]
+    if (cycles.length > 0) {
+      membershipByMemberId[String(memberId)] = cycles[0]
     }
     const memberMap = {}
-    for (const m of memberships) {
-      memberMap[String(m.memberId)] = m
+    for (const c of cycles) {
+      memberMap[String(c.memberId)] = c
     }
 
     res.json({
@@ -456,18 +491,18 @@ export const getStaffCheckinHistory = async (req, res) => {
     ])
 
     const memberIds = checkins.map((checkin) => checkin.memberId?._id).filter(Boolean)
-    const memberships = await Membership.find({
+    const cycles = await MembershipCycle.find({
       memberId: { $in: memberIds },
       status: 'active',
     })
-      .populate('planId', 'nameVi nameEn durationDays price color')
-      .sort({ endDate: -1 })
+      .populate('currentPlanId', 'nameVi nameEn durationDays price color')
+      .sort({ expiresAt: -1 })
       .lean()
 
     const membershipByMemberId = {}
-    for (const membership of memberships) {
-      const key = String(membership.memberId)
-      if (!membershipByMemberId[key]) membershipByMemberId[key] = membership
+    for (const cycle of cycles) {
+      const key = String(cycle.memberId)
+      if (!membershipByMemberId[key]) membershipByMemberId[key] = cycle
     }
 
     res.json({

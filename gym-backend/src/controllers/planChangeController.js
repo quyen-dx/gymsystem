@@ -10,10 +10,10 @@ import { createNotification } from '../services/notificationService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { handlePTDataOnPlanChange } from '../services/membershipService.js'
 
-function calcProratedValue(membership, plan) {
+function calcProratedValue(cycle, plan) {
   const now = new Date()
-  const start = new Date(membership.startDate)
-  const end = new Date(membership.endDate)
+  const start = new Date(cycle.startDate)
+  const end = new Date(cycle.expiresAt)
   const totalDuration = end.getTime() - start.getTime()
   const remaining = end.getTime() - now.getTime()
   if (totalDuration <= 0 || remaining <= 0) return 0
@@ -24,26 +24,26 @@ function calcProratedValue(membership, plan) {
 export const getAvailablePlans = async (req, res) => {
   try {
     const memberId = req.user._id
-    const membership = await Membership.findOne({ memberId, status: { $in: ['active', 'pending_cancel'] } })
-      .populate('planId')
+    const cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+      .populate('currentPlanId')
 
-    if (!membership) return res.status(404).json({ message: 'Không tìm thấy gói tập đang hoạt động' })
+    if (!cycle) return res.status(404).json({ message: 'Không tìm thấy gói tập đang hoạt động' })
 
-    const currentPrice = membership.planId?.price || 0
-    const remainingValue = calcProratedValue(membership, membership.planId)
+    const currentPrice = cycle.currentPlanId?.price || 0
+    const remainingValue = calcProratedValue(cycle, cycle.currentPlanId)
 
     const allPlans = await Plan.find({ isActive: true }).populate('featureIds').lean()
 
     const plans = allPlans
-      .filter(p => p._id.toString() !== membership.planId._id.toString())
+      .filter(p => p._id.toString() !== cycle.currentPlanId._id.toString())
       .map(p => ({
         ...p,
-        diff: p.price - currentPrice, // >0: can tra, <0: hoan vao vi
+        diff: p.price - currentPrice,
       }))
 
     res.json({
-      currentPlan: membership.planId,
-      remainingDays: Math.max(0, Math.ceil((new Date(membership.endDate) - new Date()) / (1000 * 60 * 60 * 24))),
+      currentPlan: cycle.currentPlanId,
+      remainingDays: Math.max(0, Math.ceil((new Date(cycle.expiresAt) - new Date()) / (1000 * 60 * 60 * 24))),
       plans,
     })
   } catch (error) {
@@ -59,12 +59,14 @@ export const upgradePlan = async (req, res) => {
   session.startTransaction()
 
   try {
-    const membership = await Membership.findOne({ memberId, status: { $in: ['active', 'pending_cancel'] } })
-      .populate('planId').session(session)
-    if (!membership) {
+    const cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+      .populate('currentPlanId').session(session)
+    if (!cycle) {
       await session.abortTransaction()
       return res.status(404).json({ message: 'Không tìm thấy gói tập đang hoạt động' })
     }
+
+    const membershipId = cycle.currentMembershipId
 
     const newPlan = await Plan.findById(newPlanId).session(session)
     if (!newPlan) {
@@ -72,13 +74,13 @@ export const upgradePlan = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy gói mới' })
     }
 
-    if (newPlan.price <= membership.planId.price) {
+    if (newPlan.price <= cycle.currentPlanId.price) {
       await session.abortTransaction()
       return res.status(400).json({ message: 'Gói mới phải có giá cao hơn gói hiện tại để nâng cấp' })
     }
 
-    const oldPlan = membership.planId
-    const remainingValue = calcProratedValue(membership, oldPlan)
+    const oldPlan = cycle.currentPlanId
+    const remainingValue = calcProratedValue(cycle, oldPlan)
     const amountToPay = Math.max(0, newPlan.price - remainingValue)
 
     const wallet = await Wallet.findOne({ userId: memberId }).session(session)
@@ -94,7 +96,7 @@ export const upgradePlan = async (req, res) => {
     const [payment] = await Payment.create([{
       userId: memberId,
       planId: newPlan._id,
-      membershipId: membership._id,
+      membershipId,
       amount: amountToPay,
       currency: 'vnd',
       status: 'PAID',
@@ -124,18 +126,20 @@ export const upgradePlan = async (req, res) => {
       status: 'completed',
       completedAt: new Date(),
       metadata: { paymentId: payment._id, fromPlan: oldPlan.nameVi, toPlan: newPlan.nameVi, proratedCredit: remainingValue },
-      idempotencyKey: `upgrade_${membership._id}_${newPlan._id}`,
+      idempotencyKey: `upgrade_${membershipId}_${newPlan._id}`,
     }], { session })
 
     const oldPlanId = oldPlan._id
     const oldPlanName = oldPlan.nameVi
-    membership.planId = newPlan._id
-    membership.source = 'wallet'
-    await membership.save({ session })
+
+    await MembershipCycle.updateOne(
+      { _id: cycle._id },
+      { $set: { currentPlanId: newPlan._id } },
+    ).session(session)
 
     await PlanChangeHistory.create([{
       memberId,
-      membershipId: membership._id,
+      membershipId,
       fromPlanId: oldPlanId,
       toPlanId: newPlan._id,
       changeType: 'upgrade',
@@ -144,23 +148,6 @@ export const upgradePlan = async (req, res) => {
       paymentId: payment._id,
     }], { session })
 
-    // === MembershipCycle integration (upgrade) ===
-    const upCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
-      .session(session).sort({ createdAt: -1 }).lean()
-    if (upCycle) {
-      await MembershipCycle.updateOne(
-        { _id: upCycle._id },
-        {
-          $set: {
-            currentMembershipId: membership._id,
-            currentPlanId: newPlan._id,
-          },
-        },
-      ).session(session)
-    }
-    // === end MembershipCycle integration ===
-
-    // Handle PT data changes WITHIN transaction so that failure rolls back plan change
     try {
       await handlePTDataOnPlanChange({ memberId, oldPlan, newPlan, session })
     } catch (ptErr) {
@@ -171,7 +158,6 @@ export const upgradePlan = async (req, res) => {
 
     await session.commitTransaction()
 
-    // Notifications (outside transaction, failure is acceptable)
     createNotification({
       receiverId: memberId,
       receiverRole: 'member',
@@ -183,7 +169,7 @@ export const upgradePlan = async (req, res) => {
       sendEmail: true,
     }).catch(() => {})
 
-    const populated = await Membership.findById(membership._id).populate('planId')
+    const populated = await Membership.findById(membershipId).populate('planId')
     res.json({ message: 'Nâng cấp gói tập thành công', membership: populated, payment })
   } catch (error) {
     await session.abortTransaction()
@@ -201,12 +187,14 @@ export const downgradePlan = async (req, res) => {
   session.startTransaction()
 
   try {
-    const membership = await Membership.findOne({ memberId, status: { $in: ['active', 'pending_cancel'] } })
-      .populate('planId').session(session)
-    if (!membership) {
+    const cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+      .populate('currentPlanId').session(session)
+    if (!cycle) {
       await session.abortTransaction()
       return res.status(404).json({ message: 'Không tìm thấy gói tập đang hoạt động' })
     }
+
+    const membershipId = cycle.currentMembershipId
 
     const newPlan = await Plan.findById(newPlanId).session(session)
     if (!newPlan) {
@@ -214,13 +202,13 @@ export const downgradePlan = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy gói mới' })
     }
 
-    if (newPlan.price >= membership.planId.price) {
+    if (newPlan.price >= cycle.currentPlanId.price) {
       await session.abortTransaction()
       return res.status(400).json({ message: 'Gói mới phải có giá thấp hơn gói hiện tại để hạ cấp' })
     }
 
-    const oldPlan = membership.planId
-    const remainingValue = calcProratedValue(membership, oldPlan)
+    const oldPlan = cycle.currentPlanId
+    const remainingValue = calcProratedValue(cycle, oldPlan)
     const newPlanCost = Math.round(newPlan.price * (remainingValue / oldPlan.price))
     const creditToWallet = remainingValue - newPlanCost
 
@@ -245,46 +233,31 @@ export const downgradePlan = async (req, res) => {
         amount: creditToWallet,
         balanceBefore,
         balanceAfter: wallet.balance,
-        referenceId: membership._id.toString(),
+        referenceId: membershipId.toString(),
         status: 'completed',
         completedAt: new Date(),
         metadata: { fromPlan: oldPlan.nameVi, toPlan: newPlan.nameVi, remainingValue, newPlanCost },
-        idempotencyKey: `downgrade_${membership._id}_${newPlan._id}`,
+        idempotencyKey: `downgrade_${membershipId}_${newPlan._id}`,
       }], { session })
     }
 
     const oldPlanId = oldPlan._id
     const oldPlanName = oldPlan.nameVi
-    membership.planId = newPlan._id
-    membership.source = 'wallet'
-    await membership.save({ session })
+
+    await MembershipCycle.updateOne(
+      { _id: cycle._id },
+      { $set: { currentPlanId: newPlan._id } },
+    ).session(session)
 
     await PlanChangeHistory.create([{
       memberId,
-      membershipId: membership._id,
+      membershipId,
       fromPlanId: oldPlanId,
       toPlanId: newPlan._id,
       changeType: 'downgrade',
       walletCredit: creditToWallet,
     }], { session })
 
-    // === MembershipCycle integration (downgrade) ===
-    const downCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
-      .session(session).sort({ createdAt: -1 }).lean()
-    if (downCycle) {
-      await MembershipCycle.updateOne(
-        { _id: downCycle._id },
-        {
-          $set: {
-            currentMembershipId: membership._id,
-            currentPlanId: newPlan._id,
-          },
-        },
-      ).session(session)
-    }
-    // === end MembershipCycle integration ===
-
-    // Handle PT data changes WITHIN transaction
     try {
       await handlePTDataOnPlanChange({ memberId, oldPlan, newPlan, session })
     } catch (ptErr) {
@@ -306,7 +279,7 @@ export const downgradePlan = async (req, res) => {
       sendEmail: true,
     }).catch(() => {})
 
-    const populated = await Membership.findById(membership._id).populate('planId')
+    const populated = await Membership.findById(membershipId).populate('planId')
     res.json({ message: 'Hạ cấp gói tập thành công', membership: populated, creditToWallet })
   } catch (error) {
     await session.abortTransaction()
@@ -338,12 +311,14 @@ export const changePlan = async (req, res) => {
   session.startTransaction()
 
   try {
-    const membership = await Membership.findOne({ memberId, status: { $in: ['active', 'pending_cancel'] } })
-      .populate('planId').session(session)
-    if (!membership) {
+    const cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+      .populate('currentPlanId').session(session)
+    if (!cycle) {
       await session.abortTransaction()
       return res.status(404).json({ message: 'Không tìm thấy gói tập đang hoạt động' })
     }
+
+    const membershipId = cycle.currentMembershipId
 
     const newPlan = await Plan.findById(newPlanId).populate('featureIds').session(session)
     if (!newPlan) {
@@ -351,13 +326,13 @@ export const changePlan = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy gói mới' })
     }
 
-    if (newPlan._id.toString() === membership.planId._id.toString()) {
+    if (newPlan._id.toString() === cycle.currentPlanId._id.toString()) {
       await session.abortTransaction()
       return res.status(400).json({ message: 'Gói mới phải khác gói hiện tại' })
     }
 
-    const oldPlan = membership.planId
-    const diff = newPlan.price - oldPlan.price // >0: can tra, <0: hoan vao vi
+    const oldPlan = cycle.currentPlanId
+    const diff = newPlan.price - oldPlan.price
     const changeType = diff > 0 ? 'upgrade' : 'downgrade'
 
     let wallet = await Wallet.findOne({ userId: memberId }).session(session)
@@ -370,7 +345,6 @@ export const changePlan = async (req, res) => {
     let creditToWallet = 0
 
     if (diff > 0) {
-      // Can thanh toan them
       amountToPay = diff
       if (wallet.balance < amountToPay) {
         await session.abortTransaction()
@@ -382,7 +356,7 @@ export const changePlan = async (req, res) => {
       await wallet.save({ session })
 
       const [p] = await Payment.create([{
-        userId: memberId, planId: newPlan._id, membershipId: membership._id,
+        userId: memberId, planId: newPlan._id, membershipId,
         amount: amountToPay, currency: 'vnd', status: 'PAID', paymentMethod: 'WALLET', source: 'ONLINE', paidAt: new Date(),
         metadata: { changeType, fromPlanId: oldPlan._id, walletBalanceBefore: balanceBefore, walletBalanceAfter: wallet.balance },
       }], { session })
@@ -393,10 +367,9 @@ export const changePlan = async (req, res) => {
         description: `Đổi gói: ${oldPlan.nameVi} → ${newPlan.nameVi}`, amount: -amountToPay,
         balanceBefore, balanceAfter: wallet.balance, referenceId: p._id.toString(), status: 'completed', completedAt: new Date(),
         metadata: { fromPlan: oldPlan.nameVi, toPlan: newPlan.nameVi },
-        idempotencyKey: `change_${membership._id}_${newPlan._id}`,
+        idempotencyKey: `change_${membershipId}_${newPlan._id}`,
       }], { session })
     } else {
-      // Hoan vao vi
       creditToWallet = Math.abs(diff)
       if (creditToWallet > 0) {
         const balanceBefore = wallet.balance
@@ -407,42 +380,27 @@ export const changePlan = async (req, res) => {
           userId: memberId, walletId: wallet._id, type: 'deposit', provider: 'wallet', source: 'plan_change',
           description: `Đổi gói: ${oldPlan.nameVi} → ${newPlan.nameVi}. Hoàn ${creditToWallet.toLocaleString('vi-VN')}đ vào ví.`,
           amount: creditToWallet, balanceBefore, balanceAfter: wallet.balance,
-          referenceId: membership._id.toString(), status: 'completed', completedAt: new Date(),
+          referenceId: membershipId.toString(), status: 'completed', completedAt: new Date(),
           metadata: { fromPlan: oldPlan.nameVi, toPlan: newPlan.nameVi },
-          idempotencyKey: `change_credit_${membership._id}_${newPlan._id}`,
+          idempotencyKey: `change_credit_${membershipId}_${newPlan._id}`,
         }], { session })
       }
     }
 
     const oldPlanId = oldPlan._id
     const oldPlanName = oldPlan.nameVi
-    membership.planId = newPlan._id
-    membership.source = 'wallet'
-    await membership.save({ session })
+
+    await MembershipCycle.updateOne(
+      { _id: cycle._id },
+      { $set: { currentPlanId: newPlan._id } },
+    ).session(session)
 
     await PlanChangeHistory.create([{
-      memberId, membershipId: membership._id, fromPlanId: oldPlanId, toPlanId: newPlan._id, changeType,
+      memberId, membershipId, fromPlanId: oldPlanId, toPlanId: newPlan._id, changeType,
       amount: amountToPay, walletCredit: creditToWallet,
       paymentId: payment?._id || null,
     }], { session })
 
-    // === MembershipCycle integration (change) ===
-    const chCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
-      .session(session).sort({ createdAt: -1 }).lean()
-    if (chCycle) {
-      await MembershipCycle.updateOne(
-        { _id: chCycle._id },
-        {
-          $set: {
-            currentMembershipId: membership._id,
-            currentPlanId: newPlan._id,
-          },
-        },
-      ).session(session)
-    }
-    // === end MembershipCycle integration ===
-
-    // Handle PT data changes WITHIN transaction
     try {
       await handlePTDataOnPlanChange({ memberId, oldPlan, newPlan, session })
     } catch (ptErr) {
@@ -453,7 +411,7 @@ export const changePlan = async (req, res) => {
 
     await session.commitTransaction()
 
-    const notifTitle = changeType === 'upgrade' ? 'Đổi gói tập thành công' : 'Đổi gói tập thành công'
+    const notifTitle = 'Đổi gói tập thành công'
     const notifContent = changeType === 'upgrade'
       ? `Bạn đã đổi từ gói "${oldPlanName}" sang "${newPlan.nameVi}". Thanh toán: ${amountToPay.toLocaleString('vi-VN')}đ.`
       : `Bạn đã đổi từ gói "${oldPlanName}" sang "${newPlan.nameVi}".${creditToWallet > 0 ? ` Đã hoàn ${creditToWallet.toLocaleString('vi-VN')}đ vào ví.` : ''}`
@@ -465,7 +423,7 @@ export const changePlan = async (req, res) => {
       redirectUrl: '/my-membership', createdBy: 'System', sendEmail: true,
     }).catch(() => {})
 
-    const populated = await Membership.findById(membership._id).populate('planId')
+    const populated = await Membership.findById(membershipId).populate('planId')
     res.json({ message: notifTitle, membership: populated, amountToPay, creditToWallet, payment })
   } catch (error) {
     await session.abortTransaction()

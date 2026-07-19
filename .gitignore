@@ -10,4 +10,5 @@ download/
 *.dmg
 *.pkg
 *.deb
-*.AppImage
+*.AppImagenul
+gym-backend/nul

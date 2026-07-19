@@ -1,5 +1,5 @@
 import Booking from '../models/Booking.js'
-import Membership from '../models/Membership.js'
+import MembershipCycle from '../models/MembershipCycle.js'
 import Waitlist from '../models/Waitlist.js'
 import PT from '../models/PT.js'
 import mongoose from 'mongoose'
@@ -24,13 +24,13 @@ const makeSlotId = (ptId, date, slot) => {
 
 const hasActiveMembershipForDate = async (memberId, date) => {
   const bookingDate = normalizeDate(date)
-  const membership = await Membership.findOne({
+  const cycle = await MembershipCycle.findOne({
     memberId,
-    status: { $in: ['active', 'pending_cancel'] },
-    endDate: { $gte: bookingDate },
+    status: 'active',
+    expiresAt: { $gte: bookingDate },
   }).lean()
 
-  return !!membership
+  return !!cycle
 }
 
 const requireActiveMembershipForDate = async (memberId, date, res) => {
@@ -136,71 +136,93 @@ export const createBooking = async (req, res) => {
         })
       }
 
-      const priceAtBooking = 0
+    // FIX: priceAtBooking/ totalAmount hardcoded to 0 because PT pricing is not yet implemented.
+    // TODO: Fetch PT session price from PlanFeature or SystemSettings when implemented
+    const priceAtBooking = 0
 
-    const memberConflict = await Booking.findOne({
-      memberId: req.user._id,
-      date: bookingDate,
-      slot,
-      status: { $in: activeStatus },
-    })
+    const session = await mongoose.startSession()
+    try {
+      session.startTransaction()
 
-    if (memberConflict) {
-      return res.status(400).json({
-        message: 'Bạn đã có lịch tập ở khung giờ này',
+      // Re-check conflicts inside transaction to prevent race condition (TOCTOU)
+      const [memberConflict, ptConflict] = await Promise.all([
+        Booking.findOne({
+          memberId: req.user._id,
+          date: bookingDate,
+          slot,
+          status: { $in: activeStatus },
+        }).session(session),
+        Booking.findOne({
+          ptId,
+          date: bookingDate,
+          slot,
+          status: { $in: activeStatus },
+        }).session(session),
+      ])
+
+      if (memberConflict) {
+        await session.abortTransaction()
+        return res.status(400).json({
+          message: 'Bạn đã có lịch tập ở khung giờ này',
+        })
+      }
+
+      if (ptConflict) {
+        await session.abortTransaction()
+        return res.status(400).json({
+          message: 'PT đã có người đặt khung giờ này',
+        })
+      }
+
+      const booking = await Booking.create([{
+        memberId: req.user._id,
+        ptId,
+        date: bookingDate,
+        slot,
+        note,
+        trainingType: finalTrainingType,
+        priceAtBooking,
+        totalAmount: priceAtBooking,
+        paymentStatus: 'unpaid',
+        status: 'pending',
+      }], { session })
+
+      const createdBooking = booking[0]
+
+      // === MembershipCycle benefit tracking (FIX: added await) ===
+      const benefitType = finalTrainingType === 'one_to_one' ? 'pt_1on1' : 'pt_group'
+      await markBenefitUsed(req.user._id, benefitType, { session })
+
+      await session.commitTransaction()
+
+      await createNotification({
+        receiverId: ptId,
+        receiverRole: 'pt',
+        notificationType: NOTIFICATION_TYPES.BOOKING_CONFIRMED,
+        title: 'Có lịch đặt mới',
+        content: `Hội viên đã đặt lịch tập vào ${bookingDate.toLocaleDateString('vi-VN')}, slot ${slot}.`,
+        relatedId: createdBooking._id,
+        relatedType: 'Booking',
+        redirectUrl: '/pt/bookings',
+        createdBy: 'System',
       })
-    }
 
-    const ptConflict = await Booking.findOne({
-      ptId,
-      date: bookingDate,
-      slot,
-      status: { $in: activeStatus },
-    })
-
-    if (ptConflict) {
-      return res.status(400).json({
-        message: 'PT đã có người đặt khung giờ này',
+      return res.status(201).json({
+        message: 'Đặt lịch thành công, chờ PT xác nhận',
+        booking: createdBooking,
       })
+    } catch (createErr) {
+      await session.abortTransaction()
+      // Handle unique index violation (E11000) from the partial unique index on { ptId, date, slot }
+      if (createErr.code === 11000) {
+        return res.status(409).json({
+          message: 'Khung giờ này đã có người đặt, vui lòng chọn giờ khác.',
+        })
+      }
+      throw createErr
+    } finally {
+      session.endSession()
     }
-
-    const booking = await Booking.create({
-      memberId: req.user._id,
-      ptId,
-      date: bookingDate,
-      slot,
-      note,
-
-      trainingType: finalTrainingType,
-
-      priceAtBooking,
-      totalAmount: priceAtBooking,
-
-      paymentStatus: 'unpaid',
-
-      status: 'pending',
-    })
-
-    await createNotification({
-      receiverId: ptId,
-      receiverRole: 'pt',
-      notificationType: NOTIFICATION_TYPES.BOOKING_CONFIRMED,
-      title: 'Có lịch đặt mới',
-      content: `Hội viên đã đặt lịch tập vào ${bookingDate.toLocaleDateString('vi-VN')}, slot ${slot}.`,
-      relatedId: booking._id,
-      relatedType: 'Booking',
-      redirectUrl: '/pt/bookings',
-      createdBy: 'System',
-    })
-
-    // === MembershipCycle benefit tracking ===
-    const benefitType = finalTrainingType === 'one_to_one' ? 'pt_1on1' : 'pt_group'
-    markBenefitUsed(req.user._id, benefitType)
-
-    return res.status(201).json({
-      message: 'Đặt lịch thành công, chờ PT xác nhận',
-      booking,
-    })
   } catch (error) {
     return res.status(500).json({
       message: 'Lỗi đặt lịch',
@@ -223,56 +245,82 @@ export const createRecurringBooking = async (req, res) => {
     lastBookingDate.setDate(lastBookingDate.getDate() + (Number(weeks) - 1) * 7)
     if (!(await requireActiveMembershipForDate(req.user._id, lastBookingDate, res))) return
 
-    const featureCheck = await checkMemberFeature(req.user._id, 'PT_BOOK_PRIVATE')
+    // FIX: standardize feature code to match createBooking
+    const featureCheck = await checkMemberFeature(req.user._id, 'BOOK_PT_PRIVATE')
     if (!featureCheck.allowed) {
       return res.status(403).json({ message: featureCheck.reason })
     }
 
+    const session = await mongoose.startSession()
     const createdBookings = []
     const conflicts = []
 
-    for (let i = 0; i < Number(weeks); i++) {
-      const bookingDate = normalizeDate(date)
-      bookingDate.setDate(bookingDate.getDate() + i * 7)
+    try {
+      session.startTransaction()
 
-      const conflict = await Booking.findOne({
-        $or: [
-          {
-            memberId: req.user._id,
+      for (let i = 0; i < Number(weeks); i++) {
+        const bookingDate = normalizeDate(date)
+        bookingDate.setDate(bookingDate.getDate() + i * 7)
+
+        const conflict = await Booking.findOne({
+          $or: [
+            {
+              memberId: req.user._id,
+              date: bookingDate,
+              slot,
+              status: { $in: activeStatus },
+            },
+            {
+              ptId,
+              date: bookingDate,
+              slot,
+              status: { $in: activeStatus },
+            },
+          ],
+        }).session(session)
+
+        if (conflict) {
+          conflicts.push({
             date: bookingDate,
             slot,
-            status: { $in: activeStatus },
-          },
-          {
+            reason: 'Trùng lịch member hoặc PT',
+          })
+          continue
+        }
+
+        try {
+          const [booking] = await Booking.create([{
+            memberId: req.user._id,
             ptId,
             date: bookingDate,
             slot,
-            status: { $in: activeStatus },
-          },
-        ],
-      })
+            note,
+            status: 'pending',
+          }], { session })
 
-      if (conflict) {
-        conflicts.push({
-          date: bookingDate,
-          slot,
-          reason: 'Trùng lịch member hoặc PT',
-        })
-        continue
+          // FIX: added await for markBenefitUsed
+          await markBenefitUsed(req.user._id, 'pt_1on1', { session })
+
+          createdBookings.push(booking)
+        } catch (createErr) {
+          if (createErr.code === 11000) {
+            conflicts.push({
+              date: bookingDate,
+              slot,
+              reason: 'Khung giờ này đã có người đặt, vui lòng chọn giờ khác.',
+            })
+            continue
+          }
+          throw createErr
+        }
       }
 
-      const booking = await Booking.create({
-        memberId: req.user._id,
-        ptId,
-        date: bookingDate,
-        slot,
-        note,
-        status: 'pending',
-      })
-
-      markBenefitUsed(req.user._id, 'pt_1on1')
-
-      createdBookings.push(booking)
+      await session.commitTransaction()
+    } catch (error) {
+      await session.abortTransaction()
+      throw error
+    } finally {
+      session.endSession()
     }
 
     return res.status(201).json({
@@ -309,47 +357,76 @@ export const scheduleWeeklyBooking = async (req, res) => {
       })
     }
 
-    const featureCheck = await checkMemberFeature(req.user._id, 'PT_BOOK_PRIVATE')
+    // FIX: standardize feature code to match createBooking
+    const featureCheck = await checkMemberFeature(req.user._id, 'BOOK_PT_PRIVATE')
     if (!featureCheck.allowed) {
       return res.status(403).json({ message: featureCheck.reason })
     }
 
+    const session = await mongoose.startSession()
     const results = []
     const errors = []
 
-    for (const day of daysOfWeek) {
-      const bookingDate = getNextWeekDate(day)
+    try {
+      session.startTransaction()
 
-      if (!(await requireActiveMembershipForDate(req.user._id, bookingDate, res))) return
+      for (const day of daysOfWeek) {
+        const bookingDate = getNextWeekDate(day)
 
-      const conflict = await Booking.findOne({
-        $or: [
-          { memberId: req.user._id, date: bookingDate, slot: time, status: { $in: activeStatus } },
-          { ptId, date: bookingDate, slot: time, status: { $in: activeStatus } },
-        ],
-      })
+        if (!(await requireActiveMembershipForDate(req.user._id, bookingDate, res))) {
+          await session.abortTransaction()
+          return
+        }
 
-      if (conflict) {
-        errors.push({
-          day,
-          date: bookingDate,
-          reason: 'Trùng lịch, vui lòng chọn giờ khác',
-        })
-        continue
+        const conflict = await Booking.findOne({
+          $or: [
+            { memberId: req.user._id, date: bookingDate, slot: time, status: { $in: activeStatus } },
+            { ptId, date: bookingDate, slot: time, status: { $in: activeStatus } },
+          ],
+        }).session(session)
+
+        if (conflict) {
+          errors.push({
+            day,
+            date: bookingDate,
+            reason: 'Trùng lịch, vui lòng chọn giờ khác',
+          })
+          continue
+        }
+
+        try {
+          const [booking] = await Booking.create([{
+            memberId: req.user._id,
+            ptId,
+            date: bookingDate,
+            slot: time,
+            note,
+            status: 'pending',
+          }], { session })
+
+          // FIX: added await for markBenefitUsed
+          await markBenefitUsed(req.user._id, 'pt_1on1', { session })
+
+          results.push(booking)
+        } catch (createErr) {
+          if (createErr.code === 11000) {
+            errors.push({
+              day,
+              date: bookingDate,
+              reason: 'Khung giờ này đã có người đặt, vui lòng chọn giờ khác.',
+            })
+            continue
+          }
+          throw createErr
+        }
       }
 
-      const booking = await Booking.create({
-        memberId: req.user._id,
-        ptId,
-        date: bookingDate,
-        slot: time,
-        note,
-        status: 'pending',
-      })
-
-      markBenefitUsed(req.user._id, 'pt_1on1')
-
-      results.push(booking)
+      await session.commitTransaction()
+    } catch (error) {
+      await session.abortTransaction()
+      throw error
+    } finally {
+      session.endSession()
     }
 
     return res.status(201).json({
@@ -463,20 +540,41 @@ export const rejectAllPendingBookings = async (req, res) => {
 }
 
 export const confirmBooking = async (req, res) => {
+  const session = await mongoose.startSession()
   try {
+    session.startTransaction()
+
     const booking = await Booking.findOne({
       _id: req.params.id,
       ptId: req.user._id,
-    })
+    }).session(session)
 
     if (!booking) {
+      await session.abortTransaction()
       return res.status(404).json({
         message: 'Không tìm thấy lịch đặt',
       })
     }
 
-    booking.status = 'awaiting_payment'
-    await booking.save()
+    // FIX: If totalAmount is 0 (free PT session covered by membership), skip payment step
+    // and directly confirm the booking. Otherwise set awaiting_payment for wallet payment.
+    const needsPayment = booking.totalAmount && booking.totalAmount > 0
+    if (!needsPayment) {
+      booking.status = 'confirmed'
+      booking.paymentStatus = 'paid'
+    } else {
+      booking.status = 'awaiting_payment'
+    }
+    await booking.save({ session })
+
+    const { createAssignment } = await import('../services/ptAssignmentService.js')
+    await createAssignment({
+      memberId: booking.memberId,
+      ptId: req.user._id,
+      session,
+    })
+
+    await session.commitTransaction()
 
     await createNotification({
       receiverId: booking.memberId,
@@ -490,21 +588,18 @@ export const confirmBooking = async (req, res) => {
       createdBy: 'PT',
     })
 
-    const { createAssignment } = await import('../services/ptAssignmentService.js')
-    await createAssignment({
-      memberId: booking.memberId,
-      ptId: req.user._id,
-    })
-
     return res.json({
       message: 'Đã xác nhận lịch. Chờ thành viên thanh toán',
       booking,
     })
   } catch (error) {
+    await session.abortTransaction()
     return res.status(500).json({
       message: 'Lỗi xác nhận lịch',
       error: error.message,
     })
+  } finally {
+    session.endSession()
   }
 }
 
@@ -552,15 +647,19 @@ export const rejectBooking = async (req, res) => {
 }
 
 export const cancelBooking = async (req, res) => {
+  const session = await mongoose.startSession()
   try {
+    session.startTransaction()
+
     const { reason } = req.body
 
     const booking = await Booking.findOne({
       _id: req.params.id,
       memberId: req.user._id,
-    })
+    }).session(session)
 
     if (!booking) {
+      await session.abortTransaction()
       return res.status(404).json({
         message: 'Không tìm thấy lịch đặt',
       })
@@ -574,19 +673,21 @@ export const cancelBooking = async (req, res) => {
     booking.cancelReason = reason || 'Member hủy lịch'
     booking.isViolation = diffHours < 24
 
-    await booking.save()
+    await booking.save({ session })
 
     const bookingSlotId = makeSlotId(booking.ptId, booking.date, booking.slot)
 
     const firstWaitlist = await Waitlist.findOne({
       bookingSlotId,
       notifiedAt: null,
-    }).sort({ createdAt: 1 })
+    }).sort({ createdAt: 1 }).session(session)
 
     if (firstWaitlist) {
       firstWaitlist.notifiedAt = new Date()
-      await firstWaitlist.save()
+      await firstWaitlist.save({ session })
     }
+
+    await session.commitTransaction()
 
     return res.json({
       message: booking.isViolation
@@ -596,10 +697,13 @@ export const cancelBooking = async (req, res) => {
       notifiedWaitlistMember: firstWaitlist || null,
     })
   } catch (error) {
+    await session.abortTransaction()
     return res.status(500).json({
       message: 'Lỗi hủy lịch',
       error: error.message,
     })
+  } finally {
+    session.endSession()
   }
 }
 

@@ -171,8 +171,9 @@ export default function StaffPaymentsPage() {
     },
   ]
 
-  const renderEligibilityTag = (rr: RefundRequest) => {
+  const renderEligibilityTag = (rr: any) => {
     const eligible = rr.refundPolicyResult === 'Đủ điều kiện hoàn tiền'
+      || (rr.__source === 'cancellation' && rr.refundAmount > 0)
     return (
       <Tag color={eligible ? 'success' : 'error'} icon={eligible ? <CheckCircleFilled /> : <CloseCircleFilled />}>
         {eligible ? 'Đủ điều kiện' : 'Không đủ điều kiện'}
@@ -206,6 +207,14 @@ const renderBenefitsTag = (rr: RefundRequest) => {
     {
       title: 'Gói tập', dataIndex: 'planId', key: 'planId', width: 120,
       render: (plan: any) => plan?.nameVi || '-',
+    },
+    {
+      title: 'Kích hoạt', key: 'activationStatus', width: 120,
+      render: (_: any, rr: any) => {
+        if (rr.activationStatus === 'pending') return <Tag color="warning">🟡 Chờ kích hoạt</Tag>
+        if (rr.activationStatus === 'activated') return <Tag color="success">🟢 Đã kích hoạt</Tag>
+        return <Tag color="default">—</Tag>
+      },
     },
     {
       title: 'Số tiền', key: 'refundAmount', width: 200,
@@ -335,11 +344,16 @@ const renderBenefitsTag = (rr: RefundRequest) => {
   }
 
   const submitApproveRR = async () => {
-    if (!approvingRR) return
+    if (!approvingRR || rrActionLoading) return
     setRrActionLoading(true)
     try {
-      await membershipService.approveRefundRequest(approvingRR._id, { staffNote: approvingRRNote.trim() || undefined })
-      message.success('Đã phê duyệt yêu cầu hoàn tiền.')
+      if (approvingRR.__source === 'cancellation') {
+        await membershipService.approveCancellation(approvingRR._id, { staffNote: approvingRRNote.trim() || undefined })
+        message.success('Đã phê duyệt yêu cầu hủy gói.')
+      } else {
+        await membershipService.approveRefundRequest(approvingRR._id, { staffNote: approvingRRNote.trim() || undefined })
+        message.success('Đã phê duyệt yêu cầu hoàn tiền.')
+      }
       setApprovingRR(null)
       setApprovingRRNote('')
       fetchRefundRequests(rrPagination.page)
@@ -350,12 +364,17 @@ const renderBenefitsTag = (rr: RefundRequest) => {
   }
 
   const submitRejectRR = async () => {
-    if (!rejectingRR) return
+    if (!rejectingRR || rrActionLoading) return
     if (!rejectingRRReason.trim()) { message.warning('Vui lòng nhập lý do từ chối.'); return }
     setRrActionLoading(true)
     try {
-      await membershipService.rejectRefundRequest(rejectingRR._id, { reason: rejectingRRReason.trim() })
-      message.success('Đã từ chối yêu cầu hoàn tiền.')
+      if (rejectingRR.__source === 'cancellation') {
+        await membershipService.rejectCancellation(rejectingRR._id, { reason: rejectingRRReason.trim() })
+        message.success('Đã từ chối yêu cầu hủy gói.')
+      } else {
+        await membershipService.rejectRefundRequest(rejectingRR._id, { reason: rejectingRRReason.trim() })
+        message.success('Đã từ chối yêu cầu hoàn tiền.')
+      }
       setRejectingRR(null)
       setRejectingRRReason('')
       fetchRefundRequests(rrPagination.page)
@@ -631,31 +650,82 @@ const renderBenefitsTag = (rr: RefundRequest) => {
                 </Descriptions>
 
                 <h4 className="text-sm font-semibold text-[var(--gs-text)]">Thông tin kỳ hạn</h4>
-                <Descriptions bordered size="small" column={2}>
-                  <Descriptions.Item label="Ngày bắt đầu">{formatDate(detailRR.membershipPeriodId?.startDate)}</Descriptions.Item>
-                  <Descriptions.Item label="Ngày kết thúc">{formatDate(detailRR.membershipPeriodId?.endDate)}</Descriptions.Item>
-                  <Descriptions.Item label="Ngày kích hoạt">{formatDate(detailRR.membershipPeriodId?.activatedAt)}</Descriptions.Item>
-                  <Descriptions.Item label="Ngày gửi yêu cầu">{formatDate(detailRR.requestedAt)}</Descriptions.Item>
-                  <Descriptions.Item label="Số ngày đã sử dụng">{detailRR.daysUsedAtRequest ?? '-'}</Descriptions.Item>
-                  <Descriptions.Item label="Điều kiện hoàn tiền">
-                    <Tag color={detailRR.eligibleWithin7Days ? 'success' : 'error'} icon={detailRR.eligibleWithin7Days ? <CheckCircleFilled /> : <CloseCircleFilled />}>
-                      {detailRR.eligibleWithin7Days ? 'Trong 7 ngày' : 'Quá 7 ngày'}
-                    </Tag>
-                  </Descriptions.Item>
-                </Descriptions>
 
-                <h4 className="text-sm font-semibold text-[var(--gs-text)]">Quyền lợi đã sử dụng</h4>
-                <Descriptions bordered size="small" column={2}>
-                  <Descriptions.Item label="Check-in">
-                    <Tag color={detailRR.usedCheckIn ? 'warning' : 'default'}>{detailRR.usedCheckIn ? `Đã sử dụng (${detailRR.checkInCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="PT">
-                    <Tag color={detailRR.usedPT ? 'warning' : 'default'}>{detailRR.usedPT ? `Đã sử dụng (${detailRR.ptBookingCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="Phòng tập">
-                    <Tag color={detailRR.usedGym ? 'warning' : 'default'}>{detailRR.usedGym ? `Đã sử dụng (${detailRR.gymUsageCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
-                  </Descriptions.Item>
-                </Descriptions>
+                {detailRR.__source === 'cancellation' ? (
+                  /* Cancellation request: show cycle-based info */
+                  <div className="rounded-xl border border-[var(--gs-info-border)] bg-[var(--gs-info-bg)] p-4 text-sm space-y-2">
+                    {detailRR.activationStatus === 'pending' ? (
+                      <>
+                        <p className="font-medium text-[var(--gs-text)]">🟡 Gói tập này chưa được kích hoạt.</p>
+                        <p className="text-[var(--gs-text-muted)]">
+                          Hội viên chưa check-in lần đầu nên thời hạn sử dụng chưa bắt đầu và quyền lợi chưa được sử dụng.
+                        </p>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-[var(--gs-text-soft)]">Ngày mua</span>
+                          <span className="font-medium">{formatDate(detailRR.cycle?.purchasedAt)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-[var(--gs-text-soft)]">Ngày kích hoạt</span>
+                          <span className="font-medium">Chưa kích hoạt</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-[var(--gs-text-soft)]">Thời hạn sử dụng</span>
+                          <span className="font-medium">Chưa bắt đầu</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-[var(--gs-text-soft)]">Ngày kích hoạt</span>
+                          <span className="font-medium">{formatDate(detailRR.cycle?.activatedAt)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-[var(--gs-text-soft)]">Ngày kết thúc</span>
+                          <span className="font-medium">{formatDate(detailRR.cycle?.expiresAt)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-[var(--gs-text-soft)]">Quyền lợi đầu tiên</span>
+                          <span className="font-medium">{detailRR.cycle?.firstBenefitType || '—'}</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-[var(--gs-text-soft)]">Số ngày đã sử dụng</span>
+                      <span className="font-medium">0 ngày (chưa kích hoạt)</span>
+                    </div>
+                  </div>
+                ) : (
+                  /* Period-based refund: show period data */
+                  <Descriptions bordered size="small" column={2}>
+                    <Descriptions.Item label="Ngày bắt đầu">{formatDate(detailRR.membershipPeriodId?.startDate)}</Descriptions.Item>
+                    <Descriptions.Item label="Ngày kết thúc">{formatDate(detailRR.membershipPeriodId?.endDate)}</Descriptions.Item>
+                    <Descriptions.Item label="Ngày kích hoạt">{formatDate(detailRR.membershipPeriodId?.activatedAt)}</Descriptions.Item>
+                    <Descriptions.Item label="Ngày gửi yêu cầu">{formatDate(detailRR.requestedAt)}</Descriptions.Item>
+                    <Descriptions.Item label="Số ngày đã sử dụng">{detailRR.daysUsedAtRequest ?? '-'}</Descriptions.Item>
+                    <Descriptions.Item label="Điều kiện hoàn tiền">
+                      <Tag color={detailRR.eligibleWithin7Days ? 'success' : 'error'} icon={detailRR.eligibleWithin7Days ? <CheckCircleFilled /> : <CloseCircleFilled />}>
+                        {detailRR.eligibleWithin7Days ? 'Trong 7 ngày' : 'Quá 7 ngày'}
+                      </Tag>
+                    </Descriptions.Item>
+                  </Descriptions>
+                )}
+
+                {detailRR.__source !== 'cancellation' && (
+                  <>
+                    <h4 className="text-sm font-semibold text-[var(--gs-text)]">Quyền lợi đã sử dụng</h4>
+                    <Descriptions bordered size="small" column={2}>
+                      <Descriptions.Item label="Check-in">
+                        <Tag color={detailRR.usedCheckIn ? 'warning' : 'default'}>{detailRR.usedCheckIn ? `Đã sử dụng (${detailRR.checkInCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="PT">
+                        <Tag color={detailRR.usedPT ? 'warning' : 'default'}>{detailRR.usedPT ? `Đã sử dụng (${detailRR.ptBookingCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="Phòng tập">
+                        <Tag color={detailRR.usedGym ? 'warning' : 'default'}>{detailRR.usedGym ? `Đã sử dụng (${detailRR.gymUsageCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
+                      </Descriptions.Item>
+                    </Descriptions>
+                  </>
+                )}
 
                 <Descriptions bordered size="small" column={1}>
                   <Descriptions.Item label="Kết luận chính sách">
