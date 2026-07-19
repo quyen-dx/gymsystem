@@ -78,10 +78,12 @@ export default function LoginPage() {
   }
 
   const handleGoogle = () => {
-    window.location.href = `${API_URL}/auth/google`
+    const origin = encodeURIComponent(window.location.origin)
+    window.location.href = `${API_URL}/auth/google?origin=${origin}`
   }
   const handleFacebook = () => {
-    window.location.href = `${API_URL}/auth/facebook`
+    const origin = encodeURIComponent(window.location.origin)
+    window.location.href = `${API_URL}/auth/facebook?origin=${origin}`
   }
   return (
     <div className="relative flex min-h-[100dvh] items-center justify-center overflow-y-auto overflow-x-hidden px-4 py-8 sm:overflow-hidden sm:p-0">

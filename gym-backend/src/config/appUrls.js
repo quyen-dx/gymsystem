@@ -21,8 +21,8 @@ export const getBackendUrl = () => {
   return backendUrl
 }
 
-export const buildClientUrl = (pathname, searchParams = {}) => {
-  const url = new URL(pathname, getClientUrl())
+export const buildClientUrl = (pathname, searchParams = {}, baseUrl) => {
+  const url = new URL(pathname, baseUrl || getClientUrl())
 
   Object.entries(searchParams).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {

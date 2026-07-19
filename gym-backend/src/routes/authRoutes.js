@@ -68,38 +68,68 @@ const ensureFacebookOAuthEnabled = async (_req, res, next) => {
 }
 
 // Google
-router.get('/google', ensureGoogleOAuthConfigured, ensureGoogleOAuthEnabled, passport.authenticate('google', { scope: ['profile', 'email'], prompt: 'select_account' }))
+router.get('/google', ensureGoogleOAuthConfigured, ensureGoogleOAuthEnabled, (req, res, next) => {
+  const origin = req.query.origin || undefined
+  const state = origin ? Buffer.from(origin).toString('base64') : undefined
+  passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    prompt: 'select_account',
+    state,
+  })(req, res, next)
+})
 router.get(
   '/google/callback',
   ensureGoogleOAuthConfigured,
   ensureGoogleOAuthEnabled,
   (req, res, next) => {
-    passport.authenticate('google', { session: false }, async (err, user) => {
-      if (err) return res.redirect(buildClientUrl('/oauth-success', { error: 'SERVER_ERROR' }))
-      if (!user) return res.redirect(buildClientUrl('/oauth-success', { error: 'GOOGLE_AUTH_FAILED' }))
-      if (isAccountLocked(user)) return res.redirect(buildClientUrl('/oauth-success', { error: 'ACCOUNT_LOCKED' }))
+    let originUrl = undefined
+    if (req.query.state) {
       try {
-        const redirectUrl = await buildGoogleOauthRedirect(user, res)
+        originUrl = Buffer.from(req.query.state, 'base64').toString('utf-8')
+      } catch {
+        // invalid state, fallback to default
+      }
+    }
+    passport.authenticate('google', { session: false }, async (err, user) => {
+      if (err) return res.redirect(buildClientUrl('/oauth-success', { error: 'SERVER_ERROR' }, originUrl))
+      if (!user) return res.redirect(buildClientUrl('/oauth-success', { error: 'GOOGLE_AUTH_FAILED' }, originUrl))
+      if (isAccountLocked(user)) return res.redirect(buildClientUrl('/oauth-success', { error: 'ACCOUNT_LOCKED' }, originUrl))
+      try {
+        const redirectUrl = await buildGoogleOauthRedirect(user, res, originUrl)
         return res.redirect(redirectUrl)
       } catch (error) {
-        return res.redirect(buildClientUrl('/oauth-success', { error: 'SERVER_ERROR' }))
+        return res.redirect(buildClientUrl('/oauth-success', { error: 'SERVER_ERROR' }, originUrl))
       }
     })(req, res, next)
   }
 )
 
 // Facebook
-router.get('/facebook', ensureFacebookOAuthConfigured, ensureFacebookOAuthEnabled, passport.authenticate('facebook'))
+router.get('/facebook', ensureFacebookOAuthConfigured, ensureFacebookOAuthEnabled, (req, res, next) => {
+  const origin = req.query.origin || undefined
+  const state = origin ? Buffer.from(origin).toString('base64') : undefined
+  passport.authenticate('facebook', {
+    state,
+  })(req, res, next)
+})
 router.get(
   '/facebook/callback',
   ensureFacebookOAuthConfigured,
   ensureFacebookOAuthEnabled,
   (req, res, next) => {
+    let originUrl = undefined
+    if (req.query.state) {
+      try {
+        originUrl = Buffer.from(req.query.state, 'base64').toString('utf-8')
+      } catch {
+        // invalid state, fallback to default
+      }
+    }
     passport.authenticate('facebook', { session: false }, async (err, user) => {
       if (err) return next(err)
-      if (!user) return res.redirect(buildClientUrl('/login', { error: 'facebook_oauth_failed' }))
+      if (!user) return res.redirect(buildClientUrl('/login', { error: 'facebook_oauth_failed' }, originUrl))
       try {
-        const redirectUrl = await buildFacebookOauthRedirect(user, res)
+        const redirectUrl = await buildFacebookOauthRedirect(user, res, originUrl)
         return res.redirect(redirectUrl)
       } catch (error) {
         return next(error)

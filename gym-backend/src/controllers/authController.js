@@ -127,7 +127,7 @@ const createVerifiedUser = async (payload) => {
   return user
 }
 
-export const buildGoogleOauthRedirect = async (user, res) => {
+export const buildGoogleOauthRedirect = async (user, res, originUrl) => {
   const maintenanceSettings = await isMaintenanceBlocked(user)
   if (maintenanceSettings) {
     return buildClientUrl('/oauth-success', { error: 'MAINTENANCE_MODE' })
@@ -140,9 +140,9 @@ export const buildGoogleOauthRedirect = async (user, res) => {
   await user.save({ validateBeforeSave: false })
   if (res) setRefreshCookie(res, refreshToken)
 
-  return buildClientUrl('/oauth-success', { token: accessToken })
+  return buildClientUrl('/oauth-success', { token: accessToken }, originUrl)
 }
-export const buildFacebookOauthRedirect = async (user, res) => {
+export const buildFacebookOauthRedirect = async (user, res, originUrl) => {
   const maintenanceSettings = await isMaintenanceBlocked(user)
   if (maintenanceSettings) {
     return buildClientUrl('/oauth-success', { error: 'MAINTENANCE_MODE' })
@@ -155,7 +155,7 @@ export const buildFacebookOauthRedirect = async (user, res) => {
   await user.save({ validateBeforeSave: false })
   if (res) setRefreshCookie(res, refreshToken)
 
-  return buildClientUrl('/oauth-success', { token: accessToken })
+  return buildClientUrl('/oauth-success', { token: accessToken }, originUrl)
 }
 export const sendRegisterOtp = async (req, res) => {
   try {
