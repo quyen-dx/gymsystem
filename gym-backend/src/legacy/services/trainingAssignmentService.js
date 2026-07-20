@@ -2,7 +2,7 @@
 // This file is kept as a stub to prevent import errors during transition.
 // Please use trainingClassService.js for all new training class operations.
 
-import TrainingAssignment from '../models/TrainingAssignment.js'
+import TrainingAssignment from '../../models/TrainingAssignment.js'
 
 export const createAssignment = async ({ memberId, trainerId, requestId, membershipId, classId, assignedBy }) => {
   // Stub — no longer creates new assignments

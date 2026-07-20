@@ -1,0 +1,18 @@
+export const AI_HEALTH_STATUS = Object.freeze({
+  HEALTHY: 'healthy',
+  UNHEALTHY: 'unhealthy',
+  SKIPPED: 'skipped',
+})
+
+export const PROVIDER_TYPES = Object.freeze({
+  GEMINI: 'gemini',
+})
+
+export const AI_ERROR_CODES = Object.freeze({
+  PROVIDER_UNAVAILABLE: 'AI_PROVIDER_UNAVAILABLE',
+  PROVIDER_QUOTA_EXCEEDED: 'AI_PROVIDER_QUOTA_EXCEEDED',
+  TOOL_NOT_FOUND: 'AI_TOOL_NOT_FOUND',
+  TOOL_EXECUTION_ERROR: 'AI_TOOL_EXECUTION_ERROR',
+})
+
+export default { AI_HEALTH_STATUS, PROVIDER_TYPES, AI_ERROR_CODES }

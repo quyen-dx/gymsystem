@@ -1,6 +1,6 @@
 // DEPRECATED: Training assignments are now handled via TrainingClass.members.
 // Kept as a stub to prevent import errors.
-import * as trainingAssignmentService from '../services/trainingAssignmentService.js'
+import * as trainingAssignmentService from '../legacy/services/trainingAssignmentService.js'
 
 export const getMyAssignment = async (req, res) => {
   try {

@@ -1,5 +1,5 @@
 import mongoose from 'mongoose'
-import TrainingGroup from '../models/TrainingGroup.js'
+import TrainingGroup from '../legacy/models/TrainingGroup.js'
 
 export const createGroup = async ({ name, goal, trainerId, zoneId, maxCapacity, description }) => {
   return TrainingGroup.create({

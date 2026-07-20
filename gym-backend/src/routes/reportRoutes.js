@@ -1,22 +1,56 @@
 import express from 'express'
-import {
-  getOverviewStats,
-  getChartsData,
-  getHeatmap,
-  getForecast,
-  getChurnRisk,
-  exportMonthlyReport,
-  getRevenueReport
-} from '../controllers/reportController.js'
 import { protect } from '../middlewares/authMiddleware.js'
+import AppError from '../utils/appError.js'
+import catchAsync from '../utils/catchAsync.js'
 
 const router = express.Router()
 
-router.get('/overview', protect, getOverviewStats)
-router.get('/charts', protect, getChartsData)
-router.get('/heatmap', protect, getHeatmap)
-router.get('/forecast', protect, getChurnRisk)
-router.get('/export', protect, exportMonthlyReport)
-router.get('/revenue', protect, getRevenueReport)
+router.get(
+  '/overview',
+  protect,
+  catchAsync(async (req, res) => {
+    throw new AppError('Report overview is not yet implemented', 501, 'FEATURE_NOT_IMPLEMENTED')
+  }),
+)
+
+router.get(
+  '/charts',
+  protect,
+  catchAsync(async (req, res) => {
+    throw new AppError('Chart data is not yet implemented', 501, 'FEATURE_NOT_IMPLEMENTED')
+  }),
+)
+
+router.get(
+  '/heatmap',
+  protect,
+  catchAsync(async (req, res) => {
+    throw new AppError('Heatmap is not yet implemented', 501, 'FEATURE_NOT_IMPLEMENTED')
+  }),
+)
+
+router.get(
+  '/forecast',
+  protect,
+  catchAsync(async (req, res) => {
+    throw new AppError('Forecast is not yet implemented', 501, 'FEATURE_NOT_IMPLEMENTED')
+  }),
+)
+
+router.get(
+  '/export',
+  protect,
+  catchAsync(async (req, res) => {
+    throw new AppError('Export is not yet implemented', 501, 'FEATURE_NOT_IMPLEMENTED')
+  }),
+)
+
+router.get(
+  '/revenue',
+  protect,
+  catchAsync(async (req, res) => {
+    throw new AppError('Revenue report is not yet implemented', 501, 'FEATURE_NOT_IMPLEMENTED')
+  }),
+)
 
 export default router

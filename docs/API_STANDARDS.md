@@ -1,0 +1,867 @@
+# GymPro API Standards
+
+> Version 1.0 — Applies to all `/api/v1/` endpoints.
+
+---
+
+## Table of Contents
+
+1. [Base URL](#1-base-url)
+2. [URL Conventions](#2-url-conventions)
+3. [HTTP Methods](#3-http-methods)
+4. [Request Format](#4-request-format)
+5. [Response Format](#5-response-format)
+6. [Pagination](#6-pagination)
+7. [Filtering & Sorting](#7-filtering--sorting)
+8. [Field Selection](#8-field-selection)
+9. [Search](#9-search)
+10. [Naming Conventions](#10-naming-conventions)
+11. [Authentication](#11-authentication)
+12. [Standard Headers](#12-standard-headers)
+13. [API Documentation Requirements](#13-api-documentation-requirements)
+14. [API Endpoint Catalog](#14-api-endpoint-catalog)
+
+---
+
+## 1. Base URL
+
+All API endpoints are prefixed with:
+
+```
+/api/v1/
+```
+
+Examples:
+
+```
+GET  /api/v1/memberships
+POST /api/v1/auth/login
+GET  /api/v1/check-in-history?page=1&limit=20
+```
+
+The version segment (`v1`) is part of the URL path. When breaking changes are required, a new version (`v2`) will be published alongside the previous version for a deprecation window.
+
+---
+
+## 2. URL Conventions
+
+### 2.1 Plural Nouns
+
+Resources are named with **plural nouns**.
+
+```
+/api/v1/memberships
+/api/v1/bookings
+/api/v1/users
+/api/v1/plans
+/api/v1/products
+/api/v1/notifications
+```
+
+### 2.2 Nested Routes (Sub-resources)
+
+Child resources are nested under their parent.
+
+```
+GET    /api/v1/memberships/:id/freezes
+GET    /api/v1/memberships/:id/cycles
+POST   /api/v1/orders/:id/feedback
+PUT    /api/v1/orders/:id/status
+```
+
+### 2.3 Kebab-case for Multi-word
+
+Use **kebab-case** when a resource name requires multiple words. Prefer a single word where possible.
+
+```
+/api/v1/check-in-history        ✓
+/api/v1/checkin-history         ✗ (inconsistent)
+/api/v1/checkins                ✓ (preferred single word)
+/api/v1/forgot-password         ✓
+/api/v1/membership-plans        ✓
+```
+
+### 2.4 Query Parameters for Filtering
+
+Filtering, pagination, and sorting are expressed as query parameters — never in the path.
+
+```
+GET /api/v1/memberships?status=active&page=1&limit=20
+GET /api/v1/bookings?dateFrom=2024-01-01&dateTo=2024-12-31
+GET /api/v1/users?role=staff&sort=-createdAt
+```
+
+### 2.5 No Verbs in URLs
+
+HTTP methods convey the action. URLs name the resource only.
+
+| Correct                  | Incorrect                   |
+|--------------------------|-----------------------------|
+| `POST /api/v1/orders`    | `POST /api/v1/orders/create` |
+| `DELETE /api/v1/users/5` | `GET /api/v1/users/delete/5` |
+| `POST /api/v1/checkin`   | `GET /api/v1/checkin/create` |
+
+The exception is **actions** that do not map cleanly to CRUD. These use `POST` with a verb as the last path segment.
+
+```
+POST /api/v1/memberships/:id/refund
+POST /api/v1/memberships/:id/freeze
+POST /api/v1/bookings/:id/cancel
+```
+
+### 2.6 Version in URL
+
+The API version is always present in the URL path (`/api/v1/`). This ensures backward compatibility and allows clients to pin a version.
+
+---
+
+## 3. HTTP Methods
+
+| Method   | Purpose                                     | Idempotent | Safe |
+|----------|---------------------------------------------|------------|------|
+| `GET`    | Retrieve resource(s)                        | Yes        | Yes  |
+| `POST`   | Create resource or trigger an action        | No         | No   |
+| `PUT`    | Full replace of a resource                  | Yes        | No   |
+| `PATCH`  | Partial update (preferred over PUT)         | No         | No   |
+| `DELETE` | Remove a resource                           | Yes        | No   |
+
+### 3.1 POST for Actions
+
+Use `POST` for non-CRUD operations that represent an action or process.
+
+```
+POST /api/v1/auth/forgot-password
+POST /api/v1/memberships/buy-plan
+POST /api/v1/memberships/cancel/:cycleId
+POST /api/v1/payment/create
+POST /api/v1/ai/chat
+POST /api/v1/upload
+```
+
+### 3.2 PATCH vs PUT
+
+- **PATCH** is the default for partial updates.
+- **PUT** is used only when the client sends the **entire** resource representation and expects a full replacement.
+- Most updates in this system use `PATCH`.
+
+```
+PATCH /api/v1/users/profile        ✓ (partial update)
+PUT   /api/v1/users/profile        ✗ (unless sending full user object)
+PATCH /api/v1/orders/:id/status    ✓
+PUT   /api/v1/plans/:id            ✓ (admin replaces entire plan)
+```
+
+---
+
+## 4. Request Format
+
+### 4.1 Content Type
+
+```
+Content-Type: application/json
+Accept: application/json
+```
+
+**Exception** — File uploads:
+
+```
+Content-Type: multipart/form-data
+```
+
+### 4.2 Authorization
+
+```
+Authorization: Bearer <jwt-token>
+```
+
+All authenticated endpoints require this header. Public endpoints (e.g., `POST /api/v1/auth/login`) omit it.
+
+### 4.3 Idempotency Key
+
+Payment and order mutations **must** include an idempotency key to prevent duplicate processing.
+
+```
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
+```
+
+The key is a UUID v4 generated by the client. The server caches the response for a given key for at least 24 hours. If the same key is received again, the cached response is returned without re-executing the operation.
+
+### 4.4 Request Body
+
+`POST`, `PUT`, and `PATCH` requests carry a JSON body.
+
+```json
+{
+  "name": "Premium Monthly",
+  "price": 499000,
+  "durationDays": 30
+}
+```
+
+---
+
+## 5. Response Format
+
+### 5.1 Success — Single Resource
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "664a1b2c3d4e5f6a7b8c9d0e",
+    "name": "Premium Monthly",
+    "price": 499000,
+    "durationDays": 30,
+    "createdAt": "2024-01-15T10:30:00.000Z"
+  },
+  "message": "Plan created successfully"
+}
+```
+
+The `message` field is optional and should be a human-readable string. It is typically included for mutations (create, update, delete).
+
+### 5.2 Success — List
+
+```json
+{
+  "success": true,
+  "data": [
+    { "_id": "...", "name": "Basic Monthly", "price": 299000 },
+    { "_id": "...", "name": "Premium Monthly", "price": 499000 }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 42,
+    "totalPages": 3
+  }
+}
+```
+
+### 5.3 Error
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "The 'email' field is required"
+  }
+}
+```
+
+### 5.4 Error Code Reference
+
+| Code                        | HTTP Status | Description                                  |
+|-----------------------------|-------------|----------------------------------------------|
+| `VALIDATION_ERROR`          | 400         | Request body or parameters failed validation |
+| `UNAUTHORIZED`              | 401         | Missing or invalid authentication token      |
+| `FORBIDDEN`                 | 403         | Authenticated but insufficient permissions   |
+| `NOT_FOUND`                 | 404         | Resource does not exist                      |
+| `CONFLICT`                 | 409         | Resource already exists (e.g., duplicate)   |
+| `RATE_LIMITED`              | 429         | Too many requests                            |
+| `INTERNAL_ERROR`            | 500         | Unexpected server error                      |
+| `PAYMENT_FAILED`            | 402         | Payment processing failed                    |
+| `IDEMPOTENCY_REUSE`         | 422         | Idempotency key reused with different payload|
+
+Error objects may include an optional `details` field for validation errors:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "details": [
+      { "field": "email", "message": "Must be a valid email address" },
+      { "field": "price", "message": "Must be a positive number" }
+    ]
+  }
+}
+```
+
+---
+
+## 6. Pagination
+
+### 6.1 Offset-based (Default)
+
+Used for most list endpoints.
+
+| Parameter | Type    | Default | Max   | Description                          |
+|-----------|---------|---------|-------|--------------------------------------|
+| `page`    | integer | 1       | —     | Page number (1-indexed)              |
+| `limit`   | integer | 20      | 100   | Items per page                       |
+
+**Request:**
+
+```
+GET /api/v1/memberships?page=2&limit=50
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": [ ... ],
+  "pagination": {
+    "page": 2,
+    "limit": 50,
+    "total": 120,
+    "totalPages": 3
+  }
+}
+```
+
+### 6.2 Cursor-based (Real-time Data)
+
+Used for streams where new data arrives frequently and offset-based pagination would cause duplicates or missed items.
+
+| Parameter | Type   | Description                                              |
+|-----------|--------|----------------------------------------------------------|
+| `cursor`  | string | Opaque cursor returned in the previous response          |
+| `limit`   | integer| Items per page (default 20, max 100)                     |
+
+**Request:**
+
+```
+GET /api/v1/check-in-history?cursor=664a1b2c3d4e5f6a7b8c9d0e&limit=30
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": [ ... ],
+  "pagination": {
+    "nextCursor": "664a1b2c3d4e5f6a7b8c9d0f",
+    "limit": 30,
+    "hasMore": true
+  }
+}
+```
+
+**Endpoints using cursor-based pagination:**
+
+- `GET /api/v1/check-in/history`
+- `GET /api/v1/notifications`
+- `GET /api/v1/ai/history`
+
+---
+
+## 7. Filtering & Sorting
+
+### 7.1 Filtering
+
+Filters are expressed as query parameters. The following conventions apply:
+
+| Pattern          | Example                                              |
+|------------------|------------------------------------------------------|
+| Exact match      | `?status=active`                                     |
+| Date range       | `?dateFrom=2024-01-01&dateTo=2024-12-31`            |
+| Array match      | `?status=active&status=pending` (multiple values)    |
+| Boolean          | `?isFeatured=true`                                   |
+
+Standard filter parameters:
+
+| Parameter  | Type   | Description                              |
+|------------|--------|------------------------------------------|
+| `status`   | string | Filter by resource status                |
+| `dateFrom` | string | Start date (ISO 8601 or YYYY-MM-DD)      |
+| `dateTo`   | string | End date (ISO 8601 or YYYY-MM-DD)        |
+| `role`     | string | Filter by user role                      |
+| `type`     | string | Filter by resource type                  |
+
+**Request:**
+
+```
+GET /api/v1/bookings?status=confirmed&dateFrom=2024-06-01&dateTo=2024-06-30
+```
+
+### 7.2 Sorting
+
+The `sort` parameter accepts a comma-separated list of field names. Prefix a field with `-` for descending order.
+
+| Example                     | Order                                            |
+|-----------------------------|--------------------------------------------------|
+| `?sort=createdAt`           | Ascending by `createdAt`                         |
+| `?sort=-createdAt`          | Descending by `createdAt`                        |
+| `?sort=-status,createdAt`   | Descending by `status`, then ascending by `createdAt` |
+
+Default sort is `-createdAt` (newest first) for all list endpoints unless otherwise specified.
+
+---
+
+## 8. Field Selection
+
+Clients may request a subset of fields using the `fields` parameter (sparse fieldset). This reduces payload size and improves performance.
+
+```
+GET /api/v1/users/:id?fields=name,email,phone
+```
+
+Response includes only the requested fields plus `_id` (always included):
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "664a1b2c3d4e5f6a7b8c9d0e",
+    "name": "Nguyen Van A",
+    "email": "a@example.com",
+    "phone": "0901234567"
+  }
+}
+```
+
+If `fields` is omitted, the full resource is returned.
+
+---
+
+## 9. Search
+
+Fuzzy search across relevant fields (name, email, phone, etc.) is supported via the `search` parameter.
+
+```
+GET /api/v1/users?search=nguyen
+GET /api/v1/products?search=yoga mat
+GET /api/v1/plans?search=premium
+```
+
+The search is case-insensitive and performs partial matching. The specific fields searched depend on the resource:
+
+| Resource        | Searchable Fields                         |
+|-----------------|-------------------------------------------|
+| `/users`        | `name`, `email`, `phone`                  |
+| `/products`     | `name`, `description`, `sku`              |
+| `/plans`        | `name`, `description`                     |
+| `/memberships`  | `planName`, `memberName`, `memberEmail`   |
+| `/orders`       | `orderCode`, `memberName`, `memberEmail`  |
+| `/bookings`     | `className`, `memberName`, `memberEmail`  |
+
+Search can be combined with filters and sort:
+
+```
+GET /api/v1/users?search=nguyen&role=member&sort=-createdAt&page=1&limit=20
+```
+
+---
+
+## 10. Naming Conventions
+
+### 10.1 JSON Field Names — snake_case
+
+All JSON keys use **snake_case** to match MongoDB field naming.
+
+```json
+{
+  "full_name": "Nguyen Van A",
+  "date_of_birth": "1990-05-15",
+  "phone_number": "0901234567",
+  "created_at": "2024-01-15T10:30:00.000Z"
+}
+```
+
+### 10.2 IDs — PascalCase
+
+Request parameters and reference fields use **PascalCase** for IDs.
+
+```json
+{
+  "membershipId": "664a...",
+  "bookingId": "664b...",
+  "userId": "664c...",
+  "planId": "664d...",
+  "cycleId": "664e...",
+  "orderId": "664f...",
+  "productId": "665a..."
+}
+```
+
+### 10.3 MongoDB _id
+
+MongoDB's `_id` field is returned **as-is** (`_id`) — it is **not** renamed to `id`.
+
+```json
+{
+  "_id": "664a1b2c3d4e5f6a7b8c9d0e",
+  "name": "Premium Monthly"
+}
+```
+
+### 10.4 Enums
+
+Enum values are lowercase strings.
+
+```json
+{ "status": "active" }
+{ "role": "admin" }
+{ "paymentMethod": "vnpay" }
+```
+
+---
+
+## 11. Authentication
+
+### 11.1 JWT Bearer Token
+
+All authenticated endpoints require a JWT access token in the `Authorization` header.
+
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+```
+
+The access token has a short expiry (15 minutes by default).
+
+### 11.2 Refresh Token
+
+The refresh token is transmitted via an **httpOnly**, **Secure**, **SameSite=Strict** cookie.
+
+| Attribute      | Value          |
+|----------------|----------------|
+| Cookie Name    | `refreshToken` |
+| HttpOnly       | true           |
+| Secure         | true           |
+| SameSite       | Strict         |
+| Path           | `/api/v1/auth` |
+
+**Refresh flow:**
+
+```
+POST /api/v1/auth/refresh
+Cookie: refreshToken=<token>
+```
+
+The response returns a new access token (and optionally rotates the refresh token).
+
+### 11.3 Token Payload
+
+```json
+{
+  "sub": "664a1b2c3d4e5f6a7b8c9d0e",
+  "role": "member",
+  "iat": 1704067200,
+  "exp": 1704068100
+}
+```
+
+### 11.4 Role Hierarchy
+
+| Role          | Permissions                                    |
+|---------------|------------------------------------------------|
+| `super_admin` | Full system access                             |
+| `admin`       | All admin functions except delete users        |
+| `staff`       | Manage bookings, check-ins, view reports       |
+| `trainer`     | View schedules, manage own sessions, chat      |
+| `seller`      | Manage products, view orders                   |
+| `member`      | Own profile, bookings, memberships, wallet     |
+| `guest`       | Unauthenticated (public endpoints only)        |
+
+### 11.5 Public Endpoints
+
+The following endpoints do **not** require authentication:
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/forgot-password`
+- `POST /api/v1/auth/reset-password`
+- `POST /api/v1/auth/otp/verify`
+- `POST /api/v1/auth/social/google`
+- `POST /api/v1/auth/social/facebook`
+- `POST /api/v1/auth/refresh`
+- `GET /api/v1/plans`
+- `GET /api/v1/schedules/available`
+- `GET /api/v1/bookings/available`
+- `GET /api/v1/trainers`
+- `GET /api/v1/trainers/:id`
+- `GET /api/v1/products`
+- `GET /api/v1/products/:id`
+- `GET /api/v1/shop`
+- `GET /api/v1/shop/categories`
+- `GET /api/v1/content`
+- `POST /api/v1/payment/vnpay/webhook`
+- `POST /api/v1/payment/stripe/webhook`
+
+---
+
+## 12. Standard Headers
+
+### 12.1 Request Headers
+
+| Header              | Required | Description                                      |
+|---------------------|----------|--------------------------------------------------|
+| `Authorization`     | Varies   | `Bearer <token>` for authenticated endpoints     |
+| `Content-Type`      | Yes*     | `application/json` or `multipart/form-data`     |
+| `Accept`            | Yes      | `application/json`                               |
+| `X-Request-Id`      | No       | UUID v4 correlation ID (client-generated)        |
+| `Idempotency-Key`   | No       | UUID v4 (required for payment mutations)         |
+| `Accept-Language`   | No       | Locale for i18n (e.g., `vi`, `en`)               |
+
+\* `Content-Type` is not required for `GET` and `DELETE` requests.
+
+### 12.2 Response Headers
+
+| Header                   | Description                                        |
+|--------------------------|----------------------------------------------------|
+| `X-Request-Id`           | Echoed from request or generated by server         |
+| `X-RateLimit-Limit`      | Maximum requests allowed in the current window     |
+| `X-RateLimit-Remaining`  | Requests remaining in the current window           |
+| `X-RateLimit-Reset`      | Unix timestamp when the rate limit resets          |
+| `Retry-After`            | Seconds to wait before retrying (included on 429)  |
+
+### 12.3 Correlation ID
+
+Clients may generate a UUID v4 and send it as `X-Request-Id`. The server echoes this header back in the response. If the client does not provide one, the server generates one.
+
+```
+X-Request-Id: 550e8400-e29b-41d4-a716-446655440000
+```
+
+All logs reference this ID for debugging and tracing.
+
+### 12.4 Rate Limiting
+
+| Tier           | Rate Limit            | Window |
+|----------------|-----------------------|--------|
+| Public         | 30 requests/min       | 1 min  |
+| Authenticated  | 100 requests/min      | 1 min  |
+| Admin          | 200 requests/min      | 1 min  |
+| Payment webhook| 1000 requests/min     | 1 min  |
+
+---
+
+## 13. API Documentation Requirements
+
+Every endpoint in the API catalog must be documented with the following fields:
+
+| Field            | Description                                          |
+|------------------|------------------------------------------------------|
+| Method           | HTTP method (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`)|
+| Path             | Full URL path relative to `/api/v1/`                |
+| Description      | What the endpoint does                               |
+| Auth Required    | Yes / No                                             |
+| Roles Allowed    | Roles that can access this endpoint (or `Any`)       |
+| Request Body     | Schema of the request body (if applicable)           |
+| Response Schema  | Shape of the success response                        |
+| Error Codes      | Possible error codes this endpoint may return        |
+
+### 13.1 Example Documentation Block
+
+```markdown
+### Create a Membership
+
+| Field           | Value                                             |
+|-----------------|---------------------------------------------------|
+| Method          | `POST`                                            |
+| Path            | `/api/v1/memberships/buy-plan`                   |
+| Description     | Purchase a membership plan for the current user   |
+| Auth Required   | Yes                                               |
+| Roles Allowed   | `member`                                          |
+| Request Body    | `{ "planId": "string", "paymentMethod": "string", "promoCode?": "string" }` |
+| Response Schema | `{ "success": true, "data": { "_id", "planId", "startDate", "endDate", "status" } }` |
+| Error Codes     | `VALIDATION_ERROR`, `UNAUTHORIZED`, `NOT_FOUND`, `PAYMENT_FAILED`, `CONFLICT` |
+```
+
+---
+
+## 14. API Endpoint Catalog
+
+### 14.1 Authentication
+
+| Method | Path                               | Auth Required | Roles Allowed | Description                         |
+|--------|------------------------------------|---------------|---------------|-------------------------------------|
+| POST   | `/auth/register`                   | No            | —             | Register a new member account       |
+| POST   | `/auth/login`                      | No            | —             | Login with email/phone and password |
+| POST   | `/auth/refresh`                    | Cookie        | —             | Refresh access token                |
+| POST   | `/auth/logout`                     | Yes           | Any           | Invalidate refresh token            |
+| POST   | `/auth/forgot-password`            | No            | —             | Send password reset email           |
+| POST   | `/auth/reset-password`             | No            | —             | Reset password with token           |
+| POST   | `/auth/otp/verify`                 | No            | —             | Verify OTP code                     |
+| POST   | `/auth/social/google`              | No            | —             | Login/register with Google          |
+| POST   | `/auth/social/facebook`            | No            | —             | Login/register with Facebook        |
+
+### 14.2 Users
+
+| Method | Path                      | Auth Required | Roles Allowed         | Description                       |
+|--------|---------------------------|---------------|-----------------------|-----------------------------------|
+| GET    | `/users/profile`          | Yes           | Any                   | Get current user's profile        |
+| PUT    | `/users/profile`          | Yes           | Any                   | Update current user's profile     |
+| GET    | `/users/:id`              | Yes           | `admin`, `super_admin`, `staff` | Get user by ID       |
+| GET    | `/users`                  | Yes           | `admin`, `super_admin`| List all users (paginated)        |
+| PUT    | `/users/:id`              | Yes           | `admin`, `super_admin`| Update any user                   |
+| DELETE | `/users/:id`              | Yes           | `super_admin`         | Permanently delete a user         |
+
+### 14.3 Memberships
+
+| Method | Path                                   | Auth Required | Roles Allowed | Description                           |
+|--------|----------------------------------------|---------------|---------------|---------------------------------------|
+| GET    | `/memberships`                         | Yes           | Any           | List memberships for current user     |
+| POST   | `/memberships/buy-plan`                | Yes           | `member`      | Purchase a membership plan            |
+| GET    | `/memberships/my-cycles`               | Yes           | `member`      | Get membership cycles for current user|
+| POST   | `/memberships/cancel/:cycleId`         | Yes           | `member`      | Cancel a specific membership cycle    |
+| POST   | `/memberships/freeze`                  | Yes           | `member`      | Freeze active membership              |
+| POST   | `/memberships/renew`                   | Yes           | `member`      | Renew expired membership              |
+
+### 14.4 Plans
+
+| Method | Path        | Auth Required | Roles Allowed              | Description                |
+|--------|-------------|---------------|----------------------------|----------------------------|
+| GET    | `/plans`    | No            | — (public)                 | List active plans          |
+| POST   | `/plans`    | Yes           | `admin`, `super_admin`     | Create a plan              |
+| GET    | `/plans/:id`| Varies        | Public for active, admin for all | Get plan by ID      |
+| PUT    | `/plans/:id`| Yes           | `admin`, `super_admin`     | Update a plan              |
+| DELETE | `/plans/:id`| Yes           | `admin`, `super_admin`     | Delete a plan              |
+
+### 14.5 Bookings
+
+| Method | Path                      | Auth Required | Roles Allowed                     | Description                     |
+|--------|---------------------------|---------------|-----------------------------------|---------------------------------|
+| GET    | `/bookings`               | Yes           | `admin`, `super_admin`, `staff`   | List all bookings               |
+| POST   | `/bookings`               | Yes           | `member`                          | Create a booking                |
+| GET    | `/bookings/:id`           | Yes           | Any (owner or admin)              | Get booking by ID               |
+| PUT    | `/bookings/:id`           | Yes           | Any (owner or admin)              | Update a booking                |
+| DELETE | `/bookings/:id`           | Yes           | Any (owner or admin)              | Cancel a booking                |
+| PUT    | `/bookings/:id/status`    | Yes           | `admin`, `super_admin`, `staff`   | Update booking status           |
+| GET    | `/bookings/my-bookings`   | Yes           | `member`                          | List current user's bookings    |
+| GET    | `/bookings/available`     | No            | — (public)                        | Get available time slots        |
+
+### 14.6 Check-in
+
+| Method | Path                  | Auth Required | Roles Allowed                     | Description                   |
+|--------|-----------------------|---------------|-----------------------------------|-------------------------------|
+| POST   | `/checkin`            | Yes           | `member`, `staff`, `admin`        | Check in a member             |
+| GET    | `/checkin/history`    | Yes           | Any                               | Get check-in history (cursor) |
+| GET    | `/checkin/streak`     | Yes           | `member`                          | Get current user's streak     |
+
+### 14.7 Schedule
+
+| Method | Path                    | Auth Required | Roles Allowed                     | Description                      |
+|--------|-------------------------|---------------|-----------------------------------|----------------------------------|
+| GET    | `/schedules`            | Yes           | `admin`, `super_admin`, `staff`   | List all schedules               |
+| POST   | `/schedules`            | Yes           | `admin`, `super_admin`            | Create a schedule                |
+| GET    | `/schedules/:id`        | Yes           | Any                               | Get schedule by ID               |
+| PUT    | `/schedules/:id`        | Yes           | `admin`, `super_admin`            | Update a schedule                |
+| DELETE | `/schedules/:id`        | Yes           | `admin`, `super_admin`            | Delete a schedule                |
+| GET    | `/schedules/available`  | No            | — (public)                        | Get available class schedules    |
+
+### 14.8 PT / Trainers
+
+| Method | Path                | Auth Required | Roles Allowed                     | Description                 |
+|--------|---------------------|---------------|-----------------------------------|-----------------------------|
+| GET    | `/trainers`         | No            | — (public)                        | List active trainers        |
+| GET    | `/trainers/:id`     | No            | — (public)                        | Get trainer by ID           |
+| POST   | `/trainers`         | Yes           | `admin`, `super_admin`            | Create a trainer profile    |
+| PUT    | `/trainers/:id`     | Yes           | `admin`, `super_admin`            | Update trainer profile      |
+| DELETE | `/trainers/:id`     | Yes           | `admin`, `super_admin`            | Delete trainer profile      |
+
+### 14.9 Wallet
+
+| Method | Path                  | Auth Required | Roles Allowed | Description                    |
+|--------|-----------------------|---------------|---------------|--------------------------------|
+| GET    | `/wallet`             | Yes           | `member`      | Get wallet balance & history   |
+| POST   | `/wallet/deposit`     | Yes           | `member`      | Deposit money into wallet      |
+| POST   | `/wallet/withdraw`    | Yes           | `member`      | Withdraw money from wallet     |
+| POST   | `/wallet/transfer`    | Yes           | `member`      | Transfer funds to another user |
+
+### 14.10 Payment
+
+| Method | Path                             | Auth Required | Roles Allowed | Description                       |
+|--------|----------------------------------|---------------|---------------|-----------------------------------|
+| POST   | `/payment/create`                | Yes           | Any           | Initiate a payment transaction    |
+| GET    | `/payment/vnpay-return`          | No            | — (public)    | VNPay return URL (redirect)       |
+| POST   | `/payment/stripe/webhook`        | No            | — (public)    | Stripe webhook handler            |
+| POST   | `/payment/vnpay/webhook`         | No            | — (public)    | VNPay IPN webhook handler         |
+
+### 14.11 Products
+
+| Method | Path              | Auth Required | Roles Allowed                           | Description              |
+|--------|-------------------|---------------|-----------------------------------------|--------------------------|
+| GET    | `/products`       | No            | — (public)                              | List products            |
+| GET    | `/products/:id`   | No            | — (public)                              | Get product by ID        |
+| POST   | `/products`       | Yes           | `seller`, `admin`, `super_admin`        | Create a product         |
+| PUT    | `/products/:id`   | Yes           | `seller`, `admin`, `super_admin`        | Update a product         |
+| DELETE | `/products/:id`   | Yes           | `seller`, `admin`, `super_admin`        | Delete a product         |
+
+### 14.12 Orders
+
+| Method | Path                       | Auth Required | Roles Allowed                          | Description                   |
+|--------|----------------------------|---------------|----------------------------------------|-------------------------------|
+| GET    | `/orders`                  | Yes           | Any (owner or admin)                   | List orders                   |
+| POST   | `/orders`                  | Yes           | `member`                               | Create an order               |
+| GET    | `/orders/:id`              | Yes           | Any (owner or admin)                   | Get order by ID               |
+| PUT    | `/orders/:id`              | Yes           | Any (owner or admin)                   | Update an order               |
+| DELETE | `/orders/:id`              | Yes           | Any (owner or admin)                   | Cancel an order               |
+| PUT    | `/orders/:id/status`       | Yes           | `admin`, `super_admin`, `seller`       | Update order status           |
+| POST   | `/orders/:id/feedback`     | Yes           | `member`                               | Submit feedback for an order  |
+
+### 14.13 Shop
+
+| Method | Path                    | Auth Required | Roles Allowed              | Description                    |
+|--------|-------------------------|---------------|----------------------------|--------------------------------|
+| GET    | `/shop`                 | No            | — (public)                 | Browse shop (products + info)  |
+| GET    | `/shop/categories`      | No            | — (public)                 | List shop categories           |
+| POST   | `/shop/categories`      | Yes           | `admin`, `super_admin`     | Create a category              |
+| PUT    | `/shop/categories/:id`  | Yes           | `admin`, `super_admin`     | Update a category              |
+| DELETE | `/shop/categories/:id`  | Yes           | `admin`, `super_admin`     | Delete a category              |
+
+### 14.14 Notifications
+
+| Method | Path                       | Auth Required | Roles Allowed | Description                          |
+|--------|----------------------------|---------------|---------------|--------------------------------------|
+| GET    | `/notifications`           | Yes           | Any           | List notifications (cursor paginated)|
+| PUT    | `/notifications/:id/read`  | Yes           | Any           | Mark notification as read            |
+
+### 14.15 AI
+
+| Method | Path              | Auth Required | Roles Allowed        | Description                    |
+|--------|-------------------|---------------|----------------------|--------------------------------|
+| POST   | `/ai/chat`        | Yes           | Any                  | Send message to AI assistant   |
+| GET    | `/ai/history`     | Yes           | Any                  | Get chat history (cursor)      |
+| DELETE | `/ai/history`     | Yes           | Any                  | Clear chat history             |
+
+### 14.16 Reports
+
+| Method | Path                    | Auth Required | Roles Allowed                     | Description                   |
+|--------|-------------------------|---------------|-----------------------------------|-------------------------------|
+| GET    | `/reports/revenue`      | Yes           | `admin`, `super_admin`            | Revenue report                |
+| GET    | `/reports/memberships`  | Yes           | `admin`, `super_admin`            | Membership report             |
+| GET    | `/reports/checkins`     | Yes           | `admin`, `super_admin`, `staff`   | Check-in report               |
+
+### 14.17 Upload
+
+| Method | Path         | Auth Required | Roles Allowed | Description                   |
+|--------|--------------|---------------|---------------|-------------------------------|
+| POST   | `/upload`    | Yes           | Any           | Upload file (multipart/form-data) |
+
+### 14.18 Settings
+
+| Method | Path         | Auth Required | Roles Allowed              | Description                |
+|--------|--------------|---------------|----------------------------|----------------------------|
+| GET    | `/settings`  | Yes           | `admin`, `super_admin`     | Get system settings        |
+| PUT    | `/settings`  | Yes           | `admin`, `super_admin`     | Update system settings     |
+
+### 14.19 Content
+
+| Method | Path               | Auth Required | Roles Allowed              | Description               |
+|--------|--------------------|---------------|----------------------------|---------------------------|
+| GET    | `/content`         | No            | — (public)                 | List published content    |
+| POST   | `/content`         | Yes           | `admin`, `super_admin`     | Create content            |
+| GET    | `/content/:id`     | Varies        | Public if published        | Get content by ID         |
+| PUT    | `/content/:id`     | Yes           | `admin`, `super_admin`     | Update content            |
+| DELETE | `/content/:id`     | Yes           | `admin`, `super_admin`     | Delete content            |
+
+### 14.20 Exercises
+
+| Method | Path               | Auth Required | Roles Allowed              | Description               |
+|--------|--------------------|---------------|----------------------------|---------------------------|
+| GET    | `/exercises`       | Yes           | Any                        | List exercises            |
+| POST   | `/exercises`       | Yes           | `admin`, `super_admin`, `trainer` | Create an exercise |
+| GET    | `/exercises/:id`   | Yes           | Any                        | Get exercise by ID        |
+| PUT    | `/exercises/:id`   | Yes           | `admin`, `super_admin`, `trainer` | Update an exercise |
+| DELETE | `/exercises/:id`   | Yes           | `admin`, `super_admin`     | Delete an exercise        |
+
+---
+
+*End of API Standards Document — Version 1.0*
