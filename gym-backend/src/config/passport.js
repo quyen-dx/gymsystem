@@ -8,7 +8,7 @@ import { normalizeEmail } from '../utils/identifier.js'
 const firstProfilePhoto = (profile) =>
   profile.photos?.find((photo) => photo?.value)?.value || ''
 
-const backfillSocialProfile = async (user, { provider, fullName, email, avatar, facebookId, facebookProfileUrl }) => {
+const backfillSocialProfile = async (user, { provider, fullName, email, avatar, googleId, facebookId, facebookProfileUrl }) => {
   let changed = false
   const displayName = String(fullName || '').trim()
 
@@ -42,6 +42,10 @@ const backfillSocialProfile = async (user, { provider, fullName, email, avatar, 
   }
   if (facebookProfileUrl && user.facebookProfileUrl !== facebookProfileUrl) {
     user.facebookProfileUrl = facebookProfileUrl
+    changed = true
+  }
+  if (googleId && user.googleId !== googleId) {
+    user.googleId = googleId
     changed = true
   }
 
@@ -88,7 +92,14 @@ if (isGoogleOAuthConfigured) {
             return done(new Error('Không lấy được email từ Google'), null)
           }
 
-          let user = await User.findOne({ email })
+          const googleId = profile.id
+
+          let user = await User.findOne({
+            $or: [
+              { googleId },
+              ...(email ? [{ email }] : []),
+            ],
+          })
 
           if (!user) {
             user = await User.create({
@@ -96,6 +107,7 @@ if (isGoogleOAuthConfigured) {
               fullName: name,
               email,
               avatar,
+              googleId,
               provider: 'google',
               isVerified: true,
               role: 'member',
@@ -106,10 +118,11 @@ if (isGoogleOAuthConfigured) {
               fullName: name,
               email,
               avatar,
+              googleId,
             })
           }
 
-          return done(null, user)
+          return done(null, user, { profile })
         } catch (error) {
           return done(error, null)
         }
@@ -168,7 +181,7 @@ if (isFacebookOAuthConfigured) {
             })
           }
 
-          return done(null, user)
+          return done(null, user, { profile })
         } catch (error) {
           return done(error, null)
         }

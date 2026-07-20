@@ -36,6 +36,11 @@ const userSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     facebookProfileUrl: {
       type: String,
       default: null,

@@ -36,6 +36,8 @@ import {
 import { adminOnly, protect } from '../middlewares/authMiddleware.js'
 import { buildClientUrl } from '../config/appUrls.js'
 import { disabledFeatureMessage, isFeatureEnabled } from '../services/systemSettingsService.js'
+import { loginWithGoogle, loginWithFacebook } from '../services/socialAuthService.js'
+import { linkSocial, unlinkSocial } from '../controllers/socialAuthController.js'
 
 const router = express.Router()
 
@@ -90,11 +92,14 @@ router.get(
         // invalid state, fallback to default
       }
     }
-    passport.authenticate('google', { session: false }, async (err, user) => {
+    passport.authenticate('google', { session: false }, async (err, user, info) => {
       if (err) return res.redirect(buildClientUrl('/oauth-success', { error: 'SERVER_ERROR' }, originUrl))
       if (!user) return res.redirect(buildClientUrl('/oauth-success', { error: 'GOOGLE_AUTH_FAILED' }, originUrl))
       if (isAccountLocked(user)) return res.redirect(buildClientUrl('/oauth-success', { error: 'ACCOUNT_LOCKED' }, originUrl))
       try {
+        if (info?.profile) {
+          await loginWithGoogle(user._id, info.profile)
+        }
         const redirectUrl = await buildGoogleOauthRedirect(user, res, originUrl)
         return res.redirect(redirectUrl)
       } catch (error) {
@@ -125,10 +130,13 @@ router.get(
         // invalid state, fallback to default
       }
     }
-    passport.authenticate('facebook', { session: false }, async (err, user) => {
+    passport.authenticate('facebook', { session: false }, async (err, user, info) => {
       if (err) return next(err)
       if (!user) return res.redirect(buildClientUrl('/login', { error: 'facebook_oauth_failed' }, originUrl))
       try {
+        if (info?.profile) {
+          await loginWithFacebook(user._id, info.profile)
+        }
         const redirectUrl = await buildFacebookOauthRedirect(user, res, originUrl)
         return res.redirect(redirectUrl)
       } catch (error) {
@@ -137,6 +145,9 @@ router.get(
     })(req, res, next)
   }
 )
+
+router.post('/link-social', protect, linkSocial)
+router.delete('/unlink-social', protect, unlinkSocial)
 
 router.post('/register/send-otp', sendRegisterOtp)
 router.post('/register/verify-otp', verifyRegisterOtp)
