@@ -277,13 +277,11 @@ userSchema.pre('validate', function () {
 })
 
 userSchema.pre('save', async function () {
-  if (this.isModified('passwordHash') && this.passwordHash) {
-    this.passwordHash = await bcrypt.hash(this.passwordHash, 12)
-  }
-
-  if (this.isModified('password') && this.password && !this.passwordHash) {
+  if (this.isModified('password') && this.password) {
     this.passwordHash = await bcrypt.hash(this.password, 12)
     this.password = undefined
+  } else if (this.isModified('passwordHash') && this.passwordHash) {
+    this.passwordHash = await bcrypt.hash(this.passwordHash, 12)
   }
 })
 

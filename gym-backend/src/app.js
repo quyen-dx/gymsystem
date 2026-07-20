@@ -58,6 +58,7 @@ import shiftSwapRoutes from './routes/shiftSwapRoutes.js'
 import groupClassRoutes from './routes/groupClassRoutes.js'
 import reportRoutes from './routes/reportRoutes.js'
 import notificationRoutes from './routes/notificationRoutes.js'
+import userRoutes from './routes/userRoutes.js'
 
 const createApp = () => {
   const app = express()
@@ -110,6 +111,7 @@ const createApp = () => {
   app.use('/api/v1/auth', authV2Routes)
 
   app.use('/api/auth', authRoutes)
+  app.use('/api/users', userRoutes)
   app.use('/api/cms', cmsRoutes)
   app.use('/api/members', memberRoutes)
   app.use('/api/staff/members', memberRoutes)
