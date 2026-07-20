@@ -3799,3 +3799,384 @@ html[data-theme="dark"] .dashboard-sidebar-item:not(.is-active):hover {
     gap: 8px;
   }
 }
+
+/* ===== PT Module Responsive ===== */
+
+/* Tablet sidebar */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .dashboard-desktop-sider {
+    width: 200px !important;
+  }
+  .dashboard-sidebar-item {
+    padding: 10px 14px !important;
+  }
+  .dashboard-sidebar-label {
+    font-size: 13px !important;
+  }
+}
+
+/* Schedule page - mobile header */
+@media (max-width: 767px) {
+  .pt-schedule-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .pt-schedule-header .pt-schedule-nav {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+  }
+  .pt-schedule-header .pt-schedule-nav button {
+    flex: 1;
+    font-size: 13px;
+    height: 40px;
+    min-height: 40px;
+  }
+  .pt-schedule-title {
+    font-size: 20px !important;
+    white-space: nowrap;
+  }
+  .pt-schedule-week-label {
+    font-size: 14px !important;
+  }
+  .pt-schedule-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+  .pt-schedule-day-card {
+    border-radius: 12px;
+    border: 1px solid var(--theme-border, #e5e7eb);
+    padding: 14px;
+    background: var(--theme-card, #fff);
+  }
+  .pt-schedule-day-card h4 {
+    margin: 0 0 4px 0;
+    font-size: 15px;
+  }
+  .pt-schedule-day-card .pt-date {
+    font-size: 13px;
+    color: var(--theme-muted, #6b7280);
+    margin-bottom: 10px;
+  }
+  .pt-schedule-item {
+    padding: 10px 0;
+    border-top: 1px solid var(--theme-border, #e5e7eb);
+  }
+  .pt-schedule-item:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+  .pt-schedule-item .pt-time {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .pt-schedule-item .pt-class-name {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .pt-schedule-item .pt-location {
+    font-size: 13px;
+    color: var(--theme-muted, #6b7280);
+  }
+  .pt-schedule-item .pt-count {
+    font-size: 13px;
+    color: var(--theme-muted, #6b7280);
+  }
+}
+
+/* Clients page - mobile card view */
+@media (max-width: 767px) {
+  .pt-clients-table {
+    display: none !important;
+  }
+  .pt-clients-cards {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .pt-client-card {
+    border-radius: 12px;
+    border: 1px solid var(--theme-border, #e5e7eb);
+    padding: 14px;
+    background: var(--theme-card, #fff);
+  }
+  .pt-client-card .pt-client-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .pt-client-card .pt-client-name {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .pt-client-card .pt-client-code {
+    font-size: 13px;
+    color: var(--theme-muted, #6b7280);
+  }
+  .pt-client-card .pt-client-detail {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 14px;
+  }
+  .pt-client-card .pt-client-detail .pt-label {
+    color: var(--theme-muted, #6b7280);
+  }
+  .pt-client-card .pt-client-detail .pt-value {
+    font-weight: 500;
+  }
+  .pt-client-card .pt-client-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .pt-client-card .pt-client-actions button {
+    flex: 1;
+    min-height: 44px;
+    font-size: 14px;
+  }
+  .pt-clients-filters {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .pt-clients-filters > * {
+    width: 100% !important;
+  }
+  .pt-clients-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pt-clients-tabs .ant-tabs-nav {
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 768px) {
+  .pt-clients-cards {
+    display: none !important;
+  }
+}
+
+/* Workouts page - mobile card view */
+@media (max-width: 767px) {
+  .pt-workouts-table {
+    display: none !important;
+  }
+  .pt-workouts-cards {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .pt-workout-card {
+    border-radius: 12px;
+    border: 1px solid var(--theme-border, #e5e7eb);
+    padding: 14px;
+    background: var(--theme-card, #fff);
+  }
+  .pt-workout-card .pt-workout-header {
+    margin-bottom: 8px;
+  }
+  .pt-workout-card .pt-workout-name {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .pt-workout-card .pt-workout-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--theme-muted, #6b7280);
+    margin-bottom: 8px;
+  }
+  .pt-workout-card .pt-workout-detail {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 14px;
+  }
+  .pt-workout-card .pt-workout-detail .pt-label {
+    color: var(--theme-muted, #6b7280);
+  }
+  .pt-workout-card .pt-workout-detail .pt-value {
+    font-weight: 500;
+  }
+  .pt-workout-card .pt-workout-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .pt-workout-card .pt-workout-actions button {
+    flex: 1;
+    min-height: 44px;
+    font-size: 14px;
+  }
+  .pt-workouts-filters {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .pt-workouts-filters > * {
+    width: 100% !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .pt-workouts-cards {
+    display: none !important;
+  }
+}
+
+/* Mobile global PT overrides */
+@media (max-width: 767px) {
+  .pt-mobile-full {
+    width: 100% !important;
+  }
+  .pt-mobile-stack {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .pt-mobile-stack > * {
+    width: 100% !important;
+  }
+  .pt-mobile-btn {
+    min-height: 44px !important;
+    font-size: 15px !important;
+  }
+  .pt-content {
+    padding: 16px !important;
+  }
+  .pt-card-gap {
+    gap: 12px !important;
+  }
+}
+
+/* ===== Create Schedule Page Responsive ===== */
+@media (max-width: 767px) {
+  .cs-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .cs-header h1 {
+    font-size: 20px !important;
+  }
+  .cs-header .cs-back-btn {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  .cs-header .cs-title-area {
+    padding-left: 44px;
+  }
+  .cs-member-info-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .cs-member-info-grid .cs-info-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .cs-member-info-grid .cs-info-row .cs-label {
+    min-width: 90px;
+    font-size: 12px;
+    color: var(--gs-text-muted);
+    flex-shrink: 0;
+  }
+  .cs-member-info-grid .cs-info-row .cs-value {
+    font-size: 13px;
+  }
+  .cs-filter-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .cs-filter-row > * {
+    width: 100% !important;
+  }
+  .cs-filter-row .cs-filter-item {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  .cs-reset-link {
+    display: none !important;
+  }
+  .cs-reset-btn {
+    display: block !important;
+    width: 100%;
+  }
+  .cs-slot-grid {
+    flex-direction: column !important;
+  }
+  .cs-slot-grid > * {
+    width: 100% !important;
+  }
+  .cs-footer {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .cs-footer button {
+    width: 100%;
+    min-height: 44px;
+  }
+  .cs-card {
+    padding: 16px !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .cs-reset-btn {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .cs-member-info-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px 16px !important;
+  }
+  .cs-filter-row {
+    flex-wrap: wrap !important;
+  }
+  .cs-filter-row > * {
+    flex: 1 1 45% !important;
+  }
+}
+
+/* ===== Workout Page Responsive ===== */
+@media (max-width: 767px) {
+  .workout-table-desktop {
+    display: none !important;
+  }
+  .workout-cards-mobile {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .workout-cards-mobile .ant-empty {
+    margin: 0;
+  }
+}
+
+@media (min-width: 768px) {
+  .workout-cards-mobile {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .workout-table-desktop .ant-table {
+    font-size: 13px;
+  }
+  .workout-table-desktop .ant-table-thead > tr > th,
+  .workout-table-desktop .ant-table-tbody > tr > td {
+    padding: 8px 10px !important;
+  }
+}

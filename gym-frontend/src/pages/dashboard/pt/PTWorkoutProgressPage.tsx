@@ -29,12 +29,13 @@ export default function PTWorkoutProgressPage() {
   const [ending, setEnding] = useState(false)
 
   const loadProgress = useCallback(async () => {
-    if (!assignmentId) return
+    const id = assignmentId || scheduleId
+    if (!id) return
     setLoading(true)
     setSchedule(null)
     setAssignment(null)
     try {
-      const { data } = await ptAssignmentService.getWorkoutProgress(assignmentId, scheduleId)
+      const { data } = await ptAssignmentService.getWorkoutProgress(id, scheduleId)
       setAssignment(data.assignment)
       setSchedule(data.schedule)
     } catch {

@@ -1,35 +1,54 @@
+import { CheckCircleFilled, FilterOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import {
-  CameraOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  FilterOutlined,
-  ReloadOutlined,
-  SearchOutlined,
-  StopOutlined,
-} from '@ant-design/icons'
-import { Html5Qrcode } from 'html5-qrcode'
-import { Button, Card, Col, DatePicker, Input, Row, Select, Space, Table, Tag, TimePicker, Typography, message } from 'antd'
+  Avatar,
+  Button,
+  Card,
+  Col,
+  DatePicker,
+  Input,
+  Modal,
+  Radio,
+  Row,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+  message,
+} from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useEffect, useRef, useState } from 'react'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { checkInService } from '../../../services/checkInService'
-import type { StaffCheckinHistoryItem, VerifiedMember } from '../../../types/admin/checkin'
-import { getUserDisplayName } from '../../../utils/userDisplay'
+import type { SearchedMember, StaffCheckinHistoryItem } from '../../../types/admin/checkin'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
-type Step = 'scan' | 'success' | 'error' | 'already_checked'
 type TimeMode = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'all' | 'custom'
 
-export default function StaffCheckinPage() {
-  const cameraContainerRef = useRef<HTMLDivElement>(null)
-  const cameraRef = useRef<Html5Qrcode | null>(null)
+const checkInMethodLabels: Record<string, { label: string; color: string }> = {
+  QR_SELF: { label: 'QR tự check-in', color: 'blue' },
+  QR_PROJECTOR: { label: 'QR trình chiếu', color: 'cyan' },
+  STAFF: { label: 'Lễ tân điểm danh', color: 'orange' },
+  RECEPTION: { label: 'Lễ tân điểm danh', color: 'purple' },
+  AUTO: { label: 'Auto check-in', color: 'geekblue' },
+}
 
-  const [step, setStep] = useState<Step>('scan')
-  const [cameraActive, setCameraActive] = useState(false)
-  const [manualToken, setManualToken] = useState('')
-  const [member, setMember] = useState<VerifiedMember | null>(null)
-  const [streakDay, setStreakDay] = useState(0)
+const reasonOptions = [
+  { value: 'Hết pin', label: 'Hết pin' },
+  { value: 'Quên điện thoại', label: 'Quên điện thoại' },
+  { value: 'Không mở được camera', label: 'Không mở được camera' },
+  { value: 'Không quét được QR', label: 'Không quét được QR' },
+  { value: 'Staff xác minh trực tiếp', label: 'Staff xác minh trực tiếp' },
+  { value: 'Khác', label: 'Khác' },
+]
+
+export default function StaffCheckinPage() {
+  const [searchValue, setSearchValue] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [searchedMember, setSearchedMember] = useState<SearchedMember | null>(null)
+  const [searchError, setSearchError] = useState('')
+
   const [checkins, setCheckins] = useState<StaffCheckinHistoryItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyPage, setHistoryPage] = useState(1)
@@ -39,118 +58,81 @@ export default function StaffCheckinPage() {
   const [startTime, setStartTime] = useState<Dayjs | null>(null)
   const [endTime, setEndTime] = useState<Dayjs | null>(null)
   const [keyword, setKeyword] = useState('')
-  const [errorMsg, setErrorMsg] = useState('')
-  const isProcessingRef = useRef(false)
 
-  const startCamera = async () => {
-    try {
-      const qrCode = new Html5Qrcode('camera-container')
-      setCameraActive(true)
-      await qrCode.start(
-        { facingMode: 'environment' },
-        { fps: 5 },
-        (decodedText) => {
-          if (isProcessingRef.current) return
-          console.log('[qr] decoded:', decodedText)
-          isProcessingRef.current = true
-          cameraRef.current = null
-          setCameraActive(false)
-          processQR(decodedText.trim())
-        },
-        (err) => { console.log('[qr] scan error:', err) },
-      )
-      cameraRef.current = qrCode
-      message.success('Camera đã sẵn sàng, hãy đưa QR vào khung hình')
-      console.log('[camera] started')
-    } catch (err) {
-      console.error('[camera] error:', err)
-      setCameraActive(false)
-      message.error('Không thể mở camera')
-    }
-  }
+  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedReason, setSelectedReason] = useState('Staff xác minh trực tiếp')
+  const [customReason, setCustomReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  const stopCamera = () => {
-    if (cameraRef.current) {
-      cameraRef.current.stop().catch(() => {})
-      cameraRef.current = null
-    }
-    setCameraActive(false)
-  }
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
-  useEffect(() => {
-    return () => { stopCamera() }
-  }, [])
-
-  const processQR = async (token: string) => {
-    if (!token) return
-    stopCamera()
-    try {
-      const res = await checkInService.verifyStaffCheckin({ token })
-      setMember({
-        _id: res.data.checkin.memberId,
-        name: res.data.checkin.memberName,
-        email: res.data.checkin.email || null,
-        phone: res.data.checkin.phone || null,
-        avatar: '',
-      })
-      setStreakDay(res.data.checkin.streakDay || 0)
-      setStep('success')
-      message.success(res.data.message || 'Check-in thành công')
-      loadCheckinHistory(historyPage)
-    } catch (error: any) {
-      const code = error?.response?.data?.code
-      const msg = error?.response?.data?.message || 'QR không hợp lệ'
-      if (code === 'ALREADY_CHECKED_IN') {
-        setMember({ _id: '', name: msg, email: null, phone: null, avatar: '' })
-        setStep('already_checked')
-      } else {
-        setErrorMsg(msg)
-        setStep('error')
-      }
-    }
-  }
-
-  const handleManualSubmit = () => {
-    if (!manualToken.trim()) return
-    const value = manualToken.trim()
-    if (value.split('.').length === 3) {
-      processQR(value)
+  const doSearch = async (q: string) => {
+    const trimmed = q.trim()
+    if (!trimmed) {
+      setSearchedMember(null)
+      setSearchError('')
       return
     }
-    stopCamera()
-    checkInService.verifyStaffCheckin({ memberId: value })
-      .then((res) => {
-        setMember({
-          _id: res.data.checkin.memberId,
-          name: res.data.checkin.memberName,
-          email: res.data.checkin.email || null,
-          phone: res.data.checkin.phone || null,
-          avatar: '',
-        })
-        setStreakDay(res.data.checkin.streakDay || 0)
-        setStep('success')
-        message.success(res.data.message || 'Check-in thành công')
-        loadCheckinHistory(historyPage)
-      })
-      .catch((error: any) => {
-        const code = error?.response?.data?.code
-        const msg = error?.response?.data?.message || 'Không thể check-in'
-        if (code === 'ALREADY_CHECKED_IN') setStep('already_checked')
-        else {
-          setErrorMsg(msg)
-          setStep('error')
-        }
-      })
+    setSearching(true)
+    setSearchError('')
+    try {
+      const res = await checkInService.searchMember(trimmed)
+      if (res.data.member) {
+        setSearchedMember(res.data.member)
+        setSearchError('')
+      } else {
+        setSearchedMember(null)
+        setSearchError('Không tìm thấy hội viên phù hợp.')
+      }
+    } catch {
+      setSearchedMember(null)
+      setSearchError('Tìm kiếm thất bại.')
+    }
+    setSearching(false)
   }
 
-  const resetAll = () => {
-    stopCamera()
-    setManualToken('')
-    setMember(null)
-    setStreakDay(0)
-    setErrorMsg('')
-    setStep('scan')
-    isProcessingRef.current = false
+  const handleSearchChange = (value: string) => {
+    setSearchValue(value)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => doSearch(value), 400)
+  }
+
+  const handleSearchEnter = () => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    doSearch(searchValue)
+  }
+
+  const handleCheckin = async () => {
+    if (!searchedMember) return
+    const reason = selectedReason === 'Khác' ? customReason.trim() : selectedReason
+    if (selectedReason === 'Khác' && !reason) {
+      message.warning('Vui lòng nhập lý do.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await checkInService.verifyStaffCheckin({
+        memberId: searchedMember._id,
+        manualReason: reason || undefined,
+      })
+      message.success('Điểm danh thành công!')
+      setModalOpen(false)
+      setSearchedMember(null)
+      setSearchValue('')
+      setSelectedReason('Staff xác minh trực tiếp')
+      setCustomReason('')
+      loadCheckinHistory(historyPage)
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Điểm danh thất bại.'
+      if (err?.response?.data?.code === 'ALREADY_CHECKED_IN') {
+        message.info(msg)
+        setModalOpen(false)
+        loadCheckinHistory(historyPage)
+      } else {
+        message.error(msg)
+      }
+    }
+    setSubmitting(false)
   }
 
   const loadCheckinHistory = async (page = historyPage) => {
@@ -165,12 +147,6 @@ export default function StaffCheckinPage() {
         page,
         limit: 10,
       }
-      console.log('[staff-checkin-history] frontend query:', {
-        mode: query.mode,
-        startTime: query.startTime,
-        endTime: query.endTime,
-        keyword: query.keyword,
-      })
       const res = await checkInService.getStaffHistory(query)
       setCheckins(res.data.checkins || [])
       setHistoryPage(res.data.pagination?.page || page)
@@ -196,55 +172,190 @@ export default function StaffCheckinPage() {
     setTimeout(() => loadCheckinHistory(1), 0)
   }
 
-  const renderScan = () => (
-    <div>
+  const formatDate = (value?: string) =>
+    value ? new Date(value).toLocaleString('vi-VN') : '-'
+
+  const columns = [
+    {
+      title: 'Thời gian',
+      dataIndex: 'checkinTime',
+      width: 150,
+      render: (v: string) => formatDate(v),
+    },
+    {
+      title: 'Mã HV',
+      dataIndex: 'memberCode',
+      width: 100,
+      render: (v: string) => v || '—',
+    },
+    {
+      title: 'Họ tên',
+      dataIndex: 'memberName',
+      ellipsis: true,
+    },
+    {
+      title: 'Gói tập',
+      dataIndex: 'planName',
+      ellipsis: true,
+      render: (v: string) => v || '—',
+    },
+    {
+      title: 'Hình thức',
+      dataIndex: 'checkInMethod',
+      width: 130,
+      render: (v: string) => {
+        const meta = checkInMethodLabels[v] || { label: v || '—', color: 'default' }
+        return <Tag color={meta.color}>{meta.label}</Tag>
+      },
+    },
+    {
+      title: 'Người thực hiện',
+      dataIndex: 'performedByName',
+      width: 130,
+      render: (v: string, r: StaffCheckinHistoryItem) => v || r.staffName || '—',
+    },
+    {
+      title: 'Lý do',
+      dataIndex: 'manualReason',
+      width: 150,
+      ellipsis: true,
+      render: (v: string) => v || '—',
+    },
+    {
+      title: 'Trạng thái',
+      dataIndex: 'status',
+      width: 100,
+      render: (v: string, r: StaffCheckinHistoryItem) => (
+        <Tag color={v === 'success' ? 'success' : 'error'}>
+          {v === 'success' ? 'Thành công' : r.errorNote || 'Thất bại'}
+        </Tag>
+      ),
+    },
+  ]
+
+  return (
+    <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">QUÉT QR CHECK-IN</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">Check-in</h1>
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">CHECK-IN HỘI VIÊN</p>
+        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">Điểm danh thủ công</h1>
+        <p className="mt-1 text-sm text-[var(--gs-text-muted)]">
+          Điểm danh thủ công khi hội viên không thể tự quét QR.
+        </p>
       </div>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={9}>
-          <Card className="rounded-[24px]" style={{ textAlign: 'center' }}>
-            <div className="staff-checkin-camera-shell">
-              <div id="camera-container" ref={cameraContainerRef} className={cameraActive ? 'staff-checkin-camera is-active' : 'staff-checkin-camera'} />
-              {!cameraActive && (
-              <div className="staff-checkin-camera-empty">
-                <CameraOutlined style={{ fontSize: 48, marginBottom: 12 }} />
-                <Text>Bấm "Mở camera" để bắt đầu quét QR</Text>
+          <Card className="rounded-[24px]" title={<Text strong>Tìm hội viên</Text>}>
+            <Input
+              size="large"
+              prefix={<SearchOutlined />}
+              placeholder="Nhập: Email Google OAuth • Email đăng ký • Mã hội viên • Số điện thoại"
+              value={searchValue}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onPressEnter={handleSearchEnter}
+              allowClear
+            />
+
+            {searching && (
+              <div className="mt-4 text-center text-[var(--gs-text-muted)]">Đang tìm kiếm...</div>
+            )}
+
+            {searchError && !searching && (
+              <div className="mt-4 text-center text-[var(--gs-text-muted)]">{searchError}</div>
+            )}
+
+            {searchedMember && !searching && (
+              <div className="mt-4 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4">
+                <div className="flex items-center gap-3">
+                  <Avatar size={48} src={searchedMember.avatar || undefined}>
+                    {searchedMember.fullName?.charAt(0)?.toUpperCase()}
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <Text strong className="text-[var(--gs-text)] text-base block truncate">
+                      {searchedMember.fullName}
+                    </Text>
+                    <Text className="text-[var(--gs-text-muted)] text-xs">
+                      {searchedMember.memberCode}
+                    </Text>
+                  </div>
+                </div>
+
+                <div className="mt-3 space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <Text className="text-[var(--gs-text-muted)]">Email:</Text>
+                    <Text className="text-[var(--gs-text)]">{searchedMember.email || '—'}</Text>
+                  </div>
+                  <div className="flex justify-between">
+                    <Text className="text-[var(--gs-text-muted)]">SĐT:</Text>
+                    <Text className="text-[var(--gs-text)]">{searchedMember.phone || '—'}</Text>
+                  </div>
+                  {searchedMember.membership ? (
+                    <>
+                      <div className="flex justify-between">
+                        <Text className="text-[var(--gs-text-muted)]">Gói tập:</Text>
+                        <Text className="text-[var(--gs-text)] font-medium">
+                          {searchedMember.membership.planName}
+                        </Text>
+                      </div>
+                      <div className="flex justify-between">
+                        <Text className="text-[var(--gs-text-muted)]">
+                          {searchedMember.membership.status === 'pending_initial_activation' ? 'Ngày mua:' : 'Hạn dùng:'}
+                        </Text>
+                        <Text className="text-[var(--gs-text)]">
+                          {new Date(searchedMember.membership.endDate).toLocaleDateString('vi-VN')}
+                        </Text>
+                      </div>
+                      {searchedMember.membership.price > 0 && (
+                        <div className="flex justify-between">
+                          <Text className="text-[var(--gs-text-muted)]">Giá gói:</Text>
+                          <Text className="text-[var(--gs-text)] font-medium">
+                            {searchedMember.membership.price.toLocaleString('vi-VN')}đ
+                          </Text>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <Text className="text-[var(--gs-text-muted)]">Trạng thái:</Text>
+                        {searchedMember.membership.status === 'active' ? (
+                          <Tag color="success">Đang hoạt động</Tag>
+                        ) : searchedMember.membership.status === 'pending_initial_activation' ? (
+                          <Tag color="warning">Chờ kích hoạt</Tag>
+                        ) : (
+                          <Tag color="error">Đã hết hạn</Tag>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="mt-2">
+                      <Tag color="error">Chưa có gói tập</Tag>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  {searchedMember.checkedInToday ? (
+                    <div className="flex items-center justify-center gap-2 rounded-lg bg-[var(--gs-success-bg)] py-3">
+                      <CheckCircleFilled style={{ color: '#22c55e' }} />
+                      <Text className="text-[var(--gs-text-muted)]">Đã check-in hôm nay</Text>
+                    </div>
+                  ) : (
+                    <Button
+                      type="primary"
+                      size="large"
+                      block
+                      disabled={!searchedMember.membership || searchedMember.membership.status === 'expired'}
+                      onClick={() => setModalOpen(true)}
+                    >
+                      Điểm danh
+                    </Button>
+                  )}
+                </div>
               </div>
-              )}
-            </div>
-            <Space>
-              {!cameraActive ? (
-                <Button type="primary" icon={<CameraOutlined />} onClick={startCamera} size="large">
-                  Mở camera
-                </Button>
-              ) : (
-                <Button icon={<StopOutlined />} onClick={stopCamera} size="large">
-                  Tắt camera
-                </Button>
-              )}
-            </Space>
+            )}
           </Card>
         </Col>
 
         <Col xs={24} lg={15}>
-          <Card className="rounded-[24px]" style={{ marginBottom: 16 }}>
-            <Text strong>Nhập thủ công</Text>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Input
-                placeholder="Nhập mã QR hoặc ID hội viên"
-                value={manualToken}
-                onChange={(e) => setManualToken(e.target.value)}
-                onPressEnter={handleManualSubmit}
-              />
-              <Button type="primary" onClick={handleManualSubmit}>
-                Xác nhận
-              </Button>
-            </div>
-          </Card>
-          <Card className="rounded-[24px]" title="Lịch sử check-in">
+          <Card className="rounded-[24px]" title={<Text strong>Lịch sử check-in</Text>}>
             <div className="mb-4 space-y-3">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Select<TimeMode>
@@ -274,32 +385,22 @@ export default function StaffCheckinPage() {
                 )}
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <TimePicker
-                className="w-full"
-                value={startTime}
-                onChange={setStartTime}
-                format="HH:mm"
-                placeholder="Từ giờ"
-              />
-              <TimePicker
-                className="w-full"
-                value={endTime}
-                onChange={setEndTime}
-                format="HH:mm"
-                placeholder="Đến giờ"
-              />
-              </div>
-              <Input
-                prefix={<SearchOutlined />}
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                onPressEnter={() => loadCheckinHistory(1)}
-                placeholder="Tìm theo mã HV / tên / SĐT"
-              />
-              <div className="flex flex-wrap gap-2">
-                <Button type="primary" icon={<FilterOutlined />} onClick={() => loadCheckinHistory(1)}>Tìm kiếm</Button>
-                <Button onClick={handleResetFilters}>Xóa lọc</Button>
-                <Button icon={<ReloadOutlined />} onClick={() => loadCheckinHistory(historyPage)}>Tải lại</Button>
+                <Input
+                  prefix={<SearchOutlined />}
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  onPressEnter={() => loadCheckinHistory(1)}
+                  placeholder="Tìm theo mã HV / tên / SĐT"
+                />
+                <Space>
+                  <Button type="primary" icon={<FilterOutlined />} onClick={() => loadCheckinHistory(1)}>
+                    Tìm kiếm
+                  </Button>
+                  <Button onClick={handleResetFilters}>Xóa lọc</Button>
+                  <Button icon={<ReloadOutlined />} onClick={() => loadCheckinHistory(historyPage)}>
+                    Tải lại
+                  </Button>
+                </Space>
               </div>
             </div>
             <Table
@@ -307,47 +408,7 @@ export default function StaffCheckinPage() {
               rowKey="checkinId"
               dataSource={checkins}
               loading={historyLoading}
-              columns={[
-                {
-                  title: 'Thời gian',
-                  dataIndex: 'checkinTime',
-                  width: 92,
-                  render: (value: string) => new Date(value).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-                },
-                {
-                  title: 'Mã hội viên',
-                  dataIndex: 'memberCode',
-                  width: 105,
-                  render: (value: string) => value || '—',
-                },
-                {
-                  title: 'Họ tên',
-                  dataIndex: 'memberName',
-                  ellipsis: true,
-                },
-                {
-                  title: 'Gói tập',
-                  dataIndex: 'planName',
-                  ellipsis: true,
-                  render: (value: string) => value || '—',
-                },
-                {
-                  title: 'Staff thực hiện',
-                  dataIndex: 'staffName',
-                  ellipsis: true,
-                  render: (value: string) => value || '—',
-                },
-                {
-                  title: 'Trạng thái',
-                  dataIndex: 'status',
-                  width: 100,
-                  render: (value: string, record: StaffCheckinHistoryItem) => (
-                    <Tag color={value === 'success' ? 'success' : 'error'}>
-                      {value === 'success' ? 'Thành công' : record.errorNote || 'Thất bại'}
-                    </Tag>
-                  ),
-                },
-              ]}
+              columns={columns}
               pagination={{
                 current: historyPage,
                 pageSize: 10,
@@ -355,70 +416,60 @@ export default function StaffCheckinPage() {
                 showSizeChanger: false,
                 onChange: (page) => loadCheckinHistory(page),
               }}
-              scroll={{ x: 820 }}
+              scroll={{ x: 1000 }}
             />
           </Card>
         </Col>
       </Row>
-    </div>
-  )
 
-  const renderSuccess = () => (
-    <div style={{ maxWidth: 500, margin: '0 auto', textAlign: 'center' }}>
-      <Card className="rounded-[24px]" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.1), rgba(59,130,246,0.05))' }}>
-        <CheckCircleOutlined style={{ fontSize: 72, color: '#10B981' }} />
-        <Title level={3} style={{ marginTop: 16 }}>Check-in thành công!</Title>
-        <Text>{getUserDisplayName(member, 'Thành viên')}</Text>
-        {streakDay > 1 && (
-          <div style={{ marginTop: 12 }}>
-            <Tag color="orange" style={{ fontSize: 16, padding: '4px 12px' }}>🔥 {streakDay} ngày liên tiếp</Tag>
-          </div>
-        )}
-        <div style={{ marginTop: 24 }}>
-          <Button type="primary" icon={<ReloadOutlined />} onClick={resetAll} size="large">
-            Check-in hội viên khác
-          </Button>
+      <Modal
+        title="Xác nhận điểm danh thủ công"
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setModalOpen(false)}>Hủy</Button>,
+          <Button key="confirm" type="primary" loading={submitting} onClick={handleCheckin}>
+            Xác nhận điểm danh
+          </Button>,
+        ]}
+      >
+        <div className="py-2">
+          {searchedMember && (
+            <div className="mb-4 flex items-center gap-3 rounded-lg bg-[var(--gs-card)] p-3">
+              <Avatar size={40} src={searchedMember.avatar || undefined}>
+                {searchedMember.fullName?.charAt(0)?.toUpperCase()}
+              </Avatar>
+              <div>
+                <Text strong className="text-[var(--gs-text)]">{searchedMember.fullName}</Text>
+                <div className="text-xs text-[var(--gs-text-muted)]">{searchedMember.memberCode}</div>
+              </div>
+            </div>
+          )}
+          <div className="mb-2 text-sm font-medium text-[var(--gs-text)]">Lý do:</div>
+          <Radio.Group
+            value={selectedReason}
+            onChange={(e) => setSelectedReason(e.target.value)}
+            className="w-full"
+          >
+            <Space direction="vertical" className="w-full">
+              {reasonOptions.map((opt) => (
+                <Radio key={opt.value} value={opt.value} className="text-[var(--gs-text)]">
+                  {opt.label}
+                </Radio>
+              ))}
+            </Space>
+          </Radio.Group>
+          {selectedReason === 'Khác' && (
+            <Input.TextArea
+              className="mt-3"
+              rows={3}
+              placeholder="Nhập lý do..."
+              value={customReason}
+              onChange={(e) => setCustomReason(e.target.value)}
+            />
+          )}
         </div>
-      </Card>
-    </div>
-  )
-
-  const renderAlreadyChecked = () => (
-    <div style={{ maxWidth: 500, margin: '0 auto', textAlign: 'center' }}>
-      <Card className="rounded-[24px]" style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.1), rgba(245,158,11,0.05))' }}>
-        <CheckCircleOutlined style={{ fontSize: 72, color: '#F59E0B' }} />
-        <Title level={3} style={{ marginTop: 16 }}>Đã check-in!</Title>
-        <Text>Hội viên này đã check-in thành công trước đó rồi.</Text>
-        <div style={{ marginTop: 24 }}>
-          <Button type="primary" icon={<ReloadOutlined />} onClick={resetAll} size="large">
-            Check-in hội viên khác
-          </Button>
-        </div>
-      </Card>
-    </div>
-  )
-
-  const renderError = () => (
-    <div style={{ maxWidth: 500, margin: '0 auto', textAlign: 'center' }}>
-      <Card className="rounded-[24px]">
-        <CloseCircleOutlined style={{ fontSize: 72, color: '#EF4444' }} />
-        <Title level={4} style={{ marginTop: 16 }}>Check-in thất bại</Title>
-        <Text type="secondary">{errorMsg}</Text>
-        <div style={{ marginTop: 24 }}>
-          <Button type="primary" icon={<ReloadOutlined />} onClick={resetAll} size="large">
-            Thử lại
-          </Button>
-        </div>
-      </Card>
-    </div>
-  )
-
-  return (
-    <DashboardLayout>
-      {step === 'scan' && renderScan()}
-      {step === 'success' && renderSuccess()}
-      {step === 'already_checked' && renderAlreadyChecked()}
-      {step === 'error' && renderError()}
+      </Modal>
     </DashboardLayout>
   )
 }

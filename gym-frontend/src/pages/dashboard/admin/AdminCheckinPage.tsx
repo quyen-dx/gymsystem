@@ -25,6 +25,14 @@ const TABS = [
   { key: 'qr', label: 'Mã QR trình chiếu' },
 ]
 
+const checkInMethodLabels: Record<string, { label: string; color: string }> = {
+  QR_SELF: { label: 'QR tự check-in', color: 'blue' },
+  QR_PROJECTOR: { label: 'QR trình chiếu', color: 'cyan' },
+  STAFF: { label: 'Lễ tân điểm danh', color: 'orange' },
+  RECEPTION: { label: 'Lễ tân điểm danh', color: 'purple' },
+  AUTO: { label: 'Auto check-in', color: 'geekblue' },
+}
+
 const formatDate = (value?: string) => value ? new Date(value).toLocaleString('vi-VN') : '-'
 const formatDateShort = (value?: string) => value ? new Date(value).toLocaleDateString('vi-VN') : '-'
 const formatDateLong = (d: string | Date) => new Date(d).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -207,27 +215,20 @@ function HistoryTab() {
       ),
     },
     {
-      title: 'Mã QR (ngày tạo)', key: 'qr', width: 160,
-      render: (_: any, r: any) => (
-        r.checkinSource === 'daily_qr' ? (
-          <span className="text-xs text-[var(--gs-text-muted)]">
-            {r.dailyQRDate ? formatDateShort(r.dailyQRDate) : '-'}
-          </span>
-        ) : (
-          <span className="text-xs text-[var(--gs-text-muted)]">QR Staff</span>
-        )
-      ),
-    },
-    {
-      title: 'Nguồn', dataIndex: 'checkinSource', key: 'checkinSource', width: 100,
-      render: (s: string) => {
-        if (s === 'daily_qr') return <Tag>QR trình chiếu</Tag>
-        return <Tag>Staff quét</Tag>
+      title: 'Hình thức', dataIndex: 'checkInMethod', key: 'checkInMethod', width: 150,
+      render: (v: string) => {
+        const meta = checkInMethodLabels[v] || { label: v || '—', color: 'default' }
+        return <Tag color={meta.color}>{meta.label}</Tag>
       },
     },
     {
-      title: 'Staff', dataIndex: 'staffName', key: 'staffName', width: 130,
-      render: (n: string) => n || '-',
+      title: 'Người thực hiện', dataIndex: 'performedByName', key: 'performedByName', width: 130,
+      render: (v: string, r: any) => v || r.staffName || '—',
+    },
+    {
+      title: 'Lý do', dataIndex: 'manualReason', key: 'manualReason', width: 160,
+      ellipsis: true,
+      render: (v: string) => v || '—',
     },
   ]
 
@@ -280,7 +281,7 @@ function HistoryTab() {
             showTotal: (total: number) => `Tổng cộng ${total} lượt check-in`,
             onChange: (page) => fetchHistory(page),
           }}
-          scroll={{ x: 1100 }}
+          scroll={{ x: 1300 }}
         />
       </div>
     </>

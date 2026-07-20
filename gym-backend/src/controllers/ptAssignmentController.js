@@ -310,31 +310,25 @@ export const createScheduleAndAssignWorkout = async (req, res) => {
 
 export const getWorkoutProgress = async (req, res) => {
   try {
-    const { id } = req.params
     const { scheduleId } = req.query
     const ptId = req.user._id
 
-    const assignment = await PTAssignment.findOne({ _id: id, ptId, status: 'active' })
-      .populate('memberId', 'name fullName email phone avatar memberCode memberNumber')
-      .populate('workoutId', 'name goal days totalSessions')
-
-    if (!assignment) {
-      return res.status(404).json({ message: 'Không tìm thấy phân công' })
+    // Load schedule by scheduleId (the only reliable identifier from the frontend)
+    if (!scheduleId) {
+      return res.status(400).json({ message: 'Thiếu scheduleId' })
     }
+    const schedule = await WorkoutSchedule.findById(scheduleId)
+      .populate('templateId', 'name goal days')
 
-    // Neu co scheduleId, tim dung lich do
-    let schedule = null
-    if (scheduleId) {
-      schedule = await WorkoutSchedule.findOne({ _id: scheduleId, memberId: assignment.memberId })
-        .populate('templateId', 'name goal days')
-    } else {
-      // Fallback: lay lich moi nhat cua member (tuong thich nguoc)
-      schedule = await WorkoutSchedule.findOne({
-        memberId: assignment.memberId,
-        templateId: assignment.workoutId?._id,
-        status: 'active',
+    // Find assignment by memberId + current PT
+    let assignment = null
+    if (schedule) {
+      assignment = await PTAssignment.findOne({
+        memberId: schedule.memberId,
+        ptId,
       })
-        .populate('templateId', 'name goal days')
+        .populate('memberId', 'name fullName email phone avatar memberCode memberNumber')
+        .populate('workoutId', 'name goal days totalSessions')
         .sort({ createdAt: -1 })
     }
 

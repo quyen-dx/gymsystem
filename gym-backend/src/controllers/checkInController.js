@@ -1,3 +1,4 @@
+import mongoose from 'mongoose'
 import jwt from 'jsonwebtoken'
 import CheckIn from '../models/CheckIn.js'
 import MembershipCycle from '../models/MembershipCycle.js'
@@ -150,6 +151,10 @@ const formatHistoryItem = (checkin, membershipByMemberId = {}) => {
     scheduleId: checkin.scheduleId || null,
     dailyQRDate: dailyQR.date || null,
     dailyQRCreatedAt: dailyQR.createdAt || null,
+    checkInMethod: checkin.checkInMethod || 'QR_SELF',
+    manualReason: checkin.manualReason || '',
+    performedBy: checkin.performedBy || null,
+    performedByName: checkin.performedByName || checkin.staffMemberName || '',
   }
 }
 
@@ -243,11 +248,105 @@ export const generateQRToken = async (req, res) => {
   }
 }
 
+export const searchMemberForCheckin = async (req, res) => {
+  try {
+    const { q } = req.query
+    if (!q || !String(q).trim()) {
+      return res.status(400).json({ message: 'Vui lòng nhập từ khóa tìm kiếm.' })
+    }
+    const keyword = String(q).trim()
+
+    const query = {
+      role: 'member',
+      $or: [
+        { memberCode: { $regex: `^${keyword}$`, $options: 'i' } },
+        { phone: keyword },
+        { email: { $regex: `^${keyword}$`, $options: 'i' } },
+        { fullName: { $regex: keyword, $options: 'i' } },
+      ],
+    }
+
+    const member = await User.findOne(query).lean()
+    if (!member) {
+      return res.json({ member: null })
+    }
+
+    const cycles = await MembershipCycle.find({ memberId: member._id })
+      .populate('currentPlanId', 'nameVi nameEn color')
+      .sort({ createdAt: -1 })
+      .lean()
+
+    const activeCycle = cycles.find(c => c.status === 'active' && c.expiresAt >= new Date())
+    const pendingCycle = cycles.find(c => c.status === 'pending_initial_activation')
+    const latestExpired = cycles.find(c => c.status === 'expired' || c.expiresAt < new Date())
+    const latestCycle = activeCycle || pendingCycle || latestExpired || null
+
+    let membershipStatus = null
+    let membershipInfo = null
+    if (activeCycle) {
+      membershipStatus = 'active'
+      membershipInfo = {
+        planName: activeCycle.currentPlanId?.nameVi || activeCycle.currentPlanId?.nameEn || '',
+        planColor: activeCycle.currentPlanId?.color || '',
+        startDate: activeCycle.startDate,
+        endDate: activeCycle.expiresAt,
+        price: activeCycle.price,
+        status: 'active',
+      }
+    } else if (pendingCycle) {
+      membershipStatus = 'pending_initial_activation'
+      membershipInfo = {
+        planName: pendingCycle.currentPlanId?.nameVi || pendingCycle.currentPlanId?.nameEn || '',
+        planColor: pendingCycle.currentPlanId?.color || '',
+        startDate: pendingCycle.startDate,
+        endDate: pendingCycle.expiresAt,
+        price: pendingCycle.price,
+        status: 'pending_initial_activation',
+      }
+    } else if (latestCycle) {
+      membershipStatus = 'expired'
+      membershipInfo = {
+        planName: latestCycle.currentPlanId?.nameVi || latestCycle.currentPlanId?.nameEn || '',
+        planColor: latestCycle.currentPlanId?.color || '',
+        startDate: latestCycle.startDate,
+        endDate: latestCycle.expiresAt,
+        price: latestCycle.price,
+        status: 'expired',
+      }
+    }
+
+    const todayStart = new Date(`${getVietnamDateString()}T00:00:00${VIETNAM_UTC_OFFSET}`)
+    const todayEnd = new Date(`${getVietnamDateString()}T23:59:59.999${VIETNAM_UTC_OFFSET}`)
+    const checkedInToday = await CheckIn.exists({
+      memberId: member._id,
+      checkinTime: { $gte: todayStart, $lte: todayEnd },
+      status: 'success',
+    })
+
+    res.json({
+      member: {
+        _id: member._id,
+        memberCode: member.memberCode || '',
+        fullName: getUserDisplayName(member, ''),
+        email: member.email || '',
+        phone: member.phone || '',
+        avatar: member.avatar || '',
+        membership: membershipInfo,
+        membershipStatus,
+        checkedInToday: !!checkedInToday,
+      },
+    })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
 export const staffVerifyCheckin = async (req, res) => {
   let mongoSession = null
   try {
-    const { token, memberId } = req.body
+    const { token, memberId, manualReason } = req.body
     const staffId = req.user._id
+    const checkInMethod = req.user.role === 'reception' ? 'RECEPTION' : 'STAFF'
 
     const member = await resolveMemberFromCheckinPayload({ token, memberId })
     if (!member || member.role !== 'member') {
@@ -302,6 +401,10 @@ export const staffVerifyCheckin = async (req, res) => {
       status: 'success',
       qrToken: token || undefined,
       streakDay,
+      checkInMethod: checkInMethod || 'STAFF',
+      manualReason: manualReason || undefined,
+      performedBy: staffId,
+      performedByName: getUserDisplayName(req.user, 'Staff'),
     }], { session: mongoSession })
 
     await recordUserActivity({
@@ -345,6 +448,9 @@ export const staffVerifyCheckin = async (req, res) => {
         status: checkin.status,
         errorNote: '',
         streakDay: checkin.streakDay,
+        checkInMethod: checkInMethod || 'STAFF',
+        manualReason: manualReason || undefined,
+        performedByName: getUserDisplayName(req.user, 'Staff'),
       },
     })
   } catch (error) {

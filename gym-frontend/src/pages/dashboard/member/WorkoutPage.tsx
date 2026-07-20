@@ -11,6 +11,51 @@ import { scheduleService } from '../../../services/scheduleService'
 import { getUserDisplayName } from '../../../utils/userDisplay'
 import type { WorkoutSchedule, ScheduleSession } from '../../../services/workoutService'
 
+const badgeForDate = (date: dayjs.Dayjs): { label: string; color: string } => {
+  const today = dayjs().startOf('day')
+  if (date.isSame(today, 'day')) return { label: 'Hôm nay', color: 'blue' }
+  if (date.isAfter(today)) return { label: 'Sắp tới', color: 'default' }
+  return { label: 'Đã qua', color: 'default' }
+}
+
+const MobileCard = ({ row, onDetail }: { row: ScheduleRow; onDetail: (r: ScheduleRow) => void }) => {
+  const badge = badgeForDate(row.date)
+  return (
+    <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 space-y-3 text-sm">
+      <div className="flex items-center justify-between">
+        <span className="font-semibold text-[var(--gs-text)]">{row.dayLabel}</span>
+        <div className="flex items-center gap-2">
+          {row.session.className ? <span className="text-xs text-[var(--gs-text-muted)]">{row.session.className}</span> : <span className="text-xs text-[var(--gs-text-muted)]">PT: {row.ptName}</span>}
+          <Tag color={badge.color}>{badge.label}</Tag>
+        </div>
+      </div>
+      <div className="space-y-2 text-xs text-[var(--gs-text-muted)]">
+        <div className="flex items-start gap-2">
+          <span className="w-20 shrink-0">Ngày</span>
+          <span className="text-[var(--gs-text)]">{row.date.format('DD/MM/YYYY')}</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="w-20 shrink-0">Thời gian</span>
+          <span className="text-[var(--gs-text)]">{row.time} - {row.endTime}</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="w-20 shrink-0">Địa điểm</span>
+          <span className="text-[var(--gs-text)]">{row.location}</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="w-20 shrink-0">PT</span>
+          <span className="text-[var(--gs-text)]">{row.ptName}{row.isSwapOverride && <Tag className="ml-1 text-[10px]" color="orange">Đổi ca</Tag>}</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="w-20 shrink-0">Buổi tập</span>
+          <span className="font-medium text-[var(--gs-text)]">{row.title}</span>
+        </div>
+      </div>
+      <Button type="primary" block size="small" onClick={() => onDetail(row)}>Xem chi tiết</Button>
+    </div>
+  )
+}
+
 const TIME_FILTERS = [
   { value: 'today', label: 'Hôm nay' },
   { value: '7days', label: '7 ngày tới' },
@@ -193,14 +238,14 @@ export default function WorkoutPage() {
           <MembershipRequired planName={planName} featureLabel="xem lịch tập" />
         ) : (
           <>
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-5 flex items-start justify-between max-[767px]:flex-col max-[767px]:gap-3">
               <div>
-                <h1 className="text-xl font-bold text-[var(--gs-text)]">Lịch tập của tôi</h1>
+                <h1 className="text-xl font-bold text-[var(--gs-text)] max-[767px]:text-lg">Lịch tập của tôi</h1>
                 <p className="mt-0.5 text-sm text-[var(--gs-text-muted)]">Thời khóa biểu tập luyện</p>
               </div>
-              <div className="flex items-center gap-3">
-                <Select value={timeFilter} onChange={setTimeFilter} options={TIME_FILTERS} style={{ width: 150 }} size="middle" />
-                <Button icon={<ReloadOutlined />} onClick={loadSchedules} loading={loading}>Tải lại</Button>
+              <div className="flex items-center gap-3 max-[767px]:w-full max-[767px]:flex-col max-[767px]:gap-2">
+                <Select value={timeFilter} onChange={setTimeFilter} options={TIME_FILTERS} className="max-[767px]:!w-full" style={{ width: 150 }} size="middle" />
+                <Button icon={<ReloadOutlined />} onClick={loadSchedules} loading={loading} className="max-[767px]:w-full max-[767px]:min-h-[44px]">Tải lại</Button>
               </div>
             </div>
 
@@ -211,7 +256,8 @@ export default function WorkoutPage() {
                 <Empty description="Bạn chưa có lịch tập. Hãy liên hệ PT để được tạo lịch nhé!" />
               </div>
             ) : (
-              <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)]">
+              <>
+              <div className="workout-table-desktop rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)]">
                 <Table
                   dataSource={filteredRows}
                   columns={columns}
@@ -239,11 +285,24 @@ export default function WorkoutPage() {
                       'Không có buổi tập nào'
                     ),
                   }}
+                  scroll={{ x: 700 }}
                 />
                   <div className="border-t border-[var(--gs-border)] px-4 py-2.5 text-sm text-[var(--gs-text-muted)]">
                     Đang xem 1-{filteredRows.length} / {rows.length} buổi
                   </div>
                 </div>
+              <div className="workout-cards-mobile space-y-3">
+                {filteredRows.length > 0 ? (
+                  filteredRows.map((row) => (
+                    <MobileCard key={row.key} row={row} onDetail={openDetail} />
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-dashed border-[var(--gs-border)] bg-[var(--gs-card)] p-8 text-center">
+                    <p className="text-sm text-[var(--gs-text-muted)]">Không có buổi tập nào</p>
+                  </div>
+                )}
+              </div>
+              </>
             )}
           </>
         )}

@@ -118,6 +118,26 @@ export const verifyDailyQRAndGetSessions = async (req, res) => {
 
     const memberId = req.user._id
 
+    // Check if any check-in exists today (QR_SELF, STAFF, RECEPTION, or AUTO)
+    const todayCheckin = await CheckIn.findOne({
+      memberId,
+      checkinTime: { $gte: today, $lte: eod },
+      status: 'success',
+    }).sort({ checkinTime: -1 }).lean()
+
+    if (todayCheckin) {
+      return res.json({
+        valid: true,
+        message: 'Bạn đã check-in hôm nay.',
+        memberId,
+        qrToken: token,
+        enrollment: null,
+        sessionDate: today,
+        sessions: [],
+        freeWorkoutCheckedIn: { checkedInAt: todayCheckin.checkinTime },
+      })
+    }
+
     // Find active class enrollment
     const enrollment = await ClassEnrollment.findOne({ memberId, status: 'active' })
       .populate('classId', 'code name').lean()
@@ -206,6 +226,23 @@ export const submitDailyQRCheckin = async (req, res) => {
     const now = new Date()
     const today = startOfDay(now)
     const eod = endOfDay(today)
+
+    // Check if already checked in today by any method (QR, staff, reception, auto)
+    const todayCheckin = await CheckIn.findOne({
+      memberId,
+      checkinTime: { $gte: today, $lte: eod },
+      status: 'success',
+    }).lean()
+
+    if (todayCheckin) {
+      const checkinTime = new Date(todayCheckin.checkinTime).toLocaleTimeString('vi-VN', {
+        hour: '2-digit', minute: '2-digit',
+      })
+      return res.status(400).json({
+        message: `Bạn đã check-in hôm nay lúc ${checkinTime}.`,
+        alreadyCheckedIn: true,
+      })
+    }
 
     // Validate QR token
     const qrCode = await DailyQRCode.findOne({ token, isActive: true }).lean()

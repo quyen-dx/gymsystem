@@ -539,13 +539,14 @@ export default function PTWorkoutsPage() {
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="pt-workouts-filters mb-4 flex flex-wrap items-center gap-3">
           <Input
             placeholder="Tìm kiếm theo tên giáo án..."
             prefix={<SearchOutlined />}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onPressEnter={() => loadWorkouts()}
+            className="max-[767px]:!w-full"
             style={{ width: 280 }}
             allowClear
           />
@@ -555,6 +556,7 @@ export default function PTWorkoutsPage() {
             value={filters.specializationId || undefined}
             onChange={(v) => setFilters((f) => ({ ...f, specializationId: v, goal: undefined }))}
             allowClear
+            className="max-[767px]:!w-full"
             style={{ width: 160 }}
             options={specializations.map((s) => ({ value: s, label: s }))}
           />
@@ -564,6 +566,7 @@ export default function PTWorkoutsPage() {
             value={filters.goal || undefined}
             onChange={(v) => setFilters((f) => ({ ...f, goal: v }))}
             allowClear
+            className="max-[767px]:!w-full"
             style={{ width: 160 }}
             options={filteredGoals.map((g) => ({ value: g, label: g }))}
           />
@@ -585,6 +588,7 @@ export default function PTWorkoutsPage() {
               }
             }}
             allowClear
+            className="max-[767px]:!w-full"
             style={{ width: 200 }}
             options={[
               { value: '__mine__', label: 'Giáo án của tôi' },
@@ -600,6 +604,7 @@ export default function PTWorkoutsPage() {
             value={filters.sortBy || undefined}
             onChange={(v) => setFilters((f) => ({ ...f, sortBy: v }))}
             allowClear
+            className="max-[767px]:!w-full"
             style={{ width: 200 }}
             options={[
               { value: 'most_used', label: 'Được sử dụng nhiều nhất' },
@@ -607,17 +612,17 @@ export default function PTWorkoutsPage() {
             ]}
           />
 
-          <Button icon={<ReloadOutlined />} onClick={() => loadWorkouts()} loading={loading}>
+          <Button icon={<ReloadOutlined />} onClick={() => loadWorkouts()} loading={loading} className="max-[767px]:w-full max-[767px]:min-h-[44px] max-[767px]:text-[15px]">
             Tải lại
           </Button>
 
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/pt/workouts/create')}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/pt/workouts/create')} className="max-[767px]:w-full max-[767px]:min-h-[44px] max-[767px]:text-[15px]">
             Tạo giáo án mới
           </Button>
         </div>
 
         <div className="member-scroll-x">
-          <Table
+          <Table className="pt-workouts-table"
             dataSource={workouts}
             columns={columns}
             rowKey="_id"
@@ -632,6 +637,45 @@ export default function PTWorkoutsPage() {
             }}
             scroll={{ x: 1300 }}
           />
+        </div>
+        {/* Mobile cards */}
+        <div className="pt-workouts-cards">
+          {workouts.map((record) => {
+            const spec = SPECIALIZATION_OPTIONS.find((s) => s.value === record.specializationId)
+            const st = STATUS_MAP[record.templateStatus] || { label: record.templateStatus, color: 'default' }
+            const ptName = getName(record.ptId)
+            return (
+              <div key={record._id} className="pt-workout-card">
+                <div className="pt-workout-header">
+                  <div className="pt-workout-name">{record.workoutName || record.name}</div>
+                  {record.description && <div className="text-xs text-[var(--gs-text-muted)] mt-1">{record.description?.slice(0, 80)}{(record.description?.length || 0) > 80 ? '...' : ''}</div>}
+                </div>
+                <div className="pt-workout-meta">
+                  <Tag color="blue" className="m-0 text-[11px]">{spec?.label || record.specializationId || '-'}</Tag>
+                  <Tag color="purple" className="m-0 text-[11px]">{record.goal || '-'}</Tag>
+                  <Tag color={st.color} className="m-0 text-[11px]">{st.label}</Tag>
+                </div>
+                <div className="pt-workout-detail">
+                  <span className="pt-label">Số buổi</span>
+                  <span className="pt-value">{record.totalSessions || record.days?.length || record.weeks?.length || 0}</span>
+                </div>
+                <div className="pt-workout-detail">
+                  <span className="pt-label">PT tạo</span>
+                  <span className="pt-value">{ptName}{isOwner(record) ? ' (Tôi)' : ''}</span>
+                </div>
+                <div className="pt-workout-detail">
+                  <span className="pt-label">Ngày tạo</span>
+                  <span className="pt-value">{record.createdAt ? dayjs(record.createdAt).format('DD/MM/YYYY') : '-'}</span>
+                </div>
+                <div className="pt-workout-actions">
+                  <Button size="small" onClick={() => navigate(`/pt/workouts/view/${record._id}`)}>Xem</Button>
+                  <Button size="small" onClick={() => navigate(`/pt/clients?assignWorkout=${record._id}`)}>Sử dụng</Button>
+                  {isOwner(record) && <Button size="small" onClick={() => navigate(`/pt/workouts/edit/${record._id}`)}>Sửa</Button>}
+                  <Button size="small" onClick={() => navigate(`/pt/workouts/progress/${record._id}`)}>Thống kê</Button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 

@@ -138,17 +138,18 @@ export default function PTSchedulePage() {
         </div>
 
         <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-[var(--gs-text)]">Lịch làm việc hàng tuần</h2>
-            <div className="flex items-center gap-2">
-              <Button size="small" icon={<LeftOutlined />} onClick={goPrevWeek} />
-              <Button size="small" type={isCurrentWeek ? 'primary' : 'default'} onClick={goCurrentWeek}>
+          <div className="pt-schedule-header flex items-center justify-between max-[767px]:flex-col max-[767px]:items-start max-[767px]:gap-2 mb-4">
+            <h2 className="pt-schedule-title text-lg font-semibold text-[var(--gs-text)] max-[767px]:text-lg">Lịch làm việc tuần</h2>
+            <div className="pt-schedule-nav flex items-center gap-2 max-[767px]:w-full max-[767px]:justify-between">
+              <Button size="small" icon={<LeftOutlined />} onClick={goPrevWeek} className="max-[767px]:min-h-[36px]" />
+              <Button size="small" type={isCurrentWeek ? 'primary' : 'default'} onClick={goCurrentWeek} className="max-[767px]:min-h-[36px]">
                 Tuần này
               </Button>
-              <span className="text-sm text-[var(--gs-text-muted)] min-w-[140px] text-center">{weekLabel}</span>
-              <Button size="small" icon={<RightOutlined />} onClick={goNextWeek} />
+              <span className="pt-schedule-week-label text-sm text-[var(--gs-text-muted)] min-w-[130px] text-center max-[767px]:text-xs">{weekLabel}</span>
+              <Button size="small" icon={<RightOutlined />} onClick={goNextWeek} className="max-[767px]:min-h-[36px]" />
             </div>
           </div>
+          <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3">
             {DAYS.map((day, idx) => {
               const actualDate = weekStart.add(idx, 'day')
@@ -339,6 +340,7 @@ export default function PTSchedulePage() {
           <Empty description="Không có hội viên" />
         )}
       </Modal>
+      </div>
     </DashboardLayout>
   )
 }

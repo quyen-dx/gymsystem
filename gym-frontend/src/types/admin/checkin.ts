@@ -7,6 +7,25 @@ export interface QRTokenResponse {
   streak?: number
 }
 
+export interface SearchedMember {
+  _id: string
+  memberCode: string
+  fullName: string
+  email: string
+  phone: string
+  avatar: string
+  membership: {
+    planName: string
+    planColor: string
+    startDate: string
+    endDate: string
+    price: number
+    status: string
+  } | null
+  membershipStatus: string | null
+  checkedInToday: boolean
+}
+
 export interface VerifiedMember {
   _id: string
   name: string
@@ -66,6 +85,9 @@ export interface StaffCheckinHistoryItem {
   status: 'success' | 'failed' | 'expired' | 'blocked'
   errorNote?: string
   streakDay?: number
+  checkInMethod?: string
+  manualReason?: string
+  performedByName?: string
 }
 
 export interface StaffCheckinHistoryResponse {

@@ -7,6 +7,7 @@ import {
   getCheckinStats,
   getMemberStreak,
   getTodayCheckins,
+  searchMemberForCheckin,
   staffVerifyCheckin,
 } from '../controllers/checkInController.js'
 import {
@@ -32,6 +33,7 @@ router.post('/daily-qr/checkin', submitDailyQRCheckin)
 // Member's own check-in history
 router.get('/my-history', getMyCheckinHistory)
 
+router.get('/staff/search-member', adminOrStaff, searchMemberForCheckin)
 router.post('/verify', adminOrStaff, staffVerifyCheckin)
 router.get('/staff/history', adminOrStaff, getStaffCheckinHistory)
 router.get('/history', adminOrStaff, getStaffCheckinHistory)

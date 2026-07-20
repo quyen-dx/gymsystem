@@ -127,7 +127,7 @@ export default function MemberScanPage() {
 
               {cameraReady && (
                 <div className="mt-4 flex justify-center">
-                  <Button onClick={stopCamera}>Đóng camera</Button>
+                  <Button onClick={() => navigate("/checkin")}>Quay lại</Button>
                 </div>
               )}
             </div>

@@ -9,6 +9,14 @@ const { RangePicker } = DatePicker
 
 const formatDate = (value?: string) => value ? new Date(value).toLocaleString('vi-VN') : '-'
 
+const checkInMethodLabels: Record<string, { label: string; color: string }> = {
+  QR_SELF: { label: 'QR tự check-in', color: 'blue' },
+  QR_PROJECTOR: { label: 'QR trình chiếu', color: 'cyan' },
+  STAFF: { label: 'Lễ tân điểm danh', color: 'orange' },
+  RECEPTION: { label: 'Lễ tân điểm danh', color: 'purple' },
+  AUTO: { label: 'Tự động', color: 'geekblue' },
+}
+
 export default function MemberCheckinPage() {
   const navigate = useNavigate()
   const [history, setHistory] = useState<any[]>([])
@@ -81,22 +89,29 @@ export default function MemberCheckinPage() {
               loading={loading}
               dataSource={history}
               locale={{ emptyText: 'Chưa có lịch sử check-in' }}
-              renderItem={(item: any) => (
-                <List.Item>
-                  <div className="flex items-center gap-3 w-full">
-                    <HistoryOutlined className="text-[var(--gs-text-muted)] shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{formatDate(item.checkinTime)}</div>
-                      {item.sessionTitle && (
-                        <div className="text-xs text-[var(--gs-text-muted)] truncate">{item.sessionTitle}</div>
-                      )}
+              renderItem={(item: any) => {
+                const methodMeta = checkInMethodLabels[item.checkInMethod] || checkInMethodLabels.QR_SELF
+                return (
+                  <List.Item>
+                    <div className="flex flex-col w-full gap-1">
+                      <div className="flex items-center gap-3">
+                        <HistoryOutlined className="text-[var(--gs-text-muted)] shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{formatDate(item.checkinTime)}</div>
+                          {item.sessionTitle && (
+                            <div className="text-xs text-[var(--gs-text-muted)] truncate">{item.sessionTitle}</div>
+                          )}
+                        </div>
+                        <Tag color={methodMeta.color} className="shrink-0">{methodMeta.label}</Tag>
+                      </div>
+                      <div className="ml-7 space-y-0.5 text-xs text-[var(--gs-text-muted)]">
+                        {item.performedByName && <div>Người thực hiện: {item.performedByName}</div>}
+                        {item.manualReason && <div>Lý do: {item.manualReason}</div>}
+                      </div>
                     </div>
-                    <Tag color={item.sessionType === 'free_workout' ? 'green' : 'blue'} className="shrink-0">
-                      {item.sessionType === 'free_workout' ? 'Tập tự do' : 'Theo lịch'}
-                    </Tag>
-                  </div>
-                </List.Item>
-              )}
+                  </List.Item>
+                )
+              }}
             />
           </Card>
         </div>

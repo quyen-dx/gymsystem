@@ -73,6 +73,25 @@ const checkInSchema = new mongoose.Schema(
       enum: ['scheduled', 'free_workout'],
       default: 'scheduled',
     },
+    checkInMethod: {
+      type: String,
+      enum: ['QR_SELF', 'QR_PROJECTOR', 'STAFF', 'RECEPTION', 'AUTO'],
+      default: 'QR_SELF',
+    },
+    manualReason: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    performedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    performedByName: {
+      type: String,
+      default: '',
+    },
   },
   { timestamps: true },
 )

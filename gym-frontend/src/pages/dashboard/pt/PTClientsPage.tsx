@@ -828,7 +828,7 @@ export default function PTClientsPage() {
   const classOptions = Array.from(new Map(
     clients.map(c => {
       const ce = c.classEnrollment
-      return ce ? [ce._id, { value: ce._id, label: `[${ce.code}] ${ce.name}` }] as const : null
+      return ce ? [ce._id, { value: ce._id, label: ce.name }] as const : null
     }).filter(Boolean) as Array<readonly [string, { value: string; label: string }]>
   ).values()).sort((a, b) => a.label.localeCompare(b.label))
 
@@ -857,8 +857,9 @@ export default function PTClientsPage() {
 
   const activeTabEl = (
     <div className="member-scroll-x">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="pt-clients-filters mb-4 flex flex-wrap items-center gap-3">
         <Select
+          className="max-[767px]:!w-full"
           style={{ minWidth: 200 }}
           placeholder="Lọc theo lớp"
           allowClear
@@ -867,6 +868,7 @@ export default function PTClientsPage() {
           options={classOptions}
         />
         <Select
+          className="max-[767px]:!w-full"
           style={{ minWidth: 150 }}
           placeholder="Lọc theo chuyên môn"
           allowClear
@@ -875,6 +877,7 @@ export default function PTClientsPage() {
           options={specializationOptions}
         />
         <Select
+          className="max-[767px]:!w-full"
           style={{ minWidth: 200 }}
           placeholder="Lọc theo mục tiêu"
           allowClear
@@ -884,7 +887,7 @@ export default function PTClientsPage() {
           options={goalOptions}
         />
       </div>
-      <Table
+      <Table className="pt-clients-table"
         dataSource={filteredClients}
         columns={activeColumns}
         rowKey="_id"
@@ -957,26 +960,189 @@ export default function PTClientsPage() {
           onExpand: handleExpand,
         }}
       />
+      {/* Mobile cards */}
+      <div className="pt-clients-cards">
+        {filteredClients.map((record) => {
+          const ce = record.classEnrollment
+          const goals = record.goals || []
+          const genderIcon = record.gender === 'female' ? '♀' : record.gender === 'male' ? '♂' : ''
+          const isExpanded = expandedMemberId === record._id
+          const schedules = clientSchedules[record._id] || []
+          return (
+            <div key={record._id} className="pt-client-card">
+              <div className="pt-client-header" style={{ cursor: 'pointer' }} onClick={() => handleExpand(expandedMemberId !== record._id, record)}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: record.avatar ? `url(${record.avatar}) center/cover` : 'var(--gs-border)', flexShrink: 0 }} />
+                <div className="flex-1 min-w-0">
+                  <div className="pt-client-name truncate">{getUserDisplayName(record, 'Thành viên')}</div>
+                  <div className="pt-client-code truncate">{record.memberCode ? `${record.memberCode}${genderIcon ? ' • ' + genderIcon : ''}${record.phone ? ' • ' + record.phone : ''}` : record.phone || record.email || ''}</div>
+                </div>
+                <div className="pt-client-expand-btn" style={{ flexShrink: 0, fontSize: 22, lineHeight: 1, fontWeight: 700, color: isExpanded ? 'var(--theme-accent)' : 'var(--gs-text-muted)', padding: '4px 4px 0 0', alignSelf: 'flex-start' }}>
+                  {isExpanded ? '−' : '+'}
+                </div>
+              </div>
+              <div className="pt-client-detail">
+                <span className="pt-label">Lớp</span>
+                <span className="pt-value">{ce ? ce.name : <span className="italic text-[var(--gs-text-muted)]">Chưa xếp lớp</span>}</span>
+              </div>
+              {record.specialization && (
+                <div className="pt-client-detail">
+                  <span className="pt-label">Chuyên môn</span>
+                  <span className="pt-value"><Tag color="blue" className="m-0">{record.specialization}</Tag></span>
+                </div>
+              )}
+              {goals.length > 0 && (
+                <div className="pt-client-detail">
+                  <span className="pt-label">Mục tiêu</span>
+                  <span className="pt-value">{goals.join(', ')}</span>
+                </div>
+              )}
+              <div className="pt-client-detail">
+                <span className="pt-label">Gói tập</span>
+                <span className="pt-value">
+                  {record.membershipStatus === 'pending_initial_activation'
+                    ? <Tag color="orange" className="m-0">🟡 Chờ kích hoạt</Tag>
+                    : record.membershipStatus === 'active'
+                      ? <Tag color="green" className="m-0">🟢 Đang hoạt động</Tag>
+                      : <span className="text-[var(--gs-text-muted)]">—</span>}
+                </span>
+              </div>
+              <div className="pt-client-detail">
+                <span className="pt-label">Lịch tập</span>
+                <span className="pt-value"><Tag color={(record.scheduleCount ?? 0) > 0 ? 'blue' : 'default'} className="m-0">{record.scheduleCount ?? 0} lịch</Tag></span>
+              </div>
+              <div className="pt-client-detail">
+                <span className="pt-label">Giáo án</span>
+                <span className="pt-value">
+                  {record.workout
+                    ? <span>{record.workout.name}</span>
+                    : <span className="text-[var(--gs-text-muted)]">Chưa có giáo án</span>}
+                </span>
+              </div>
+              <div className="pt-client-actions">
+                <Button
+                  type="primary"
+                  size="small"
+                  block
+                  icon={<PlusOutlined />}
+                  onClick={() => navigate(`/pt/clients/${record._id}/create-schedule?assignmentId=${record.assignmentId || ''}`)}
+                >
+                  Tạo lịch & Gán giáo án
+                </Button>
+              </div>
+              {isExpanded && (
+                <div className="mt-3 border-t border-[var(--gs-border)] pt-3">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-[var(--gs-text-muted)]">{schedules.length} lịch tập</span>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="small" icon={<ReloadOutlined />} onClick={() => fetchClientSchedules(record._id)}>Tải lại</Button>
+                      {hasActiveSchedule(record) && (
+                        <Button size="small" danger onClick={() => handleEndAllWorkouts(record)}>Kết thúc toàn bộ lịch tập</Button>
+                      )}
+                      {ce && <Button size="small" onClick={() => openClassModal(record, 'transfer')}>Chuyển lớp</Button>}
+                      {ce && <Button size="small" onClick={() => openClassModal(record, 'leave')}>Rời lớp</Button>}
+                      <Button size="small" danger onClick={() => { setEndRequestModal({ open: true, client: record }); setEndReason('MEMBER_COMPLETED'); setEndDetail('') }}>
+                        Kết thúc phụ trách
+                      </Button>
+                    </div>
+                  </div>
+                  {schedules.length > 0 ? (
+                    <div className="space-y-3">
+                      {schedules.map((sched: any) => {
+                        const tpl = sched.templateId as any
+                        const sessions = sched.sessions || []
+                        const done = sessions.filter((s: any) => s.status === 'completed').length
+                        const weekInfo = sched.totalWeeks && sched.totalWeeks > 1
+                          ? ` - Tuần ${sched.weekIndex || '?'}/${sched.totalWeeks}`
+                          : ''
+                        const statusColor = sched.status === 'active' ? 'green' : sched.status === 'completed' ? 'blue' : 'default'
+                        const statusLabel = sched.status === 'active' ? 'Đang hoạt động' : sched.status === 'completed' ? 'Hoàn thành' : '—'
+                        return (
+                          <div key={sched._id} className="rounded-lg border border-[var(--gs-border)] p-3 text-sm">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <div>
+                                <div className="font-medium text-[var(--gs-text)]">{(tpl?.name || 'Giáo án mẫu') + weekInfo}</div>
+                                {tpl?.goal && <div className="text-xs text-[var(--gs-text-muted)]">{tpl.goal}</div>}
+                              </div>
+                              <Tag color={statusColor} className="m-0 shrink-0">{statusLabel}</Tag>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1 text-xs text-[var(--gs-text-muted)] mb-2">
+                              <div>Số buổi: <span className="font-medium text-[var(--gs-text)]">{sessions.length} buổi</span></div>
+                              <div>Tiến độ: <span className="font-medium text-[var(--gs-text)]">{done}/{sessions.length}</span></div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button size="small" type="primary" ghost
+                                onClick={() => navigate(`/pt/clients/${record._id}/progress?assignmentId=${record.assignmentId || ''}&scheduleId=${sched._id}`)}>
+                                Xem tiến độ
+                              </Button>
+                              <Popconfirm title="Xoá lịch tập này?" okText="Xoá" cancelText="Huỷ" okButtonProps={{ danger: true }}
+                                onConfirm={() => handleDeleteSchedule(sched)}>
+                                <Tooltip title="Xoá lịch tập">
+                                  <Button size="small" danger icon={<DeleteOutlined />} />
+                                </Tooltip>
+                              </Popconfirm>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="py-4 text-center text-sm text-[var(--gs-text-muted)]">Chưa có lịch tập</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 
   const pendingTabEl = (
-    <div className="member-scroll-x">
-      <Table
-        dataSource={pendingItems}
-        columns={pendingColumns}
-        rowKey="_id"
-        loading={pendingLoading}
-        pagination={{ pageSize: 20 }}
-        locale={{ emptyText: <Empty description="Không có yêu cầu chờ duyệt" /> }}
-      />
+    <div>
+      <div className="pt-clients-table member-scroll-x">
+        <Table
+          dataSource={pendingItems}
+          columns={pendingColumns}
+          rowKey="_id"
+          loading={pendingLoading}
+          pagination={{ pageSize: 20 }}
+          locale={{ emptyText: <Empty description="Không có yêu cầu chờ duyệt" /> }}
+        />
+      </div>
+      <div className="pt-clients-cards">
+        {pendingItems.map((record: PendingApproval) => {
+          const member = typeof record.memberId === 'object' ? record.memberId as PTAssignmentMember : null
+          const cls = typeof record.classId === 'object' ? record.classId : null
+          const label = REASON_LABELS[record.reasonType] || record.reasonType
+          return (
+            <div key={(record as any)._id} className="pt-client-card">
+              <div className="pt-client-header">
+                <div className="pt-client-name">{getUserDisplayName(member, '—')}</div>
+                {member?.memberCode && <div className="pt-client-code truncate">{member.memberCode}</div>}
+              </div>
+              <div className="pt-client-detail"><span className="pt-label">Lớp</span><span className="pt-value">{cls?.name || '—'}</span></div>
+              {member?.specialization && <div className="pt-client-detail"><span className="pt-label">Chuyên môn</span><span className="pt-value"><Tag color="blue" className="m-0">{member.specialization}</Tag></span></div>}
+              <div className="pt-client-detail"><span className="pt-label">Ngày gửi</span><span className="pt-value">{fmt(record.createdAt)}</span></div>
+              <div className="pt-client-detail"><span className="pt-label">Lý do</span><span className="pt-value">{record.reasonType === 'OTHER' && record.reasonDetail ? record.reasonDetail : label}</span></div>
+              <div className="pt-client-detail"><span className="pt-label">Trạng thái</span><span className="pt-value"><Tag color="orange" className="m-0" icon={<ClockCircleOutlined />}>Chờ Admin phê duyệt</Tag></span></div>
+              <div className="pt-client-actions">
+                <Button type="primary" size="small" block>Phê duyệt</Button>
+              </div>
+            </div>
+          )
+        })}
+        {pendingItems.length === 0 && !pendingLoading && (
+          <div className="text-center py-10 text-[var(--gs-text-muted)]">Không có yêu cầu chờ duyệt</div>
+        )}
+      </div>
     </div>
   )
 
   const historyTabEl = (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="pt-clients-filters mb-4 flex flex-wrap items-center gap-3">
         <Select
+          className="max-[767px]:!w-full"
           allowClear
           placeholder="Loại kết thúc"
           style={{ width: 180 }}
@@ -988,16 +1154,19 @@ export default function PTClientsPage() {
           ]}
         />
         <DatePicker
+          className="max-[767px]:!w-full"
           placeholder="Từ ngày"
           format="DD/MM/YYYY"
           onChange={(d) => setHistoryFromDate(d?.startOf('day').toISOString() || undefined)}
         />
         <DatePicker
+          className="max-[767px]:!w-full"
           placeholder="Đến ngày"
           format="DD/MM/YYYY"
           onChange={(d) => setHistoryToDate(d?.endOf('day').toISOString() || undefined)}
         />
         <Input
+          className="max-[767px]:!w-full"
           placeholder="Tìm kiếm..."
           prefix={<SearchOutlined />}
           style={{ width: 220 }}
@@ -1005,11 +1174,11 @@ export default function PTClientsPage() {
           onChange={(e) => setHistorySearch(e.target.value)}
           onPressEnter={() => fetchHistory(1)}
         />
-        <Button type="primary" onClick={() => fetchHistory(1)}>
+        <Button type="primary" onClick={() => fetchHistory(1)} className="max-[767px]:w-full max-[767px]:min-h-[44px]">
           Tìm kiếm
         </Button>
       </div>
-      <div className="member-scroll-x">
+      <div className="pt-clients-table member-scroll-x">
         <Table
           dataSource={historyItems}
           columns={historyColumns}
@@ -1023,6 +1192,38 @@ export default function PTClientsPage() {
           }}
           locale={{ emptyText: <Empty description="Chưa có dữ liệu" /> }}
         />
+      </div>
+      <div className="pt-clients-cards">
+        {historyItems.map((record: HistoryEntry) => {
+          const member = typeof record.memberId === 'object' ? record.memberId as PTAssignmentMember : null
+          const cls = typeof record.classId === 'object' ? record.classId : null
+          const pt = typeof (record as any).ptId === 'object' ? (record as any).ptId : null
+          const label = REASON_LABELS[(record as any).reasonType || ''] || (record as any).reasonType || '—'
+          const reasonText = (record as any).reasonType === 'OTHER' && (record as any).reasonDetail ? (record as any).reasonDetail : label
+          return (
+            <div key={`${record._type}_${(record as any)._id}`} className="pt-client-card">
+              <div className="pt-client-header">
+                <div className="pt-client-name">{getUserDisplayName(member, '—')}</div>
+                {member?.memberCode && <div className="pt-client-code truncate">{member.memberCode}</div>}
+              </div>
+              <div className="pt-client-detail"><span className="pt-label">Loại</span><span className="pt-value">{record._type === 'workout_end' ? <Tag color="blue" className="m-0">Kết thúc giáo án</Tag> : <Tag color="purple" className="m-0">Kết thúc phụ trách</Tag>}</span></div>
+              <div className="pt-client-detail"><span className="pt-label">Lớp</span><span className="pt-value">{cls?.name || '—'}</span></div>
+              {record._type === 'workout_end' ? (
+                <div className="pt-client-detail"><span className="pt-label">Ngày kết thúc</span><span className="pt-value">{fmt((record as any).endedAt)}</span></div>
+              ) : (
+                <>
+                  <div className="pt-client-detail"><span className="pt-label">Gửi yêu cầu</span><span className="pt-value">{fmt((record as any).requestedAt)}</span></div>
+                  <div className="pt-client-detail"><span className="pt-label">Phê duyệt</span><span className="pt-value">{fmt((record as any).approvedAt)}</span></div>
+                </>
+              )}
+              {record._type !== 'workout_end' && <div className="pt-client-detail"><span className="pt-label">Lý do</span><span className="pt-value">{reasonText}</span></div>}
+              <div className="pt-client-detail"><span className="pt-label">PT</span><span className="pt-value">{pt ? getUserDisplayName(pt, '—') : '—'}</span></div>
+            </div>
+          )
+        })}
+        {historyItems.length === 0 && !historyLoading && (
+          <div className="text-center py-10 text-[var(--gs-text-muted)]">Chưa có dữ liệu</div>
+        )}
       </div>
     </div>
   )
@@ -1045,7 +1246,7 @@ export default function PTClientsPage() {
         </p>
       </div>
 
-      <div className="mb-4 flex gap-4 border-b border-[var(--gs-border)]">
+      <div className="pt-clients-tabs mb-4 flex gap-4 border-b border-[var(--gs-border)] max-[767px]:overflow-x-auto max-[767px]:whitespace-nowrap max-[767px]:pb-1 max-[767px]:gap-3">
         <button
           onClick={() => setActiveTab('active')}
           className={`pb-3 font-semibold transition ${

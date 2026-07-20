@@ -4,6 +4,7 @@ import type {
   HeatmapResponse,
   MemberStreakResponse,
   QRTokenResponse,
+  SearchedMember,
   StaffCheckinHistoryResponse,
   StaffVerifyCheckinResponse,
   TodayCheckinsResponse,
@@ -51,7 +52,10 @@ export const checkInService = {
   getMyCheckinHistory: (params?: Record<string, any>) =>
     api.get<{ checkins: any[]; pagination: any }>('/checkin/my-history', { params }),
 
-  verifyStaffCheckin: (data: { token?: string; memberId?: string }) =>
+  searchMember: (q: string) =>
+    api.get<{ member: SearchedMember | null }>('/checkin/staff/search-member', { params: { q } }),
+
+  verifyStaffCheckin: (data: { token?: string; memberId?: string; checkInMethod?: string; manualReason?: string }) =>
     api.post<StaffVerifyCheckinResponse>('/staff/checkin/verify', data),
 
   getStreak: (memberId: string) =>

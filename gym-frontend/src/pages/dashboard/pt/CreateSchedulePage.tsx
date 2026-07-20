@@ -316,44 +316,40 @@ export default function CreateSchedulePage() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto max-w-5xl px-4 py-6">
-        <div className="mb-6 flex items-center gap-4">
-          <Button icon={<ArrowLeftOutlined />} shape="circle" onClick={() => navigate('/pt/clients')} />
-          <div>
-            <h1 className="text-2xl font-bold text-[var(--gs-text)]">Tạo lịch tập từ giáo án mẫu</h1>
-            <p className="mt-0.5 text-sm text-[var(--gs-text-muted)]">{clientInfo ? `Hội viên: ${clientInfo.fullName}` : 'Đang tải...'}</p>
+      <div className="mx-auto max-w-5xl px-4 py-6 max-[767px]:px-3 max-[767px]:py-4">
+        <div className="cs-header mb-6 flex items-center gap-4 max-[767px]:relative max-[767px]:min-h-[44px]">
+          <Button className="cs-back-btn" icon={<ArrowLeftOutlined />} shape="circle" onClick={() => navigate('/pt/clients')} />
+          <div className="cs-title-area">
+            <h1 className="text-2xl font-bold text-[var(--gs-text)] max-[767px]:text-lg">Tạo lịch</h1>
+            <p className="mt-0.5 text-sm text-[var(--gs-text-muted)] max-[767px]:text-[13px]">{clientInfo ? `Hội viên: ${clientInfo.fullName}` : 'Đang tải...'}</p>
           </div>
         </div>
 
         <div className="space-y-5">
           {/* ── Section 1: Member info ── */}
           {clientInfo && (
-            <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-5">
-              <p className="text-lg font-bold text-[var(--gs-text)]">{clientInfo.fullName}</p>
+            <div className="cs-card rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-5">
+              <p className="text-lg font-bold text-[var(--gs-text)] max-[767px]:text-base">{clientInfo.fullName}</p>
               {memberPrefs ? (
-                <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2">
-                  <div className="space-y-2">
-                    {memberPrefs.specialization && <div className="flex items-center gap-2"><span className="text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0">Chuyên môn:</span><Tag color="blue" className="m-0 text-xs">{memberPrefs.specialization}</Tag></div>}
-                    {memberPrefs.goals.length > 0 && <div className="flex items-center gap-2"><span className="text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0">Mục tiêu:</span><div className="flex flex-wrap gap-1">{memberPrefs.goals.map((g, i) => <Tag key={i} color="purple" className="m-0 text-xs">{g}</Tag>)}</div></div>}
-                    {memberPrefs.desiredSessions > 0 && <div className="flex items-center gap-2"><span className="text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0">Số buổi/tuần:</span><span className="text-sm font-semibold text-[var(--gs-text)]">{memberPrefs.desiredSessions} buổi</span></div>}
-                    {memberPrefs.isNewToGym && <Tag color="orange" className="text-xs" icon={<ExclamationCircleOutlined />}>Người mới cần hướng dẫn cơ bản</Tag>}
-                  </div>
-                  <div className="space-y-2">
-                    {clientInfo.preferredTime && <div className="flex items-center gap-2"><span className="text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0">Khung giờ:</span><span className="text-sm text-[var(--gs-text)]">{clientInfo.preferredTime}</span></div>}
-                    {preferredTimeSlots.length > 0 && <div className="flex items-start gap-2"><span className="text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0 pt-0.5">Ca đăng ký:</span><div className="flex flex-wrap gap-1">{preferredTimeSlots.map((t, i) => <Tag key={i} color="cyan" className="m-0 text-xs">{t}</Tag>)}</div></div>}
-                    {preferredDaysOfWeek.length > 0 ? (
-                      <div className="flex items-start gap-2">
-                        <span className="text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0 pt-0.5">Ngày mong muốn:</span>
-                        <div className="flex flex-wrap gap-1">{preferredDaysOfWeek.map((d, i) => <Tag key={i} color="blue" className="m-0 text-xs">{DAY_LABEL_MAP[d]}</Tag>)}</div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-2">
-                        <span className="text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0 pt-0.5">Ngày mong muốn:</span>
-                        <Tag className="m-0 text-xs text-[var(--gs-text-muted)]" style={{ background: 'transparent', borderColor: 'var(--gs-border)' }}>Không yêu cầu cụ thể — để PT sắp xếp</Tag>
-                      </div>
-                    )}
-                    {memberPrefs.note && <div className="flex items-start gap-2"><span className="text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0">Ghi chú:</span><span className="text-xs text-[var(--gs-text-muted)]">{memberPrefs.note}</span></div>}
-                  </div>
+                <div className="cs-member-info-grid mt-3 grid grid-cols-2 gap-x-6 gap-y-2">
+                  {memberPrefs.specialization && <div className="cs-info-row flex items-center gap-2"><span className="cs-label text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0">Chuyên môn:</span><Tag color="blue" className="m-0 text-xs">{memberPrefs.specialization}</Tag></div>}
+                  {memberPrefs.goals.length > 0 && <div className="cs-info-row flex items-center gap-2"><span className="cs-label text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0">Mục tiêu:</span><div className="flex flex-wrap gap-1">{memberPrefs.goals.map((g, i) => <Tag key={i} color="purple" className="m-0 text-xs">{g}</Tag>)}</div></div>}
+                  {memberPrefs.desiredSessions > 0 && <div className="cs-info-row flex items-center gap-2"><span className="cs-label text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0">Số buổi/tuần:</span><span className="text-sm font-semibold text-[var(--gs-text)]">{memberPrefs.desiredSessions} buổi</span></div>}
+                  {clientInfo.preferredTime && <div className="cs-info-row flex items-center gap-2"><span className="cs-label text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0">Khung giờ:</span><span className="text-sm text-[var(--gs-text)]">{clientInfo.preferredTime}</span></div>}
+                  {preferredTimeSlots.length > 0 && <div className="cs-info-row flex items-start gap-2"><span className="cs-label text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0 pt-0.5">Ca đăng ký:</span><div className="flex flex-wrap gap-1">{preferredTimeSlots.map((t, i) => <Tag key={i} color="cyan" className="m-0 text-xs">{t}</Tag>)}</div></div>}
+                  {preferredDaysOfWeek.length > 0 ? (
+                    <div className="cs-info-row flex items-start gap-2">
+                      <span className="cs-label text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0 pt-0.5">Ngày mong muốn:</span>
+                      <div className="flex flex-wrap gap-1">{preferredDaysOfWeek.map((d, i) => <Tag key={i} color="blue" className="m-0 text-xs">{DAY_LABEL_MAP[d]}</Tag>)}</div>
+                    </div>
+                  ) : (
+                    <div className="cs-info-row flex items-start gap-2">
+                      <span className="cs-label text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0 pt-0.5">Ngày mong muốn:</span>
+                      <Tag className="m-0 text-xs text-[var(--gs-text-muted)]" style={{ background: 'transparent', borderColor: 'var(--gs-border)' }}>Không yêu cầu cụ thể — để PT sắp xếp</Tag>
+                    </div>
+                  )}
+                  {memberPrefs.note && <div className="cs-info-row flex items-start gap-2"><span className="cs-label text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0">Ghi chú:</span><span className="text-xs text-[var(--gs-text-muted)]">{memberPrefs.note}</span></div>}
+                  {memberPrefs.isNewToGym && <Tag color="orange" className="text-xs max-[767px]:mt-1" icon={<ExclamationCircleOutlined />}>Người mới cần hướng dẫn cơ bản</Tag>}
                 </div>
               ) : (<p className="mt-1 text-xs text-[var(--gs-text-muted)]">Chưa có thông tin đăng ký</p>)}
               {memberPrefs?.healthNotes && (
@@ -369,8 +365,8 @@ export default function CreateSchedulePage() {
           <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-5 space-y-4">
             <div className="space-y-3">
               <label className="block text-sm font-semibold text-[var(--gs-text)]">Chọn giáo án mẫu</label>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex-1 min-w-[140px]">
+              <div className="cs-filter-row flex flex-wrap items-end gap-3">
+                <div className="cs-filter-item flex-1 min-w-[140px] max-[767px]:!w-full">
                   <label className="mb-1 block text-[11px] font-medium text-[var(--gs-text-muted)]">Chuyên môn</label>
                   <Select className="w-full" size="small" value={filterSpecialty} onChange={(v) => { setFilterSpecialty(v); setSelectedTemplateId(undefined) }}
                     options={[
@@ -378,13 +374,13 @@ export default function CreateSchedulePage() {
                       ...allSpecialties.map((s) => ({ value: s, label: s })),
                     ]} />
                 </div>
-                <div className="flex-1 min-w-[180px]">
+                <div className="cs-filter-item flex-1 min-w-[180px] max-[767px]:!w-full">
                   <label className="mb-1 block text-[11px] font-medium text-[var(--gs-text-muted)]">Mục tiêu</label>
                   <Select className="w-full" size="small" mode="multiple" value={filterGoals} onChange={(v) => { setFilterGoals(v); setSelectedTemplateId(undefined) }}
                     maxTagCount={2}
                     options={allGoals.map((g) => ({ value: g, label: g }))} />
                 </div>
-                <div className="w-[120px]">
+                <div className="cs-filter-item w-[120px] max-[767px]:!w-full">
                   <label className="mb-1 block text-[11px] font-medium text-[var(--gs-text-muted)]">Số buổi/tuần</label>
                   <Select className="w-full" size="small" value={filterSessions} onChange={(v) => { setFilterSessions(v); setSelectedTemplateId(undefined) }}
                     options={[
@@ -413,16 +409,25 @@ export default function CreateSchedulePage() {
                   <Select.Option key="__empty" value="__empty" disabled style={{ display: 'none' }} />
                 )}
               </Select>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 max-[767px]:flex-col max-[767px]:items-stretch">
                 <span className="text-xs text-[var(--gs-text-muted)]">{filteredTemplates.length} giáo án khớp</span>
                 {(filterSpecialty || filterGoals.length > 0 || filterSessions > 0) && (
-                  <Button size="small" type="link" className="!text-xs" onClick={() => {
-                    if (memberPrefs) {
-                      setFilterSpecialty(memberPrefs.specialization || '')
-                      setFilterGoals(memberPrefs.goals || [])
-                      setFilterSessions(memberPrefs.desiredSessions || 0)
-                    }
-                  }}>Đặt lại theo hội viên</Button>
+                  <>
+                    <Button size="small" type="link" className="cs-reset-link !text-xs" onClick={() => {
+                      if (memberPrefs) {
+                        setFilterSpecialty(memberPrefs.specialization || '')
+                        setFilterGoals(memberPrefs.goals || [])
+                        setFilterSessions(memberPrefs.desiredSessions || 0)
+                      }
+                    }}>Đặt lại theo hội viên</Button>
+                    <Button size="small" className="cs-reset-btn" onClick={() => {
+                      if (memberPrefs) {
+                        setFilterSpecialty(memberPrefs.specialization || '')
+                        setFilterGoals(memberPrefs.goals || [])
+                        setFilterSessions(memberPrefs.desiredSessions || 0)
+                      }
+                    }}>Đặt lại theo hội viên</Button>
+                  </>
                 )}
               </div>
             </div>
@@ -587,9 +592,9 @@ export default function CreateSchedulePage() {
         </div>
 
         {selectedTemplateId && startDate && (
-          <div className="mt-6 flex justify-end gap-3 border-t border-[var(--gs-border)] pt-4">
-            <Button onClick={() => navigate('/pt/clients')}>Hủy</Button>
-            <Button type="primary" size="large" loading={submitting} disabled={!allFilled} onClick={handleSubmit}>
+          <div className="cs-footer mt-6 flex justify-end gap-3 border-t border-[var(--gs-border)] pt-4">
+            <Button onClick={() => navigate('/pt/clients')} className="max-[767px]:min-h-[44px]">Hủy</Button>
+            <Button type="primary" size="large" loading={submitting} disabled={!allFilled} onClick={handleSubmit} className="max-[767px]:min-h-[44px]">
               {isRepeating ? `Tạo lịch tập (${weeks.length} tuần)` : 'Tạo lịch tập'}
             </Button>
           </div>
