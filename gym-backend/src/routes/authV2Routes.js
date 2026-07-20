@@ -1,6 +1,6 @@
 import express from 'express'
-import { protect } from '../middlewares/authMiddleware.js'
-import { validateBody } from '../middlewares/validation.js'
+import { protect, superAdminOnly } from '../middlewares/authMiddleware.js'
+import { validateBody, validateQuery, validateParams } from '../middlewares/validation.js'
 import {
   authLoginLimiter,
   authRegisterLimiter,
@@ -16,7 +16,13 @@ import {
   resendVerificationSchema,
   resetPasswordSchema,
 } from '../validators/authValidator.js'
+import {
+  loginHistoryQuerySchema,
+  deviceIdParamsSchema,
+  unlockBodySchema,
+} from '../validators/loginHistoryValidator.js'
 import * as authController from '../controllers/v2AuthController.js'
+import * as hardeningController from '../controllers/loginHistoryController.js'
 
 const router = express.Router()
 
@@ -29,5 +35,11 @@ router.post('/verify-email', authOtpLimiter, validateBody(verifyEmailSchema), au
 router.post('/resend-verification', authOtpLimiter, validateBody(resendVerificationSchema), authController.resendVerification)
 router.post('/forgot-password', authPasswordResetLimiter, validateBody(forgotPasswordSchema), authController.forgotPassword)
 router.post('/reset-password', authPasswordResetLimiter, validateBody(resetPasswordSchema), authController.resetPassword)
+
+router.get('/login-history', protect, validateQuery(loginHistoryQuerySchema), hardeningController.getHistory)
+router.get('/sessions', protect, hardeningController.getSessions)
+router.delete('/devices/:id', protect, validateParams(deviceIdParamsSchema), hardeningController.revokeDeviceHandler)
+router.delete('/devices', protect, hardeningController.revokeAllHandler)
+router.post('/unlock', protect, superAdminOnly, validateBody(unlockBodySchema), hardeningController.unlockHandler)
 
 export default router

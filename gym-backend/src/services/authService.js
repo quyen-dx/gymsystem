@@ -7,6 +7,7 @@ import logger from '../config/logger.js'
 import * as tokenService from './tokenService.js'
 import * as otpService from './otpService.js'
 import { sendPasswordResetEmail } from './emailService.js'
+import { recordLoginHistory } from './loginHistoryService.js'
 
 const hashToken = (raw) => crypto.createHash('sha256').update(raw).digest('hex')
 
@@ -44,30 +45,43 @@ export const register = async ({ email, password, name }) => {
 }
 
 export const login = async (email, password, deviceInfo = {}) => {
+  const device = {
+    ip: deviceInfo.ip || '',
+    userAgent: deviceInfo.userAgent || '',
+    platform: deviceInfo.platform || '',
+  }
+
   const user = await User.findOne({ email }).select('+passwordHash')
   if (!user) {
+    await recordLoginHistory({ action: 'login_failed', ...device, failureReason: 'user_not_found' })
     throw new AppError('Email hoặc mật khẩu không đúng', 401, 'AUTH_INVALID_CREDENTIALS')
   }
 
   if (!user.isActive) {
+    await recordLoginHistory({ userId: user._id, action: 'login_failed', ...device, failureReason: 'account_inactive' })
     throw new AppError('Tài khoản đã bị vô hiệu hóa', 403, 'AUTH_USER_INACTIVE')
   }
 
   if (user.status === 'locked' || user.isLocked) {
+    await recordLoginHistory({ userId: user._id, action: 'login_failed', ...device, failureReason: 'account_locked' })
     throw new AppError('Tài khoản đã bị khóa', 423, 'AUTH_USER_LOCKED')
   }
 
   if (!user.isVerified && user.provider === 'email') {
+    await recordLoginHistory({ userId: user._id, action: 'login_failed', ...device, failureReason: 'email_unverified' })
     throw new AppError('Vui lòng xác thực email trước khi đăng nhập', 403, 'AUTH_EMAIL_UNVERIFIED')
   }
 
   const isMatch = await user.comparePassword(password)
   if (!isMatch) {
+    await recordLoginHistory({ userId: user._id, action: 'login_failed', ...device, failureReason: 'invalid_password' })
     throw new AppError('Email hoặc mật khẩu không đúng', 401, 'AUTH_INVALID_CREDENTIALS')
   }
 
   const accessToken = tokenService.generateAccessToken(user)
   const refreshResult = await tokenService.generateRefreshToken(user, deviceInfo)
+
+  await recordLoginHistory({ userId: user._id, action: 'login', ...device })
 
   logger.info('User logged in', { userId: user._id })
 
