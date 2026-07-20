@@ -577,16 +577,16 @@ export const listRefundRequests = async ({ page = 1, limit = 20, status, search 
     }
   }
 
-  // Cancel status mapping: 'PENDING'/'pending'/'APPROVED'/'approved'/'REJECTED'/'rejected' or all when empty
-  const [cancelStatus, refundStatus] = status
-    ? String(status).toLowerCase() === 'pending'
-      ? ['pending', 'PENDING']
-      : [String(status).toLowerCase(), status]
-    : [null, null]
-
-  // Khi không có status filter, vẫn query cancellation requests (lấy tất cả)
-  // Khi có status filter, chỉ query cancellation requests theo status tương ứng
-  const cancelFilter = cancelStatus ? { status: cancelStatus } : {}
+  // Xây dựng cancelFilter từ status giống refundFilter
+  let cancelFilter = {}
+  if (status) {
+    const statuses = String(status).split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    if (statuses.length === 1) {
+      cancelFilter = { status: statuses[0] }
+    } else if (statuses.length > 1) {
+      cancelFilter = { status: { $in: statuses } }
+    }
+  }
   if (memberFilter.memberId) cancelFilter.memberId = memberFilter.memberId
 
   const refundFilter = { ...filter }
@@ -594,7 +594,7 @@ export const listRefundRequests = async ({ page = 1, limit = 20, status, search 
   const skip = (Number(page) - 1) * Number(limit)
   const limitNum = Number(limit)
 
-  const queryCancels = status ? cancelStatus !== null : true
+  const queryCancels = true
 
   const [cancelRequests, refundItems] = await Promise.all([
     queryCancels
@@ -664,6 +664,9 @@ export const listRefundRequests = async ({ page = 1, limit = 20, status, search 
       }
     }
 
+    const renewalTotal = (cr.renewalRefunds || []).reduce((sum, r) => sum + (r.refundAmount || 0), 0)
+    const renewalCount = (cr.renewalRefunds || []).length
+
     return {
       _id: cr._id,
       memberId: cr.memberId,
@@ -683,8 +686,8 @@ export const listRefundRequests = async ({ page = 1, limit = 20, status, search 
       usedBenefits: false,
       refundPolicyResult,
       policyVersion: '1.0',
-      pendingPeriodsTotal: 0,
-      pendingPeriodsCount: 0,
+      pendingPeriodsTotal: renewalTotal,
+      pendingPeriodsCount: renewalCount,
       __source: 'cancellation',
       cancellationRequestId: cr._id,
       cycle,

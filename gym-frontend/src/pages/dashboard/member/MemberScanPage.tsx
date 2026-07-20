@@ -126,12 +126,6 @@ export default function MemberScanPage() {
               <div id="member-scanner-container" className={`w-full rounded-2xl overflow-hidden ${cameraError ? 'hidden' : ''}`} />
 
               {cameraReady && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="rounded-xl border-2 border-white/60" style={{ width: 280, height: 280 }} />
-                </div>
-              )}
-
-              {cameraReady && (
                 <div className="mt-4 flex justify-center">
                   <Button onClick={stopCamera}>Đóng camera</Button>
                 </div>

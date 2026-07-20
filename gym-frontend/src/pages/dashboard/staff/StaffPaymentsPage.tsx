@@ -1,6 +1,6 @@
 import { CheckCircleFilled, CloseCircleFilled, EyeOutlined, FilterOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
-import { Alert, Badge, Button, DatePicker, Descriptions, Input, Modal, Select, Space, Table, Tabs, Tag, message } from 'antd'
-import { useEffect , useState } from 'react'
+import { Alert, Badge, Button, DatePicker, Descriptions, Drawer, Input, Modal, Select, Space, Table, Tabs, Tag, message } from 'antd'
+import React, { useEffect , useState } from 'react'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { membershipService, type RefundRequest } from '../../../services/membershipService'
 import { socketService } from '../../../services/socketService'
@@ -40,6 +40,15 @@ function getPaymentStatusMeta(status: string) {
 
 const rrStatusColors: Record<string, string> = { PENDING: 'warning', APPROVED: 'success', REJECTED: 'error', CANCELLED: 'default', REFUNDED: 'orange' }
 const rrStatusLabels: Record<string, string> = { PENDING: 'Chờ duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Từ chối', CANCELLED: 'Đã hủy', REFUNDED: 'Đã hoàn tiền' }
+
+function Row({ label, value, bold }: { label: string; value: React.ReactNode; bold?: boolean }) {
+  return (
+    <div className="flex items-center justify-between px-4 py-2.5">
+      <span className="text-[var(--gs-text-soft)]">{label}</span>
+      <span className={bold ? 'font-medium text-[var(--gs-text)]' : ''}>{value}</span>
+    </div>
+  )
+}
 
 export default function StaffPaymentsPage() {
   const [activeTab, setActiveTab] = useState('history')
@@ -184,9 +193,32 @@ export default function StaffPaymentsPage() {
   const getRefundBreakdown = (rr: RefundRequest) => {
   const hasPending = rr.pendingPeriodsCount && rr.pendingPeriodsCount > 0
   const pendingTotal = rr.pendingPeriodsTotal || 0
-  const primaryAmount = rr.status === 'PENDING' ? rr.refundAmount : Math.max(0, rr.refundAmount - pendingTotal)
-  const total = rr.status === 'PENDING' ? rr.refundAmount + pendingTotal : rr.refundAmount
-  return { primaryAmount, pendingTotal, total, hasPending, pendingCount: rr.pendingPeriodsCount || 0 }
+
+  // Đã từ chối/hủy: không hoàn gì cả
+  if (rr.status === 'REJECTED' || rr.status === 'CANCELLED') {
+    return { mainRefund: 0, pendingTotal: 0, total: 0, hasPending, pendingCount: rr.pendingPeriodsCount || 0 }
+  }
+
+  // Period-based PENDING: refundAmount = tiền gói chính (chưa gộp renewal)
+  if (rr.status === 'PENDING' && !rr.__source) {
+    return {
+      mainRefund: rr.refundAmount || 0,
+      pendingTotal,
+      total: (rr.refundAmount || 0) + pendingTotal,
+      hasPending,
+      pendingCount: rr.pendingPeriodsCount || 0,
+    }
+  }
+
+  // APPROVED/REFUNDED period-based + ALL cancellations: refundAmount = gói chính + renewal
+  const mainRefund = Math.max(0, (rr.refundAmount || 0) - pendingTotal)
+  return {
+    mainRefund,
+    pendingTotal,
+    total: rr.refundAmount || 0,
+    hasPending,
+    pendingCount: rr.pendingPeriodsCount || 0,
+  }
 }
 
 const renderBenefitsTag = (rr: RefundRequest) => {
@@ -220,12 +252,12 @@ const renderBenefitsTag = (rr: RefundRequest) => {
       title: 'Số tiền', key: 'refundAmount', width: 200,
       render: (_: any, rr: RefundRequest) => {
         if (rr.pendingPeriodsCount && rr.pendingPeriodsCount > 0) {
-          const { primaryAmount, pendingTotal, total, pendingCount } = getRefundBreakdown(rr)
+          const { mainRefund, pendingTotal, total, pendingCount } = getRefundBreakdown(rr)
           return (
             <div className="text-xs leading-relaxed">
               <div className="font-medium text-[var(--gs-accent)]">{formatMoney(total)}</div>
               <div className="text-[var(--gs-text-muted)]">
-                Gói: {formatMoney(primaryAmount)} + GH ({pendingCount} kỳ): {formatMoney(pendingTotal)}
+                Gói: {formatMoney(mainRefund)} + GH ({pendingCount} kỳ): {formatMoney(pendingTotal)}
               </div>
             </div>
           )
@@ -274,57 +306,39 @@ const renderBenefitsTag = (rr: RefundRequest) => {
   const refundHistoryColumns = [
     {
       title: 'Hội viên', dataIndex: 'memberId', key: 'memberId', width: 180,
-      render: (member: any) => <div><div className="font-medium">{member?.fullName || member?.name || '-'}</div><div className="text-xs text-[var(--gs-text-muted)]">{member?.email}</div></div>,
+      render: (member: any) => <div><div className="font-medium">{member?.fullName || member?.name || '-'}</div><div className="text-xs text-[var(--gs-text-muted)]">{member?.email || member?.memberCode || ''}</div></div>,
     },
     {
       title: 'Gói tập', dataIndex: 'planId', key: 'planId', width: 120,
       render: (plan: any) => plan?.nameVi || '-',
     },
     {
-      title: 'Số tiền', key: 'refundAmount', width: 200,
+      title: 'Số tiền hoàn', key: 'refundAmount', width: 120,
       render: (_: any, rr: RefundRequest) => {
-        if (rr.pendingPeriodsCount && rr.pendingPeriodsCount > 0) {
-          const { primaryAmount, pendingTotal, total, pendingCount } = getRefundBreakdown(rr)
-          return (
-            <div className="text-xs leading-relaxed">
-              <div className="font-medium text-[var(--gs-accent)]">{formatMoney(total)}</div>
-              <div className="text-[var(--gs-text-muted)]">
-                Gói: {formatMoney(primaryAmount)} + GH ({pendingCount} kỳ): {formatMoney(pendingTotal)}
-              </div>
-            </div>
-          )
-        }
-        return <span className="font-medium text-[var(--gs-accent)]">{formatMoney(rr.refundAmount)}</span>
+        const { total } = getRefundBreakdown(rr)
+        return <span className="font-semibold text-[var(--gs-accent)]">{formatMoney(total)}</span>
       },
-    },
-    {
-      title: 'Đã dùng', key: 'daysUsed', width: 80,
-      render: (_: any, rr: RefundRequest) => <span>{rr.daysUsedAtRequest ?? '-'} ngày</span>,
-    },
-    {
-      title: 'Điều kiện hoàn tiền', key: 'eligibility', width: 160,
-      render: (_: any, rr: RefundRequest) => (
-        <Space direction="vertical" size={0}>
-          {renderEligibilityTag(rr)}
-          {rr.refundPolicyResult && <span className="text-xs text-[var(--gs-text-muted)]">{rr.refundPolicyResult}</span>}
-        </Space>
-      ),
-    },
-    {
-      title: 'Quyền lợi', key: 'benefits', width: 120,
-      render: (_: any, rr: RefundRequest) => renderBenefitsTag(rr),
-    },
-    {
-      title: 'Ngày yêu cầu', dataIndex: 'requestedAt', key: 'requestedAt', width: 150,
-      render: (date: string) => formatDate(date),
     },
     {
       title: 'Trạng thái', dataIndex: 'status', key: 'status', width: 110,
       render: (status: string) => <Tag color={rrStatusColors[status] || 'default'}>{rrStatusLabels[status] || status}</Tag>,
     },
     {
+      title: 'Ngày xử lý', key: 'processedAt', width: 150,
+      render: (_: any, rr: RefundRequest) => formatDate(rr.reviewedAt || rr.requestedAt),
+    },
+    {
       title: 'Người xử lý', dataIndex: 'reviewedBy', key: 'reviewedBy', width: 130,
-      render: (user: any) => user?.name || user?.fullName || '-',
+      render: (user: any) => {
+        if (!user) return <span className="text-[var(--gs-text-muted)]">—</span>
+        return user?.name || user?.fullName || '—'
+      },
+    },
+    {
+      title: '', key: 'action', width: 80,
+      render: (_: any, rr: RefundRequest) => (
+        <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailRR(rr)}>Chi tiết</Button>
+      ),
     },
   ]
 
@@ -604,140 +618,128 @@ const renderBenefitsTag = (rr: RefundRequest) => {
             />
           </div>
 
-          {/* DETAIL MODAL */}
-          <Modal
-            title="Chi tiết yêu cầu hoàn tiền"
+          {/* DETAIL DRAWER */}
+          <Drawer
+            title="Chi tiết hoàn tiền"
             open={Boolean(detailRR)}
-            onCancel={() => setDetailRR(null)}
-            footer={<Button onClick={() => setDetailRR(null)}>Đóng</Button>}
-            width={640}
+            onClose={() => setDetailRR(null)}
+            width={560}
+            styles={{ body: { padding: '20px 24px' } }}
           >
-            {detailRR && (
-              <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-2">
-                <Descriptions bordered size="small" column={1}>
-                  <Descriptions.Item label="Hội viên">
-                    {detailRR.memberId?.fullName || detailRR.memberId?.name || '-'}
-                    <span className="ml-2 text-xs text-[var(--gs-text-muted)]">({detailRR.memberId?.email})</span>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="Gói tập">{detailRR.planId?.nameVi || '-'}</Descriptions.Item>
-                  <Descriptions.Item label="Chi tiết hoàn tiền">
-                    {(() => {
-                      const { primaryAmount, pendingTotal, total, hasPending, pendingCount } = getRefundBreakdown(detailRR)
-                      return (
-                        <div className="space-y-1 text-xs w-full">
-                          <div className="flex justify-between">
-                            <span className="text-[var(--gs-text-soft)]">Gói đang hoạt động</span>
-                            <span className={primaryAmount > 0 ? 'font-medium' : 'text-[var(--gs-text-muted)]'}>{primaryAmount > 0 ? formatMoney(primaryAmount) : '0đ'}</span>
-                          </div>
-                          <div className="text-[10px] text-[var(--gs-text-muted)] pl-2 leading-tight">
-                            {detailRR.refundPolicyResult === 'Đủ điều kiện hoàn tiền' ? '(Đủ điều kiện hoàn tiền)' : `(Không đủ điều kiện — ${detailRR.refundPolicyResult})`}
-                          </div>
-                          {hasPending && (
-                            <div className="flex justify-between mt-1">
-                              <span className="text-[var(--gs-text-soft)]">Gia hạn ({pendingCount} kỳ chưa kích hoạt)</span>
-                              <span className="font-medium text-[var(--gs-success)]">{formatMoney(pendingTotal)}</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between mt-1 pt-1 border-t border-dashed border-[var(--gs-border)]">
-                            <span className="font-semibold">Tổng hoàn</span>
-                            <span className="font-bold text-[var(--gs-accent)]">{formatMoney(total)}</span>
-                          </div>
-                        </div>
-                      )
-                    })()}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="Lý do hủy">{detailRR.reason || '-'}</Descriptions.Item>
-                </Descriptions>
+            {detailRR && (() => {
+              const member = detailRR.memberId || {}
+              const plan = detailRR.planId || {}
+              const cycle = detailRR.cycle || {}
+              const { mainRefund, pendingTotal, total, hasPending, pendingCount } = getRefundBreakdown(detailRR)
+              const isActivated = !!cycle.activatedAt
+              const renewalPrice = pendingCount > 0 ? pendingTotal / pendingCount : 0
 
-                <h4 className="text-sm font-semibold text-[var(--gs-text)]">Thông tin kỳ hạn</h4>
+              const explainText = isActivated
+                ? 'Gói chính đã được kích hoạt nên không được hoàn.'
+                : mainRefund > 0
+                  ? 'Gói chính chưa kích hoạt nên được hoàn toàn bộ.'
+                  : ''
 
-                {detailRR.__source === 'cancellation' ? (
-                  /* Cancellation request: show cycle-based info */
-                  <div className="rounded-xl border border-[var(--gs-info-border)] bg-[var(--gs-info-bg)] p-4 text-sm space-y-2">
-                    {detailRR.activationStatus === 'pending' ? (
-                      <>
-                        <p className="font-medium text-[var(--gs-text)]">🟡 Gói tập này chưa được kích hoạt.</p>
-                        <p className="text-[var(--gs-text-muted)]">
-                          Hội viên chưa check-in lần đầu nên thời hạn sử dụng chưa bắt đầu và quyền lợi chưa được sử dụng.
-                        </p>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-[var(--gs-text-soft)]">Ngày mua</span>
-                          <span className="font-medium">{formatDate(detailRR.cycle?.purchasedAt)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-[var(--gs-text-soft)]">Ngày kích hoạt</span>
-                          <span className="font-medium">Chưa kích hoạt</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-[var(--gs-text-soft)]">Thời hạn sử dụng</span>
-                          <span className="font-medium">Chưa bắt đầu</span>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-[var(--gs-text-soft)]">Ngày kích hoạt</span>
-                          <span className="font-medium">{formatDate(detailRR.cycle?.activatedAt)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-[var(--gs-text-soft)]">Ngày kết thúc</span>
-                          <span className="font-medium">{formatDate(detailRR.cycle?.expiresAt)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-[var(--gs-text-soft)]">Quyền lợi đầu tiên</span>
-                          <span className="font-medium">{detailRR.cycle?.firstBenefitType || '—'}</span>
-                        </div>
-                      </>
-                    )}
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[var(--gs-text-soft)]">Số ngày đã sử dụng</span>
-                      <span className="font-medium">0 ngày (chưa kích hoạt)</span>
+              return (
+                <div className="space-y-5">
+
+                  {/* 0. HỘI VIÊN */}
+                  <section>
+                    <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] overflow-hidden text-sm">
+                      <div className="px-4 py-2.5 font-semibold text-[var(--gs-text)] border-b border-[var(--gs-border)]">Hội viên</div>
+                      <div className="divide-y divide-[var(--gs-border)]">
+                        <Row label="Họ tên" value={member.fullName || member.name || '-'} bold />
+                        <Row label="Mã hội viên" value={member.memberCode || '-'} />
+                        <Row label="Email" value={member.email || '-'} />
+                        <Row label="SĐT" value={member.phone || '-'} />
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  /* Period-based refund: show period data */
-                  <Descriptions bordered size="small" column={2}>
-                    <Descriptions.Item label="Ngày bắt đầu">{formatDate(detailRR.membershipPeriodId?.startDate)}</Descriptions.Item>
-                    <Descriptions.Item label="Ngày kết thúc">{formatDate(detailRR.membershipPeriodId?.endDate)}</Descriptions.Item>
-                    <Descriptions.Item label="Ngày kích hoạt">{formatDate(detailRR.membershipPeriodId?.activatedAt)}</Descriptions.Item>
-                    <Descriptions.Item label="Ngày gửi yêu cầu">{formatDate(detailRR.requestedAt)}</Descriptions.Item>
-                    <Descriptions.Item label="Số ngày đã sử dụng">{detailRR.daysUsedAtRequest ?? '-'}</Descriptions.Item>
-                    <Descriptions.Item label="Điều kiện hoàn tiền">
-                      <Tag color={detailRR.eligibleWithin7Days ? 'success' : 'error'} icon={detailRR.eligibleWithin7Days ? <CheckCircleFilled /> : <CloseCircleFilled />}>
-                        {detailRR.eligibleWithin7Days ? 'Trong 7 ngày' : 'Quá 7 ngày'}
-                      </Tag>
-                    </Descriptions.Item>
-                  </Descriptions>
-                )}
+                  </section>
 
-                {detailRR.__source !== 'cancellation' && (
-                  <>
-                    <h4 className="text-sm font-semibold text-[var(--gs-text)]">Quyền lợi đã sử dụng</h4>
-                    <Descriptions bordered size="small" column={2}>
-                      <Descriptions.Item label="Check-in">
-                        <Tag color={detailRR.usedCheckIn ? 'warning' : 'default'}>{detailRR.usedCheckIn ? `Đã sử dụng (${detailRR.checkInCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
-                      </Descriptions.Item>
-                      <Descriptions.Item label="PT">
-                        <Tag color={detailRR.usedPT ? 'warning' : 'default'}>{detailRR.usedPT ? `Đã sử dụng (${detailRR.ptBookingCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
-                      </Descriptions.Item>
-                      <Descriptions.Item label="Phòng tập">
-                        <Tag color={detailRR.usedGym ? 'warning' : 'default'}>{detailRR.usedGym ? `Đã sử dụng (${detailRR.gymUsageCountAtRequest} lần)` : 'Chưa sử dụng'}</Tag>
-                      </Descriptions.Item>
-                    </Descriptions>
-                  </>
-                )}
+                  {/* 1. GÓI CHÍNH */}
+                  <section>
+                    <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] overflow-hidden text-sm">
+                      <div className="px-4 py-2.5 font-semibold text-[var(--gs-text)] border-b border-[var(--gs-border)]">Gói chính</div>
+                      <div className="divide-y divide-[var(--gs-border)]">
+                        <Row label="Tên gói" value={plan.nameVi || '-'} bold />
+                        <Row label="Giá" value={formatMoney(plan.price || 0)} />
+                        <Row label="Trạng thái" value={<Tag color={isActivated ? 'success' : 'warning'} className="m-0">{isActivated ? 'Đã kích hoạt' : 'Chưa kích hoạt'}</Tag>} />
+                      </div>
+                      <div className="flex items-center justify-between px-4 py-3 bg-[var(--gs-card)] border-t border-[var(--gs-border)]">
+                        <span className="font-medium text-[var(--gs-text)]">Hoàn tiền</span>
+                        <span className={`font-bold ${mainRefund > 0 ? 'text-[var(--gs-success)]' : 'text-[var(--gs-text-muted)]'}`}>
+                          {formatMoney(mainRefund)}
+                        </span>
+                      </div>
+                      {explainText && (
+                        <p className="px-4 py-2 text-xs text-[var(--gs-text-muted)] italic m-0 border-t border-[var(--gs-border)] leading-relaxed">
+                          {explainText}
+                        </p>
+                      )}
+                    </div>
+                  </section>
 
-                <Descriptions bordered size="small" column={1}>
-                  <Descriptions.Item label="Kết luận chính sách">
-                    <Tag color={detailRR.refundPolicyResult === 'Đủ điều kiện hoàn tiền' ? 'success' : 'error'}>
-                      {detailRR.refundPolicyResult || '-'}
-                    </Tag>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="Ghi chú của Staff">{detailRR.staffNote || '-'}</Descriptions.Item>
-                </Descriptions>
-              </div>
-            )}
-          </Modal>
+                  {/* 2. GÓI GIA HẠN */}
+                  {hasPending && (
+                    <section>
+                      <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] overflow-hidden text-sm">
+                        <div className="px-4 py-2.5 font-semibold text-[var(--gs-text)] border-b border-[var(--gs-border)]">Gói gia hạn</div>
+                        <div className="divide-y divide-[var(--gs-border)]">
+                          <Row label="Tên gói" value={plan.nameVi || '-'} bold />
+                          <Row label="Giá mỗi gói" value={formatMoney(renewalPrice)} />
+                          <Row label="Số lượng" value={<span className="font-semibold">{pendingCount} gói</span>} />
+                          <Row label="Trạng thái" value={<Tag color="warning" className="m-0">Chờ kích hoạt</Tag>} />
+                        </div>
+                        <div className="flex items-center justify-between px-4 py-3 bg-[var(--gs-card)] border-t border-[var(--gs-border)]">
+                          <span className="font-medium text-[var(--gs-text)]">Hoàn tiền</span>
+                          <span className="font-bold text-[var(--gs-success)]">{formatMoney(pendingTotal)}</span>
+                        </div>
+                        <div className="px-4 py-2 space-y-1 border-t border-[var(--gs-border)]">
+                          <div className="text-xs text-[var(--gs-text-soft)] mb-1">Chi tiết:</div>
+                          {Array.from({ length: pendingCount }).map((_, i) => (
+                            <div key={i} className="flex items-center justify-between text-xs py-1">
+                              <span className="text-[var(--gs-text-soft)]">Gia hạn #{i + 1}</span>
+                              <span className="font-medium text-[var(--gs-text)]">{formatMoney(renewalPrice)}</span>
+                              <span className="text-[var(--gs-success)]">Được hoàn</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
+                  {/* 3. KẾT QUẢ HOÀN TIỀN */}
+                  <section>
+                    <div className="rounded-xl border-2 border-[var(--gs-accent)] bg-[var(--gs-elevated)] overflow-hidden text-sm">
+                      <div className="px-4 py-2.5 font-semibold text-[var(--gs-text)] border-b border-[var(--gs-accent)]">Kết quả hoàn tiền</div>
+                      <div className="p-4 space-y-2">
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-[var(--gs-text-soft)]">Gói chính</span>
+                          <span className={`font-medium ${mainRefund > 0 ? 'text-[var(--gs-success)]' : 'text-[var(--gs-text-muted)]'}`}>
+                            {formatMoney(mainRefund)}
+                          </span>
+                        </div>
+                        {hasPending && (
+                          <div className="flex items-center justify-between py-1">
+                            <span className="text-[var(--gs-text-soft)]">Gói gia hạn</span>
+                            <span className="text-right">
+                              <span className="text-[var(--gs-text-soft)] text-xs">{formatMoney(renewalPrice)} × {pendingCount} = </span>
+                              <span className="font-medium text-[var(--gs-success)]">{formatMoney(pendingTotal)}</span>
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between px-4 py-3.5 bg-[var(--gs-accent)] bg-opacity-10 border-t-2 border-[var(--gs-accent)]">
+                        <span className="font-bold text-base text-[var(--gs-text)]">Hội viên nhận</span>
+                        <span className="font-bold text-lg text-[var(--gs-success)]">{formatMoney(total)}</span>
+                      </div>
+                    </div>
+                  </section>
+
+                </div>
+              )
+            })()}
+          </Drawer>
 
           {/* APPROVE MODAL */}
           <Modal
@@ -761,7 +763,11 @@ const renderBenefitsTag = (rr: RefundRequest) => {
                     <div className="flex justify-between text-sm">
                       <span className="text-[var(--gs-text-soft)]">Gói đang hoạt động</span>
                       <span className={`font-medium ${approvingRR.refundPolicyResult === 'Đủ điều kiện hoàn tiền' ? 'text-[var(--gs-accent)]' : 'text-[var(--gs-text-muted)]'}`}>
-                        {approvingRR.refundPolicyResult === 'Đủ điều kiện hoàn tiền' ? formatMoney(approvingRR.refundAmount) : 'Không hoàn'}
+                        {(() => {
+                          if (approvingRR.refundPolicyResult !== 'Đủ điều kiện hoàn tiền') return 'Không hoàn'
+                          const bd = getRefundBreakdown(approvingRR)
+                          return formatMoney(bd.mainRefund)
+                        })()}
                       </span>
                     </div>
                     {approvingRR.refundPolicyResult !== 'Đủ điều kiện hoàn tiền' && (
@@ -778,7 +784,10 @@ const renderBenefitsTag = (rr: RefundRequest) => {
                     <div className="flex justify-between text-sm mt-1 pt-1 border-t border-dashed border-[var(--gs-border)]">
                       <span className="font-semibold text-[var(--gs-text)]">Dự kiến tổng hoàn</span>
                       <span className="font-bold text-[var(--gs-accent)]">
-                        {formatMoney(approvingRR.refundAmount + (approvingRR.pendingPeriodsTotal || 0))}
+                        {(() => {
+                          const bd = getRefundBreakdown(approvingRR)
+                          return formatMoney(bd.total)
+                        })()}
                       </span>
                     </div>
                   </div>

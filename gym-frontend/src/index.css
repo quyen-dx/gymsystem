@@ -61,6 +61,9 @@ textarea {
   height: 100% !important;
 }
 
+/* Ẩn viewfinder mặc định của thư viện html5-qrcode — tránh 2 khung scan */
+/* Không có custom overlay — camera render thuần từ html5-qrcode */
+
 .staff-checkin-camera {
   display: none;
 }
