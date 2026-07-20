@@ -21,6 +21,7 @@ import infraRoutes from './routes/infraRoutes.js'
 import addressRoutes from './routes/addressRoutes.js'
 import auditLogRoutes from './routes/auditLogRoutes.js'
 import authRoutes from './routes/authRoutes.js'
+import authV2Routes from './routes/authV2Routes.js'
 import checkInRoutes from './routes/checkInRoutes.js'
 import cmsRoutes from './routes/cmsRoutes.js'
 import memberRoutes from './routes/memberRoutes.js'
@@ -106,6 +107,7 @@ const createApp = () => {
   app.use(maintenanceModeGuard)
 
   app.use('/api/v1', infraRoutes)
+  app.use('/api/v1/auth', authV2Routes)
 
   app.use('/api/auth', authRoutes)
   app.use('/api/cms', cmsRoutes)

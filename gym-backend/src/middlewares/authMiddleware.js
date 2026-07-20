@@ -1,61 +1,41 @@
-import User from '../models/User.js';
-import { verifyAccessToken } from '../utils/generateToken.js';
-
-const isAccountLocked = (user) =>
-  user?.status === 'locked' || user?.isLocked === true || user?.isActive === false
+import { verifyAccessToken } from '../services/tokenService.js'
 
 export const protect = async (req, res, next) => {
   try {
-    let token;
+    let token
 
     if (req.headers.authorization?.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
+      token = req.headers.authorization.split(' ')[1]
     }
 
     if (!token) {
-      return res.status(401).json({ message: 'Bạn chưa đăng nhập' });
+      return res.status(401).json({ message: 'Bạn chưa đăng nhập' })
     }
 
-    const decoded = verifyAccessToken(token);
-    if (!decoded) {
-      return res.status(401).json({ message: 'Token không hợp lệ hoặc đã hết hạn' });
-    }
+    const { user } = await verifyAccessToken(token)
 
-    const user = await User.findById(decoded.id);
-
-    if (!user) {
-      return res.status(401).json({ message: 'Token không hợp lệ' });
-    }
-
-    if (isAccountLocked(user)) {
-      return res.status(403).json({ code: 'ACCOUNT_LOCKED', message: 'Account is locked' });
-    }
-
-    req.user = user;
-    next();
+    req.user = user
+    next()
   } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: 'Token đã hết hạn', code: 'TOKEN_EXPIRED' });
-    }
-    return next(error); // <-- chuyển lỗi sang error handler thay vì res trực tiếp
+    return next(error)
   }
-};
+}
 
 export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         message: `Bạn không có quyền thực hiện hành động này. Yêu cầu role: ${roles.join(', ')}`,
-      });
+      })
     }
-    next();
-  };
-};
+    next()
+  }
+}
 
-export const adminOnly = authorize('super_admin', 'admin');
-export const superAdminOnly = authorize('super_admin');
-export const sellerOnly = authorize('seller');
-export const sellerOrAdmin = authorize('seller', 'super_admin', 'admin');
-export const adminOrStaff = authorize('super_admin', 'admin', 'staff');
-export const adminOrPT = authorize('super_admin', 'admin', 'pt');
-export const allRoles = authorize('super_admin', 'admin', 'pt', 'staff', 'member', 'seller');
+export const adminOnly = authorize('super_admin', 'admin')
+export const superAdminOnly = authorize('super_admin')
+export const sellerOnly = authorize('seller')
+export const sellerOrAdmin = authorize('seller', 'super_admin', 'admin')
+export const adminOrStaff = authorize('super_admin', 'admin', 'staff')
+export const adminOrPT = authorize('super_admin', 'admin', 'pt')
+export const allRoles = authorize('super_admin', 'admin', 'pt', 'staff', 'member', 'seller')

@@ -29,15 +29,18 @@ passwordResetTokenSchema.index({ token: 1 }, { unique: true })
 passwordResetTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 3600 })
 
 passwordResetTokenSchema.statics.generate = async function (userId) {
-  const token = crypto.randomBytes(32).toString('hex')
+  const rawToken = crypto.randomBytes(32).toString('hex')
+  const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex')
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
-  return this.create({ userId, token, expiresAt })
+  const doc = await this.create({ userId, token: hashedToken, expiresAt })
+  return { doc, rawToken }
 }
 
-passwordResetTokenSchema.statics.consume = async function (token) {
+passwordResetTokenSchema.statics.consume = async function (rawToken) {
+  const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex')
   return this.findOneAndUpdate(
     {
-      token,
+      token: hashedToken,
       usedAt: null,
       expiresAt: { $gt: new Date() },
     },

@@ -81,6 +81,40 @@ export const sendOtpEmail = async ({ toEmail, otp, purpose }) => {
   return info
 }
 
+export const sendPasswordResetEmail = async ({ toEmail, resetToken }) => {
+  const frontendUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173'
+  const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`
+
+  const info = await transporter.sendMail({
+    from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
+    to: toEmail,
+    subject: 'Đặt lại mật khẩu - GymPro',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px;">
+        <p style="font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b7280; margin: 0 0 12px;">GymPro</p>
+        <h1 style="font-size: 24px; margin: 0 0 12px; color: #111827;">Đặt lại mật khẩu</h1>
+        <p style="color: #374151; line-height: 1.7; margin: 0 0 20px;">
+          Bạn đã yêu cầu đặt lại mật khẩu cho tài khoản GymPro của mình. Nhấn nút bên dưới để tiếp tục.
+        </p>
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${resetUrl}" style="display: inline-block; padding: 14px 32px; background: #7C3AED; color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; border-radius: 10px;">
+            Đặt lại mật khẩu
+          </a>
+        </div>
+        <p style="color: #6b7280; line-height: 1.7; margin: 0; font-size: 14px;">
+          Liên kết có hiệu lực trong 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
+        </p>
+      </div>
+    `,
+  })
+
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.log('Email password reset mock:', info.message)
+  }
+
+  return info
+}
+
 export const sendShopDeletionEmail = async ({ toEmail, shopName, reason }) => {
   const info = await transporter.sendMail({
     from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
