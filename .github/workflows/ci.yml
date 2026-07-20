@@ -50,7 +50,7 @@ jobs:
       - name: Test
         run: npm test
         env:
-          MONGODB_URI: mongodb://localhost:27017/gympro
+          MONGO_URI: mongodb://localhost:27017/gympro
           NODE_ENV: test
           JWT_SECRET: test-jwt-secret
           JWT_REFRESH_SECRET: test-jwt-refresh-secret
