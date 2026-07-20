@@ -66,6 +66,11 @@ const userSchema = new mongoose.Schema(
       minlength: [6, 'Mật khẩu phải có ít nhất 6 ký tự'],
       select: false,
     },
+    passwordHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
     provider: {
       type: String,
       enum: ['google', 'facebook', 'phone', 'email'],
@@ -145,6 +150,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       select: false,
     },
+    lastLoginAt: {
+      type: Date,
+      default: null,
+    },
     preferredTime: {
       type: String,
       default: '',
@@ -199,6 +208,12 @@ const userSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    address: {
+      street: { type: String, default: '', trim: true },
+      ward: { type: String, default: '', trim: true },
+      district: { type: String, default: '', trim: true },
+      city: { type: String, default: '', trim: true },
+    },
     emergencyContact: {
       name: { type: String, default: '', trim: true },
       phone: { type: String, default: '', trim: true },
@@ -224,9 +239,23 @@ const userSchema = new mongoose.Schema(
     identityRejectReason: { type: String, default: '', trim: true },
     identityReviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     identityReviewedAt: { type: Date, default: null },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true },
 )
+
+userSchema.index({ role: 1, isActive: 1 })
+userSchema.index({ deletedAt: 1 }, { sparse: true })
+
+userSchema.pre(/^find/, function (next) {
+  if (!this.getQuery().includeDeleted) {
+    this.where({ deletedAt: null })
+  }
+  next()
+})
 
 userSchema.pre('validate', function () {
   if (!this.email && !this.phone && !this.facebookId) {
@@ -243,9 +272,14 @@ userSchema.pre('validate', function () {
 })
 
 userSchema.pre('save', async function () {
-  if (!this.isModified('password') || !this.password) return
-  if (this.$locals?.skipPasswordHashing) return
-  this.password = await bcrypt.hash(this.password, 12)
+  if (this.isModified('passwordHash') && this.passwordHash) {
+    this.passwordHash = await bcrypt.hash(this.passwordHash, 12)
+  }
+
+  if (this.isModified('password') && this.password && !this.passwordHash) {
+    this.passwordHash = await bcrypt.hash(this.password, 12)
+    this.password = undefined
+  }
 })
 
 const getNextMemberNumber = async (UserModel) => {
@@ -279,13 +313,30 @@ userSchema.pre('save', async function () {
 })
 
 userSchema.methods.comparePassword = async function (candidatePassword) {
-  if (!this.password || !candidatePassword) return false
-  return bcrypt.compare(candidatePassword, this.password)
+  if (!candidatePassword) return false
+  if (this.passwordHash) return bcrypt.compare(candidatePassword, this.passwordHash)
+  if (this.password) return bcrypt.compare(candidatePassword, this.password)
+  return false
+}
+
+userSchema.methods.changedPasswordAfter = function (jwtTimestamp) {
+  if (this.updatedAt) {
+    const changedAt = Math.floor(this.updatedAt.getTime() / 1000)
+    return jwtTimestamp < changedAt
+  }
+  return false
+}
+
+userSchema.methods.softDelete = function () {
+  this.deletedAt = new Date()
+  this.isActive = false
+  return this.save()
 }
 
 userSchema.methods.toJSON = function () {
   const obj = normalizeUserMemberIdentity(this.toObject())
   delete obj.password
+  delete obj.passwordHash
   delete obj.refreshToken
   return obj
 }

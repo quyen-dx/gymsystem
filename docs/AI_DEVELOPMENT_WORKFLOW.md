@@ -217,7 +217,7 @@ For every task, the AI MUST determine WHICH documents to load based on task clas
 |------|-----------|
 | Core | README_FOR_AI.md, AI_CODING_CONSTITUTION.md, CURRENT_PHASE.md, PROJECT_OVERVIEW.md |
 | Business | `docs/modules/auth.md`, BUSINESS_RULES.md (BR-AUTH-* section), PERMISSION_MATRIX.md (Auth section) |
-| Technical | DATABASE.md (users, otps, sessions models), API_STANDARDS.md (auth endpoints), ADR-003 (JWT) |
+| Technical | DATABASE.md (users, otps, refresh_tokens models), API_STANDARDS.md (auth endpoints), ADR-003 (JWT) |
 
 #### Membership Module
 

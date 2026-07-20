@@ -1,22 +1,36 @@
+import crypto from 'crypto'
 import mongoose from 'mongoose'
 
 const otpSchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: false,
+      default: null,
+    },
     identifier: {
       type: String,
       required: true,
-      index: true,
       trim: true,
+      lowercase: true,
     },
-    otp: {
+    code: {
       type: String,
       required: true,
     },
-    purpose: {
+    type: {
       type: String,
-      enum: ['register', 'forgot_password', 'password_reset', 'email_change'],
+      enum: [
+        'register',
+        'forgot_password',
+        'password_reset',
+        'email_change',
+        'email_verification',
+        'phone_verification',
+        'login',
+      ],
       required: true,
-      index: true,
     },
     channel: {
       type: String,
@@ -25,7 +39,6 @@ const otpSchema = new mongoose.Schema(
     },
     provider: {
       type: String,
-      enum: ['google', 'facebook', 'phone', 'email'],
       default: null,
     },
     payload: {
@@ -39,19 +52,35 @@ const otpSchema = new mongoose.Schema(
     expiresAt: {
       type: Date,
       required: true,
-      index: true,
+    },
+    consumedAt: {
+      type: Date,
+      default: null,
     },
     attempts: {
       type: Number,
       default: 0,
+      max: 5,
+    },
+    lockedUntil: {
+      type: Date,
+      default: null,
     },
   },
   { timestamps: true },
 )
 
-otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
-otpSchema.index({ identifier: 1, purpose: 1 }, { unique: true })
+otpSchema.index({ identifier: 1, type: 1 }, { unique: true })
+otpSchema.index({ userId: 1, type: 1 })
+otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 2100 })
+otpSchema.index({ lockedUntil: 1 })
 
-const Otp = mongoose.model('Otp', otpSchema)
+otpSchema.statics.generate = async function (userId, type) {
+  const code = crypto.randomInt(100000, 999999).toString()
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+  return this.create({ userId, code, type, expiresAt })
+}
 
-export default Otp
+const OTP = mongoose.model('OTP', otpSchema)
+
+export default OTP

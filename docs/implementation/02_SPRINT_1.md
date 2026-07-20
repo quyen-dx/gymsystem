@@ -73,7 +73,7 @@ Implement complete identity management including registration, login, OAuth, JWT
 | `docs/BUSINESS_RULES.md` BR-AUD-004 | Concurrent session limit: max 3 devices per member. |
 | `docs/BUSINESS_RULES.md` BR-AUD-005 | Rate limiting: max 5 failed OTP attempts per 15 minutes. |
 | `docs/PERMISSION_MATRIX.md` | "User Management" section (all rows). Also note Policy Overrides §1–§5. |
-| `docs/DATABASE.md` §2.1 | Auth & Users collections: `users`, `otps`, `sessions`, `password_reset_tokens`, `social_accounts`, `refresh_tokens`. |
+| `docs/DATABASE.md` §2.1 | Auth & Users collections: `users`, `otps`, `password_reset_tokens`, `social_accounts`, `refresh_tokens`. |
 | `docs/API_STANDARDS.md` | §11 (Authentication) — how JWTs are sent (Bearer header), refresh flow. |
 | `docs/adr/ADR-003.md` | JWT Bearer Tokens — decision and rationale. |
 | `docs/ERROR_HANDLING.md` | Auth-specific error codes: `AUTH_INVALID_TOKEN`, `AUTH_TOKEN_EXPIRED`, `AUTH_INSUFFICIENT_PERMISSIONS`, `AUTH_USER_NOT_FOUND`. |
@@ -92,7 +92,7 @@ Implement complete identity management including registration, login, OAuth, JWT
 
 | Rule ID | Summary | Implementation |
 |---|---|---|
-| **BR-AUD-004** | Max 3 concurrent sessions per member. | `sessionService.createSession()` counts active sessions. If ≥ 3, invalidate oldest, create new. `sessions` collection stores active sessions indexed by `userId`. |
+| **BR-AUD-004** | Max 3 concurrent logins per member. | On login, `RefreshToken.countActiveByUser()` counts active non-revoked tokens. If ≥ 3, invalidate oldest (by `createdAt`), create new. Enforced in `authService.js`. |
 | **BR-AUD-005** | Max 5 failed OTP attempts per 15 minutes per action type. | `otpService.checkRateLimit()` queries `otps` collection for failed attempts within rolling 15-minute window. Returns error if count ≥ 5. Lockout scoped per `(userId, type)`. |
 | **BR-AUD-002** | GDPR: member data exportable within 72 hours. | Not fully implemented here. `User` model must support `deletedAt` soft-delete and `anonymize()` method. Admin action logging (§BR-ADM-003) supports audit trail for data access. |
 
@@ -154,12 +154,6 @@ All 6 collections from `docs/DATABASE.md` §2.1 (Auth & Users):
 | Key Fields | Indexes |
 |---|---|
 | `userId` (ObjectId ref: User), `code` (String, required), `type` (enum: email_verification, password_reset, phone_verification, login), `expiresAt` (Date, required), `consumedAt` (Date), `attempts` (Number, default 0, max 5) | `{ userId: 1, type: 1 }`, TTL index `{ expiresAt: 1 }` (expire 5 min after `expiresAt`) |
-
-### `sessions`
-
-| Key Fields | Indexes |
-|---|---|
-| `userId` (ObjectId ref: User), `refreshToken` (String, required), `deviceInfo` (Object: {userAgent, ip, platform}), `isRevoked` (Boolean, default false), `expiresAt` (Date, required) | `{ userId: 1 }`, `{ refreshToken: 1 }` (unique), TTL index `{ expiresAt: 1 }` |
 
 ### `password_reset_tokens`
 
@@ -224,10 +218,9 @@ No AI components are touched in Sprint 1. The auth middleware (`protect`, `autho
 |---|---|
 | `models/User.js` | User schema with all fields from DATABASE.md §2.1 (`users`). Mongoose hooks: pre-save password hashing, pre-find soft-delete filter. Instance methods: `comparePassword()`, `changedPasswordAfter()`. |
 | `models/OTP.js` | OTP schema with TTL index. Static methods: `generate()`, `verify()`. |
-| `models/Session.js` | Session schema with TTL index. Static: `createSession()`, `invalidateAll()`. |
 | `models/PasswordResetToken.js` | Token schema with TTL index. Static: `generate()`, `consume()`. |
 | `models/SocialAccount.js` | Social account schema with compound unique index. |
-| `models/RefreshToken.js` | Refresh token schema with rotation family support. Static: `rotate()`, `revokeFamily()`. |
+| `models/RefreshToken.js` | Refresh token schema with `deviceInfo`, rotation family, theft detection, and `countActiveByUser()` for BR-AUD-004 enforcement. |
 
 ### Services (`gym-backend/src/services/`)
 
@@ -236,7 +229,6 @@ No AI components are touched in Sprint 1. The auth middleware (`protect`, `autho
 | `services/authService.js` | `register()`, `login()`, `refresh()`, `logout()`, `forgotPassword()`, `resetPassword()`, `socialLogin()` — full business logic per `docs/modules/auth.md` Services table. |
 | `services/otpService.js` | `generateOTP()`, `sendOTP()`, `verifyOTP()`, `checkRateLimit()` — OTP lifecycle with BR-AUD-005 enforcement. |
 | `services/tokenService.js` | `generateAccessToken()`, `generateRefreshToken()`, `rotateRefreshToken()`, `revokeRefreshToken()`, `decodeToken()` — JWT signing and verification. |
-| `services/sessionService.js` | `createSession()`, `validateSession()`, `invalidateSession()`, `listActiveSessions()`, `enforceConcurrentLimit()` — BR-AUD-004 enforcement. |
 | `services/userService.js` | `getProfile()`, `updateProfile()`, `getUser()`, `listUsers()`, `updateUser()`, `deleteUser()`, `createStaffAccount()` — all operations from `docs/modules/user-management.md` Services table. |
 
 ### Controllers (`gym-backend/src/controllers/`)
@@ -355,7 +347,7 @@ No AI components are touched in Sprint 1. The auth middleware (`protect`, `autho
 | AC-1.6 | Expired OTP (>5 minutes) returns 410 with `OTP_EXPIRED`. |
 | AC-1.7 | Incorrect OTP increments attempt counter. After 5 failed attempts within 15 minutes, returns 429 with lockout duration. |
 
-### Login & Sessions
+### Login & Tokens
 
 | ID | Criterion |
 |---|---|
@@ -427,7 +419,7 @@ No AI components are touched in Sprint 1. The auth middleware (`protect`, `autho
 | `tokenService.rotateRefreshToken()` | Old token revoked, new token created with same family. |
 | `tokenService.revokeFamily()` | All tokens in family set to `isRevoked: true`. |
 | `otpService.checkRateLimit()` | 0–4 failed attempts → allowed. 5th attempt within 15 min window → throws AppError. 6th attempt after 15 min → allowed (window slides). |
-| `sessionService.enforceConcurrentLimit()` | 0–2 active sessions → new session created. 3 active sessions → oldest invalidated, new created. |
+| `authService.login()` with BR-AUD-004 | 0–2 active tokens → login allowed. 3 active → oldest RefreshToken invalidated, new created. |
 | `userService.updateUser()` | Admin updates non-role fields → success. Admin attempts role change → 403. Super Admin changes role → success. |
 | Middleware `protect` | No token → 401. Invalid token → 401. Expired token → 401. Valid token → `req.user` populated. |
 | Middleware `authorize('admin')` | Member user → 403. Admin user → `next()`. Super Admin user → `next()`. |
@@ -513,13 +505,12 @@ No AI components are touched in Sprint 1. The auth middleware (`protect`, `autho
 
 ## 22. Estimated Implementation Order
 
-1. **Mongoose models**: `User`, `OTP`, `Session`, `PasswordResetToken`, `SocialAccount`, `RefreshToken`.
+1. **Mongoose models**: `User`, `OTP`, `PasswordResetToken`, `SocialAccount`, `RefreshToken`.
 2. **JWT utilities**: `tokenHelper.js` (sign, verify, decode), `tokenService.js` (generate, rotate, revoke).
 3. **Password hashing**: bcrypt config in `User` model pre-save hook. `comparePassword()` instance method.
 4. **Email service**: `utils/emailService.js` with Nodemailer transport. Templates for OTP, password reset, welcome.
 5. **OTP service**: `services/otpService.js` — generate, send, verify, rate-limit check (BR-AUD-005).
 6. **Auth service**: `services/authService.js` — register, login, refresh, logout, forgotPassword, resetPassword.
-7. **Session service**: `services/sessionService.js` — create, validate, invalidate, enforce BR-AUD-004.
 8. **Auth middleware**: `middlewares/auth.js` — `protect`, `authorize`, `adminOnly`, `superAdminOnly`, `selfOrAdmin`.
 9. **Auth routes + controller**: `routes/authRoutes.js` + `controllers/authController.js`.
 10. **Rate limiting**: Apply `express-rate-limit` to `/auth/login` (10/min), `/auth/otp/verify` (5/15min per BR-AUD-005), `/auth/forgot-password` (3/hour).
@@ -592,7 +583,7 @@ After Sprint 1 code is complete, update these documents:
 |---|---|---|
 | 1 | `User` model with all fields from DATABASE.md | `mongoose.model('User').schema.paths` contains all fields. Pre-save hook hashes password. |
 | 2 | `OTP` model with TTL index and rate-limit tracking | OTP documents auto-expire after `expiresAt` + 5 min. Attempts capped at 5. |
-| 3 | `Session` model with concurrent limit tracking | Index `{ userId: 1 }` supports efficient count queries. TTL expires old sessions. |
+| 3 | `RefreshToken` model with `deviceInfo` and BR-AUD-004 enforcement | `countActiveByUser()` limits to 3. `rotate()` handles rotation. `revokeFamily()` for theft detection. |
 | 4 | `PasswordResetToken` model with 1-hour TTL | `consume()` marks token used and prevents reuse. |
 | 5 | `SocialAccount` model with compound unique index | `{ provider: 1, providerId: 1 }` prevents duplicate linking. |
 | 6 | `RefreshToken` model with family rotation | `family` field groups tokens. `revokeFamily()` revokes all tokens in family. |

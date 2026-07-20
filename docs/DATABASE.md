@@ -48,7 +48,7 @@ MONGODB_OPTIONS={"maxPoolSize":50,"minPoolSize":5,"serverSelectionTimeoutMS":500
 
 ---
 
-### 2.1 Auth & Users (6 collections)
+### 2.1 Auth & Users (5 collections)
 
 #### `users`
 
@@ -87,20 +87,6 @@ MONGODB_OPTIONS={"maxPoolSize":50,"minPoolSize":5,"serverSelectionTimeoutMS":500
 - TTL index: `{ expiresAt: 1 }` — documents expire 5 minutes after `expiresAt`
 
 
-#### `sessions`
-
-| Field          | Type   | Notes                         |
-| -------------- | ------ | ----------------------------- |
-| userId         | Object | ref: User                     |
-| refreshToken   | String | required                      |
-| deviceInfo     | Object | `{ userAgent, ip, platform }` |
-| isRevoked      | Boolean| default false                 |
-| expiresAt      | Date   | required                      |
-
-- index: `{ userId: 1 }`, `{ refreshToken: 1 }` (unique)
-- TTL index: `{ expiresAt: 1 }` — documents expire 24 hours after `expiresAt`
-
-
 #### `password_reset_tokens`
 
 | Field     | Type   | Notes                         |
@@ -134,13 +120,15 @@ MONGODB_OPTIONS={"maxPoolSize":50,"minPoolSize":5,"serverSelectionTimeoutMS":500
 | ----------- | ------- | ---------------------- |
 | userId      | Object  | ref: User              |
 | token       | String  | required, unique       |
-| family      | String  | token rotation family  |
+| family      | String  | token rotation family (UUID) |
+| deviceInfo  | Object  | `{ userAgent, ip, platform }` — captured on login |
 | isRevoked   | Boolean | default false          |
 | expiresAt   | Date    | required               |
 
 - unique: `token`
 - index: `{ userId: 1, family: 1 }`
 - TTL index: `{ expiresAt: 1 }`
+- Static: `countActiveByUser(userId)` — used for BR-AUD-004 concurrent login enforcement
 
 ---
 
@@ -1274,7 +1262,7 @@ Soft delete is implemented on all collections via the following convention:
 deletedAt: { type: Date, default: null }
 ```
 
-- Documents are never physically removed from the database (except for TTL-indexed collections: `otps`, `sessions`, `password_reset_tokens`, `refresh_tokens`).
+- Documents are never physically removed from the database (except for TTL-indexed collections: `otps`, `password_reset_tokens`, `refresh_tokens`).
 - Queries must always filter `{ deletedAt: null }` unless explicitly querying deleted records.
 - A Mongoose global plugin handles the automatic filtering:
 
@@ -1397,7 +1385,7 @@ Compound indexes are designed to cover the most frequent query patterns:
 | ------------ | ----------------- | ---------------------------- |
 | users        | `email`           | Case-insensitive via lowercase transform |
 | users        | `phone`           | Sparse (optional field)      |
-| sessions     | `refreshToken`    |                              |
+| refresh_tokens | `token`           |                              |
 | otps         | `token`           |                              |
 | membership_plans    | `name`     |                              |
 | membership_discounts| `code`     |                              |
@@ -1418,7 +1406,6 @@ Auto-expire documents after a specified period:
 | Collection            | Field       | Expire After     | Purpose                        |
 | --------------------- | ----------- | ---------------- | ------------------------------ |
 | otps                  | `expiresAt` | 5 minutes        | Auto-clean expired OTP codes   |
-| sessions              | `expiresAt` | 24 hours         | Remove stale sessions          |
 | password_reset_tokens | `expiresAt` | 1 hour           | Clean reset tokens             |
 | refresh_tokens        | `expiresAt` | 30 days          | Rotation garbage collection    |
 | logs                  | `createdAt` | 90 days (opt)    | Log retention policy           |
