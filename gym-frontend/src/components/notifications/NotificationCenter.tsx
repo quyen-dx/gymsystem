@@ -209,8 +209,10 @@ export default function NotificationCenter({ role: _role }: Props) {
     setProcessingIds(prev => new Set(prev).add(item._id))
     try {
       await ptClassService.acceptClass(item.relatedId)
-      setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true } : n))
-      load()
+      await notificationService.markAsRead(item._id)
+      // Update local state — không gọi load() để tránh flash
+      setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n))
+      setClassDetails(prev => prev[item._id] ? { ...prev, [item._id]: { ...prev[item._id], status: 'active' } } : prev)
     } catch { /* ignore */ }
     setProcessingIds(prev => { const next = new Set(prev); next.delete(item._id); return next })
   }
@@ -220,8 +222,9 @@ export default function NotificationCenter({ role: _role }: Props) {
     setProcessingIds(prev => new Set(prev).add(item._id))
     try {
       await ptClassService.declineClass(item.relatedId)
-      setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true } : n))
-      load()
+      await notificationService.markAsRead(item._id)
+      setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n))
+      setClassDetails(prev => prev[item._id] ? { ...prev, [item._id]: { ...prev[item._id], status: 'waiting_pt' } } : prev)
     } catch { /* ignore */ }
     setProcessingIds(prev => { const next = new Set(prev); next.delete(item._id); return next })
   }

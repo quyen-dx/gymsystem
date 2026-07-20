@@ -34,7 +34,7 @@ import {
   calcMembershipEndDate,
 } from '../utils/dateUtils.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
-import { createNotification } from '../services/notificationService.js'
+import { createNotification, notifyPtMemberChanged } from '../services/notificationService.js'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
 
@@ -2565,10 +2565,29 @@ export async function handlePTDataOnPlanChange({ memberId, oldPlan, newPlan, ses
       .lean()
 
     const className = enrollments.length > 0 && enrollments[0].classId
-      ? `[${enrollments[0].classId.code}] ${enrollments[0].classId.name}`
+      ? enrollments[0].classId.name
       : 'lớp'
 
+    // Lấy PT của class trước khi end enrollment
+    const classId = enrollments.length > 0 && enrollments[0].classId ? enrollments[0].classId._id : null
+    let ptId = null
+    if (classId) {
+      const tc = await (await import('../models/TrainingClass.js')).default.findById(classId).select('ptId').lean()
+      ptId = tc?.ptId || null
+    }
+
     await endClassEnrollments({ memberId, sourceReason: 'package_switched_to_1on1', note: 'Chuyển sang gói PT 1-1', session })
+
+    // Notify the group PT that the member left
+    if (ptId) {
+      notifyPtMemberChanged({
+        action: 'transferred_out',
+        memberName: mName,
+        className,
+        classId,
+        ptId,
+      })
+    }
 
     await createNotification({
       receiverId: null, receiverRole: 'admin',

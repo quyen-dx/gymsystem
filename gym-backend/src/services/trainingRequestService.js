@@ -5,6 +5,7 @@ import MembershipCycle from '../models/MembershipCycle.js'
 import MembershipPeriod from '../models/MembershipPeriod.js'
 import Plan from '../models/Plan.js'
 import { ensureEnrollment as ensureClassEnrollment } from './classEnrollmentService.js'
+import { notifyPtMemberChanged } from './notificationService.js'
 import { calculateRemainingDays } from '../utils/dateUtils.js'
 
 export const createRequest = async ({ memberId, data }) => {
@@ -162,14 +163,16 @@ export const assignToClass = async ({ requestId, classId, assignedBy }) => {
   )
 
   if (request) {
-    // Tạo TrainingAssignment — trainerId = null (chờ PT nhận)
+    const hasActivePt = trainingClass.status === 'active' && trainingClass.ptId
+    // Tạo TrainingAssignment — nếu lớp đã có PT active thì gán luôn
     await TrainingAssignment.create({
       memberId: request.memberId,
       classId,
       requestId: request._id,
-      trainerId: null,
+      trainerId: hasActivePt ? trainingClass.ptId : null,
       assignedBy: assignedBy || undefined,
-      status: 'waiting_pt',
+      status: hasActivePt ? 'active' : 'waiting_pt',
+      acceptedAt: hasActivePt ? new Date() : null,
       startDate: new Date(),
     })
 
@@ -178,6 +181,17 @@ export const assignToClass = async ({ requestId, classId, assignedBy }) => {
       classId,
       memberId: request.memberId,
       sourceReason: 'assigned_by_pt',
+    })
+
+    // Notify PT nếu lớp đã có PT active
+    const member = await (await import('../models/User.js')).default.findById(request.memberId).select('fullName name').lean()
+    const memberName = member?.fullName || member?.name || ''
+    notifyPtMemberChanged({
+      action: 'joined',
+      memberName,
+      className: trainingClass.name || '',
+      classId,
+      ptId: trainingClass.ptId || null,
     })
   }
 

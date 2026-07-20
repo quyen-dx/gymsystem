@@ -177,3 +177,57 @@ export async function markAllAsRead(userId) {
     { isRead: true, readAt: new Date() },
   )
 }
+
+/**
+ * Notify PT when a member is added to or removed from their class.
+ * Only sends if the class has an active PT (TrainingClass.status === 'active').
+ *
+ * @param {Object} params
+ * @param {'joined'|'left'|'transferred_in'|'transferred_out'|'class_closed'|'membership_ended'} params.action
+ * @param {string} params.memberName - display name of the member
+ * @param {string} params.className - name of the class
+ * @param {string} params.classId - ObjectId of the class
+ * @param {string|null} params.ptId - ObjectId of the PT (null = skip)
+ */
+export async function notifyPtMemberChanged({ action, memberName, className, classId, ptId }) {
+  if (!ptId || !classId) return
+
+  // Check class status — chỉ gửi nếu class đang active
+  const { default: TrainingClass } = await import('../models/TrainingClass.js')
+  const cls = await TrainingClass.findById(classId).select('status').lean()
+  if (!cls || cls.status !== 'active') return
+
+  const TITLES = {
+    joined: 'Hội viên mới được thêm vào lớp',
+    left: 'Hội viên đã rời lớp',
+    transferred_in: 'Hội viên được chuyển vào lớp của bạn',
+    transferred_out: 'Hội viên được chuyển sang lớp khác',
+    class_closed: 'Lớp tập đã kết thúc',
+    membership_ended: 'Hội viên không còn thuộc lớp do gói tập đã kết thúc',
+  }
+
+  const CONTENTS = {
+    joined: `Hội viên ${memberName} đã được thêm vào lớp ${className}.`,
+    left: `Hội viên ${memberName} đã rời lớp ${className}.`,
+    transferred_in: `Hội viên ${memberName} đã được chuyển vào lớp ${className} của bạn.`,
+    transferred_out: `Hội viên ${memberName} đã được chuyển từ lớp ${className} sang lớp khác.`,
+    class_closed: `Lớp ${className} đã kết thúc.`,
+    membership_ended: `Hội viên ${memberName} không còn thuộc lớp ${className} do gói tập đã kết thúc.`,
+  }
+
+  const title = TITLES[action]
+  const content = CONTENTS[action]
+  if (!title || !content) return
+
+  createNotification({
+    receiverId: ptId,
+    receiverRole: 'pt',
+    notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+    title,
+    content,
+    relatedId: classId,
+    relatedType: 'TrainingClass',
+    redirectUrl: '/pt/clients',
+    createdBy: 'System',
+  }).catch(err => console.error('Notify PT member changed failed:', err.message))
+}

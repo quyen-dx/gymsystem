@@ -134,7 +134,7 @@ export default function AdminPTAssignmentEndRequestsPage() {
         {cls && (
           <div>
             <div className="mb-1 font-medium text-[var(--gs-text-muted)]">Lớp</div>
-            <div className="text-[var(--gs-text)]">[{cls.code}] {cls.name}</div>
+            <div className="text-[var(--gs-text)]">{cls.name}</div>
           </div>
         )}
         {workout && (
@@ -205,7 +205,7 @@ export default function AdminPTAssignmentEndRequestsPage() {
       render: (_: unknown, r: PTAssignmentEndRequest) => {
         const cls = typeof r.classId === 'object' ? r.classId : null
         return cls
-          ? <span className="text-sm text-[var(--gs-text)]">[{cls.code}] {cls.name}</span>
+          ? <span className="text-sm text-[var(--gs-text)]">{cls.name}</span>
           : <span className="text-sm text-[var(--gs-text-muted)]">—</span>
       },
     },
