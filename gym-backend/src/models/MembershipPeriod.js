@@ -45,6 +45,23 @@ const membershipPeriodSchema = new mongoose.Schema({
     type: Date,
     default: null,
   },
+  refundStatus: {
+    type: String,
+    enum: ['refunded', 'none'],
+    default: 'none',
+  },
+  refundAmount: {
+    type: Number,
+    default: 0,
+  },
+  refundAt: {
+    type: Date,
+    default: null,
+  },
+  refundMethod: {
+    type: String,
+    default: null,
+  },
   status: {
     type: String,
     enum: ['PENDING', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'REFUNDED', 'CANCEL_REQUESTED', 'REJECTED'],

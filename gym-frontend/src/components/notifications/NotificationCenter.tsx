@@ -29,6 +29,8 @@ import 'dayjs/locale/vi'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { notificationService, type NotificationItem } from '../../services/notificationService'
 import { socketService } from '../../services/socketService'
+import { ptClassService } from '../../services/ptAssignmentService'
+import { trainingClassService } from '../../services/trainingGroupService'
 
 dayjs.extend(relativeTime)
 dayjs.locale('vi')
@@ -86,6 +88,8 @@ export default function NotificationCenter({ role: _role }: Props) {
   const [search, setSearch] = useState('')
   const [sortMode, setSortMode] = useState<SortMode>('newest')
   const [showMobileFilters, setShowMobileFilters] = useState(false)
+  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
+  const [classDetails, setClassDetails] = useState<Record<string, { name: string; status: string; daysOfWeek: number[]; startTime: string; endTime: string; floorName: string; zoneName: string; maxCapacity: number; currentCount: number }>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -172,10 +176,105 @@ export default function NotificationCenter({ role: _role }: Props) {
     return counts
   }, [notifications])
 
+  // Fetch class details for PT_CLASS_REQUEST notifications
+  useEffect(() => {
+    const ptRequests = notifications.filter(n => n.notificationType === 'PT_CLASS_REQUEST' && n.relatedId)
+    for (const n of ptRequests) {
+      if (classDetails[n._id]) continue
+      trainingClassService.getById(n.relatedId!).then((res) => {
+        const c = res.data.class
+        if (!c) return
+        const floor = c.floorId as any
+        const zone = c.zoneId as any
+        setClassDetails(prev => ({
+          ...prev,
+          [n._id]: {
+            name: c.name,
+            status: c.status,
+            daysOfWeek: c.daysOfWeek || [],
+            startTime: c.startTime || '',
+            endTime: c.endTime || '',
+            floorName: floor?.name || '',
+            zoneName: zone?.name || '',
+            maxCapacity: zone?.maxCapacity || 0,
+            currentCount: c.currentActiveCount || 0,
+          },
+        }))
+      }).catch(() => {})
+    }
+  }, [notifications])
+
+  const handleAcceptClass = async (item: NotificationItem) => {
+    if (!item.relatedId) return
+    setProcessingIds(prev => new Set(prev).add(item._id))
+    try {
+      await ptClassService.acceptClass(item.relatedId)
+      setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true } : n))
+      load()
+    } catch { /* ignore */ }
+    setProcessingIds(prev => { const next = new Set(prev); next.delete(item._id); return next })
+  }
+
+  const handleDeclineClass = async (item: NotificationItem) => {
+    if (!item.relatedId) return
+    setProcessingIds(prev => new Set(prev).add(item._id))
+    try {
+      await ptClassService.declineClass(item.relatedId)
+      setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true } : n))
+      load()
+    } catch { /* ignore */ }
+    setProcessingIds(prev => { const next = new Set(prev); next.delete(item._id); return next })
+  }
+
   // ──── RENDER CARD ────
   const renderCard = (item: NotificationItem) => {
     const cat = classify(item)
     const isUnread = !item.isRead
+
+    // Custom card for PT_CLASS_REQUEST
+    if (item.notificationType === 'PT_CLASS_REQUEST') {
+      const detail = classDetails[item._id]
+      const classProcessed = detail && detail.status !== 'waiting_accept'
+      const action = classProcessed ? 'done' : (item.isRead ? 'read' : 'pending')
+      const isLoading = processingIds.has(item._id)
+      const DAY_LABELS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
+      const daysStr = detail?.daysOfWeek.map(d => DAY_LABELS[d]).filter(Boolean).join(', ') || ''
+
+      return (
+        <div key={item._id} className="group relative flex gap-3.5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 transition-all">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold text-[var(--gs-text)]">Bạn được mời phụ trách lớp</h3>
+            {detail ? (
+              <div className="mt-3 space-y-1.5 text-xs text-[var(--gs-text-muted)]">
+                <p><strong className="text-[var(--gs-text)]">{detail.name}</strong></p>
+                <p>{daysStr} | {detail.startTime?.slice(0, 5)} - {detail.endTime?.slice(0, 5)}</p>
+                <p>{(detail.floorName || detail.zoneName) && `${detail.floorName} - ${detail.zoneName}`}</p>
+                <p>Sức chứa: {detail.currentCount} / {detail.maxCapacity || '∞'}</p>
+              </div>
+            ) : (
+              <div className="mt-2 text-xs text-[var(--gs-text-muted)]">Đang tải thông tin lớp...</div>
+            )}
+            <div className="mt-4 flex gap-2">
+              {isLoading ? (
+                <span className="text-xs text-[var(--gs-text-muted)] self-center">Đang xử lý...</span>
+              ) : action === 'pending' ? (
+                <>
+                  <Button size="small" danger onClick={(e) => { e.stopPropagation(); handleDeclineClass(item) }}>
+                    Từ chối
+                  </Button>
+                  <Button size="small" type="primary" onClick={(e) => { e.stopPropagation(); handleAcceptClass(item) }}>
+                    Chấp nhận
+                  </Button>
+                </>
+              ) : (
+                <span className="text-xs text-[var(--gs-text-muted)] self-center">Đã xử lý</span>
+              )}
+            </div>
+          </div>
+          <span className="text-[11px] text-[var(--gs-text-muted)] shrink-0 self-start">{formatTimeFull(item.createdAt)}</span>
+        </div>
+      )
+    }
 
     const menuItems = [
       ...(!item.isRead

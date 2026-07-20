@@ -59,7 +59,7 @@ export const createSwapRequest = async ({ ptId, targetDate, reason, classIds }) 
       let classId = null, className = session.className || '', classCode = session.classCode || ''
       const sessionDow = sessionDate.getDay()
       const matchedClass = await TrainingClass.findOne({
-        ptId, daysOfWeek: sessionDow, startTime: session.time,
+        ptId, daysOfWeek: sessionDow, startTime: session.time, status: 'active',
       }).select('name code').lean()
       if (matchedClass) {
         classId = String(matchedClass._id)
@@ -206,7 +206,7 @@ export const getAvailableSubstitutePTs = async ({ swapRequestId }) => {
     }
 
     // Time conflict: TrainingClass on same dayOfWeek with overlapping time
-    const classes = await TrainingClass.find({ ptId: pt._id, daysOfWeek: targetDow }).lean()
+    const classes = await TrainingClass.find({ ptId: pt._id, daysOfWeek: targetDow, status: { $ne: 'closed' } }).lean()
     let conflicting = false
     for (const cls of classes) {
       if (!cls.startTime || !cls.endTime) continue

@@ -91,6 +91,14 @@ const cancellationRequestSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    renewalRefunds: {
+      type: [{
+        periodId: { type: mongoose.Schema.Types.ObjectId },
+        price: { type: Number, default: 0 },
+        refundAmount: { type: Number, default: 0 },
+      }],
+      default: [],
+    },
     finalRefundAmount: {
       type: Number,
       default: 0,

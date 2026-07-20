@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import Plan from '../models/Plan.js'
 import Membership from '../models/Membership.js'
 import MembershipCycle from '../models/MembershipCycle.js'
+import MembershipPeriod from '../models/MembershipPeriod.js'
 import PlanChangeHistory from '../models/PlanChangeHistory.js'
 import Payment from '../models/Payment.js'
 import Wallet from '../models/Wallet.js'
@@ -24,8 +25,12 @@ function calcProratedValue(cycle, plan) {
 export const getAvailablePlans = async (req, res) => {
   try {
     const memberId = req.user._id
-    const cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+    let cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
       .populate('currentPlanId')
+    if (!cycle) {
+      cycle = await MembershipCycle.findOne({ memberId, status: 'pending_initial_activation' })
+        .populate('currentPlanId')
+    }
 
     if (!cycle) return res.status(404).json({ message: 'Không tìm thấy gói tập đang hoạt động' })
 
@@ -41,9 +46,31 @@ export const getAvailablePlans = async (req, res) => {
         diff: p.price - currentPrice,
       }))
 
+    const remainingDays = cycle.expiresAt
+      ? Math.max(0, Math.ceil((new Date(cycle.expiresAt) - new Date()) / (1000 * 60 * 60 * 24)))
+      : 0
+
+    // Kiểm tra các kỳ gia hạn chưa sử dụng
+    const allPeriods = cycle.currentMembershipId
+      ? await MembershipPeriod.find({ membershipId: cycle.currentMembershipId })
+          .sort({ startDate: 1 })
+          .lean()
+      : []
+
+    const nowMs = Date.now()
+    const pendingRenewals = allPeriods.filter(p => {
+      const start = new Date(p.startDate).getTime()
+      return p.status === 'PENDING' && nowMs < start
+    })
+
     res.json({
       currentPlan: cycle.currentPlanId,
-      remainingDays: Math.max(0, Math.ceil((new Date(cycle.expiresAt) - new Date()) / (1000 * 60 * 60 * 24))),
+      remainingDays,
+      cycleStatus: cycle.status,
+      durationDays: cycle.durationDays || cycle.currentPlanId?.durationDays || 0,
+      hasPendingRenewals: pendingRenewals.length > 0,
+      pendingRenewalsCount: pendingRenewals.length,
+      pendingRenewalsTotal: pendingRenewals.reduce((sum, p) => sum + (p.price || 0), 0),
       plans,
     })
   } catch (error) {
@@ -311,8 +338,12 @@ export const changePlan = async (req, res) => {
   session.startTransaction()
 
   try {
-    const cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+    let cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
       .populate('currentPlanId').session(session)
+    if (!cycle) {
+      cycle = await MembershipCycle.findOne({ memberId, status: 'pending_initial_activation' })
+        .populate('currentPlanId').session(session)
+    }
     if (!cycle) {
       await session.abortTransaction()
       return res.status(404).json({ message: 'Không tìm thấy gói tập đang hoạt động' })
@@ -338,6 +369,35 @@ export const changePlan = async (req, res) => {
     let wallet = await Wallet.findOne({ userId: memberId }).session(session)
     if (!wallet) {
       [wallet] = await Wallet.create([{ userId: memberId, balance: 0 }], { session })
+    }
+
+    // Xử lý các kỳ gia hạn chưa sử dụng nếu người dùng yêu cầu hủy
+    const cancelRenewals = req.body.cancelRenewals === true
+    if (cancelRenewals && membershipId) {
+      const allPeriods = await MembershipPeriod.find({ membershipId }).sort({ startDate: 1 }).session(session).lean()
+      const nowMs = Date.now()
+      for (const p of allPeriods) {
+        const start = new Date(p.startDate).getTime()
+        if (p.status === 'PENDING' && nowMs < start && (p.price || 0) > 0) {
+          const balanceBefore = Number(wallet.balance || 0)
+          wallet.balance += p.price
+          await wallet.save({ session })
+
+          await Transaction.create([{
+            userId: memberId, walletId: wallet._id, type: 'REFUND_TO_WALLET', provider: 'wallet', source: 'plan_change',
+            description: `Hoàn tiền hủy gia hạn khi đổi gói (+${p.totalDays} ngày)`,
+            amount: p.price, balanceBefore, balanceAfter: wallet.balance,
+            referenceId: p._id.toString(), status: 'completed', completedAt: new Date(),
+            metadata: { periodId: p._id, membershipId, reason: 'cancelled_on_plan_change' },
+            idempotencyKey: `change_cancel_period_${p._id}`,
+          }], { session })
+
+          await MembershipPeriod.updateOne(
+            { _id: p._id },
+            { $set: { status: 'CANCELLED' } },
+          ).session(session)
+        }
+      }
     }
 
     let payment = null
@@ -395,6 +455,12 @@ export const changePlan = async (req, res) => {
       { $set: { currentPlanId: newPlan._id } },
     ).session(session)
 
+    // Cập nhật luôn Membership.planId để getMyMembership trả về đúng gói mới
+    await Membership.updateOne(
+      { _id: membershipId },
+      { $set: { planId: newPlan._id } },
+    ).session(session)
+
     await PlanChangeHistory.create([{
       memberId, membershipId, fromPlanId: oldPlanId, toPlanId: newPlan._id, changeType,
       amount: amountToPay, walletCredit: creditToWallet,
@@ -423,7 +489,7 @@ export const changePlan = async (req, res) => {
       redirectUrl: '/my-membership', createdBy: 'System', sendEmail: true,
     }).catch(() => {})
 
-    const populated = await Membership.findById(membershipId).populate('planId')
+    const populated = await Membership.findById(membershipId).populate({ path: 'planId', populate: { path: 'featureIds', model: 'PlanFeature' } })
     res.json({ message: notifTitle, membership: populated, amountToPay, creditToWallet, payment })
   } catch (error) {
     await session.abortTransaction()

@@ -34,6 +34,11 @@ export interface CancellationRequest {
   policyAcceptedAt: string | null
   refundEligible: boolean
   estimatedRefundAmount: number
+  renewalRefunds: Array<{
+    periodId: string
+    price: number
+    refundAmount: number
+  }>
   finalRefundAmount: number
   status: 'pending' | 'approved' | 'rejected'
   rejectReason: string
@@ -74,6 +79,10 @@ export interface MembershipPeriod {
   isFirst?: boolean
   hasPendingRequest?: boolean
   rejectionReason?: string
+  refundStatus?: 'refunded' | 'none'
+  refundAmount?: number
+  refundAt?: string
+  refundMethod?: 'WALLET' | null
   createdAt?: string
   cancelledAt?: string
   plan?: MembershipPlan
@@ -125,8 +134,34 @@ export interface CancelPeriodDetail {
   refundReason: string | null
 }
 
+export interface CancelRenewalItem {
+  index: number
+  days: number
+  price: number
+  startDate: string
+  endDate: string
+  status: string
+  displayStatus: string
+  refundEligible: boolean
+  refundAmount: number
+}
+
+export interface CancelMainPackage {
+  planName: string
+  price: number
+  status: string
+  activatedAt: string | null
+  purchasedAt: string | null
+  refundEligible: boolean
+  refundAmount: number
+  reason: string
+}
+
 export interface CancelInfo {
   membership: MyMembership
+  mainPackage: CancelMainPackage
+  renewals: CancelRenewalItem[]
+  totalRefund: number
   period: {
     startDate: string | null
     endDate: string | null
@@ -236,6 +271,8 @@ export const membershipService = {
 
   createRefundRequest: (data: { periodId: string; reason?: string }) =>
     api.post<{ message: string; refundRequest: RefundRequest }>('/memberships/my/refund-request', data),
+  autoCancelPeriod: (periodId: string) =>
+    api.post<{ message: string; refundAmount: number }>(`/memberships/my/periods/${periodId}/auto-cancel`),
   getMyHistory: () =>
     api.get<{ history: Array<{ membership: MyMembership; periods: MembershipPeriod[] }> }>('/memberships/history'),
   getMembershipDetail: (membershipId: string) =>
@@ -251,6 +288,8 @@ export const membershipService = {
   rejectRefundRequest: (id: string, data: { reason: string }) =>
     api.post<{ message: string; refundRequest: RefundRequest }>(`/memberships/staff/refund-requests/${id}/reject`, data),
 
+  cancelPendingMembership: () =>
+    api.post<{ message: string; refundAmount: number; refundEligible: boolean }>('/memberships/cancel-pending'),
   createCancelRequest: (data: { reason: string; policyAccepted?: boolean; refundMethod?: 'WALLET' | 'NONE' }) =>
     api.post<{ message: string; cancellationRequest: CancellationRequest }>('/memberships/cancel-request', data),
   getMyCancelRequests: () =>

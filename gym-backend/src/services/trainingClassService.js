@@ -1,4 +1,5 @@
 import TrainingClass from '../models/TrainingClass.js'
+import TrainingAssignment from '../models/TrainingAssignment.js'
 import ClassEnrollment from '../models/ClassEnrollment.js'
 import { getActiveCountMap as getActiveEnrollmentCountMap } from './classEnrollmentService.js'
 
@@ -56,7 +57,7 @@ async function validateConflicts({ name, ptId, floorId, zoneId, daysOfWeek, star
 
     // 1. Check location conflict: same floor + zone + day + overlapping time
     if (floorId && zoneId) {
-      const locationFilter = { ...matchFilter, floorId, zoneId }
+      const locationFilter = { ...matchFilter, floorId, zoneId, status: { $ne: 'closed' } }
       if (excludeId) locationFilter._id = { $ne: excludeId }
       const locationClasses = await TrainingClass.find(locationFilter).lean()
       for (const c of locationClasses) {
@@ -68,7 +69,7 @@ async function validateConflicts({ name, ptId, floorId, zoneId, daysOfWeek, star
 
     // 2. Check PT conflict: same PT + day + overlapping time
     if (ptId) {
-      const ptFilter = { ...matchFilter, ptId }
+      const ptFilter = { ...matchFilter, ptId, status: { $ne: 'closed' } }
       if (excludeId) ptFilter._id = { $ne: excludeId }
       const ptClasses = await TrainingClass.find(ptFilter).lean()
       for (const c of ptClasses) {
@@ -116,16 +117,18 @@ export const updateClass = async ({ classId, data }) => {
   return serializeClass(cls)
 }
 
-export const getAllClasses = async ({ page = 1, limit = 50 }) => {
+export const getAllClasses = async ({ page = 1, limit = 50, includeClosed = false }) => {
   const skip = (Number(page) - 1) * Number(limit)
 
+  const filter = includeClosed ? {} : { status: { $ne: 'closed' } }
+
   const [items, total] = await Promise.all([
-    TrainingClass.find()
+    TrainingClass.find(filter)
       .populate(POPULATE_FIELDS)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit)),
-    TrainingClass.countDocuments({}),
+    TrainingClass.countDocuments(filter),
   ])
 
   const countMap = await getActiveEnrollmentCountMap(items.map(c => c._id))
@@ -165,7 +168,24 @@ export const getClassOccupancy = async (classId) => {
 }
 
 export const deleteClass = async (classId) => {
-  return TrainingClass.findByIdAndDelete(classId)
+  const cls = await TrainingClass.findById(classId)
+  if (!cls) return null
+
+  // Soft delete: đóng lớp, kết thúc assignment + enrollment
+  cls.status = 'closed'
+  await cls.save()
+
+  await TrainingAssignment.updateMany(
+    { classId, status: { $in: ['waiting_pt', 'active'] } },
+    { $set: { status: 'finished', endDate: new Date() } },
+  )
+
+  await ClassEnrollment.updateMany(
+    { classId, status: 'active' },
+    { $set: { status: 'ended', leftAt: new Date() } },
+  )
+
+  return cls
 }
 
 export const getClassById = async (classId) => {

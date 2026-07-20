@@ -10,6 +10,7 @@ import { useWallet } from '../../../context/WalletProvider'
 import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 import { membershipService, type CancellationRequest, type MembershipPeriod, type MembershipRenewal, type MyMembership, type PendingCancelRequest } from '../../../services/membershipService'
 import { planFeatureService, type PlanFeature } from '../../../services/planFeatureService'
+import MembershipBenefits from '../../../components/membership/MembershipBenefits'
 
 const formatMoney = (value?: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString('vi-VN') : '-'
@@ -49,7 +50,7 @@ export default function MyMembershipPage() {
   const [cancelPeriodModal, setCancelPeriodModal] = useState<{ open: boolean; period: MembershipPeriod | null }>({ open: false, period: null })
   const [cancellingPeriod, setCancellingPeriod] = useState(false)
   const [batchCancelDays, setBatchCancelDays] = useState(0)
-  const [batchCancelling, setBatchCancelling] = useState(false)
+  const [batchCancelModal, setBatchCancelModal] = useState<{ open: boolean; loading: boolean; totalRefund: number; count: number }>({ open: false, loading: false, totalRefund: 0, count: 0 })
   const [tickedPolicies, setTickedPolicies] = useState<Record<string, { type: string; version: string }> | null>(null)
   const [consentSubmitted, setConsentSubmitted] = useState(false)
   const consentReady = tickedPolicies !== null && Object.keys(tickedPolicies).length > 0
@@ -61,11 +62,14 @@ export default function MyMembershipPage() {
     planName: string
   } | null>(null)
   const [allFeatures, setAllFeatures] = useState<PlanFeature[]>([])
+  const [pendingCancelModal, setPendingCancelModal] = useState<{ open: boolean; loading: boolean; result: { message: string; refundAmount: number } | null }>({ open: false, loading: false, result: null })
   const [changeModalOpen, setChangeModalOpen] = useState(false)
   const [availablePlans, setAvailablePlans] = useState<any>(null)
   const [plansLoading, setPlansLoading] = useState(false)
   const [changeLoading, setChangeLoading] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<any>(null)
+  const [renewalHandlingOpen, setRenewalHandlingOpen] = useState(false)
+  const [renewalAction, setRenewalAction] = useState<'cancel' | 'convert' | null>(null)
   const [changeHistory, setChangeHistory] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState('info')
 
@@ -150,13 +154,11 @@ export default function MyMembershipPage() {
     if (!period) return
     setCancellingPeriod(true)
     try {
-       await membershipService.createRefundRequest({
-        periodId: period._id,
-        reason: 'Hủy gia hạn',
-      })
-      message.success('Yêu cầu đã được gửi tới nhân viên. Vui lòng chờ phê duyệt.')
+      const res = await membershipService.autoCancelPeriod(period._id)
+      message.success(res.data.message)
       setCancelPeriodModal({ open: false, period: null })
       loadData()
+      refreshWallet()
     } catch (error: any) {
       message.error(error?.response?.data?.message || 'Hủy thất bại')
     } finally {
@@ -164,25 +166,45 @@ export default function MyMembershipPage() {
     }
   }
 
-  const handleBatchCancel = async () => {
+  const handleBatchCancelShowModal = () => {
     if (batchCancelDays <= 0) return
     const targets = pendingPeriods.slice(-batchCancelDays)
-    setBatchCancelling(true)
+    const totalRefund = targets.reduce((s, p) => s + (p.price || 0), 0)
+    setBatchCancelModal({ open: true, loading: false, totalRefund, count: targets.length })
+  }
+
+  const handleBatchCancelConfirm = async () => {
+    if (batchCancelDays <= 0) return
+    const targets = pendingPeriods.slice(-batchCancelDays)
+    setBatchCancelModal((prev) => ({ ...prev, loading: true }))
     try {
       for (const p of targets) {
-        await membershipService.createRefundRequest({ periodId: p._id, reason: 'Hủy gia hạn' })
+        await membershipService.autoCancelPeriod(p._id)
       }
-      message.success(`Đã gửi yêu cầu hủy ${targets.length} kỳ gia hạn.`)
+      const totalRefund = targets.reduce((s, p) => s + (p.price || 0), 0)
+      message.success(`Đã hoàn ${formatMoney(totalRefund)} vào Ví GymPro.`)
       setBatchCancelDays(0)
+      setBatchCancelModal({ open: false, loading: false, totalRefund: 0, count: 0 })
       loadData()
+      refreshWallet()
     } catch (error: any) {
       message.error(error?.response?.data?.message || 'Hủy thất bại')
-    } finally {
-      setBatchCancelling(false)
+      setBatchCancelModal((prev) => ({ ...prev, loading: false }))
     }
   }
 
-  
+  const handleCancelPending = async () => {
+    setPendingCancelModal((prev) => ({ ...prev, loading: true }))
+    try {
+      const res = await membershipService.cancelPendingMembership()
+      setPendingCancelModal({ open: true, loading: false, result: { message: res.data.message, refundAmount: res.data.refundAmount } })
+      loadData()
+      refreshWallet()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || 'Hủy gói thất bại')
+      setPendingCancelModal({ open: false, loading: false, result: null })
+    }
+  }
 
   const handleRenew = async () => {
     if (!consentReady) return
@@ -228,11 +250,11 @@ export default function MyMembershipPage() {
     }
   }
 
-  const handleChangePlan = async () => {
+  const handleChangePlan = async (cancelRenewals = false) => {
     if (!selectedPlan) return
     setChangeLoading(true)
     try {
-      const res = await api.post('/memberships/change-plan', { newPlanId: selectedPlan._id })
+      const res = await api.post('/memberships/change-plan', { newPlanId: selectedPlan._id, cancelRenewals })
       const d = res.data
       const msg = d.creditToWallet > 0
         ? `Đổi gói thành công! Đã hoàn ${formatMoney(d.creditToWallet)} vào ví.`
@@ -243,6 +265,8 @@ export default function MyMembershipPage() {
       setChangeModalOpen(false)
       setSelectedPlan(null)
       setAvailablePlans(null)
+      setRenewalHandlingOpen(false)
+      setRenewalAction(null)
       loadData()
       refreshWallet()
       fetchChangeHistory()
@@ -250,6 +274,14 @@ export default function MyMembershipPage() {
       message.error(err.response?.data?.message || 'Đổi gói thất bại')
     } finally {
       setChangeLoading(false)
+    }
+  }
+
+  const handleChangePlanClick = () => {
+    if (availablePlans?.hasPendingRenewals) {
+      setRenewalHandlingOpen(true)
+    } else {
+      handleChangePlan(false)
     }
   }
 
@@ -270,11 +302,6 @@ export default function MyMembershipPage() {
   const completedPeriods = useMemo(() => periods.filter(p => {
     const ds = p.displayStatus || p.status
     return ds === 'COMPLETED'
-  }), [periods])
-
-  const cancelRequestedPeriods = useMemo(() => periods.filter(p => {
-    const ds = p.displayStatus || p.status
-    return ds === 'CANCEL_REQUESTED'
   }), [periods])
 
   const cancelledPeriods = useMemo(() => periods.filter(p => {
@@ -330,7 +357,19 @@ export default function MyMembershipPage() {
                   </span>
                 </div>
               </div>
-              <Button href="/plans">Xem gói tập</Button>
+              <div className="flex gap-2 flex-wrap items-center">
+                <Button icon={<SwapOutlined />} onClick={() => { setSelectedPlan(null); fetchAvailablePlans(); setChangeModalOpen(true) }}>
+                  Đổi gói tập
+                </Button>
+                <div className="h-6 w-px bg-[var(--gs-border)]" />
+                <Button
+                  danger
+                  icon={<CloseCircleOutlined />}
+                  onClick={() => setPendingCancelModal({ open: true, loading: false, result: null })}
+                >
+                  Hủy gói
+                </Button>
+              </div>
             </div>
 
             <div className="mb-5 rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-4">
@@ -346,30 +385,10 @@ export default function MyMembershipPage() {
               <InfoCell label="Gói tập" value={planName} />
               <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
               <InfoCell label="Ngày đăng ký" value={formatDate(cycle?.purchasedAt || membership?.createdAt)} />
-              <InfoCell label="Quyền hoàn tiền" value={
-                cycle?.refundEligible
-                  ? `🟢 Có thể hoàn tiền trong vòng ${(() => {
-                      const daysSince = Math.floor((Date.now() - new Date(cycle.purchasedAt || membership?.createdAt).getTime()) / 86400000)
-                      const remaining = 7 - daysSince
-                      return remaining > 0 ? `${remaining} ngày` : '0 ngày (đã hết hạn)'
-                    })()}`
-                  : '🔒 Đã hết hiệu lực'
-              } wide />
+              <InfoCell label="Thời lượng gói" value={`${cycle?.durationDays || 0} ngày`} wide />
             </div>
 
-            {memberPlanFeatures.length > 0 && (
-              <div className="mt-6">
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--gs-text-soft)]">Quyền lợi</h4>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {memberPlanFeatures.map((f: any) => (
-                    <div key={f._id} className="flex items-center gap-2 rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
-                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
-                      <span className="text-sm font-medium text-[var(--gs-text)]">{f.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <MembershipBenefits features={memberPlanFeatures} />
           </Card>
         )}
 
@@ -386,7 +405,6 @@ export default function MyMembershipPage() {
                   </span>
                 </div>
               </div>
-              <Button href="/plans">Xem gói tập</Button>
             </div>
 
             <div className="mb-5 rounded-xl border border-[var(--gs-info-border)] bg-[var(--gs-info-bg)] p-4">
@@ -447,8 +465,17 @@ export default function MyMembershipPage() {
                 </div>
                 {pendingCancel.refundEligible && (
                   <div>
-                    <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">Số tiền hoàn dự kiến</div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">Tổng tiền hoàn dự kiến</div>
                     <div className="mt-0.5 text-base font-semibold text-[var(--gs-success)]">{formatMoney(pendingCancel.estimatedRefundAmount)}</div>
+                  </div>
+                )}
+                {pendingCancel.refundEligible && (
+                  <div className="sm:col-span-2">
+                    <div className="mt-1 text-xs leading-relaxed text-[var(--gs-text-muted)]">
+                      {pendingCancel.renewalRefunds?.length > 0
+                        ? `Đã bao gồm ${pendingCancel.renewalRefunds.length} gói gia hạn chưa sử dụng.`
+                        : 'Không có khoản hoàn nào đủ điều kiện.'}
+                    </div>
                   </div>
                 )}
                 {pendingCancel.refundEligible && (
@@ -485,22 +512,7 @@ export default function MyMembershipPage() {
               <InfoCell label="Số ngày còn lại" value={`${membership.remainingDays} ngày`} />
             </div>
 
-            {memberPlanFeatures.length > 0 && (
-              <div className="mt-6">
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--gs-text-soft)]">Quyền lợi</h4>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {memberPlanFeatures.map((f: any) => (
-                    <div key={f._id} className="flex items-center gap-2 rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
-                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
-                      <span className="text-sm font-medium text-[var(--gs-text)]">{f.name}</span>
-                      {f.category && (
-                        <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }} color="blue">{f.category}</Tag>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <MembershipBenefits features={memberPlanFeatures} />
           </Card>
         ) : membership && isCancelRequested ? (
           <Card>
@@ -548,22 +560,7 @@ export default function MyMembershipPage() {
               <InfoCell label="Số ngày còn lại" value={`${membership.remainingDays} ngày`} />
             </div>
 
-            {memberPlanFeatures.length > 0 && (
-              <div className="mt-6">
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--gs-text-soft)]">Quyền lợi</h4>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {memberPlanFeatures.map((f: any) => (
-                    <div key={f._id} className="flex items-center gap-2 rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
-                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
-                      <span className="text-sm font-medium text-[var(--gs-text)]">{f.name}</span>
-                      {f.category && (
-                        <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }} color="blue">{f.category}</Tag>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <MembershipBenefits features={memberPlanFeatures} />
           </Card>
         ) : membership && cycle?.status === 'active' && !isPendingCancel && !isCancelRequested ? (
           <Card className="overflow-hidden">
@@ -685,33 +682,13 @@ export default function MyMembershipPage() {
               })()} wide />
             </div>
 
-            {/* Features with icons */}
-            {memberPlanFeatures.length > 0 && (
-              <div className="mt-6">
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--gs-text-soft)]">Quyền lợi</h4>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {memberPlanFeatures.map((f: any) => (
-                    <div key={f._id} className="flex items-center gap-3 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg" style={{ background: 'var(--theme-accent-muted)', color: 'var(--theme-accent)' }}>
-                        {f.icon ? <span className="text-lg">{f.icon}</span> : <CheckCircleFilled />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-[var(--gs-text)]">{f.name}</div>
-                        {f.category && (
-                          <span className="text-xs text-[var(--gs-text-muted)]">{f.category}</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <MembershipBenefits features={memberPlanFeatures} />
 
           </Card>
         ) : null}
 
         {/* Periods tabs (only for active membership) */}
-        {membership && !isPendingCancel && !isCancelRequested && periods.length > 0 && (
+        {membership && cycle?.status !== 'pending_initial_activation' && !isPendingCancel && !isCancelRequested && periods.length > 0 && (
           <Card className="mt-6" styles={{ body: { padding: '20px 24px' } }}>
             <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">Lịch sử gói</h3>
 
@@ -751,8 +728,7 @@ export default function MyMembershipPage() {
                             danger
                             className="mt-2"
                             disabled={batchCancelDays <= 0}
-                            loading={batchCancelling}
-                            onClick={handleBatchCancel}
+                            onClick={handleBatchCancelShowModal}
                           >
                             Xác nhận hủy
                           </Button>
@@ -821,39 +797,6 @@ export default function MyMembershipPage() {
                   ),
                 },
                 {
-                  key: 'cancel_requested',
-                  label: `Chờ phê duyệt (${cancelRequestedPeriods.length})`,
-                  children: cancelRequestedPeriods.length === 0 ? (
-                    <Empty description="Không có yêu cầu nào" />
-                  ) : (
-                    <div className="space-y-3">
-                      {cancelRequestedPeriods.map((p) => {
-                        const crGlobalIdx = periods.findIndex(pp => pp._id === p._id) + 1
-                        return (
-                        <Card key={p._id} size="small" className="border-[var(--gs-warning)] bg-[var(--gs-warning-bg)]" styles={{ body: { padding: '16px' } }}>
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-sm font-semibold text-[var(--gs-text)]">Đợt {crGlobalIdx}</span>
-                                <Tag icon={<ExclamationCircleOutlined />} color="warning">Đang chờ phê duyệt</Tag>
-                              </div>
-                              <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--gs-text-soft)]">
-                                <span>{formatDate(p.startDate)} → {formatDate(p.endDate)}</span>
-                                {p.price > 0 && <span className="font-medium text-[var(--gs-accent)]">{formatMoney(p.price)}</span>}
-                              </div>
-                              <div className="mt-2 text-xs leading-relaxed text-[var(--gs-text-muted)]">
-                                Yêu cầu hủy đã được gửi tới nhân viên.
-                              </div>
-                            </div>
-                            <Button size="small" disabled>Đã gửi yêu cầu</Button>
-                          </div>
-                        </Card>
-                      );
-                    })}
-                    </div>
-                  ),
-                },
-                {
                   key: 'cancelled',
                   label: `Đã hủy (${cancelledPeriods.length})`,
                   children: cancelledPeriods.length === 0 ? (
@@ -861,16 +804,16 @@ export default function MyMembershipPage() {
                   ) : (
                     <div className="space-y-3">
                       {cancelledPeriods.map((p) => {
-                        const isRefunded = (p.displayStatus || p.status) === 'REFUNDED'
+                        const isRefunded = p.refundStatus === 'refunded'
                         const ccGlobalIdx = periods.findIndex(pp => pp._id === p._id) + 1
                         return (
-                          <Card key={p._id} size="small" className="border-[var(--gs-border)] bg-[var(--gs-elevated)] opacity-60" styles={{ body: { padding: '16px' } }}>
+                          <Card key={p._id} size="small" className={`border-[var(--gs-border)] bg-[var(--gs-elevated)] ${!isRefunded ? 'opacity-60' : ''}`} styles={{ body: { padding: '16px' } }}>
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="text-sm font-semibold text-[var(--gs-text)]">Đợt {ccGlobalIdx}</span>
                                   {isRefunded ? (
-                                    <Tag color="orange">Đã hoàn tiền</Tag>
+                                    <Tag icon={<CheckCircleFilled />} color="success">Đã hoàn tiền</Tag>
                                   ) : (
                                     <Tag color="error">Đã hủy</Tag>
                                   )}
@@ -879,11 +822,21 @@ export default function MyMembershipPage() {
                                   <span>{formatDate(p.startDate)} → {formatDate(p.endDate)}</span>
                                   {p.price > 0 && <span className="font-medium text-[var(--gs-accent)]">{formatMoney(p.price)}</span>}
                                 </div>
-                                {isRefunded && (
-                                  <div className="mt-1.5 text-xs font-medium text-[var(--gs-success)]">
-                                    <CheckCircleFilled className="mr-1" />
-                                    Đã hoàn {formatMoney(p.price)}
+                                {isRefunded ? (
+                                  <div className="mt-3 space-y-1.5 rounded-lg border border-[var(--gs-success)]/30 bg-[var(--gs-success-bg)] p-3">
+                                    <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--gs-success)]">
+                                      <CheckCircleFilled />
+                                      <span>Hoàn vào Ví GymPro</span>
+                                    </div>
+                                    <div className="text-sm font-bold text-[var(--gs-success)]">{formatMoney(p.refundAmount || p.price)}</div>
+                                    {p.refundAt && (
+                                      <div className="text-xs text-[var(--gs-text-muted)]">
+                                        Ngày hoàn: {dayjs(p.refundAt).format('DD/MM/YYYY HH:mm')}
+                                      </div>
+                                    )}
                                   </div>
+                                ) : (
+                                  <div className="mt-2 text-xs text-[var(--gs-text-muted)] italic">Không hoàn tiền</div>
                                 )}
                               </div>
                             </div>
@@ -1126,7 +1079,11 @@ export default function MyMembershipPage() {
               <Card size="small" className="mb-4 bg-[var(--gs-bg-subtle)]">
                 <Descriptions column={2} size="small">
                   <Descriptions.Item label="Gói hiện tại">{availablePlans.currentPlan?.nameVi}</Descriptions.Item>
-                  <Descriptions.Item label="Còn lại">{availablePlans.remainingDays} ngày</Descriptions.Item>
+                  {availablePlans.cycleStatus === 'pending_initial_activation' ? (
+                    <Descriptions.Item label="Trạng thái">Chờ kích hoạt</Descriptions.Item>
+                  ) : (
+                    <Descriptions.Item label="Còn lại">{availablePlans.remainingDays} ngày</Descriptions.Item>
+                  )}
                 </Descriptions>
               </Card>
               {availablePlans.plans?.length === 0 ? (
@@ -1187,7 +1144,7 @@ export default function MyMembershipPage() {
                       <hr className="my-2" />
                       <div className="flex justify-between font-bold"><span>Thanh toán thêm</span><span className="text-[var(--theme-accent)]">{formatMoney(Math.abs(selectedPlan.diff))}</span></div>
                       <div className="mt-1 text-xs text-[var(--gs-text-muted)]">Số dư ví: {formatMoney(wallet?.balance)}</div>
-                      <Button type="primary" block className="mt-3" loading={changeLoading} onClick={handleChangePlan}
+                      <Button type="primary" block className="mt-3" loading={changeLoading} onClick={handleChangePlanClick}
                         disabled={wallet ? wallet.balance < Math.abs(selectedPlan.diff) : true}
                       >
                         Thanh toán và đổi gói
@@ -1198,7 +1155,7 @@ export default function MyMembershipPage() {
                       <hr className="my-2" />
                       <div className="flex justify-between font-bold"><span>Hoàn vào Ví GymPro</span><span className="text-green-600">{formatMoney(Math.abs(selectedPlan.diff))}</span></div>
                       <div className="mt-1 text-xs text-[var(--gs-text-muted)]">Bạn không cần thanh toán thêm. Tiền dư sẽ được cộng vào ví.</div>
-                      <Button type="primary" block className="mt-3" loading={changeLoading} onClick={handleChangePlan}>
+                      <Button type="primary" block className="mt-3" loading={changeLoading} onClick={handleChangePlanClick}>
                         Xác nhận đổi gói
                       </Button>
                     </>
@@ -1210,6 +1167,76 @@ export default function MyMembershipPage() {
             <Empty description="Không có dữ liệu" />
           )}
         </Spin>
+      </Modal>
+
+      {/* Renewal Handling Modal */}
+      <Modal
+        title="Xử lý gói gia hạn"
+        open={renewalHandlingOpen}
+        onCancel={() => { setRenewalHandlingOpen(false); setRenewalAction(null) }}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => { setRenewalHandlingOpen(false); setRenewalAction(null) }}>Hủy</Button>
+            <Button type="primary" loading={changeLoading}
+              disabled={!renewalAction}
+              onClick={() => {
+                if (renewalAction === 'cancel') handleChangePlan(true)
+                else handleChangePlan(false)
+              }}
+            >
+              Xác nhận
+            </Button>
+          </div>
+        }
+        width={520}
+        centered
+      >
+        <div className="py-2">
+          <p className="m-0 text-sm text-[var(--gs-text)]">
+            Bạn đang có <strong>{availablePlans?.pendingRenewalsCount}</strong> gói gia hạn (tổng giá trị <strong>{formatMoney(availablePlans?.pendingRenewalsTotal || 0)}</strong>).
+          </p>
+          <p className="mt-1 text-sm text-[var(--gs-text-soft)]">Bạn muốn xử lý các gói gia hạn như thế nào?</p>
+
+          <div className={`mt-4 rounded-xl border p-4 cursor-pointer transition-colors ${renewalAction === 'convert' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/10' : 'border-[var(--gs-border)] hover:bg-[var(--gs-border)]/20'}`}
+            onClick={() => setRenewalAction('convert')}
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5">
+                <div className={`h-4 w-4 rounded-full border-2 ${renewalAction === 'convert' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]' : 'border-[var(--gs-text-muted)]'}`}>
+                  {renewalAction === 'convert' && <div className="h-2 w-2 rounded-full bg-white m-0.5" />}
+                </div>
+              </div>
+              <div>
+                <p className="m-0 text-sm font-semibold text-[var(--gs-text)]">Quy đổi sang gói mới</p>
+                <p className="mt-1 text-xs text-[var(--gs-text-muted)]">
+                  {selectedPlan && selectedPlan.diff > 0
+                    ? `Bạn cần thanh toán thêm ${formatMoney(Math.abs(selectedPlan.diff))}.`
+                    : selectedPlan && selectedPlan.diff < 0
+                      ? `Bạn sẽ được hoàn ${formatMoney(Math.abs(selectedPlan.diff))} vào Ví GymPro.`
+                      : 'Không có chênh lệch giá.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className={`mt-3 rounded-xl border p-4 cursor-pointer transition-colors ${renewalAction === 'cancel' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/10' : 'border-[var(--gs-border)] hover:bg-[var(--gs-border)]/20'}`}
+            onClick={() => setRenewalAction('cancel')}
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5">
+                <div className={`h-4 w-4 rounded-full border-2 ${renewalAction === 'cancel' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]' : 'border-[var(--gs-text-muted)]'}`}>
+                  {renewalAction === 'cancel' && <div className="h-2 w-2 rounded-full bg-white m-0.5" />}
+                </div>
+              </div>
+              <div>
+                <p className="m-0 text-sm font-semibold text-[var(--gs-text)]">Hủy các gói gia hạn</p>
+                <p className="mt-1 text-xs text-[var(--gs-text-muted)]">
+                  Toàn bộ Gia hạn sẽ bị hủy. Bạn sẽ được hoàn <strong>{formatMoney(availablePlans?.pendingRenewalsTotal || 0)}</strong> vào Ví GymPro.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </Modal>
 
       {/* Change History Modal */}
@@ -1233,6 +1260,91 @@ export default function MyMembershipPage() {
               { title: 'Hoàn ví', dataIndex: 'walletCredit', render: (v: number) => v > 0 ? <span className="text-green-600">{formatMoney(v)}</span> : '—' },
             ]}
           />
+        )}
+      </Modal>
+
+      {/* Batch Cancel Confirmation Modal */}
+      <Modal
+        title="Hủy gia hạn"
+        open={batchCancelModal.open}
+        onCancel={() => !batchCancelModal.loading && setBatchCancelModal({ open: false, loading: false, totalRefund: 0, count: 0 })}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button disabled={batchCancelModal.loading} onClick={() => setBatchCancelModal({ open: false, loading: false, totalRefund: 0, count: 0 })}>Hủy</Button>
+            <Button danger type="primary" loading={batchCancelModal.loading} onClick={handleBatchCancelConfirm}>
+              Xác nhận
+            </Button>
+          </div>
+        }
+        width={480}
+        centered
+      >
+        <div className="py-4">
+          <p className="m-0 text-sm text-[var(--gs-text)]">Bạn sắp hủy:</p>
+          <p className="mt-2 text-base font-semibold text-[var(--gs-text)]">• {batchCancelModal.count} lần gia hạn</p>
+          <div className="mt-4 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[var(--gs-text-soft)]">Tổng tiền hoàn</span>
+              <span className="text-lg font-bold text-[var(--gs-success)]">{formatMoney(batchCancelModal.totalRefund)}</span>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-[var(--gs-text-muted)]">
+              Số tiền sẽ được hoàn ngay vào Ví GymPro. Thao tác này không thể hoàn tác.
+            </p>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Pending Cancel Confirmation Modal */}
+      <Modal
+        title="Hủy gói"
+        open={pendingCancelModal.open}
+        onCancel={() => setPendingCancelModal({ open: false, loading: false, result: null })}
+        footer={pendingCancelModal.result ? (
+          <Button type="primary" onClick={() => setPendingCancelModal({ open: false, loading: false, result: null })}>Đóng</Button>
+        ) : (
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setPendingCancelModal({ open: false, loading: false, result: null })}>Quay lại</Button>
+            <Button danger type="primary" loading={pendingCancelModal.loading} onClick={handleCancelPending}>
+              Xác nhận hủy
+            </Button>
+          </div>
+        )}
+        width={480}
+        centered
+      >
+        {pendingCancelModal.result ? (
+          <div className="py-4">
+            <div className="flex items-start gap-3">
+              <CheckCircleFilled className="mt-0.5 text-lg text-[var(--gs-success)]" />
+              <div>
+                <p className="m-0 text-sm font-semibold text-[var(--gs-text)]">
+                  {pendingCancelModal.result.refundAmount > 0
+                    ? `Đã hoàn ${formatMoney(pendingCancelModal.result.refundAmount)} vào ví.`
+                    : 'Đã hủy gói tập.'}
+                </p>
+                <p className="mt-2 text-xs leading-relaxed text-[var(--gs-text-muted)]">{pendingCancelModal.result.message}</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="py-4">
+            <p className="m-0 text-sm text-[var(--gs-text)]">
+              Bạn đang hủy gói <strong>{planName}</strong> chưa được kích hoạt.
+            </p>
+            <div className="mt-4 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--gs-text-soft)]">Tổng tiền hoàn dự kiến</span>
+                <span className={`text-base font-bold ${planPrice > 0 && cycle?.refundEligible ? 'text-[var(--gs-success)]' : 'text-[var(--gs-text-muted)]'}`}>
+                  {cycle?.refundEligible ? formatMoney(planPrice) : '0đ'}
+                </span>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-[var(--gs-text-muted)]">
+                {cycle?.refundEligible
+                  ? 'Số tiền sẽ được hoàn về Ví GymPro ngay sau khi xác nhận.'
+                  : 'Gói đã quá 7 ngày kể từ ngày đăng ký. Theo chính sách hoàn tiền, bạn sẽ không được hoàn tiền.'}
+              </p>
+            </div>
+          </div>
         )}
       </Modal>
 

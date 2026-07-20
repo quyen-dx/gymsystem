@@ -17,6 +17,7 @@ const trainingRequestSchema = new mongoose.Schema({
     index: true,
   },
   assignedClassId: { type: mongoose.Schema.Types.ObjectId, ref: 'TrainingClass', default: null },
+  assignedTrainerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   assignedAt: Date,
   assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   cancelledAt: Date,

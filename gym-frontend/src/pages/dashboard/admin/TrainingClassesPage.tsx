@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Table, Button, Tag, Modal, Form, Input, Select, message, Space, Tooltip, Popconfirm } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SendOutlined } from '@ant-design/icons'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { trainingClassService, DAY_OPTIONS, SPECIALIZATION_OPTIONS, type TrainingClass } from '../../../services/trainingGroupService'
 import { trainerService } from '../../../services/trainerService'
 import { floorZoneService } from '../../../services/floorZoneService'
 import { getUserDisplayName } from '../../../utils/userDisplay'
+import { ptClassService } from '../../../services/ptAssignmentService'
 
 const TIME_SLOTS = [
   '07:00 - 09:00',
@@ -32,6 +33,14 @@ const CLASS_SPECIALIZATION_OPTIONS = [
   { value: 'MEDITATION', label: 'MEDITATION' },
 ]
 
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  waiting_pt: { label: 'Chờ PT', color: 'orange' },
+  waiting_accept: { label: 'Đang chờ PT xác nhận', color: 'processing' },
+  active: { label: 'Đang hoạt động', color: 'success' },
+  inactive: { label: 'Tạm dừng', color: 'default' },
+  closed: { label: 'Đã đóng', color: 'error' },
+}
+
 export default function TrainingClassesPage() {
   const [classes, setClasses] = useState<TrainingClass[]>([])
   const [trainers, setTrainers] = useState<any[]>([])
@@ -45,14 +54,9 @@ export default function TrainingClassesPage() {
   const [filterSpecialization, setFilterSpecialization] = useState<string | undefined>()
   const [filterPtId, setFilterPtId] = useState<string | undefined>()
   const [filterTimeSlot, setFilterTimeSlot] = useState<string | undefined>()
-  const [filterCapacity, setFilterCapacity] = useState<string | undefined>() // 'full' | 'available' | undefined
-  const [selectedSpecialty, setSelectedSpecialty] = useState<string | undefined>()
+  const [filterCapacity, setFilterCapacity] = useState<string | undefined>()
 
-  const filteredTrainers = trainers.filter((t: any) => {
-    if (!selectedSpecialty) return false
-    const ptSpecialties = Array.isArray(t.specialties) ? t.specialties.map((s: string) => s.toUpperCase()) : []
-    return ptSpecialties.includes(selectedSpecialty.toUpperCase())
-  })
+  const [ptModal, setPtModal] = useState<{ open: boolean; class: TrainingClass | null; loading: boolean }>({ open: false, class: null, loading: false })
 
   const load = async () => {
     setLoading(true)
@@ -75,16 +79,13 @@ export default function TrainingClassesPage() {
   const handleOpen = (c?: TrainingClass) => {
     if (c) {
       setEditing(c)
-      const pt = (c.ptId as any)
       const floor = (c.floorId as any)
       const zone = (c.zoneId as any)
       setSelectedFloor(floor?._id || null)
-      setSelectedSpecialty(c.specialization || undefined)
       form.setFieldsValue({
         name: c.name,
         description: c.description,
         specialization: c.specialization || undefined,
-        ptId: pt?._id || pt || undefined,
         floorId: floor?._id || undefined,
         zoneId: zone?._id || undefined,
         daysOfWeek: c.daysOfWeek || [],
@@ -93,7 +94,6 @@ export default function TrainingClassesPage() {
     } else {
       setEditing(null)
       setSelectedFloor(null)
-      setSelectedSpecialty(undefined)
       form.resetFields()
     }
     setOpen(true)
@@ -114,8 +114,10 @@ export default function TrainingClassesPage() {
     const [startTime, endTime] = values.timeSlot
       ? values.timeSlot.split(' - ').map((s: string) => s.trim())
       : [null, null]
-    const { timeSlot, ...rest } = values
-    const payload = { ...rest, startTime, endTime }
+    const payload = { ...values, startTime, endTime }
+
+    // Remove timeSlot from payload (it's reconstructed as startTime/endTime)
+    delete payload.timeSlot
     try {
       if (editing) {
         await trainingClassService.update(editing._id, payload)
@@ -201,16 +203,20 @@ export default function TrainingClassesPage() {
 
   const columns = [
     {
-      title: 'Mã lớp', dataIndex: 'code', key: 'code', width: 80,
-      render: (c: string) => <span className="font-mono text-xs font-semibold text-[var(--gs-text)]">{c || '—'}</span>,
-    },
-    {
       title: 'Tên lớp', dataIndex: 'name', key: 'name',
       render: (n: string) => <span className="font-semibold text-[var(--gs-text)]">{n}</span>,
     },
     {
       title: 'Chuyên môn', dataIndex: 'specialization', key: 'specialization', width: 130,
       render: (s: string) => <Tag className="uppercase">{getSpecializationTag(s)}</Tag>,
+    },
+    {
+      title: 'Trạng thái', key: 'status', width: 140,
+      render: (_: any, r: TrainingClass) => {
+        const st = r.status || 'waiting_pt'
+        const info = STATUS_LABELS[st] || { label: st, color: 'default' }
+        return <Tag color={info.color}>{info.label}</Tag>
+      },
     },
     {
       title: 'PT phụ trách', key: 'pt', width: 150,
@@ -242,19 +248,31 @@ export default function TrainingClassesPage() {
       render: (_: any, r: TrainingClass) => getCapacityLabel(r),
     },
     {
-      title: '', key: 'action', width: 80,
-      render: (_: any, r: TrainingClass) => (
-        <Space size={4}>
-          <Tooltip title="Sửa">
-            <Button size="small" icon={<EditOutlined />} onClick={() => handleOpen(r)} />
-          </Tooltip>
-          <Popconfirm title="Xóa lớp này?" onConfirm={() => handleDelete(r._id)} okText="Xóa" cancelText="Hủy">
-            <Tooltip title="Xóa">
-              <Button size="small" danger icon={<DeleteOutlined />} />
+      title: '', key: 'action', width: 160,
+      render: (_: any, r: TrainingClass) => {
+        const isWaitingPt = r.status === 'waiting_pt' || !r.status
+        const isWaitingAccept = r.status === 'waiting_accept'
+        return (
+          <Space size={4}>
+            {isWaitingPt && (
+              <Button size="small" type="primary" icon={<SendOutlined />} onClick={() => setPtModal({ open: true, class: r, loading: false })}>
+                Gửi PT
+              </Button>
+            )}
+            {isWaitingAccept && (
+              <Tag color="processing">Đang chờ</Tag>
+            )}
+            <Tooltip title="Sửa">
+              <Button size="small" icon={<EditOutlined />} onClick={() => handleOpen(r)} />
             </Tooltip>
-          </Popconfirm>
-        </Space>
-      ),
+            <Popconfirm title="Xóa lớp này?" onConfirm={() => handleDelete(r._id)} okText="Xóa" cancelText="Hủy">
+              <Tooltip title="Xóa">
+                <Button size="small" danger icon={<DeleteOutlined />} />
+              </Tooltip>
+            </Popconfirm>
+          </Space>
+        )
+      },
     },
   ]
 
@@ -303,13 +321,7 @@ export default function TrainingClassesPage() {
               </div>
               <div className="space-y-2">
                 <Form.Item name="specialization" label="Chuyên môn của lớp" rules={[{ required: true, message: 'Chọn chuyên môn' }]}>
-                  <Select placeholder="Chọn chuyên môn" options={CLASS_SPECIALIZATION_OPTIONS}
-                    onChange={(val) => { setSelectedSpecialty(val); form.setFieldValue('ptId', undefined) }} />
-                </Form.Item>
-                <Form.Item name="ptId" label="PT điều hành">
-                  <Select placeholder={selectedSpecialty ? 'Chọn PT' : 'Vui lòng chọn chuyên môn của lớp trước'}
-                    disabled={!selectedSpecialty} allowClear showSearch optionFilterProp="label"
-                    options={filteredTrainers.map((t: any) => ({ label: getUserDisplayName(t, 'PT'), value: t._id }))} />
+                  <Select placeholder="Chọn chuyên môn" options={CLASS_SPECIALIZATION_OPTIONS} />
                 </Form.Item>
                 <Form.Item name="daysOfWeek" label="Thứ trong tuần">
                   <Select placeholder="Chọn các thứ" mode="multiple" options={DAY_OPTIONS} />
@@ -329,6 +341,54 @@ export default function TrainingClassesPage() {
               </div>
             </div>
           </Form>
+        </Modal>
+
+        {/* PT Request Modal */}
+        <Modal
+          title="Gửi yêu cầu PT"
+          open={ptModal.open}
+          onCancel={() => setPtModal({ open: false, class: null, loading: false })}
+          footer={null}
+          width={500}
+          centered
+          destroyOnClose
+        >
+          {ptModal.class && (
+            <div className="py-2">
+              <p className="text-sm text-[var(--gs-text)]">
+                Gửi yêu cầu phụ trách lớp <strong>{ptModal.class.name}</strong> ({ptModal.class.code})
+              </p>
+              <p className="mt-1 text-xs text-[var(--gs-text-muted)]">
+                Chuyên môn: {getSpecializationTag(ptModal.class.specialization)}
+              </p>
+              <Select
+                className="mt-4 w-full"
+                placeholder="Chọn PT"
+                showSearch
+                optionFilterProp="label"
+                onChange={async (trainerId) => {
+                  setPtModal((prev) => ({ ...prev, loading: true }))
+                  try {
+                    await ptClassService.requestClass(ptModal.class!._id, trainerId)
+                    message.success('Đã gửi yêu cầu đến PT')
+                    setPtModal({ open: false, class: null, loading: false })
+                    load()
+                  } catch (err: any) {
+                    message.error(err?.response?.data?.message || 'Gửi thất bại')
+                    setPtModal((prev) => ({ ...prev, loading: false }))
+                  }
+                }}
+                options={trainers
+                  .filter((t: any) => {
+                    const spec = ptModal.class!.specialization.toUpperCase()
+                    const ptSpecs = Array.isArray(t.specialties) ? t.specialties.map((s: string) => s.toUpperCase()) : []
+                    return ptSpecs.length === 0 || ptSpecs.includes(spec)
+                  })
+                  .map((t: any) => ({ label: getUserDisplayName(t, 'PT'), value: t._id }))}
+              />
+              <p className="mt-2 text-xs text-[var(--gs-text-muted)]">Chọn PT để gửi yêu cầu nhận lớp.</p>
+            </div>
+          )}
         </Modal>
       </div>
     </DashboardLayout>

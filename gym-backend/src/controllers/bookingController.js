@@ -24,13 +24,23 @@ const makeSlotId = (ptId, date, slot) => {
 
 const hasActiveMembershipForDate = async (memberId, date) => {
   const bookingDate = normalizeDate(date)
-  const cycle = await MembershipCycle.findOne({
+
+  // Active cycle: cần expiresAt >= ngày đặt và trạng thái active
+  const activeCycle = await MembershipCycle.findOne({
     memberId,
     status: 'active',
     expiresAt: { $gte: bookingDate },
   }).lean()
+  if (activeCycle) return true
 
-  return !!cycle
+  // Pending activation cycle: chưa kích hoạt nhưng đã có quyền lợi PT
+  const pendingCycle = await MembershipCycle.findOne({
+    memberId,
+    status: 'pending_initial_activation',
+  }).lean()
+  if (pendingCycle) return true
+
+  return false
 }
 
 const requireActiveMembershipForDate = async (memberId, date, res) => {

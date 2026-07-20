@@ -1,5 +1,15 @@
 import api from './api'
 
+export interface TrainingRequestMembershipInfo {
+  planName: string
+  remainingDays: number
+  totalRemainingDays: number
+  pendingRenewalsCount: number
+  isPending?: boolean
+  hasMembership: boolean
+  planPrice: number
+}
+
 export interface TrainingRequest {
   _id: string
   memberId: string | { _id: string; name?: string; fullName?: string; email?: string; phone?: string; avatar?: string; memberCode?: string }
@@ -13,11 +23,13 @@ export interface TrainingRequest {
   note?: string
   status: 'pending' | 'assigned' | 'cancelled'
   assignedClassId?: string | { _id: string; name?: string; schedule?: Array<{ dayOfWeek: number; time: string }> }
+  assignedTrainerId?: string | null
   assignedAt?: string
   assignedBy?: string
   cancelledAt?: string
   cancelReason?: string
   createdAt: string
+  membershipInfo?: TrainingRequestMembershipInfo
 }
 
 export const trainingRequestService = {

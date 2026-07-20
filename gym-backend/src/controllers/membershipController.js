@@ -1,4 +1,5 @@
 import {
+  autoCancelPendingPeriod,
   cancelPeriod,
   cancelRegistration,
   cancelRenewal,
@@ -208,6 +209,18 @@ export const getMembershipPeriodsHandler = async (req, res, next) => {
 export const cancelMyPeriod = async (req, res, next) => {
   try {
     const result = await cancelPeriod({
+      userId: req.user._id,
+      periodId: req.params.periodId,
+    })
+    return res.json(result)
+  } catch (error) {
+    return sendServiceError(res, error, next)
+  }
+}
+
+export const autoCancelMyPeriod = async (req, res, next) => {
+  try {
+    const result = await autoCancelPendingPeriod({
       userId: req.user._id,
       periodId: req.params.periodId,
     })

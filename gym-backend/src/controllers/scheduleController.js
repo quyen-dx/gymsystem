@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import PTAssignment from '../models/PTAssignment.js'
 import TrainingClass from '../models/TrainingClass.js'
+import TrainingAssignment from '../models/TrainingAssignment.js'
 import Workout from '../models/Workout.js'
 import { applyOverridesToSchedules } from '../services/shiftSwapService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
@@ -21,14 +22,19 @@ const enrichSessions = async (schedules) => {
 
   if (!ptIds.length) return schedules
 
-  const classes = await TrainingClass.find({ ptId: { $in: ptIds } })
-    .populate('zoneId', 'name maxCapacity')
-    .populate('floorId', 'name')
+  const assignments = await TrainingAssignment.find({ trainerId: { $in: ptIds }, status: 'active' })
+    .populate({
+      path: 'classId',
+      populate: [
+        { path: 'zoneId', select: 'name maxCapacity' },
+        { path: 'floorId', select: 'name' },
+      ],
+    })
     .lean()
 
   for (const schedule of schedules) {
     const ptId = String(schedule.assignedBy && typeof schedule.assignedBy === 'object' ? schedule.assignedBy._id : schedule.assignedBy)
-    const ptClasses = classes.filter(c => String(c.ptId) === ptId)
+    const ptAssignments = assignments.filter(a => String(a.trainerId) === ptId)
 
     for (const session of schedule.sessions || []) {
       if (!session.date || !session.time) continue
@@ -36,9 +42,12 @@ const enrichSessions = async (schedules) => {
       const dayOfWeek = new Date(session.date).getDay()
       const sessionTime = session.time
 
-      const matched = ptClasses.find(c =>
-        (c.daysOfWeek || []).includes(dayOfWeek) && c.startTime === sessionTime
-      )
+      const matched = ptAssignments
+        .map(a => a.classId)
+        .filter(Boolean)
+        .find(c =>
+          (c.daysOfWeek || []).includes(dayOfWeek) && c.startTime === sessionTime
+        )
 
       if (matched) {
         if (!session.endTime || session.endTime === '') session.endTime = matched.endTime || ''
@@ -74,7 +83,7 @@ export const createSchedule = async (req, res) => {
     for (const s of sessions) {
       if (!s.date || !s.time) continue
       const dayOfWeek = new Date(s.date).getDay()
-      const matchQuery = { ptId, daysOfWeek: dayOfWeek, startTime: s.time }
+      const matchQuery = { ptId, daysOfWeek: dayOfWeek, startTime: s.time, status: 'active' }
       if (s.endTime) matchQuery.endTime = s.endTime
       const match = await TrainingClass.findOne(matchQuery).lean()
       if (match) {

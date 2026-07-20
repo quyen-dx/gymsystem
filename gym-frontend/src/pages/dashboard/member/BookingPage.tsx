@@ -122,7 +122,11 @@ export default function BookingPage() {
   useEffect(() => {
     membershipService.getMyMembership().then((res) => {
       const m = res.data.membership
-      const allowed = (m?.status === 'active' || m?.status === 'pending_cancel') && Number(m.remainingDays || 0) > 0
+      const cycle = res.data.cycle
+      const statusOk = m?.status === 'active' || m?.status === 'pending_cancel'
+      const pendingOk = cycle?.status === 'pending_initial_activation'
+      const notExpired = statusOk ? Number(m?.remainingDays || 0) > 0 : true
+      const allowed = (statusOk || pendingOk) && notExpired
       setCanRequest(allowed)
       setPlanName(m?.planNameVi || m?.plan?.nameVi || null)
     }).catch(() => setCanRequest(false))

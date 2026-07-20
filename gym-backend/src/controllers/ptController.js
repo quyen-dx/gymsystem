@@ -3,6 +3,7 @@ import PT from '../models/PT.js'
 import PTSchedule from '../models/PTSchedule.js'
 import Booking from '../models/Booking.js'
 import TrainingClass from '../models/TrainingClass.js'
+import TrainingAssignment from '../models/TrainingAssignment.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import CheckIn from '../models/CheckIn.js'
 import { recordAuditLog } from '../services/auditLogService.js'
@@ -219,11 +220,18 @@ export const getPTSchedule = async (req, res) => {
 
 export const getPTMyClasses = async (req, res) => {
   try {
-    const classes = await TrainingClass.find({ ptId: req.user._id })
-      .populate('floorId', 'name')
-      .populate('zoneId', 'name')
-      .sort({ startTime: 1 })
+    const assignments = await TrainingAssignment.find({ trainerId: req.user._id, status: 'active' })
+      .populate({
+        path: 'classId',
+        populate: [
+          { path: 'floorId', select: 'name' },
+          { path: 'zoneId', select: 'name' },
+        ],
+      })
+      .sort({ createdAt: -1 })
       .lean()
+
+    const classes = assignments.map(a => a.classId).filter(Boolean)
 
     res.json({ classes })
   } catch (error) {
@@ -253,15 +261,50 @@ export const getPTMyWeekAttendees = async (req, res) => {
     const endDate = new Date(startDate)
     endDate.setDate(endDate.getDate() + 7)
 
-    const classes = await TrainingClass.find({ ptId: req.user._id })
-      .select('_id code name daysOfWeek startTime endTime')
+    const assignments = await TrainingAssignment.find({ trainerId: req.user._id, status: 'active' })
+      .populate('classId', '_id code name daysOfWeek startTime endTime')
       .lean()
+
+    const classes = assignments.map(a => a.classId).filter(Boolean)
 
     if (classes.length === 0) {
       return res.json({ attendees: [] })
     }
 
     const classCodes = classes.map(c => c.code).filter(Boolean)
+    const classIds = classes.map(c => c._id).filter(Boolean)
+
+    // Lấy enrolled members từ ClassEnrollment (bao gồm cả chưa có workout)
+    const enrollments = await ClassEnrollment.find({
+      classId: { $in: classIds },
+      status: 'active',
+    })
+      .populate('memberId', 'name fullName memberCode')
+      .lean()
+
+    // Thêm enrolled members vào attendeeMap trước
+    // Dùng weekday của class, không giới hạn ngày
+    const attendeeMap = new Map()
+    for (const enrollment of enrollments) {
+      const member = typeof enrollment.memberId === 'object' ? enrollment.memberId : null
+      if (!member?._id) continue
+      const cls = classes.find(c => String(c._id) === String(enrollment.classId))
+      if (!cls) continue
+      for (const dayOfWeek of cls.daysOfWeek || []) {
+        const key = `${dayOfWeek}_${cls.code}`
+        if (!attendeeMap.has(key)) {
+          attendeeMap.set(key, new Map())
+        }
+        const members = attendeeMap.get(key)
+        if (!members.has(String(member._id))) {
+          members.set(String(member._id), {
+            _id: member._id,
+            name: member.fullName || member.name || '',
+            memberCode: member.memberCode || '',
+          })
+        }
+      }
+    }
 
     const schedules = await WorkoutSchedule.find({
       status: 'active',
@@ -271,9 +314,6 @@ export const getPTMyWeekAttendees = async (req, res) => {
     })
       .populate('memberId', 'name fullName memberCode')
       .lean()
-
-    // Map: "dayOfWeek_classCode" -> Map<memberId, memberInfo>
-    const attendeeMap = new Map()
 
     for (const schedule of schedules) {
       const member = typeof schedule.memberId === 'object' ? schedule.memberId : null

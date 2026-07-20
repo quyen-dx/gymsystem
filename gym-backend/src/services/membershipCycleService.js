@@ -89,6 +89,7 @@ export async function activateCycle(memberId, opts = {}) {
       new: true,
       sort: { createdAt: -1 },
       session: opts.session || null,
+      updatePipeline: true,
     }
   )
 
@@ -201,6 +202,7 @@ export async function markBenefitUsed(memberId, benefitType, opts = {}) {
       new: true,
       sort: { createdAt: -1 },
       session: opts.session || null,
+      updatePipeline: true,
     }
   )
 

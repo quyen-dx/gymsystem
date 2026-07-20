@@ -63,7 +63,11 @@ export default function WorkoutPage() {
       try {
         const res = await membershipService.getMyMembership()
         const membership = res.data.membership
-        const allowed = (membership?.status === 'active' || membership?.status === 'pending_cancel') && Number(membership.remainingDays || 0) > 0
+        const cycle = res.data.cycle
+        const statusOk = membership?.status === 'active' || membership?.status === 'pending_cancel'
+        const pendingOk = cycle?.status === 'pending_initial_activation'
+        const notExpired = statusOk ? Number(membership?.remainingDays || 0) > 0 : true
+        const allowed = (statusOk || pendingOk) && notExpired
         setCanView(allowed)
         if (membership) {
           const name = membership.planNameVi || membership.plan?.nameVi || null

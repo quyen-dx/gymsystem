@@ -66,6 +66,7 @@ interface ClientInfo {
   goals?: string[]
   workout?: { _id: string; name: string; goal?: string } | null
   scheduleCount?: number
+  membershipStatus?: 'active' | 'pending_initial_activation' | null
   cancelledAt?: string
   cancelReason?: string
 }
@@ -93,6 +94,7 @@ function extractClient(assignment: PTAssignment): ClientInfo | null {
     goals: assignment.goals || [],
     workout,
     scheduleCount: assignment.scheduleCount ?? 0,
+    membershipStatus: assignment.membershipStatus,
     cancelledAt: assignment.cancelledAt,
     cancelReason: assignment.cancelReason,
   }
@@ -578,7 +580,7 @@ export default function PTClientsPage() {
       render: (_: unknown, record: ClientInfo) => {
         const ce = record.classEnrollment
         if (ce) {
-          return <span className="text-sm text-[var(--gs-text)]">[{ce.code}] {ce.name}</span>
+          return <span className="text-sm text-[var(--gs-text)]">{ce.name}</span>
         }
         return <span className="text-sm text-[var(--gs-text-muted)] italic">Chưa xếp lớp</span>
       },
@@ -609,6 +611,17 @@ export default function PTClientsPage() {
         }
         return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
       },
+    },
+    {
+      title: 'Gói tập',
+      width: 130,
+      render: (_: unknown, record: ClientInfo) => (
+        record.membershipStatus === 'pending_initial_activation'
+          ? <Tag color="orange">🟡 Chờ kích hoạt</Tag>
+          : record.membershipStatus === 'active'
+            ? <Tag color="green">🟢 Đang hoạt động</Tag>
+            : <span className="text-xs text-[var(--gs-text-muted)]">—</span>
+      ),
     },
     {
       title: 'Lịch tập',
@@ -675,7 +688,7 @@ export default function PTClientsPage() {
       render: (_: unknown, record: PendingApproval) => {
         const cls = typeof record.classId === 'object' ? record.classId : null
         return cls
-          ? <span className="text-sm text-[var(--gs-text)]">[{cls.code}] {cls.name}</span>
+          ? <span className="text-sm text-[var(--gs-text)]">{cls.name}</span>
           : <span className="text-sm text-[var(--gs-text-muted)]">—</span>
       },
     },
@@ -756,7 +769,7 @@ export default function PTClientsPage() {
         if (record._type === 'assignment_end') {
           const cls = typeof record.classId === 'object' ? record.classId : null
           return cls
-            ? <span className="text-sm text-[var(--gs-text)]">[{cls.code}] {cls.name}</span>
+            ? <span className="text-sm text-[var(--gs-text)]">{cls.name}</span>
             : <span className="text-sm text-[var(--gs-text-muted)]">—</span>
         }
         return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
@@ -1014,7 +1027,7 @@ export default function PTClientsPage() {
     </div>
   )
 
-  const tabContent = activeTab === 'active' ? activeTabEl : activeTab === 'pending' ? pendingTabEl : historyTabEl
+  const tabContent = activeTab === 'active' || activeTab === 'pending_first' ? activeTabEl : activeTab === 'pending' ? pendingTabEl : historyTabEl
 
   // ============ RENDER ============
 

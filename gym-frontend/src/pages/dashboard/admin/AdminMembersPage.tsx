@@ -2,6 +2,7 @@ import {
   EditOutlined,
   EyeOutlined,
   LockOutlined,
+  MailOutlined,
   PlusOutlined,
   UnlockOutlined,
 } from '@ant-design/icons'
@@ -83,6 +84,7 @@ export default function AdminMembersPage() {
   const [reqFilter, setReqFilter] = useState<string>('pending')
   const [reqLoading, setReqLoading] = useState(false)
   const [requests, setRequests] = useState<TrainingRequest[]>([])
+  const [msgModal, setMsgModal] = useState<{ open: boolean; request: TrainingRequest | null; text: string; sending: boolean }>({ open: false, request: null, text: '', sending: false })
 
   const loadRequests = async () => {
     setReqLoading(true)
@@ -411,7 +413,8 @@ export default function AdminMembersPage() {
 
       <Modal title="Yêu cầu tập luyện" open={modalOpen} onCancel={() => setModalOpen(false)}
         width={1100} centered footer={null} destroyOnClose
-        styles={{ body: { paddingTop: 8 } }}>
+        styles={{ body: { paddingTop: 8, maxHeight: '75vh', overflowY: 'auto' } }}
+        className="!w-[min(95vw,1500px)] max-sm:!w-[98vw]">
         <div className="flex items-center justify-between mb-4">
           <div className="flex gap-2">
             {['pending', 'matched', 'cancelled', ''].map((s) => (
@@ -428,22 +431,25 @@ export default function AdminMembersPage() {
           loading={reqLoading}
           pagination={false}
           locale={{ emptyText: 'Không có yêu cầu nào' }}
+          scroll={{ x: 1400 }}
           columns={[
             {
               title: 'Hội viên',
               dataIndex: 'memberId',
-              width: 200,
+              width: 220,
+              className: '!whitespace-nowrap',
               render: (m: any) => (
                 <div className="flex items-center gap-2">
-                  {m?.avatar && <img src={m.avatar} className="h-8 w-8 rounded-full object-cover" />}
-                  <span className="font-medium text-[var(--gs-text)]">{getUserDisplayName(m)}</span>
+                  {m?.avatar && <img src={m.avatar} className="h-8 w-8 rounded-full object-cover shrink-0" />}
+                  <span className="font-medium text-[var(--gs-text)] truncate">{getUserDisplayName(m)}</span>
                 </div>
               ),
             },
             {
               title: 'Chuyên môn & Mục tiêu',
               dataIndex: 'goals',
-              width: 260,
+              width: 240,
+              className: '!whitespace-nowrap',
               render: (_: any, r: TrainingRequest) => {
                 const specName = SPEC_LABELS[r.specialization || 'GYM'] || r.specialization || 'GYM'
                 return (
@@ -464,6 +470,7 @@ export default function AdminMembersPage() {
               title: 'Lịch',
               key: 'schedule',
               width: 280,
+              className: '!whitespace-nowrap',
               render: (_: any, r: TrainingRequest) => (
                 <div className="text-xs text-[var(--gs-text)] space-y-1">
                   <div><span className="text-[var(--gs-text-muted)]">Số buổi:</span> {r.desiredSessions} buổi/tuần</div>
@@ -473,9 +480,47 @@ export default function AdminMembersPage() {
               ),
             },
             {
+              title: 'Gói tập',
+              key: 'membership',
+              width: 260,
+              className: '!whitespace-nowrap',
+              render: (_: any, r: TrainingRequest) => {
+                const info = r.membershipInfo
+                if (!info) return <span className="text-xs text-[var(--gs-text-muted)]">Không có gói</span>
+                const isExpired = !info.isPending && info.totalRemainingDays <= 0
+                return (
+                  <div className="text-xs space-y-1">
+                    <div className="font-semibold text-[var(--gs-text)]">{info.planName}</div>
+                    <div className="flex flex-wrap gap-1">
+                      {info.isPending ? (
+                        <Tag color="orange">Chờ kích hoạt</Tag>
+                      ) : isExpired ? (
+                        <Tag color="red">Đã hết hạn</Tag>
+                      ) : (
+                        <Tag color="green">Đang hoạt động</Tag>
+                      )}
+                    </div>
+                    {info.isPending ? null : isExpired ? null : (
+                      <div className="text-[var(--gs-text-muted)]">
+                        {info.pendingRenewalsCount > 0 ? (
+                          <span className="flex flex-wrap gap-1 items-center">
+                            <span>Còn {info.totalRemainingDays} ngày</span>
+                            <Tag color="purple">Có gia hạn</Tag>
+                          </span>
+                        ) : (
+                          <span>Còn {info.totalRemainingDays} ngày</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              },
+            },
+            {
               title: 'Trạng thái',
               dataIndex: 'status',
-              width: 100,
+              width: 120,
+              className: '!whitespace-nowrap',
               render: (s: string) => {
                 const map: Record<string, [string, string]> = {
                   pending: ['orange', 'Chờ'],
@@ -486,23 +531,122 @@ export default function AdminMembersPage() {
               },
             },
             {
-              title: 'Xếp vào lớp',
+              title: 'Thao tác',
               key: 'action',
-              width: 180,
+              width: 320,
+              className: '!whitespace-nowrap',
               render: (_: any, r: TrainingRequest) => {
                 if (r.status !== 'pending') {
                   return <span className="text-xs text-[var(--gs-text-muted)]">Đã xử lý</span>
                 }
+                const info = r.membershipInfo
+                const canFindClass = info && (info.isPending || info.totalRemainingDays >= 30)
+                const isExpired = info && !info.isPending && info.totalRemainingDays <= 0
                 return (
-                  <Button type="primary" size="small" onClick={() => navigate(`/admin/member-requests/match?requestId=${r._id}`)}>
-                    Tìm lớp phù hợp
-                  </Button>
+                  <div className="flex gap-1.5">
+                    {isExpired ? (
+                      <Button size="small" onClick={() => {
+                        const defaultMsg = `Gói tập của bạn đã hết hạn. Bạn vui lòng gia hạn gói tập để Admin có thể sắp xếp lịch học phù hợp.`
+                        setMsgModal({ open: true, request: r, text: defaultMsg })
+                      }}>
+                        Yêu cầu gia hạn
+                      </Button>
+                    ) : !canFindClass ? (
+                      <Button size="small" onClick={() => {
+                        const defaultMsg = `Gói tập của bạn chỉ còn ${info?.totalRemainingDays || 0} ngày nên chưa đủ điều kiện tham gia chương trình PT.\n\nBạn vui lòng gia hạn gói tập để Admin có thể sắp xếp lịch học phù hợp.`
+                        setMsgModal({ open: true, request: r, text: defaultMsg })
+                      }}>
+                        Yêu cầu gia hạn
+                      </Button>
+                    ) : (
+                      <Button type="primary" size="small" onClick={() => navigate(`/admin/member-requests/match?requestId=${r._id}`)}>
+                        Tìm lớp phù hợp
+                      </Button>
+                    )}
+                    <Button size="small" icon={<MailOutlined />} onClick={() => {
+                        const defaultMsg = `Chúng tôi đã nhận được yêu cầu tập luyện của bạn. Chúng tôi sẽ sớm liên hệ để sắp xếp lịch tập phù hợp.`
+                        setMsgModal({ open: true, request: r, text: defaultMsg })
+                      }}>
+                      Gửi tin nhắn
+                    </Button>
+                  </div>
                 )
               },
             },
           ]}
         />
       </Modal>
+
+      {/* Message Sending Modal */}
+      <Modal
+        title="Gửi tin nhắn cho hội viên"
+        open={msgModal.open}
+        onCancel={() => setMsgModal({ open: false, request: null })}
+        footer={null}
+        width={600}
+        centered
+        destroyOnClose
+      >
+        {msgModal.request && (() => {
+          const r = msgModal.request
+          const info = r.membershipInfo
+          const memberName = typeof r.memberId === 'object' ? r.memberId.fullName || r.memberId.name : ''
+
+          const handleSend = async () => {
+            setMsgModal((prev) => ({ ...prev, sending: true }))
+            try {
+              const memberId = typeof r.memberId === 'object' ? r.memberId._id : r.memberId
+              await api.post('/notifications/send', {
+                receiverId: memberId,
+                receiverRole: 'member',
+                title: 'Phản hồi yêu cầu tập luyện',
+                content: msgModal.text,
+                redirectUrl: '/my-membership',
+              })
+              message.success('Đã gửi tin nhắn thành công')
+              setMsgModal({ open: false, request: null, text: '', sending: false })
+            } catch {
+              message.error('Gửi tin nhắn thất bại')
+              setMsgModal((prev) => ({ ...prev, sending: false }))
+            }
+          }
+
+          return (
+            <div className="py-2">
+              <p className="m-0 text-sm text-[var(--gs-text)]">
+                Gửi tới: <strong>{memberName || 'Hội viên'}</strong>
+              </p>
+              {info && (
+                <div className="mt-3 flex flex-wrap gap-2 items-center">
+                  <Tag>{info.planName}</Tag>
+                  {info.isPending ? (
+                    <Tag color="orange">Chờ kích hoạt</Tag>
+                  ) : info.totalRemainingDays <= 0 ? (
+                    <Tag color="red">Đã hết hạn</Tag>
+                  ) : (
+                    <>
+                      <Tag color="green">Đang hoạt động</Tag>
+                      <span className="text-xs text-[var(--gs-text-muted)]">Còn {info.totalRemainingDays} ngày</span>
+                      {info.pendingRenewalsCount > 0 && <Tag color="purple">Có gia hạn</Tag>}
+                    </>
+                  )}
+                </div>
+              )}
+              <textarea
+                className="mt-4 w-full rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 text-sm text-[var(--gs-text)] outline-none transition-colors focus:border-[var(--theme-accent)]"
+                rows={8}
+                value={msgModal.text}
+                onChange={(e) => setMsgModal((prev) => ({ ...prev, text: e.target.value }))}
+              />
+              <div className="mt-4 flex justify-end gap-2">
+                <Button onClick={() => setMsgModal({ open: false, request: null, text: '', sending: false })}>Hủy</Button>
+                <Button type="primary" loading={msgModal.sending} onClick={handleSend}>Gửi tin nhắn</Button>
+              </div>
+            </div>
+          )
+        })()}
+      </Modal>
+
     </DashboardLayout>
   )
 }

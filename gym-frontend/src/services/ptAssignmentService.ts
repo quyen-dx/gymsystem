@@ -74,6 +74,7 @@ export interface PTAssignment {
   cancelReason?: string
   scheduleCount?: number
   _fromClass?: boolean
+  membershipStatus?: 'active' | 'pending_initial_activation' | null
   createdAt?: string
   updatedAt?: string
 }
@@ -243,6 +244,28 @@ const enrollmentService = {
 
   leaveClass: (data: { memberId: string; reason?: string }) =>
     api.post<LeaveClassResponse>('/pt-assignments/enrollment/leave', data),
+}
+
+// ============================================================
+// PT Class Assignment Request / Accept / Decline / Release
+// ============================================================
+
+export const ptClassService = {
+  requestClass: (classId: string, trainerId: string) =>
+    api.post<{ message: string; class: { _id: string; name: string; code: string } }>(
+      '/pt-assignments/request-class', { classId, trainerId },
+    ),
+
+  acceptClass: (classId: string) =>
+    api.post<{ message: string }>('/pt-assignments/accept-class', { classId }),
+
+  declineClass: (classId: string) =>
+    api.post<{ message: string }>('/pt-assignments/decline-class', { classId }),
+
+  bulkReleasePt: (trainerId: string) =>
+    api.post<{ message: string; result: { releasedClassCount: number } }>(
+      '/pt-assignments/bulk-release', { trainerId },
+    ),
 }
 
 export { enrollmentService }

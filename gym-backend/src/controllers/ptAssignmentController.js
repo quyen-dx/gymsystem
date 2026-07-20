@@ -189,6 +189,7 @@ export const createScheduleAndAssignWorkout = async (req, res) => {
         ptId,
         daysOfWeek: dayOfWeek,
         startTime: s.time,
+        status: 'active',
       }
       if (s.endTime) matchQuery.endTime = s.endTime
 
@@ -623,7 +624,7 @@ export const getMemberEnrollmentPreview = async (req, res) => {
       .populate('classId', 'code name specialization daysOfWeek startTime endTime ptId floorId zoneId')
       .lean()
 
-    const allClasses = await TrainingClass.find()
+    const allClasses = await TrainingClass.find({ status: { $ne: 'closed' } })
       .populate('ptId', 'name fullName')
       .populate('floorId', 'name')
       .populate('zoneId', 'name maxCapacity')
@@ -848,5 +849,135 @@ export const leaveMemberClass = async (req, res) => {
     return sendError(res, error)
   } finally {
     leaveSession.endSession()
+  }
+}
+
+// === NEW: Request/Accept/Decline/BulkRelease ===
+
+export const requestClassAssignment = async (req, res) => {
+  try {
+    const { classId, trainerId } = req.body
+    if (!classId || !trainerId) {
+      return res.status(400).json({ message: 'Thiếu classId hoặc trainerId' })
+    }
+
+    const result = await ptAssignmentService.requestClassAssignment({ classId, trainerId, assignedBy: req.user._id })
+
+    createNotification({
+      receiverId: trainerId,
+      receiverRole: 'pt',
+      notificationType: NOTIFICATION_TYPES.PT_CLASS_REQUEST,
+      title: 'Yêu cầu nhận lớp',
+      content: `Admin mời bạn phụ trách lớp "${result.name}".`,
+      relatedId: classId,
+      relatedType: 'TrainingClass',
+      redirectUrl: '/pt/schedule',
+      createdBy: 'Admin',
+    }).catch(() => {})
+
+    res.json({ message: 'Đã gửi yêu cầu đến PT', class: result })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const acceptClassAssignment = async (req, res) => {
+  try {
+    const { classId } = req.body
+    if (!classId) {
+      return res.status(400).json({ message: 'Thiếu classId' })
+    }
+
+    const result = await ptAssignmentService.acceptClassAssignment({
+      classId,
+      trainerId: req.user._id,
+    })
+
+    // Notify admin
+    createNotification({
+      receiverId: null,
+      receiverRole: 'admin',
+      notificationType: NOTIFICATION_TYPES.PT_CLASS_ACCEPTED,
+      title: 'PT đã nhận lớp',
+      content: `PT ${req.user.fullName || req.user.name} đã nhận lớp.`,
+      relatedId: classId,
+      relatedType: 'TrainingClass',
+      redirectUrl: '/admin/training-classes',
+      createdBy: 'System',
+    }).catch(() => {})
+
+    // Notify members
+    for (const memberId of result.memberIds) {
+      createNotification({
+        receiverId: memberId,
+        receiverRole: 'member',
+        notificationType: NOTIFICATION_TYPES.PT_CLASS_ACCEPTED,
+        title: 'Bạn đã được gán PT',
+        content: `PT ${req.user.fullName || req.user.name} sẽ phụ trách lớp của bạn.`,
+        relatedId: classId,
+        relatedType: 'TrainingClass',
+        redirectUrl: '/my-membership',
+        createdBy: 'System',
+      }).catch(() => {})
+    }
+
+    res.json({ message: 'Đã nhận lớp thành công' })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const declineClassAssignment = async (req, res) => {
+  try {
+    const { classId } = req.body
+    if (!classId) {
+      return res.status(400).json({ message: 'Thiếu classId' })
+    }
+
+    const result = await ptAssignmentService.declineClassAssignment({
+      classId,
+      trainerId: req.user._id,
+    })
+
+    createNotification({
+      receiverId: null,
+      receiverRole: 'admin',
+      notificationType: NOTIFICATION_TYPES.PT_CLASS_DECLINED,
+      title: 'PT từ chối nhận lớp',
+      content: `PT ${req.user.fullName || req.user.name} đã từ chối lớp "${result.name}".`,
+      relatedId: classId,
+      relatedType: 'TrainingClass',
+      redirectUrl: '/admin/training-classes',
+      createdBy: 'System',
+    }).catch(() => {})
+
+    res.json({ message: 'Đã từ chối nhận lớp' })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+export const bulkReleasePt = async (req, res) => {
+  try {
+    const { trainerId } = req.body
+    if (!trainerId) {
+      return res.status(400).json({ message: 'Thiếu trainerId' })
+    }
+
+    const result = await ptAssignmentService.releasePtClasses({ trainerId })
+
+    createNotification({
+      receiverId: trainerId,
+      receiverRole: 'pt',
+      notificationType: NOTIFICATION_TYPES.CLASS_PT_CHANGED,
+      title: 'Bạn đã bị hủy phân công lớp',
+      content: `Admin đã hủy toàn bộ lớp của bạn. ${result.releasedClassCount} lớp đã được chuyển về trạng thái chờ PT.`,
+      redirectUrl: '/pt/schedule',
+      createdBy: 'Admin',
+    }).catch(() => {})
+
+    res.json({ message: `Đã giải phóng ${result.releasedClassCount} lớp`, result })
+  } catch (error) {
+    return sendError(res, error)
   }
 }

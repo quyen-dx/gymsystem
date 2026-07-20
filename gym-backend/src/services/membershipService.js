@@ -1813,13 +1813,27 @@ const getMyPeriods = async ({ userId }) => {
   const memberId = toObjectId(userId, 'userId')
   await lazyActivatePendingPeriods({ memberId })
 
-  // Lấy membershipId từ active cycle
-  const activeCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+  // Tìm cycle hiện tại theo thứ tự ưu tiên (giống getMyMembership)
+  let displayCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
     .select('currentMembershipId').sort({ createdAt: -1 }).lean()
 
+  if (!displayCycle) {
+    displayCycle = await MembershipCycle.findOne({ memberId, status: 'pending_initial_activation' })
+      .select('currentMembershipId').sort({ createdAt: -1 }).lean()
+  }
+
+  if (!displayCycle) {
+    displayCycle = await MembershipCycle.findOne({ memberId, status: 'pending_renewal_activation' })
+      .select('currentMembershipId').sort({ createdAt: -1 }).lean()
+  }
+
+  // Chỉ lấy periods thuộc membership hiện tại, không lấy toàn bộ periods của user
   const filter = { memberId }
-  if (activeCycle?.currentMembershipId) {
-    filter.membershipId = activeCycle.currentMembershipId
+  if (displayCycle?.currentMembershipId) {
+    filter.membershipId = displayCycle.currentMembershipId
+  } else {
+    // Không có cycle nào → không có periods
+    return []
   }
 
   const periods = await MembershipPeriod.find(filter)
@@ -1892,6 +1906,115 @@ const refundPeriodToWallet = async ({ period, wallet, session }) => {
 const cancelPeriod = async ({ userId, periodId, reason = '' }) => {
   const { createRefundRequest } = await import('./refundRequestService.js')
   return createRefundRequest({ userId, periodId, reason })
+}
+
+const autoCancelPendingPeriod = async ({ userId, periodId }) => {
+  const memberId = toObjectId(userId, 'userId')
+  const periodIdObj = toObjectId(periodId, 'periodId')
+
+  const period = await MembershipPeriod.findById(periodIdObj)
+  if (!period) {
+    const error = new Error('Không tìm thấy kỳ gia hạn.')
+    error.statusCode = 404
+    throw error
+  }
+
+  if (String(period.memberId) !== String(memberId)) {
+    const error = new Error('Không có quyền hủy kỳ gia hạn này.')
+    error.statusCode = 403
+    throw error
+  }
+
+  // Chỉ cho phép hủy kỳ chưa bắt đầu (PENDING)
+  const now = Date.now()
+  const start = new Date(period.startDate).getTime()
+  if (now >= start) {
+    const error = new Error('Gói gia hạn đã bắt đầu sử dụng nên không thể hủy.')
+    error.statusCode = 400
+    throw error
+  }
+
+  if (period.status !== 'PENDING') {
+    const error = new Error('Gói gia hạn đã được xử lý trước đó.')
+    error.statusCode = 400
+    throw error
+  }
+
+  const session = await mongoose.startSession()
+  let committed = false
+  try {
+    session.startTransaction()
+
+    const refundAmount = period.price || 0
+
+    // Hoàn tiền vào ví
+    if (refundAmount > 0) {
+      let wallet = await Wallet.findOne({ userId: memberId }).session(session)
+      if (!wallet) {
+        [wallet] = await Wallet.create([{ userId: memberId, balance: 0 }], { session })
+      }
+
+      const balanceBefore = Number(wallet.balance || 0)
+      wallet.balance = balanceBefore + refundAmount
+      await wallet.save({ session })
+
+      await Transaction.create([{
+        userId: memberId,
+        walletId: wallet._id,
+        type: 'REFUND_TO_WALLET',
+        provider: 'wallet',
+        source: 'membership',
+        description: `Hoàn tiền hủy gia hạn (+${period.totalDays} ngày)`,
+        amount: refundAmount,
+        balanceBefore,
+        balanceAfter: wallet.balance,
+        referenceId: period._id.toString(),
+        status: 'completed',
+        completedAt: new Date(),
+        metadata: { periodId: period._id, membershipId: period.membershipId, periodDays: period.totalDays, periodPrice: period.price },
+        idempotencyKey: `auto_cancel_period_${period._id}`,
+      }], { session })
+    }
+
+    // Cập nhật period status + refund info
+    period.status = 'CANCELLED'
+    period.refundStatus = refundAmount > 0 ? 'refunded' : 'none'
+    period.refundAmount = refundAmount
+    period.refundAt = refundAmount > 0 ? new Date() : null
+    period.refundMethod = refundAmount > 0 ? 'WALLET' : null
+    await period.save({ session })
+
+    await recordUserActivity({
+      userId: memberId,
+      type: 'membership',
+      title: 'Hủy kỳ gia hạn',
+      description: `Đã hủy kỳ gia hạn (+${period.totalDays} ngày). Hoàn tiền: ${refundAmount.toLocaleString('vi-VN')}đ`,
+      metadata: { periodId: period._id, membershipId: period.membershipId, refundAmount },
+      session,
+    })
+
+    createNotification({
+      receiverId: memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.REFUND_APPROVED,
+      title: 'Hủy gia hạn thành công',
+      content: `Đã hủy gia hạn (+${period.totalDays} ngày). ${refundAmount > 0 ? `Đã hoàn ${refundAmount.toLocaleString('vi-VN')}đ vào ví.` : ''}`,
+      relatedId: period._id,
+      relatedType: 'MembershipPeriod',
+      redirectUrl: '/my-membership',
+      createdBy: 'System',
+    }).catch(() => {})
+
+    await session.commitTransaction()
+    committed = true
+
+    return { message: refundAmount > 0 ? `Đã hủy gói gia hạn thành công. ${refundAmount.toLocaleString('vi-VN')}đ đã được hoàn vào Ví GymPro.` : 'Đã hủy gói gia hạn.', refundAmount }
+  } catch (error) {
+    if (!committed) await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
 }
 
 const hasActivePeriod = async ({ memberId }) => {
@@ -1987,9 +2110,15 @@ const getMembershipDetail = async ({ userId, membershipId }) => {
 const getCancelInfo = async ({ userId }) => {
   const memberId = toObjectId(userId, 'userId')
 
-  const cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+  let cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
     .populate('currentPlanId', 'nameVi nameEn price durationDays')
     .sort({ createdAt: -1 }).lean()
+
+  if (!cycle) {
+    cycle = await MembershipCycle.findOne({ memberId, status: 'pending_initial_activation' })
+      .populate('currentPlanId', 'nameVi nameEn price durationDays')
+      .sort({ createdAt: -1 }).lean()
+  }
 
   if (!cycle) {
     const error = new Error('Không tìm thấy gói tập.')
@@ -2001,7 +2130,7 @@ const getCancelInfo = async ({ userId }) => {
   const planPrice = plan?.price || 0
 
   const membership = cycle.currentMembershipId
-    ? await Membership.findById(cycle.currentMembershipId).lean()
+    ? await Membership.findById(cycle.currentMembershipId).populate('planId').lean()
     : null
 
   const membershipForSerialize = membership || {
@@ -2041,27 +2170,112 @@ const getCancelInfo = async ({ userId }) => {
     refundReason = 'Không đủ thông tin để xét hoàn tiền.'
   }
 
-  const estimatedRefundAmount = refundEligible ? planPrice : 0
+  // Lấy tất cả periods để phân tích gói chính và các lần gia hạn
+  const allPeriods = cycle.currentMembershipId
+    ? await MembershipPeriod.find({ membershipId: cycle.currentMembershipId })
+        .sort({ startDate: 1 })
+        .lean()
+    : []
+
+  // Gói chính = period đầu tiên, các period còn lại = gia hạn
+  const mainPeriod = allPeriods[0] || null
+  // Chỉ lấy các renewal còn hiệu lực (chưa hủy/chưa hoàn)
+  const renewalPeriods = allPeriods.slice(1).filter(p =>
+    p.status === 'PENDING' && p.refundStatus !== 'refunded'
+  )
+
+  // --- Tính hoàn tiền gói chính ---
+  let mainRefundEligible = false
+  let mainRefundAmount = 0
+  let mainRefundReason = ''
+
+  if (cycle.activatedAt) {
+    mainRefundEligible = false
+    mainRefundReason = 'Gói chính đã được kích hoạt nên không đủ điều kiện hoàn tiền.'
+  } else {
+    const effectivePurchaseDate = cycle.purchasedAt || cycle.startDate || cycle.createdAt
+    if (effectivePurchaseDate) {
+      const daysSince = Math.floor((Date.now() - new Date(effectivePurchaseDate).getTime()) / 86400000)
+      if (daysSince < 7) {
+        mainRefundEligible = true
+        mainRefundAmount = planPrice
+        mainRefundReason = 'Gói chính chưa kích hoạt và còn trong thời gian hoàn tiền.'
+      } else {
+        mainRefundReason = 'Đã quá 07 ngày kể từ ngày đăng ký gói chính.'
+      }
+    } else {
+      mainRefundReason = 'Không đủ thông tin để xét hoàn tiền gói chính.'
+    }
+  }
+
+  // --- Tính hoàn tiền từng lần gia hạn ---
+  const now = Date.now()
+  const renewals = renewalPeriods.map((p, idx) => {
+    const start = new Date(p.startDate).getTime()
+    const end = new Date(p.endDate).getTime()
+    let displayStatus
+    let refundEligible
+    if (now < start) {
+      displayStatus = 'Chưa sử dụng'
+      refundEligible = true
+    } else if (now >= start && now <= end) {
+      displayStatus = 'Đang sử dụng'
+      refundEligible = false
+    } else {
+      displayStatus = 'Đã sử dụng'
+      refundEligible = false
+    }
+    const refundAmount = refundEligible ? (p.price || 0) : 0
+    return {
+      index: idx + 1,
+      days: p.totalDays,
+      price: p.price || 0,
+      startDate: p.startDate,
+      endDate: p.endDate,
+      status: p.status,
+      displayStatus,
+      refundEligible,
+      refundAmount,
+    }
+  })
+
+  const renewalsRefundTotal = renewals
+    .filter(r => r.refundEligible)
+    .reduce((sum, r) => sum + r.refundAmount, 0)
+
+  const totalRefund = mainRefundAmount + renewalsRefundTotal
 
   return {
     membership: serializeMembership(membershipForSerialize, cycle),
-    period: {
-      startDate: cycle.startDate,
-      endDate: cycle.expiresAt,
-      totalDays: plan?.durationDays || 0,
+    mainPackage: {
+      planName: plan?.nameVi || plan?.nameEn || '',
       price: planPrice,
+      status: cycle.activatedAt ? 'Đã kích hoạt' : 'Chưa kích hoạt',
       activatedAt: cycle.activatedAt,
+      purchasedAt: cycle.purchasedAt,
+      refundEligible: mainRefundEligible,
+      refundAmount: mainRefundAmount,
+      reason: mainRefundReason,
     },
+    renewals,
+    totalRefund,
+    period: mainPeriod ? {
+      startDate: mainPeriod.startDate,
+      endDate: mainPeriod.endDate,
+      totalDays: mainPeriod.totalDays,
+      price: mainPeriod.price,
+      activatedAt: mainPeriod.activatedAt,
+    } : null,
     refundInfo: {
-      eligibleForRefund: refundEligible,
-      estimatedRefundAmount,
-      reason: refundReason,
+      eligibleForRefund: mainRefundEligible || renewalsRefundTotal > 0,
+      estimatedRefundAmount: totalRefund,
+      reason: mainRefundReason || (renewalsRefundTotal > 0 ? 'Có gia hạn chưa sử dụng đủ điều kiện hoàn tiền.' : 'Không có khoản nào đủ điều kiện hoàn tiền.'),
       purchasedAt: cycle.purchasedAt,
       activatedAt: cycle.activatedAt,
     },
     pendingPeriods: [],
     periodsDetail: [],
-    totalEstimatedRefund: estimatedRefundAmount,
+    totalEstimatedRefund: totalRefund,
   }
 }
 
@@ -2091,10 +2305,16 @@ const getMembershipInfo = async ({ userId }) => {
   const memberId = toObjectId(userId, 'userId')
 
   // Active cycle (nguồn sự thật duy nhất)
-  const activeCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+  let activeCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
     .populate('currentPlanId')
     .sort({ createdAt: -1 })
     .lean()
+  if (!activeCycle) {
+    activeCycle = await MembershipCycle.findOne({ memberId, status: 'pending_initial_activation' })
+      .populate('currentPlanId')
+      .sort({ createdAt: -1 })
+      .lean()
+  }
 
   let activePeriod = null
   let pendingRenewals = []
@@ -2189,14 +2409,8 @@ export const cleanupMemberPTData = async ({ memberId, session, sourceReason = 'e
   )
 
   await TrainingAssignment.updateMany(
-    { memberId, status: 'active' },
-    {
-      $set: {
-        status: 'cancelled',
-        cancelledAt: new Date(),
-        cancelReason: reason,
-      },
-    },
+    { memberId, status: { $in: ['waiting_pt', 'active'] } },
+    { $set: { status: 'finished', endDate: new Date() } },
     opts,
   )
 
@@ -2321,6 +2535,12 @@ export async function handlePTDataOnPlanChange({ memberId, oldPlan, newPlan, ses
       opts,
     )
 
+    await TrainingAssignment.updateMany(
+      { memberId, status: { $in: ['waiting_pt', 'active'] } },
+      { $set: { status: 'finished', endDate: new Date() } },
+      opts,
+    )
+
     if (oldType === 'group') {
       await endClassEnrollments({ memberId, sourceReason: 'package_downgraded', note: reason, session })
     }
@@ -2441,5 +2661,6 @@ export {
   getMyPeriods,
   hasActivePeriod,
   cancelPeriod,
+  autoCancelPendingPeriod,
   rebuildMembershipTimeline,
 }

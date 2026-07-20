@@ -1,6 +1,3 @@
-// DEPRECATED: Training assignments are now handled via TrainingClass.members (embedded).
-// This file is kept only to prevent import errors during transition.
-// TrainingAssignment model is no longer used for new records.
 import mongoose from 'mongoose'
 
 const trainingAssignmentSchema = new mongoose.Schema({
@@ -11,10 +8,11 @@ const trainingAssignmentSchema = new mongoose.Schema({
   membershipId: { type: mongoose.Schema.Types.ObjectId, ref: 'Membership' },
   status: {
     type: String,
-    enum: ['active', 'cancelled', 'completed'],
-    default: 'active',
+    enum: ['waiting_pt', 'active', 'finished', 'cancelled'],
+    default: 'waiting_pt',
     index: true,
   },
+  acceptedAt: { type: Date, default: null },
   startDate: { type: Date, default: Date.now },
   endDate: Date,
   cancelledAt: Date,
@@ -24,5 +22,6 @@ const trainingAssignmentSchema = new mongoose.Schema({
 
 trainingAssignmentSchema.index({ memberId: 1, status: 1 })
 trainingAssignmentSchema.index({ classId: 1 })
+trainingAssignmentSchema.index({ trainerId: 1, status: 1 })
 
 export default mongoose.models.TrainingAssignment || mongoose.model('TrainingAssignment', trainingAssignmentSchema)

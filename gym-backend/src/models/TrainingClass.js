@@ -6,16 +6,23 @@ const trainingClassSchema = new mongoose.Schema({
   description: { type: String, default: '', trim: true },
   specialization: { type: String, default: '', trim: true },
   ptId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  pendingTrainerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   floorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Floor', default: null },
   zoneId: { type: mongoose.Schema.Types.ObjectId, ref: 'Zone', default: null },
   daysOfWeek: { type: [Number], default: [] },
   startTime: { type: String, default: null }, // HH:mm
   endTime: { type: String, default: null },   // HH:mm
+  status: {
+    type: String,
+    enum: ['waiting_pt', 'waiting_accept', 'active', 'inactive', 'closed'],
+    default: 'waiting_pt',
+  },
 }, { timestamps: true })
 
 trainingClassSchema.index({ createdAt: -1 })
 trainingClassSchema.index({ floorId: 1, zoneId: 1 })
 trainingClassSchema.index({ ptId: 1 })
+trainingClassSchema.index({ status: 1 })
 
 trainingClassSchema.pre('save', async function () {
   if (!this.code) {

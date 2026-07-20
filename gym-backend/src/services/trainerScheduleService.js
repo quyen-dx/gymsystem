@@ -19,15 +19,20 @@ function timesOverlap(start1, end1, start2, end2) {
 }
 
 async function validateNoClassConflict(trainerId, schedules) {
-  const classes = await TrainingClass.find({ ptId: trainerId })
+  // Lấy class từ TrainingAssignment thay vì TrainingClass.ptId
+  const assignments = await TrainingAssignment.find({ trainerId, status: 'active' })
+    .populate('classId', 'name daysOfWeek startTime endTime')
+    .lean()
 
   for (const sched of schedules) {
     const startTime = sched.startTime || SHIFT_RANGES[sched.shift]?.start
     const endTime = sched.endTime || SHIFT_RANGES[sched.shift]?.end
     if (!startTime || !endTime) continue
 
-    for (const cls of classes) {
-      if (!cls.daysOfWeek.includes(sched.dayOfWeek)) continue
+    for (const a of assignments) {
+      if (!a.classId) continue
+      const cls = a.classId
+      if (!cls.daysOfWeek?.includes(sched.dayOfWeek)) continue
       if (!cls.startTime || !cls.endTime) continue
       if (timesOverlap(startTime, endTime, cls.startTime, cls.endTime)) {
         throw new Error(`PT đã có lịch dạy lớp tập "${cls.name}" trong khung giờ này, không thể đăng ký ca rảnh!`)
@@ -59,26 +64,32 @@ export const getTrainerSchedule = async (trainerId) => {
   const schedules = await TrainerSchedule.find({ trainerId, status: 'active' })
     .sort({ dayOfWeek: 1 })
 
-  const classes = await TrainingClass.find({ ptId: trainerId })
-    .populate('floorId', 'name')
-    .populate('zoneId', 'name maxCapacity')
-    .sort({ startTime: 1 })
+  // Lấy class từ TrainingAssignment thay vì TrainingClass.ptId
+  const assignments = await TrainingAssignment.find({ trainerId, status: 'active' })
+    .populate({
+      path: 'classId',
+      populate: [
+        { path: 'floorId', select: 'name' },
+        { path: 'zoneId', select: 'name maxCapacity' },
+      ],
+      select: 'name code daysOfWeek startTime endTime floorId zoneId',
+    })
     .lean()
 
-  const classIds = classes.map(c => c._id)
-  const assignmentCounts = await TrainingAssignment.aggregate([
-    { $match: { classId: { $in: classIds }, status: 'active' } },
-    { $group: { _id: '$classId', count: { $sum: 1 } } },
-  ])
-  const countMap = {}
-  for (const a of assignmentCounts) {
-    countMap[String(a._id)] = a.count
+  const classMap = new Map()
+  for (const a of assignments) {
+    if (!a.classId) continue
+    const cid = String(a.classId._id)
+    if (!classMap.has(cid)) {
+      classMap.set(cid, { class: a.classId, count: 0 })
+    }
+    classMap.get(cid).count++
   }
 
-  const classSchedules = classes.map(c => ({
-    ...c,
-    currentActiveCount: countMap[String(c._id)] || 0,
-    zoneMaxCapacity: c.zoneId?.maxCapacity || 0,
+  const classSchedules = Array.from(classMap.values()).map(({ class: cl, count }) => ({
+    ...cl,
+    currentActiveCount: count,
+    zoneMaxCapacity: cl.zoneId?.maxCapacity || 0,
   }))
 
   return { schedules, classSchedules }

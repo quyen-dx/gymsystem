@@ -12,6 +12,7 @@ import { recordUserActivity } from '../services/userActivityService.js';
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js';
 import { assertPolicyConsent } from '../utils/policyConsent.js';
 import MembershipCycle from '../models/MembershipCycle.js';
+import MembershipPeriod from '../models/MembershipPeriod.js';
 import PlanChangeHistory from '../models/PlanChangeHistory.js';
 import ClassEnrollment from '../models/ClassEnrollment.js';
 import PTAssignment from '../models/PTAssignment.js';
@@ -22,6 +23,141 @@ import { sendRefundRequestSubmittedEmail, sendRefundRequestProcessedEmail } from
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const REFUND_WINDOW_DAYS = 7;
+
+// === Hủy gói khi đang chờ kích hoạt (Pending Activation) — xử lý tự động, không cần Staff ===
+export const cancelPendingMembership = async (req, res, next) => {
+  try {
+    const memberId = req.user._id
+
+    const cycle = await MembershipCycle.findOne({
+      memberId,
+      status: 'pending_initial_activation',
+    }).sort({ createdAt: -1 }).lean()
+
+    if (!cycle) {
+      return res.status(400).json({ message: 'Không tìm thấy gói tập đang chờ kích hoạt.' })
+    }
+
+    const membership = cycle.currentMembershipId
+      ? await Membership.findById(cycle.currentMembershipId).lean()
+      : null
+
+    const plan = cycle.currentPlanId
+      ? await Plan.findById(cycle.currentPlanId).lean()
+      : null
+
+    const planPrice = plan?.price || 0
+    const effectivePurchaseDate = cycle.purchasedAt || cycle.createdAt
+    const now = new Date()
+
+    // Kiểm tra điều kiện hoàn tiền: trong vòng 7 ngày kể từ ngày đăng ký
+    let refundAmount = 0
+    let refundEligible = false
+    let message = ''
+
+    if (effectivePurchaseDate) {
+      const daysSince = Math.floor((now.getTime() - new Date(effectivePurchaseDate).getTime()) / MS_PER_DAY)
+      if (daysSince < REFUND_WINDOW_DAYS) {
+        refundEligible = true
+        refundAmount = planPrice
+        message = `Đã hủy gói tập. Số tiền ${planPrice.toLocaleString('vi-VN')}đ đã được hoàn vào ví.`
+      } else {
+        message = 'Đã hủy gói tập. Gói đã quá 7 ngày kể từ ngày đăng ký nên không được hoàn tiền.'
+      }
+    } else {
+      message = 'Đã hủy gói tập. Không đủ thông tin để xét hoàn tiền.'
+    }
+
+    const session = await mongoose.startSession()
+    try {
+      session.startTransaction()
+
+      // Cập nhật cycle status
+      await MembershipCycle.updateOne(
+        { _id: cycle._id },
+        { $set: { status: refundAmount > 0 ? 'refunded' : 'cancelled' } },
+      ).session(session)
+
+      // Hoàn tiền nếu đủ điều kiện
+      if (refundAmount > 0) {
+        let wallet = await Wallet.findOne({ userId: memberId }).session(session)
+        if (!wallet) {
+          [wallet] = await Wallet.create([{ userId: memberId, balance: 0 }], { session })
+        }
+
+        const balanceBefore = Number(wallet.balance || 0)
+        wallet.balance = balanceBefore + refundAmount
+        await wallet.save({ session })
+
+        await Transaction.create([{
+          userId: memberId,
+          walletId: wallet._id,
+          type: 'REFUND_TO_WALLET',
+          provider: 'wallet',
+          source: 'membership',
+          description: `Hoàn tiền hủy gói "${plan?.nameVi || ''}" (chưa kích hoạt)`,
+          amount: refundAmount,
+          balanceBefore,
+          balanceAfter: wallet.balance,
+          referenceId: cycle._id.toString(),
+          status: 'completed',
+          completedAt: now,
+          metadata: { cycleId: cycle._id, membershipId: membership?._id, planId: plan?._id, policyCode: 'REFUND_100' },
+          idempotencyKey: `cancel_pending_refund_${cycle._id}`,
+        }], { session })
+
+        await Payment.create([{
+          userId: memberId,
+          membershipId: membership?._id,
+          planId: plan?._id,
+          amount: refundAmount,
+          currency: 'vnd',
+          status: 'REFUNDED',
+          paymentMethod: 'WALLET',
+          source: 'OFFLINE',
+          paidAt: now,
+          metadata: { cancelType: 'pending_auto', cycleId: cycle._id, refundType: 'membership_cancellation' },
+        }], { session })
+      }
+
+      // Ghi lại PlanChangeHistory
+      await PlanChangeHistory.create([{
+        memberId,
+        membershipId: membership?._id,
+        fromPlanId: plan?._id,
+        toPlanId: null,
+        changedAt: now,
+        changeType: 'cancel',
+        type: 'cancel',
+        amount: 0,
+        priceDifference: 0,
+        proratedValue: 0,
+        proratedCredit: 0,
+        walletCredit: refundAmount,
+      }], { session })
+
+      await recordUserActivity({
+        userId: memberId,
+        type: 'membership',
+        title: 'Hủy gói tập (chưa kích hoạt)',
+        description: `Hủy gói "${plan?.nameVi || ''}" - ${refundAmount > 0 ? `Hoàn ${refundAmount.toLocaleString('vi-VN')}đ` : 'Không hoàn tiền'}`,
+        metadata: { cycleId: cycle._id, membershipId: membership?._id, planId: plan?._id, refundAmount },
+        session,
+      })
+
+      await session.commitTransaction()
+    } catch (error) {
+      await session.abortTransaction()
+      throw error
+    } finally {
+      session.endSession()
+    }
+
+    return res.json({ message, refundAmount, refundEligible })
+  } catch (error) {
+    next(error)
+  }
+}
 
 export const createCancellationRequest = async (req, res, next) => {
   try {
@@ -41,11 +177,16 @@ export const createCancellationRequest = async (req, res, next) => {
       return res.status(400).json({ message: 'Bạn đã có yêu cầu hủy gói đang chờ xử lý.' });
     }
 
-    // Find the active/pending cycle to cancel (exclude completed/cancelled/refunded)
-    const cycle = await MembershipCycle.findOne({
-      memberId,
-      status: { $nin: ['completed', 'cancelled', 'refunded'] },
+    // Find the active/pending cycle to cancel (ưu tiên active, fallback sang pending)
+    let cycle = await MembershipCycle.findOne({
+      memberId, status: 'active',
     }).sort({ createdAt: -1 }).lean()
+    if (!cycle) {
+      cycle = await MembershipCycle.findOne({
+        memberId,
+        status: { $nin: ['completed', 'cancelled', 'refunded'] },
+      }).sort({ createdAt: -1 }).lean()
+    }
 
     if (!cycle) {
       return res.status(400).json({ message: 'Không tìm thấy gói tập để hủy.' });
@@ -63,35 +204,64 @@ export const createCancellationRequest = async (req, res, next) => {
       return res.status(404).json({ message: 'Không tìm thấy thông tin gói tập.' });
     }
 
-    // === Refund eligibility: based on purchasedAt + activatedAt ===
-    // purchasedAt có thể NULL nếu cycle được tạo từ backfill hoặc mua thêm lần 2,3 không cập nhật purchasedAt
-    // → dùng createdAt hoặc startDate làm fallback
+    // === Refund eligibility: gói chính + các lần gia hạn ===
     const effectivePurchaseDate = cycle.purchasedAt || cycle.startDate || cycle.createdAt
-    let refundEligible = false
-    let estimatedRefundAmount = 0
+    const now = Date.now()
+
+    // --- Gói chính ---
+    let mainRefundEligible = false
+    let mainRefundAmount = 0
     let policyCode = 'NO_REFUND'
     let policyLabel = 'Không đủ điều kiện hoàn tiền'
     let refundRate = 0
 
     if (cycle.activatedAt) {
-      // Đã kích hoạt → không hoàn tiền (trừ khi có xét thêm logic khác)
-      policyLabel = 'Gói tập đã được kích hoạt.'
+      mainRefundAmount = 0
+      policyLabel = 'Gói chính đã được kích hoạt.'
     } else if (effectivePurchaseDate) {
-      const daysSince = Math.floor((Date.now() - new Date(effectivePurchaseDate).getTime()) / 86400000)
-      const refundWindowDays = 7
-      if (daysSince < refundWindowDays) {
-        // Chưa kích hoạt + trong 7 ngày → đủ điều kiện hoàn 100%
-        refundEligible = true
-        estimatedRefundAmount = Number(plan.price || 0)
+      const daysSince = Math.floor((now - new Date(effectivePurchaseDate).getTime()) / 86400000)
+      if (daysSince < 7) {
+        mainRefundEligible = true
+        mainRefundAmount = Number(plan.price || 0)
         policyCode = 'REFUND_100'
-        policyLabel = 'Hoàn 100% nếu chưa kích hoạt và trong vòng 7 ngày'
+        policyLabel = 'Hoàn 100% gói chính nếu chưa kích hoạt và trong vòng 7 ngày'
         refundRate = 1
       } else {
-        policyLabel = `Đã quá ${refundWindowDays} ngày kể từ ngày đăng ký.`
+        policyLabel = 'Đã quá 07 ngày kể từ ngày đăng ký gói chính.'
       }
     } else {
-      policyLabel = 'Không đủ thông tin để xét hoàn tiền.'
+      policyLabel = 'Không đủ thông tin để xét hoàn tiền gói chính.'
     }
+
+    // --- Các lần gia hạn ---
+    const allPeriods = cycle.currentMembershipId
+      ? await MembershipPeriod.find({ membershipId: cycle.currentMembershipId })
+          .sort({ startDate: 1 })
+          .lean()
+      : []
+
+    // Chỉ lấy các renewal còn hiệu lực (chưa hủy/chưa hoàn)
+    const renewalPeriods = allPeriods.slice(1).filter(p =>
+      p.status === 'PENDING' && p.refundStatus !== 'refunded'
+    )
+    const renewalRefunds = []
+    let renewalsRefundTotal = 0
+
+    for (const p of renewalPeriods) {
+      const start = new Date(p.startDate).getTime()
+      const periodRefund = now < start ? (p.price || 0) : 0
+      if (periodRefund > 0) {
+        renewalRefunds.push({
+          periodId: p._id,
+          price: p.price || 0,
+          refundAmount: periodRefund,
+        })
+        renewalsRefundTotal += periodRefund
+      }
+    }
+
+    const estimatedRefundAmount = mainRefundAmount + renewalsRefundTotal
+    const refundEligible = mainRefundEligible || renewalsRefundTotal > 0
 
     let determinedRefundMethod = 'NONE';
     let determinedRefundStatus = 'NOT_APPLICABLE';
@@ -125,6 +295,7 @@ export const createCancellationRequest = async (req, res, next) => {
         policyAcceptedAt: new Date(),
         refundEligible,
         estimatedRefundAmount,
+        renewalRefunds,
         finalRefundAmount: 0,
         status: 'pending',
         refundMethod: determinedRefundMethod,
@@ -416,6 +587,75 @@ export const approveCancellationRequest = async (req, res, next) => {
           { _id: cycle._id },
           { $set: { status: refundAmount > 0 ? 'refunded' : 'cancelled' } },
         ).session(session)
+
+        // Hủy tất cả các cycle pending khác (pending_renewal_activation, pending_initial_activation)
+        await MembershipCycle.updateMany(
+          {
+            memberId: cancellationRequest.memberId,
+            _id: { $ne: cycle._id },
+            status: { $in: ['pending_initial_activation', 'pending_renewal_activation'] },
+          },
+          { $set: { status: 'cancelled' } },
+        ).session(session)
+
+        // Hủy tất cả các MembershipPeriod đang PENDING (gia hạn chưa sử dụng)
+        if (cancellationRequest.membershipId) {
+          const pendingPeriods = await MembershipPeriod.find({
+            membershipId: cancellationRequest.membershipId,
+            status: 'PENDING',
+          }).session(session).lean()
+
+          const now = new Date()
+          for (const p of pendingPeriods) {
+            const start = new Date(p.startDate).getTime()
+            if (now.getTime() < start) {
+              // Gia hạn chưa bắt đầu → hoàn tiền
+              let wallet = await Wallet.findOne({ userId: cancellationRequest.memberId }).session(session)
+              if (!wallet) {
+                [wallet] = await Wallet.create([{ userId: cancellationRequest.memberId, balance: 0 }], { session })
+              }
+              const balanceBefore = Number(wallet.balance || 0)
+              wallet.balance += p.price
+              await wallet.save({ session })
+
+              await Transaction.create([{
+                userId: cancellationRequest.memberId,
+                walletId: wallet._id,
+                type: 'REFUND_TO_WALLET',
+                provider: 'wallet',
+                source: 'membership',
+                description: `Hoàn tiền hủy gia hạn khi duyệt hủy gói (+${p.totalDays} ngày)`,
+                amount: p.price,
+                balanceBefore,
+                balanceAfter: wallet.balance,
+                referenceId: p._id.toString(),
+                status: 'completed',
+                completedAt: now,
+                metadata: { periodId: p._id, membershipId: cancellationRequest.membershipId, reason: 'cancelled_on_approve' },
+                idempotencyKey: `approve_cancel_period_${p._id}`,
+              }], { session })
+
+              await MembershipPeriod.updateOne(
+                { _id: p._id },
+                {
+                  $set: {
+                    status: 'CANCELLED',
+                    refundStatus: 'refunded',
+                    refundAmount: p.price,
+                    refundAt: now,
+                    refundMethod: 'WALLET',
+                  },
+                },
+              ).session(session)
+            } else {
+              // Gia hạn đã bắt đầu → không hoàn
+              await MembershipPeriod.updateOne(
+                { _id: p._id },
+                { $set: { status: 'CANCELLED', refundStatus: 'none' } },
+              ).session(session)
+            }
+          }
+        }
       }
 
       // PlanChangeHistory(cancel)

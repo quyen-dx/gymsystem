@@ -24,7 +24,10 @@ export const createClass = async (req, res) => {
 
 export const getAllClasses = async (req, res) => {
   try {
-    const result = await trainingClassService.getAllClasses({ page: req.query.page })
+    const result = await trainingClassService.getAllClasses({
+      page: req.query.page,
+      includeClosed: req.query.includeClosed === 'true',
+    })
     res.json(result)
   } catch (error) {
     res.status(500).json({ message: error.message })
@@ -44,19 +47,25 @@ export const getClassById = async (req, res) => {
 export const deleteClass = async (req, res) => {
   try {
     const classDoc = await trainingClassService.deleteClass(req.params.id)
-    createNotification({
-      receiverId: classDoc.ptId,
-      receiverRole: 'pt',
-      notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
-      title: 'Lớp tập đã bị xóa',
-      content: `Lớp "${classDoc.name}" đã bị Admin xóa.`,
-      relatedId: null,
-      relatedType: 'TrainingClass',
-      redirectUrl: '/pt/classes',
-      createdBy: 'Admin',
-    }).catch(err => console.error('Notify class deleted failed:', err.message))
+    if (!classDoc) return res.status(404).json({ message: 'Không tìm thấy lớp tập' })
+
+    if (classDoc.ptId) {
+      createNotification({
+        receiverId: classDoc.ptId,
+        receiverRole: 'pt',
+        notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+        title: 'Lớp tập đã bị xóa',
+        content: `Lớp "${classDoc.name}" đã bị Admin xóa.`,
+        relatedId: null,
+        relatedType: 'TrainingClass',
+        redirectUrl: '/pt/classes',
+        createdBy: 'Admin',
+      }).catch(err => console.error('Notify class deleted failed:', err.message))
+    }
+
     res.json({ message: 'Đã xóa lớp tập' })
   } catch (error) {
+    console.error('[deleteClass]', error)
     res.status(500).json({ message: error.message })
   }
 }

@@ -1,5 +1,6 @@
 import express from 'express'
 import {
+  autoCancelMyPeriod,
   cancelMembershipRegistration,
   cancelMyPeriod,
   cancelMyRenewal,
@@ -22,6 +23,7 @@ import {
 } from '../controllers/membershipController.js'
 import {
   approveCancellationRequest,
+  cancelPendingMembership,
   createCancellationRequest,
   getMyCancellationRequest,
   listCancellationRequests,
@@ -59,6 +61,7 @@ router.get('/my/cancel-info', getCancelInfoHandler)
 router.get('/my/renewals', getMyRenewalsHandler)
 router.post('/my/cancel-renewal/:renewalId', cancelMyRenewal)
 router.post('/my/periods/:periodId/cancel', cancelMyPeriod)
+router.post('/my/periods/:periodId/auto-cancel', autoCancelMyPeriod)
 
 router.get('/history', getMembershipHistory)
 
@@ -69,6 +72,7 @@ router.patch('/registrations/:id/confirm', adminOrStaff, confirmMembershipRegist
 router.patch('/registrations/:id/cancel', adminOrStaff, cancelMembershipRegistration)
 router.get('/payments', adminOrStaff, getMembershipPayments)
 
+router.post('/cancel-pending', cancelPendingMembership)
 router.post('/cancel-request', createCancellationRequest)
 router.get('/my-cancel-request', getMyCancellationRequest)
 

@@ -7,6 +7,7 @@ import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import Workout from '../models/Workout.js'
 import PTAssignmentEndRequest from '../models/PTAssignmentEndRequest.js'
 import ClassEnrollment from '../models/ClassEnrollment.js'
+import MembershipCycle from '../models/MembershipCycle.js'
 
 const nearestFutureDay = (startDate, targetDayOfWeek) => {
   const d = new Date(startDate)
@@ -68,104 +69,68 @@ export const findActiveAssignment = async ({ memberId, session }) => {
 }
 
 export const findActiveAssignmentByPt = async ({ ptId, session }) => {
-  // 0. Get members with pending end requests to exclude
+  // Members with pending end requests to exclude
   const pendingEndMemberIds = await PTAssignmentEndRequest
     .find({ ptId, status: 'pending' })
     .select('memberId')
     .lean()
   const excludeMemberIds = pendingEndMemberIds.map(r => String(r.memberId))
 
-  // 1. Direct PTAssignment records (one-on-one)
-  const directAssignments = await PTAssignment.find({ ptId, status: 'active' })
+  // 1. TrainingAssignment — PT nhóm (nguồn chính)
+  const groupAssignments = await TrainingAssignment.find({ trainerId: ptId, status: 'active' })
+    .populate('memberId', 'name fullName email phone avatar memberCode memberNumber preferredTime')
+    .populate({
+      path: 'classId',
+      select: 'name code daysOfWeek startTime endTime specialization',
+    })
+    .sort({ createdAt: -1 })
+    .session(session || null)
+    .lean()
+
+  // 2. PTAssignment — PT cá nhân (1-1)
+  const privateAssignments = await PTAssignment.find({ ptId, status: 'active' })
     .populate('memberId', 'name fullName email phone avatar memberCode memberNumber preferredTime')
     .populate('workoutId', 'name goal')
     .sort({ createdAt: -1 })
     .session(session || null)
     .lean()
 
-  // 2. Classes taught by this PT
-  const classes = await TrainingClass.find({ ptId }).select('_id').lean()
-  const classIds = classes.map(c => c._id)
-
-  if (classIds.length === 0) {
-    return attachScheduleCounts(directAssignments)
-  }
-
-  // 3. Members enrolled in those classes (exclude those with pending end requests)
-  const classAssignments = await TrainingAssignment.find({ classId: { $in: classIds }, status: 'active' })
-    .populate('memberId', 'name fullName email phone avatar memberCode memberNumber preferredTime')
-    .populate('classId', 'name code')
-    .sort({ createdAt: -1 })
-    .session(session || null)
-    .lean()
-
-  // 4. Merge and deduplicate by memberId
+  // 3. Merge + dedup + exclude pending end requests
   const memberMap = new Map()
-  for (const a of directAssignments) {
+  for (const a of groupAssignments) {
     const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
     if (!excludeMemberIds.includes(mid)) {
+      a._fromClass = true
       memberMap.set(mid, a)
     }
   }
-  for (const a of classAssignments) {
+  for (const a of privateAssignments) {
     const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
     if (!memberMap.has(mid) && !excludeMemberIds.includes(mid)) {
-      memberMap.set(mid, {
-        _id: a._id,
-        memberId: a.memberId,
-        ptId,
-        classId: a.classId,
-        status: 'active',
-        startDate: a.startDate,
-        createdAt: a.createdAt,
-        updatedAt: a.updatedAt,
-        _fromClass: true,
-      })
+      memberMap.set(mid, a)
     }
   }
 
   const results = Array.from(memberMap.values())
 
-  // 4b. Attach classId for PTAssignment members (find their TrainingAssignment)
-  const memberIds = results.map(a =>
-    typeof a.memberId === 'object' ? a.memberId._id : a.memberId
-  ).filter(Boolean)
-  const trainingAssignments = await TrainingAssignment.find({
-    memberId: { $in: memberIds },
-    status: 'active',
-  })
-    .populate('classId', 'name code')
-    .select('memberId classId')
-    .lean()
-
-  const taMap = new Map()
-  for (const ta of trainingAssignments) {
-    const mid = String(ta.memberId)
-    if (!taMap.has(mid)) {
-      taMap.set(mid, ta)
-    }
-  }
-  for (const a of results) {
-    const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
-    if (!a.classId && taMap.has(mid)) {
-      a.classId = taMap.get(mid).classId
-    }
-  }
-
-  // 5. Attach schedule counts for all members in results
+  // 4. Attach schedule counts
   const withCounts = await attachScheduleCounts(results)
 
-  // 6. Attach ClassEnrollment data + TrainingRequest data (specialization, goals)
+  // 5. Attach ClassEnrollment + membershipStatus + training request data
   const allMemberIds = withCounts.map(a =>
     typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
   ).filter(Boolean)
 
   if (allMemberIds.length > 0) {
-    const [enrollments, trainingRequests] = await Promise.all([
+    const [enrollments, cycles, trainingRequests] = await Promise.all([
       ClassEnrollment.find({ memberId: { $in: allMemberIds }, status: 'active' })
         .populate('classId', 'code name')
         .select('memberId classId')
         .lean(),
+      MembershipCycle.find({
+        memberId: { $in: allMemberIds },
+        status: { $in: ['active', 'pending_initial_activation'] },
+      }).select('memberId status').sort({ createdAt: -1 }).lean(),
       TrainingRequest.aggregate([
         { $match: { memberId: { $in: allMemberIds.map(id => new mongoose.Types.ObjectId(id)) }, status: 'assigned' } },
         { $sort: { createdAt: -1 } },
@@ -181,6 +146,14 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
       }
     }
 
+    const cycleMap = new Map()
+    for (const c of cycles) {
+      const mid = String(c.memberId)
+      if (!cycleMap.has(mid)) {
+        cycleMap.set(mid, c.status)
+      }
+    }
+
     const trainingRequestMap = new Map()
     for (const tr of trainingRequests) {
       trainingRequestMap.set(String(tr._id), { specialization: tr.specialization, goals: tr.goals })
@@ -189,6 +162,7 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
     for (const a of withCounts) {
       const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
       a.classEnrollment = enrollmentMap.get(mid) || null
+      a.membershipStatus = cycleMap.get(mid) || null
       const tr = trainingRequestMap.get(mid)
       a.specialization = tr?.specialization || ''
       a.goals = tr?.goals || []
@@ -499,9 +473,15 @@ export const checkTimeConflict = async ({ ptId, date, time }) => {
   const [h, m] = time.split(':').map(Number)
   const sessionMinutes = h * 60 + m
 
-  const classes = await TrainingClass.find({ ptId, daysOfWeek: dayOfWeek }).select('name startTime endTime').lean()
+  // Query từ TrainingAssignment thay vì TrainingClass.ptId
+  const assignments = await TrainingAssignment.find({ trainerId: ptId, status: 'active' })
+    .populate('classId', 'name startTime endTime daysOfWeek')
+    .lean()
 
-  for (const cls of classes) {
+  for (const a of assignments) {
+    if (!a.classId) continue
+    const cls = a.classId
+    if (!cls.daysOfWeek?.includes(dayOfWeek)) continue
     if (!cls.startTime || !cls.endTime) continue
     const [sh, sm] = cls.startTime.split(':').map(Number)
     const [eh, em] = cls.endTime.split(':').map(Number)
@@ -515,7 +495,6 @@ export const checkTimeConflict = async ({ ptId, date, time }) => {
       }
     }
   }
-
   return { hasConflict: false }
 }
 
@@ -524,15 +503,22 @@ export const checkTimeConflict = async ({ ptId, date, time }) => {
  * Returns slots derived from the PT's TrainingClass schedule.
  */
 export const getSuggestedSlots = async ({ ptId }) => {
-  const classes = await TrainingClass.find({ ptId })
-    .populate('zoneId', 'maxCapacity')
-    .select('name code specialization daysOfWeek startTime endTime zoneId')
+  // Query từ TrainingAssignment thay vì TrainingClass.ptId
+  const assignments = await TrainingAssignment.find({ trainerId: ptId, status: 'active' })
+    .populate({
+      path: 'classId',
+      populate: { path: 'zoneId', select: 'maxCapacity' },
+      select: 'name code specialization daysOfWeek startTime endTime zoneId',
+    })
     .lean()
 
-  const DAY_LABELS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
+  const classes = assignments.map(a => a.classId).filter(Boolean)
+  const uniqueClasses = Array.from(new Map(classes.map(c => [String(c._id), c])).values())
+
+  const DAY_LABELS = ['Ch? nh?t', 'Th? hai', 'Th? ba', 'Th? tu', 'Th? nam', 'Th? s�u', 'Th? b?y']
 
   // Count active members per class
-  const classIds = classes.map(c => c._id)
+  const classIds = uniqueClasses.map(c => c._id)
   const counts = await TrainingAssignment.aggregate([
     { $match: { classId: { $in: classIds }, status: 'active' } },
     { $group: { _id: '$classId', count: { $sum: 1 } } },
@@ -540,7 +526,7 @@ export const getSuggestedSlots = async ({ ptId }) => {
   const countMap = new Map(counts.map(c => [String(c._id), c.count]))
 
   const slots = []
-  for (const c of classes) {
+  for (const c of uniqueClasses) {
     const current = countMap.get(String(c._id)) || 0
     const maxCapacity = (c.zoneId && typeof c.zoneId === 'object' ? c.zoneId.maxCapacity : null) || 0
     const isFull = maxCapacity > 0 && current >= maxCapacity
@@ -595,11 +581,18 @@ export const getMatchedClassesForBooking = async ({ memberId, ptId }) => {
   const prefs = await getMemberTrainingPreferences({ memberId })
   const { timeSlots, daysOfWeek, specialization } = prefs
 
-  const classes = await TrainingClass.find({ ptId })
-    .populate('zoneId', 'maxCapacity')
+  const assignments = await TrainingAssignment.find({ trainerId: ptId, status: 'active' })
+    .populate({
+      path: 'classId',
+      populate: { path: 'zoneId', select: 'maxCapacity' },
+      select: 'name code specialization daysOfWeek startTime endTime zoneId',
+    })
     .lean()
 
-  const classIds = classes.map(c => c._id)
+  const classes = assignments.map(a => a.classId).filter(Boolean)
+  const uniqueClasses = Array.from(new Map(classes.map(c => [String(c._id), c])).values())
+
+  const classIds = uniqueClasses.map(c => c._id)
   const counts = await TrainingAssignment.aggregate([
     { $match: { classId: { $in: classIds }, status: 'active' } },
     { $group: { _id: '$classId', count: { $sum: 1 } } },
@@ -609,7 +602,7 @@ export const getMatchedClassesForBooking = async ({ memberId, ptId }) => {
   const normalize = (str) => String(str || '').replace(/\s+/g, '').toLowerCase()
 
   const matched = []
-  for (const c of classes) {
+  for (const c of uniqueClasses) {
     const current = countMap.get(String(c._id)) || 0
     const maxCap = (c.zoneId && typeof c.zoneId === 'object' ? c.zoneId.maxCapacity : null) || 0
     const isFull = maxCap > 0 && current >= maxCap
@@ -659,4 +652,132 @@ export const cancelAssignment = async ({ memberId, session, reason = 'Gói tập
     },
     opts,
   )
+}
+
+// === NEW: Request/Accept/Decline/BulkRelease ===
+
+export const requestClassAssignment = async ({ classId, trainerId, assignedBy }) => {
+  // Atomic: chỉ cập nhật nếu class đang waiting_pt
+  const result = await TrainingClass.findOneAndUpdate(
+    { _id: classId, status: 'waiting_pt' },
+    { status: 'waiting_accept', pendingTrainerId: trainerId },
+    { new: true },
+  )
+
+  if (!result) {
+    const err = new Error('Lớp đã được xử lý bởi người khác.')
+    err.statusCode = 409
+    throw err
+  }
+
+  return result
+}
+
+export const acceptClassAssignment = async ({ classId, trainerId }) => {
+  const trainingClass = await TrainingClass.findById(classId)
+  if (!trainingClass) {
+    const err = new Error('Không tìm thấy lớp tập')
+    err.statusCode = 404
+    throw err
+  }
+
+  if (trainingClass.status !== 'waiting_accept') {
+    const err = new Error('Lớp không trong trạng thái chờ nhận')
+    err.statusCode = 400
+    throw err
+  }
+
+  if (String(trainingClass.pendingTrainerId) !== String(trainerId)) {
+    const err = new Error('Bạn không phải người được mời nhận lớp này')
+    err.statusCode = 403
+    throw err
+  }
+
+  const session = await mongoose.startSession()
+  try {
+    session.startTransaction()
+
+    const now = new Date()
+
+    // Update TrainingAssignment
+    await TrainingAssignment.updateMany(
+      { classId, status: 'waiting_pt' },
+      { trainerId, status: 'active', acceptedAt: now },
+    ).session(session)
+
+    // Update TrainingClass
+    trainingClass.ptId = trainerId
+    trainingClass.pendingTrainerId = null
+    trainingClass.status = 'active'
+    await trainingClass.save({ session })
+
+    // Update TrainingRequest
+    const enrollments = await ClassEnrollment.find({ classId, status: 'active' }).session(session).lean()
+    const memberIds = enrollments.map(e => e.memberId)
+    if (memberIds.length > 0) {
+      await TrainingRequest.updateMany(
+        { memberId: { $in: memberIds }, status: 'assigned' },
+        { assignedTrainerId: trainerId },
+      ).session(session)
+    }
+
+    await session.commitTransaction()
+
+    return { trainingClass, memberIds }
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
+}
+
+export const declineClassAssignment = async ({ classId, trainerId }) => {
+  const trainingClass = await TrainingClass.findById(classId)
+  if (!trainingClass) {
+    const err = new Error('Không tìm thấy lớp tập')
+    err.statusCode = 404
+    throw err
+  }
+
+  if (String(trainingClass.pendingTrainerId) !== String(trainerId)) {
+    const err = new Error('Bạn không phải người được mời nhận lớp này')
+    err.statusCode = 403
+    throw err
+  }
+
+  trainingClass.pendingTrainerId = null
+  trainingClass.status = 'waiting_pt'
+  await trainingClass.save()
+
+  return trainingClass
+}
+
+export const releasePtClasses = async ({ trainerId }) => {
+  const session = await mongoose.startSession()
+  try {
+    session.startTransaction()
+
+    await TrainingAssignment.updateMany(
+      { trainerId, status: 'active' },
+      { status: 'finished', endDate: new Date() },
+    ).session(session)
+
+    const classes = await TrainingClass.find({ ptId: trainerId, status: 'active' }).session(session).lean()
+    const classIds = classes.map(c => c._id)
+    if (classIds.length > 0) {
+      await TrainingClass.updateMany(
+        { _id: { $in: classIds } },
+        { ptId: null, status: 'waiting_pt' },
+      ).session(session)
+    }
+
+    await session.commitTransaction()
+    return { releasedClassCount: classes.length }
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
 }

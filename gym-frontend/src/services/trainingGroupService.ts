@@ -8,6 +8,7 @@ export interface TrainingClass {
   specialization: string
   specializationLabel?: string
   ptId: string | { _id: string; name?: string; fullName?: string; email?: string; phone?: string; avatar?: string }
+  pendingTrainerId?: string | { _id: string; name?: string; fullName?: string } | null
   floorId: string | { _id: string; name: string; order?: number }
   zoneId: string | { _id: string; name: string; maxCapacity?: number }
   daysOfWeek: number[]
@@ -16,6 +17,7 @@ export interface TrainingClass {
   daysLabel?: string
   currentActiveCount?: number
   hasPT?: boolean
+  status?: 'waiting_pt' | 'waiting_accept' | 'active' | 'inactive' | 'closed'
   createdAt: string
 }
 

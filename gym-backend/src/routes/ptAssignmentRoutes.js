@@ -15,6 +15,10 @@ import {
   getMemberEnrollmentPreview,
   transferMemberClass,
   leaveMemberClass,
+  requestClassAssignment,
+  acceptClassAssignment,
+  declineClassAssignment,
+  bulkReleasePt,
 } from '../controllers/ptAssignmentController.js'
 import { authorize, protect } from '../middlewares/authMiddleware.js'
 
@@ -34,6 +38,12 @@ router.get('/:id/progress', authorize('pt', 'admin', 'super_admin'), getWorkoutP
 router.post('/:id/end-workout', authorize('pt', 'admin', 'super_admin'), endWorkout)
 router.put('/:id/assign-workout', authorize('pt', 'admin', 'super_admin'), assignWorkout)
 router.post('/:assignmentId/create-schedule-and-assign', authorize('pt', 'admin', 'super_admin'), createScheduleAndAssignWorkout)
+
+// PT class request / accept / decline / release
+router.post('/request-class', authorize('admin', 'super_admin'), requestClassAssignment)
+router.post('/accept-class', authorize('pt'), acceptClassAssignment)
+router.post('/decline-class', authorize('pt'), declineClassAssignment)
+router.post('/bulk-release', authorize('admin', 'super_admin'), bulkReleasePt)
 
 // Class enrollment: transfer / leave class (tường minh)
 router.get('/enrollment/preview', authorize('pt', 'admin', 'super_admin', 'member'), getMemberEnrollmentPreview)
