@@ -87,9 +87,9 @@ export default function MemberSessionSelectPage() {
     return (
       <MemberLayout>
         <div className="mx-auto w-full max-w-lg px-4 py-12">
-          <div className="rounded-xl bg-red-50 border border-red-200 p-6 text-center">
-            <Typography.Title level={4} className="m-0" style={{ color: '#dc2626' }}>Mã QR không hợp lệ</Typography.Title>
-            <Typography.Paragraph className="mt-2" style={{ color: '#b91c1c' }}>{error}</Typography.Paragraph>
+          <div className="rounded-xl bg-[var(--gs-elevated)] border border-[var(--gs-border)] p-6 text-center">
+            <Typography.Title level={4} className="m-0 text-[var(--gs-text)]">Mã QR không hợp lệ</Typography.Title>
+            <Typography.Paragraph className="mt-2 text-[var(--gs-text-muted)]">{error}</Typography.Paragraph>
             <Button type="primary" onClick={() => navigate('/checkin/scan')} className="mt-2">
               Quét lại mã QR
             </Button>
@@ -110,10 +110,10 @@ export default function MemberSessionSelectPage() {
         </div>
 
         {allCheckedIn && (
-          <div className="rounded-xl bg-green-50 border border-green-200 p-6 text-center mb-6">
+          <div className="rounded-xl border border-[var(--gs-success-border)] bg-[var(--gs-success-bg)] p-6 text-center mb-6">
             <CheckCircleFilled style={{ fontSize: 48, color: '#22c55e' }} />
-            <Typography.Title level={4} className="mt-3" style={{ color: '#16a34a' }}>Đã check-in hôm nay</Typography.Title>
-            <Typography.Paragraph style={{ color: '#15803d' }}>
+            <Typography.Title level={4} className="mt-3 text-[var(--gs-text)]">Đã check-in hôm nay</Typography.Title>
+            <Typography.Paragraph className="text-[var(--gs-text-muted)]">
               Bạn đã check-in tất cả các buổi tập hôm nay.
             </Typography.Paragraph>
           </div>
@@ -125,7 +125,7 @@ export default function MemberSessionSelectPage() {
               <div key={`${s.scheduleId}-${s.sessionIndex}`}
                 className={`rounded-xl border p-4 ${
                   s.alreadyCheckedIn
-                    ? 'border-green-200 bg-green-50'
+                    ? 'border-[var(--gs-success-border)] bg-[var(--gs-success-bg)]'
                     : 'border-[var(--gs-border)] bg-[var(--gs-card)]'
                 }`}
               >
@@ -151,7 +151,7 @@ export default function MemberSessionSelectPage() {
                     {s.alreadyCheckedIn ? (
                       <div className="text-center">
                         <CheckCircleFilled style={{ fontSize: 24, color: '#22c55e' }} />
-                        <div className="text-xs text-green-600 mt-1">Đã check-in</div>
+                        <div className="text-xs text-[var(--gs-text-muted)] mt-1">Đã check-in</div>
                       </div>
                     ) : (
                       <Button type="primary" size="small"
@@ -170,7 +170,7 @@ export default function MemberSessionSelectPage() {
 
             <div className={`rounded-xl border p-4 ${
               freeCheckedIn
-                ? 'border-green-200 bg-green-50'
+                ? 'border-[var(--gs-success-border)] bg-[var(--gs-success-bg)]'
                 : 'border-dashed border-[var(--gs-border)] bg-[var(--gs-card)]'
             }`}>
               <div className="flex items-start justify-between">
@@ -182,7 +182,7 @@ export default function MemberSessionSelectPage() {
                   {freeCheckedIn ? (
                     <div className="text-center">
                       <CheckCircleFilled style={{ fontSize: 24, color: '#22c55e' }} />
-                      <div className="text-xs text-green-600 mt-1">Đã check-in</div>
+                      <div className="text-xs text-[var(--gs-text-muted)] mt-1">Đã check-in</div>
                     </div>
                   ) : (
                     <Button onClick={() => handleCheckin('free')} loading={submitting}>
