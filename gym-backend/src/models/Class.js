@@ -86,14 +86,12 @@ classSchema.virtual("slotLeft").get(function () {
   return this.maxSlots - this.members.length;
 });
 
-classSchema.pre("save", function (next) {
+classSchema.pre("save", function () {
   if (this.members.length >= this.maxSlots) {
     this.status = "FULL";
   } else {
     this.status = "OPEN";
   }
-
-  next();
 });
 
 export default mongoose.model("Class", classSchema);

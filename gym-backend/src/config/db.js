@@ -36,7 +36,7 @@ const connectDB = async () => {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       await mongoose.connect(ATLAS_URI, MONGO_OPTIONS)
-      logger.info(`Atlas connected: ${mongoose.connection.host}`)
+      logger.info(`✅Atlas connected: ${mongoose.connection.host}`)
       _isFallback = false
       _fallbackError = null
       await dropStaleIndexes(mongoose.connection.db)

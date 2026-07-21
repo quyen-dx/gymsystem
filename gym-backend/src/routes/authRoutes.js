@@ -33,6 +33,13 @@ import {
   approveVerification,
   rejectVerification,
 } from '../controllers/authController.js'
+import {
+  authLoginLimiter,
+  authRegisterLimiter,
+  authOtpLimiter,
+  authPasswordResetLimiter,
+  authRefreshLimiter,
+} from '../middlewares/rateLimiter.js'
 import { adminOnly, protect } from '../middlewares/authMiddleware.js'
 import { buildClientUrl } from '../config/appUrls.js'
 import { disabledFeatureMessage, isFeatureEnabled } from '../services/systemSettingsService.js'
@@ -149,16 +156,16 @@ router.get(
 router.post('/link-social', protect, linkSocial)
 router.delete('/unlink-social', protect, unlinkSocial)
 
-router.post('/register/send-otp', sendRegisterOtp)
-router.post('/register/verify-otp', verifyRegisterOtp)
-router.post('/register/facebook', registerFacebook)
-router.post('/login', login)
-router.post('/refresh', refreshToken)
-router.post('/refresh-token', refreshToken)
+router.post('/register/send-otp', authOtpLimiter, sendRegisterOtp)
+router.post('/register/verify-otp', authOtpLimiter, verifyRegisterOtp)
+router.post('/register/facebook', authRegisterLimiter, registerFacebook)
+router.post('/login', authLoginLimiter, login)
+router.post('/refresh', authRefreshLimiter, refreshToken)
+router.post('/refresh-token', authRefreshLimiter, refreshToken)
 
-router.post('/forgot-password/send-otp', sendForgotPasswordOtp)
-router.post('/forgot-password/verify-otp', verifyForgotPasswordOtp)
-router.post('/forgot-password/reset', resetPassword)
+router.post('/forgot-password/send-otp', authPasswordResetLimiter, sendForgotPasswordOtp)
+router.post('/forgot-password/verify-otp', authPasswordResetLimiter, verifyForgotPasswordOtp)
+router.post('/forgot-password/reset', authPasswordResetLimiter, resetPassword)
 
 router.get('/me', protect, getMe)
 router.get('/has-password', protect, hasPassword)

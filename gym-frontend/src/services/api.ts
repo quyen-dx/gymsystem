@@ -81,16 +81,26 @@ const scheduleTokenRefresh = () => {
 export const startRefreshScheduler = scheduleTokenRefresh
 
 api.interceptors.request.use((config) => {
-  const token = getAuthToken()
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  console.log('[AXIOS REQUEST]', config.method?.toUpperCase(), config.url)
+  try {
+    const token = getAuthToken()
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  } catch (err) {
+    console.log('[AXIOS REQUEST] ERROR in interceptor:', err)
+    throw err
   }
-  return config
 })
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('[AXIOS RESPONSE]', response.config?.method?.toUpperCase(), response.config?.url, 'status:', response.status)
+    return response
+  },
   async (error) => {
+    console.log('[AXIOS ERROR]', error?.config?.method?.toUpperCase(), error?.config?.url, 'message:', error?.message, 'status:', error?.response?.status)
     const originalRequest = error.config
     const status = error.response?.status
     const errorCode = error.response?.data?.code
@@ -136,6 +146,7 @@ api.interceptors.response.use(
         if (!window.location.pathname.startsWith('/login')) {
           window.location.href = '/login'
         }
+        return Promise.reject(error)
       }
     }
 

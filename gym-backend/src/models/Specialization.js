@@ -9,7 +9,6 @@ const specializationSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
 }, { timestamps: true })
 
-specializationSchema.index({ code: 1 }, { unique: true })
 specializationSchema.index({ isActive: 1 })
 
 const Specialization = mongoose.model('Specialization', specializationSchema)

@@ -6,6 +6,7 @@ import TrainingRequest from '../models/TrainingRequest.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import Workout from '../models/Workout.js'
 import PTAssignmentEndRequest from '../models/PTAssignmentEndRequest.js'
+import PersonalTrainingRequest from '../models/PersonalTrainingRequest.js'
 import ClassEnrollment from '../models/ClassEnrollment.js'
 import MembershipCycle from '../models/MembershipCycle.js'
 
@@ -95,6 +96,16 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
     .session(session || null)
     .lean()
 
+  // 3. PersonalTrainingRequest — PT riêng 1-1 (luồng mới)
+  const ptOneOnOneRequests = await PersonalTrainingRequest.find({
+    assignedTrainerId: ptId,
+    status: 'assigned',
+  })
+    .populate('memberId', 'name fullName email phone avatar memberCode memberNumber preferredTime')
+    .sort({ createdAt: -1 })
+    .session(session || null)
+    .lean()
+
   // 3. Merge + dedup + exclude pending end requests
   const memberMap = new Map()
   for (const a of groupAssignments) {
@@ -108,6 +119,13 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
     const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
     if (!memberMap.has(mid) && !excludeMemberIds.includes(mid)) {
       memberMap.set(mid, a)
+    }
+  }
+  for (const r of ptOneOnOneRequests) {
+    const mid = typeof r.memberId === 'object' ? String(r.memberId._id) : String(r.memberId)
+    if (!memberMap.has(mid) && !excludeMemberIds.includes(mid)) {
+      r._isPersonalTraining = true
+      memberMap.set(mid, r)
     }
   }
 
@@ -164,8 +182,8 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
       a.classEnrollment = enrollmentMap.get(mid) || null
       a.membershipStatus = cycleMap.get(mid) || null
       const tr = trainingRequestMap.get(mid)
-      a.specialization = tr?.specialization || ''
-      a.goals = tr?.goals || []
+      a.specialization = a.specialization || tr?.specialization || ''
+      a.goals = a.goals?.length ? a.goals : (tr?.goals || [])
     }
   }
 

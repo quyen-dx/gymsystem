@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit'
-import { rateLimit as rateLimitConfig } from '../config/env.js'
+
+const skipInDev = () => process.env.NODE_ENV === 'development'
 
 const makeHandler = (windowMs) => (req, res) => {
   res.status(429).json({
@@ -13,52 +14,43 @@ const makeHandler = (windowMs) => (req, res) => {
   })
 }
 
-const rateLimiter = rateLimit({
-  windowMs: rateLimitConfig.windowMs,
-  max: rateLimitConfig.max,
+const defaults = {
   standardHeaders: true,
   legacyHeaders: false,
-  handler: makeHandler(rateLimitConfig.windowMs),
-})
+  skip: skipInDev,
+}
 
 export const authLoginLimiter = rateLimit({
+  ...defaults,
   windowMs: 60 * 1000,
   max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
   handler: makeHandler(60 * 1000),
 })
 
 export const authRegisterLimiter = rateLimit({
+  ...defaults,
   windowMs: 60 * 1000,
   max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
   handler: makeHandler(60 * 1000),
 })
 
 export const authOtpLimiter = rateLimit({
+  ...defaults,
   windowMs: 15 * 60 * 1000,
   max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
   handler: makeHandler(15 * 60 * 1000),
 })
 
 export const authPasswordResetLimiter = rateLimit({
+  ...defaults,
   windowMs: 60 * 60 * 1000,
   max: 3,
-  standardHeaders: true,
-  legacyHeaders: false,
   handler: makeHandler(60 * 60 * 1000),
 })
 
 export const authRefreshLimiter = rateLimit({
+  ...defaults,
   windowMs: 60 * 1000,
   max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
   handler: makeHandler(60 * 1000),
 })
-
-export default rateLimiter

@@ -46,7 +46,7 @@ const start = async () => {
   }
 
   server = httpServer.listen(config.port, () => {
-    logger.info(`Server listening on port ${config.port}`, {
+    logger.info(`✅Server listening on port ${config.port}`, {
       port: config.port,
       environment: config.env,
     })

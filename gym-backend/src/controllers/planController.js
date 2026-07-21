@@ -3,6 +3,16 @@ import PlanFeature from '../models/PlanFeature.js';
 import MembershipCycle from '../models/MembershipCycle.js';
 import { recordAuditLog } from '../services/auditLogService.js';
 
+const deriveFeaturesVi = (planDoc) => {
+  const obj = typeof planDoc.toObject === 'function' ? planDoc.toObject() : planDoc;
+  if (obj.featuresVi && obj.featuresVi.length) return obj.featuresVi;
+  const populated = planDoc.featureIds || [];
+  if (populated.length && populated[0] && typeof populated[0] === 'object') {
+    return populated.map((f) => f.name);
+  }
+  return [];
+};
+
 // ==================== TẠO GÓI TẬP ====================
 export const createPlan = async (req, res) => {
   try {
@@ -26,7 +36,11 @@ export const createPlan = async (req, res) => {
       details: 'Tạo gói tập',
     });
 
-    res.status(201).json({ message: 'Tạo gói tập thành công', plan: populated });
+    const planObj = populated.toObject();
+    res.status(201).json({
+      message: 'Tạo gói tập thành công',
+      plan: { ...planObj, featuresVi: deriveFeaturesVi(populated) },
+    });
   } catch (error) {
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map((e) => e.message);
@@ -73,7 +87,11 @@ export const getPlans = async (req, res) => {
           currentPlanId: plan._id,
           status: 'active',
         });
-        return { ...plan.toObject(), memberCount };
+        return {
+          ...plan.toObject(),
+          memberCount,
+          featuresVi: deriveFeaturesVi(plan),
+        };
       })
     );
 
@@ -104,7 +122,13 @@ export const getPlanById = async (req, res) => {
       status: 'active',
     });
 
-    res.json({ plan: { ...plan.toObject(), memberCount } });
+    res.json({
+      plan: {
+        ...plan.toObject(),
+        memberCount,
+        featuresVi: deriveFeaturesVi(plan),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -141,7 +165,11 @@ export const updatePlan = async (req, res) => {
       details: 'Cập nhật thông tin gói tập',
     });
 
-    res.json({ message: 'Cập nhật gói tập thành công', plan: populated });
+    const planObj = populated.toObject();
+    res.json({
+      message: 'Cập nhật gói tập thành công',
+      plan: { ...planObj, featuresVi: deriveFeaturesVi(populated) },
+    });
   } catch (error) {
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map((e) => e.message);

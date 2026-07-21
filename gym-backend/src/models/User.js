@@ -255,11 +255,10 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ role: 1, isActive: 1 })
 userSchema.index({ deletedAt: 1 }, { sparse: true })
 
-userSchema.pre(/^find/, function (next) {
+userSchema.pre(/^find/, function () {
   if (!this.getQuery().includeDeleted) {
     this.where({ deletedAt: null })
   }
-  next()
 })
 
 userSchema.pre('validate', function () {

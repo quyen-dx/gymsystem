@@ -5,6 +5,7 @@ import {
   MailOutlined,
   PlusOutlined,
   UnlockOutlined,
+  UserAddOutlined,
 } from '@ant-design/icons'
 import {
   Badge,
@@ -24,7 +25,9 @@ import { useNavigate } from 'react-router-dom'
 
 import api from '../../../services/api'
 import { trainingRequestService, type TrainingRequest } from '../../../services/trainingRequestService'
+import { personalTrainingRequestService, type PersonalTrainingRequest } from '../../../services/personalTrainingRequestService'
 import { trainerService } from '../../../services/trainerService'
+import { socketService } from '../../../services/socketService'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { memberService } from '../../../services/memberService'
 import type { MemberListItem } from '../../../types/admin/member'
@@ -86,6 +89,21 @@ export default function AdminMembersPage() {
   const [requests, setRequests] = useState<TrainingRequest[]>([])
   const [msgModal, setMsgModal] = useState<{ open: boolean; request: TrainingRequest | null; text: string; sending: boolean }>({ open: false, request: null, text: '', sending: false })
 
+  // ─── PT 1-1 ───
+  const [ptModalOpen, setPtModalOpen] = useState(false)
+  const [ptReqFilter, setPtReqFilter] = useState<string>('pending')
+  const [ptReqLoading, setPtReqLoading] = useState(false)
+  const [ptRequests, setPtRequests] = useState<PersonalTrainingRequest[]>([])
+  const [pendingPTCount, setPendingPTCount] = useState(0)
+  const [assignModalOpen, setAssignModalOpen] = useState(false)
+  const [assignRequestId, setAssignRequestId] = useState<string | null>(null)
+  const [selectedPTId, setSelectedPTId] = useState<string | null>(null)
+  const [ptSearchKeyword, setPtSearchKeyword] = useState('')
+  const [ptList, setPtList] = useState<any[]>([])
+  const [ptSearchLoading, setPtSearchLoading] = useState(false)
+  const [assignSubmitting, setAssignSubmitting] = useState(false)
+  const [cancelSubmitting, setCancelSubmitting] = useState<string | null>(null)
+
   const loadRequests = async () => {
     setReqLoading(true)
     try {
@@ -113,6 +131,52 @@ export default function AdminMembersPage() {
     load()
     const interval = setInterval(load, 30000)
     return () => clearInterval(interval)
+  }, [])
+
+  // ─── PT 1-1: load data ───
+  const loadPTRequests = async () => {
+    setPtReqLoading(true)
+    try {
+      const res = await personalTrainingRequestService.getAllRequests({ status: ptReqFilter || undefined })
+      setPtRequests(res.data.requests || [])
+    } finally { setPtReqLoading(false) }
+  }
+
+  useEffect(() => {
+    if (ptModalOpen) loadPTRequests()
+  }, [ptModalOpen, ptReqFilter])
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await personalTrainingRequestService.getAllRequests({ status: 'pending', page: 1 })
+        setPendingPTCount(res.data.pagination?.total || 0)
+      } catch {}
+    }
+    load()
+    const interval = setInterval(load, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // ─── PT 1-1: socket listeners ───
+  useEffect(() => {
+    socketService.connect()
+    const handleCount = (data: { pendingCount: number }) => {
+      setPendingPTCount(data.pendingCount ?? 0)
+    }
+    const handleNew = (data: PersonalTrainingRequest) => {
+      setPtRequests((prev) => {
+        const exists = prev.some((r) => r._id === data._id)
+        if (exists) return prev
+        return [data, ...prev]
+      })
+    }
+    socketService.on('personal_training:count_updated', handleCount)
+    socketService.on('personal_training:new_request', handleNew)
+    return () => {
+      socketService.off('personal_training:count_updated', handleCount)
+      socketService.off('personal_training:new_request', handleNew)
+    }
   }, [])
 
   const fetchMembers = useCallback(async (p = page, s = search, plan = planFilter, status = statusFilter, remaining = remainingFilter) => {
@@ -307,18 +371,32 @@ export default function AdminMembersPage() {
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Quản lý</p>
         <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý thành viên</h1>
-        <button
-          type="button"
-          onClick={() => setModalOpen(true)}
-          className="mt-3 inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white"
-        >
-          <span>Yêu cầu tập luyện</span>
-          {pendingTrainingCount > 0 && (
-            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f5222d] px-1.5 text-xs font-bold text-white">
-              {pendingTrainingCount > 99 ? '99+' : pendingTrainingCount}
-            </span>
-          )}
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white"
+          >
+            <span>Yêu cầu tập nhóm</span>
+            {pendingTrainingCount > 0 && (
+              <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f5222d] px-1.5 text-xs font-bold text-white">
+                {pendingTrainingCount > 99 ? '99+' : pendingTrainingCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPtModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--gs-amber)] hover:text-white"
+          >
+            <span>Yêu cầu PT 1-1</span>
+            {pendingPTCount > 0 && (
+              <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f5222d] px-1.5 text-xs font-bold text-white">
+                {pendingPTCount > 99 ? '99+' : pendingPTCount}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
@@ -645,6 +723,215 @@ export default function AdminMembersPage() {
             </div>
           )
         })()}
+      </Modal>
+
+      {/* ─── PT 1-1 Request Modal ─── */}
+      <Modal title="Yêu cầu PT 1-1" open={ptModalOpen} onCancel={() => setPtModalOpen(false)}
+        width={1100} centered footer={null} destroyOnClose
+        styles={{ body: { paddingTop: 8, maxHeight: '75vh', overflowY: 'auto' } }}
+        className="!w-[min(95vw,1500px)] max-sm:!w-[98vw]">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex gap-2">
+            {[{ key: 'pending', label: 'Chờ xử lý' }, { key: 'assigned', label: 'Đã phân công' }, { key: 'cancelled', label: 'Đã hủy' }, { key: '', label: 'Tất cả' }].map((tab) => (
+              <Button key={tab.key} type={ptReqFilter === tab.key ? 'primary' : 'default'} size="small" onClick={() => setPtReqFilter(tab.key)}>
+                {tab.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <Table
+          dataSource={ptRequests}
+          rowKey="_id"
+          loading={ptReqLoading}
+          pagination={false}
+          locale={{ emptyText: 'Không có yêu cầu nào' }}
+          scroll={{ x: 1300 }}
+          columns={[
+            {
+              title: 'Hội viên',
+              dataIndex: 'memberId',
+              width: 220,
+              className: '!whitespace-nowrap',
+              render: (m: any) => (
+                <div className="flex items-center gap-2">
+                  {m?.avatar && <img src={m.avatar} className="h-8 w-8 rounded-full object-cover shrink-0" />}
+                  <div>
+                    <div className="text-sm font-medium text-[var(--gs-text)]">{getUserDisplayName(m)}</div>
+                    {m?.memberCode && <div className="text-xs text-[var(--gs-text-muted)]">{m.memberCode}</div>}
+                  </div>
+                </div>
+              ),
+            },
+            {
+              title: 'SĐT / Email',
+              dataIndex: 'memberId',
+              width: 200,
+              render: (m: any) => (
+                <div className="text-xs text-[var(--gs-text)] space-y-0.5">
+                  {m?.phone && <div>{m.phone}</div>}
+                  {m?.email && <div className="text-[var(--gs-text-muted)]">{m.email}</div>}
+                </div>
+              ),
+            },
+            {
+              title: 'Chuyên môn & Mục tiêu',
+              key: 'goals',
+              width: 220,
+              render: (_: any, r: PersonalTrainingRequest) => {
+                const specName = SPEC_LABELS[r.specialization] || r.specialization || 'GYM'
+                return (
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--gs-text)] uppercase">{specName}</div>
+                    {r.goals?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {r.goals.map((g, i) => <Tag key={i} className="m-0 text-xs" color="purple">{g}</Tag>)}
+                      </div>
+                    )}
+                  </div>
+                )
+              },
+            },
+            {
+              title: 'PT mong muốn',
+              dataIndex: 'preferredPTId',
+              width: 150,
+              render: (pt: any) => (
+                <span className="text-sm text-[var(--gs-text)]">
+                  {pt ? (pt.fullName || pt.name) : 'Không yêu cầu'}
+                </span>
+              ),
+            },
+            {
+              title: 'Ghi chú',
+              dataIndex: 'notes',
+              width: 150,
+              render: (n: string) => n ? <span className="text-xs text-[var(--gs-text)]">{n}</span> : <span className="text-xs text-[var(--gs-text-muted)]">—</span>,
+            },
+            {
+              title: 'Ngày gửi',
+              dataIndex: 'createdAt',
+              width: 120,
+              render: (d: string) => <span className="text-xs text-[var(--gs-text-muted)]">{d ? new Date(d).toLocaleDateString('vi-VN') : ''}</span>,
+            },
+            {
+              title: 'Trạng thái',
+              dataIndex: 'status',
+              width: 120,
+              render: (s: string) => {
+                const map: Record<string, [string, string]> = {
+                  pending: ['orange', 'Chờ xử lý'],
+                  assigned: ['green', 'Đã phân công'],
+                  cancelled: ['red', 'Đã hủy'],
+                }
+                return <Tag color={map[s]?.[0] || 'default'}>{map[s]?.[1] || s}</Tag>
+              },
+            },
+            {
+              title: 'Thao tác',
+              key: 'action',
+              width: 150,
+              render: (_: any, r: PersonalTrainingRequest) => {
+                if (r.status !== 'pending') return <span className="text-xs text-[var(--gs-text-muted)]">Đã xử lý</span>
+                return (
+                  <div className="flex gap-1.5">
+                    <Button type="primary" size="small" icon={<UserAddOutlined />}
+                      onClick={() => { setAssignRequestId(r._id); setSelectedPTId(null); setPtSearchKeyword(''); setPtList([]); setAssignModalOpen(true) }}>
+                      Phân công PT
+                    </Button>
+                    <Button size="small" danger loading={cancelSubmitting === r._id}
+                      onClick={async () => {
+                        setCancelSubmitting(r._id)
+                        try {
+                          await personalTrainingRequestService.cancelMyRequest(r._id)
+                          message.success('Đã hủy yêu cầu')
+                          loadPTRequests()
+                        } catch {
+                          message.error('Không thể hủy yêu cầu')
+                        } finally { setCancelSubmitting(null) }
+                      }}>
+                      Hủy
+                    </Button>
+                  </div>
+                )
+              },
+            },
+          ]}
+        />
+      </Modal>
+
+      {/* ─── Assign PT Modal ─── */}
+      <Modal title="Phân công PT" open={assignModalOpen} onCancel={() => { setAssignModalOpen(false); setAssignRequestId(null); setSelectedPTId(null); setPtSearchKeyword(''); setPtList([]) }}
+        footer={[
+          <Button key="cancel" onClick={() => { setAssignModalOpen(false); setAssignRequestId(null); setSelectedPTId(null); setPtSearchKeyword(''); setPtList([]) }}>Hủy</Button>,
+          <Button key="assign" type="primary" loading={assignSubmitting}
+            disabled={!selectedPTId}
+            onClick={async () => {
+              if (!assignRequestId || !selectedPTId) { message.warning('Chưa chọn PT'); return }
+              setAssignSubmitting(true)
+              try {
+                await personalTrainingRequestService.assignPT(assignRequestId, selectedPTId)
+                message.success('Đã phân công PT thành công')
+                setAssignModalOpen(false)
+                setAssignRequestId(null)
+                setSelectedPTId(null)
+                setPtSearchKeyword('')
+                setPtList([])
+                loadPTRequests()
+              } catch (err: any) {
+                message.error(err?.response?.data?.message || 'Phân công thất bại')
+              } finally { setAssignSubmitting(false) }
+            }}>
+            Xác nhận
+          </Button>,
+        ]}
+        width={500} centered destroyOnClose>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Tìm kiếm PT</label>
+            <Input.Search
+              placeholder="Nhập tên PT..."
+              value={ptSearchKeyword}
+              onChange={(e) => setPtSearchKeyword(e.target.value)}
+              onSearch={async (val) => {
+                setPtSearchLoading(true)
+                try {
+                  const res = await api.get('/pts/available', { params: { search: val, limit: 50, status: 'active' } })
+                  setPtList(res.data.pts || [])
+                } catch { setPtList([]) }
+                finally { setPtSearchLoading(false) }
+              }}
+              loading={ptSearchLoading}
+              enterButton
+            />
+          </div>
+          {ptList.length > 0 && (
+            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              {ptList.map((pt: any) => (
+                <div
+                  key={pt._id}
+                  onClick={() => setSelectedPTId(pt._id)}
+                  className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all ${
+                    selectedPTId === pt._id
+                      ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
+                      : 'border-[var(--theme-border)] hover:border-[var(--theme-accent)]'
+                  }`}
+                >
+                  {pt.avatar && <img src={pt.avatar} className="h-10 w-10 rounded-full object-cover shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-[var(--gs-text)]">{pt.name || pt.fullName}</div>
+                    <div className="text-xs text-[var(--gs-text-muted)] flex flex-wrap gap-2 mt-0.5">
+                      {pt.specialties?.length > 0 && <span>{pt.specialties.join(', ')}</span>}
+                      {pt.totalStudents > 0 && <Tag className="m-0 text-xs">{pt.totalStudents} hội viên</Tag>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {ptList.length === 0 && !ptSearchLoading && ptSearchKeyword && (
+            <p className="text-sm text-[var(--gs-text-muted)] text-center">Không tìm thấy PT phù hợp</p>
+          )}
+        </div>
       </Modal>
 
     </DashboardLayout>

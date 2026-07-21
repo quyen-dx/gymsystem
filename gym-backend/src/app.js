@@ -12,7 +12,6 @@ import { protect, sellerOnly } from './middlewares/authMiddleware.js'
 import { maintenanceModeGuard } from './middlewares/maintenanceMiddleware.js'
 import requestId from './middlewares/requestId.js'
 import requestLogger from './middlewares/requestLogger.js'
-import rateLimiter from './middlewares/rateLimiter.js'
 import notFound from './middlewares/notFound.js'
 import errorHandler from './middlewares/errorHandler.js'
 import { isFallbackActive, reconnectToPrimary, getFallbackError } from './config/db.js'
@@ -49,6 +48,7 @@ import scheduleRoutes from './routes/scheduleRoutes.js'
 import ptAssignmentRoutes from './routes/ptAssignmentRoutes.js'
 import ptAssignmentEndRoutes from './routes/ptAssignmentEndRoutes.js'
 import trainingRequestRoutes from './routes/trainingRequestRoutes.js'
+import personalTrainingRequestRoutes from './routes/personalTrainingRequestRoutes.js'
 import trainingAssignmentRoutes from './routes/trainingAssignmentRoutes.js'
 import trainingClassRoutes from './routes/trainingClassRoutes.js'
 import floorZoneRoutes from './routes/floorZoneRoutes.js'
@@ -92,7 +92,6 @@ const createApp = () => {
 
   app.use(requestId)
   app.use(requestLogger)
-  app.use(rateLimiter)
 
   app.use(
     session({
@@ -144,6 +143,7 @@ const createApp = () => {
   app.use('/api/pt-assignments', ptAssignmentRoutes)
   app.use('/api/pt-assignment-end-requests', ptAssignmentEndRoutes)
   app.use('/api/training-requests', trainingRequestRoutes)
+  app.use('/api/personal-training-requests', personalTrainingRequestRoutes)
   app.use('/api/training-assignments', trainingAssignmentRoutes)
   app.use('/api/training-classes', trainingClassRoutes)
   app.use('/api/floors-zones', floorZoneRoutes)

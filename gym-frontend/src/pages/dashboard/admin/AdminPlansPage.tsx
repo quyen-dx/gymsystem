@@ -120,12 +120,19 @@ export default function AdminPlansPage() {
   }
 
   const handleDelete = async (id: string) => {
+    console.log('[DELETE] handleDelete called with id:', id)
     try {
-      await api.delete(`/plans/${id}`)
+      console.log('[DELETE] Calling api.delete...')
+      const res = await api.delete(`/plans/${id}`)
+      console.log('[DELETE] api.delete succeeded, response:', res)
       message.success('Xóa gói tập thành công')
       fetchPlans()
-    } catch {
-      message.error('Không thể xóa gói tập')
+    } catch (err: any) {
+      console.log('[DELETE] api.delete FAILED with error:', err)
+      console.log('[DELETE] err.message:', err?.message)
+      console.log('[DELETE] err.response:', err?.response)
+      console.log('[DELETE] err.config:', err?.config)
+      message.error(err?.response?.data?.message || 'Không thể xóa gói tập')
     }
   }
 
@@ -228,7 +235,13 @@ export default function AdminPlansPage() {
           <Popconfirm
             title="Xóa gói tập"
             description="Bạn có chắc chắn muốn xóa gói tập này?"
-            onConfirm={() => handleDelete(record._id)}
+            onConfirm={() => {
+              console.log('[DELETE] Popconfirm onConfirm fired with id:', record._id)
+              handleDelete(record._id)
+            }}
+            onCancel={() => {
+              console.log('[DELETE] Popconfirm onCancel fired')
+            }}
             okText="Xóa"
             cancelText="Hủy"
           >

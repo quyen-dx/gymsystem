@@ -21,12 +21,27 @@ export const getPTs = async (req, res) => {
     const userFilter = { role: 'pt' }
 
     if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = { $regex: escaped, $options: 'i' }
       const phone = search.replace(/\s/g, '')
       const isPhoneSearch = /^(0|\+84)\d{8,9}$/.test(phone)
+
       if (isPhoneSearch) {
-        userFilter.phone = { $regex: phone.replace(/^0/, '(+84|0)'), $options: 'i' }
+        userFilter.$or = [
+          { phone: { $regex: phone.replace(/^0/, '(+84|0)'), $options: 'i' } },
+          { name: regex },
+          { fullName: regex },
+          { email: regex },
+          { memberCode: regex },
+        ]
       } else {
-        userFilter.name = { $regex: search, $options: 'i' }
+        userFilter.$or = [
+          { name: regex },
+          { fullName: regex },
+          { email: regex },
+          { phone: regex },
+          { memberCode: regex },
+        ]
       }
     }
 

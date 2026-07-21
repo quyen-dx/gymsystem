@@ -25,7 +25,6 @@ const passwordResetTokenSchema = new mongoose.Schema(
   { timestamps: true },
 )
 
-passwordResetTokenSchema.index({ token: 1 }, { unique: true })
 passwordResetTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 3600 })
 
 passwordResetTokenSchema.statics.generate = async function (userId) {

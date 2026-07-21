@@ -7,6 +7,4 @@ const zoneSchema = new mongoose.Schema({
   status: { type: String, enum: ['active', 'maintenance'], default: 'active' },
 }, { timestamps: true })
 
-zoneSchema.index({ floorId: 1 })
-
 export default mongoose.models.Zone || mongoose.model('Zone', zoneSchema)

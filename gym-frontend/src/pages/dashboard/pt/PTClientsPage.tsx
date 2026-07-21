@@ -69,6 +69,7 @@ interface ClientInfo {
   membershipStatus?: 'active' | 'pending_initial_activation' | null
   cancelledAt?: string
   cancelReason?: string
+  source?: 'group' | 'pt_private' | 'pt_one_on_one'
 }
 
 function extractClient(assignment: PTAssignment): ClientInfo | null {
@@ -97,6 +98,8 @@ function extractClient(assignment: PTAssignment): ClientInfo | null {
     membershipStatus: assignment.membershipStatus,
     cancelledAt: assignment.cancelledAt,
     cancelReason: assignment.cancelReason,
+    source: (assignment as any)._isPersonalTraining ? 'pt_one_on_one'
+      : (assignment as any)._fromClass ? 'group' : 'pt_private',
   }
 }
 
@@ -122,6 +125,7 @@ export default function PTClientsPage() {
   const [filterClass, setFilterClass] = useState<string | undefined>(undefined)
   const [filterSpecialization, setFilterSpecialization] = useState<string | undefined>(undefined)
   const [filterGoals, setFilterGoals] = useState<string[]>([])
+  const [filterSource, setFilterSource] = useState<string | undefined>(undefined)
 
   // Tab 2: Pending approvals
   const [pendingItems, setPendingItems] = useState<PendingApproval[]>([])
@@ -575,9 +579,30 @@ export default function PTClientsPage() {
       ),
     },
     {
+      title: 'SĐT',
+      width: 130,
+      render: (_: unknown, record: ClientInfo) => (
+        <span className="text-sm text-[var(--gs-text)]">
+          {record.source === 'pt_one_on_one' && record.phone ? record.phone : '—'}
+        </span>
+      ),
+    },
+    {
+      title: 'Email',
+      width: 180,
+      render: (_: unknown, record: ClientInfo) => (
+        <span className="text-sm text-[var(--gs-text)]">
+          {record.source === 'pt_one_on_one' && record.email ? record.email : '—'}
+        </span>
+      ),
+    },
+    {
       title: 'Lớp',
       width: 140,
       render: (_: unknown, record: ClientInfo) => {
+        if (record.source === 'pt_one_on_one') {
+          return <Tag color="purple">PT RIÊNG</Tag>
+        }
         const ce = record.classEnrollment
         if (ce) {
           return <span className="text-sm text-[var(--gs-text)]">{ce.name}</span>
@@ -852,6 +877,10 @@ export default function PTClientsPage() {
       const cGoals = c.goals || []
       if (!filterGoals.some(g => cGoals.includes(g))) return false
     }
+    if (filterSource) {
+      if (filterSource === 'class' && c.source !== 'group') return false
+      if (filterSource === 'pt_one_on_one' && c.source !== 'pt_one_on_one') return false
+    }
     return true
   })
 
@@ -866,6 +895,18 @@ export default function PTClientsPage() {
           value={filterClass}
           onChange={(v) => setFilterClass(v || undefined)}
           options={classOptions}
+        />
+        <Select
+          className="max-[767px]:!w-full"
+          style={{ minWidth: 170 }}
+          placeholder="Loại học viên"
+          allowClear
+          value={filterSource}
+          onChange={(v) => setFilterSource(v || undefined)}
+          options={[
+            { value: 'class', label: 'Hội viên có lớp' },
+            { value: 'pt_one_on_one', label: 'Hội viên PT riêng' },
+          ]}
         />
         <Select
           className="max-[767px]:!w-full"
@@ -892,6 +933,7 @@ export default function PTClientsPage() {
         columns={activeColumns}
         rowKey="_id"
         loading={clientsLoading}
+        scroll={{ x: 1400 }}
         pagination={{ pageSize: 15 }}
         locale={{ emptyText: <Empty description="Chưa có học viên nào" /> }}
         expandable={{
@@ -920,18 +962,42 @@ export default function PTClientsPage() {
                         Kết thúc toàn bộ lịch tập
                       </Button>
                     )}
-                    <Button
-                      size="small"
-                      onClick={() => openClassModal(record, 'transfer')}
-                    >
-                      Chuyển lớp
-                    </Button>
-                    <Button
-                      size="small"
-                      onClick={() => openClassModal(record, 'leave')}
-                    >
-                      Rời lớp
-                    </Button>
+                    {record.source === 'pt_one_on_one' ? (
+                      <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-3 min-w-[220px]">
+                        <div className="text-xs font-medium text-[var(--gs-text-muted)] mb-2">Thông tin liên hệ</div>
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <div className="text-sm text-[var(--gs-text)]">
+                            <span className="text-xs text-[var(--gs-text-muted)]">SĐT </span>
+                            {record.phone || '—'}
+                          </div>
+                          {record.phone && (
+                            <a href={`tel:${record.phone}`} className="text-xs text-[var(--theme-accent)] hover:underline shrink-0">
+                              Gọi
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm text-[var(--gs-text)] truncate max-w-[180px]">
+                            <span className="text-xs text-[var(--gs-text-muted)]">Email </span>
+                            {record.email || '—'}
+                          </div>
+                          {record.email && (
+                            <a href={`mailto:${record.email}`} className="text-xs text-[var(--theme-accent)] hover:underline shrink-0">
+                              Email
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <Button size="small" onClick={() => openClassModal(record, 'transfer')}>
+                          Chuyển lớp
+                        </Button>
+                        <Button size="small" onClick={() => openClassModal(record, 'leave')}>
+                          Rời lớp
+                        </Button>
+                      </>
+                    )}
                     <Button
                       size="small"
                       danger
@@ -980,9 +1046,27 @@ export default function PTClientsPage() {
                   {isExpanded ? '−' : '+'}
                 </div>
               </div>
+              {record.source === 'pt_one_on_one' && (
+                <>
+                  <div className="pt-client-detail">
+                    <span className="pt-label">SĐT</span>
+                    <span className="pt-value">{record.phone || '—'}</span>
+                  </div>
+                  <div className="pt-client-detail">
+                    <span className="pt-label">Email</span>
+                    <span className="pt-value">{record.email || '—'}</span>
+                  </div>
+                </>
+              )}
               <div className="pt-client-detail">
-                <span className="pt-label">Lớp</span>
-                <span className="pt-value">{ce ? ce.name : <span className="italic text-[var(--gs-text-muted)]">Chưa xếp lớp</span>}</span>
+                <span className="pt-label">{record.source === 'pt_one_on_one' ? 'Loại' : 'Lớp'}</span>
+                <span className="pt-value">
+                  {record.source === 'pt_one_on_one'
+                    ? <Tag color="purple" className="m-0">PT RIÊNG</Tag>
+                    : ce
+                      ? ce.name
+                      : <span className="italic text-[var(--gs-text-muted)]">Chưa xếp lớp</span>}
+                </span>
               </div>
               {record.specialization && (
                 <div className="pt-client-detail">
@@ -1038,8 +1122,40 @@ export default function PTClientsPage() {
                       {hasActiveSchedule(record) && (
                         <Button size="small" danger onClick={() => handleEndAllWorkouts(record)}>Kết thúc toàn bộ lịch tập</Button>
                       )}
-                      {ce && <Button size="small" onClick={() => openClassModal(record, 'transfer')}>Chuyển lớp</Button>}
-                      {ce && <Button size="small" onClick={() => openClassModal(record, 'leave')}>Rời lớp</Button>}
+                      {record.source === 'pt_one_on_one' ? (
+                        <div className="w-full rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-3 mb-2">
+                          <div className="text-xs font-medium text-[var(--gs-text-muted)] mb-2">Thông tin liên hệ</div>
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <span className="text-sm text-[var(--gs-text)]">
+                              <span className="text-xs text-[var(--gs-text-muted)]">SĐT </span>
+                              {record.phone || '—'}
+                            </span>
+                            {record.phone && (
+                              <a href={`tel:${record.phone}`} className="text-xs text-[var(--theme-accent)] shrink-0">Gọi</a>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm text-[var(--gs-text)] truncate max-w-[200px]">
+                              <span className="text-xs text-[var(--gs-text-muted)]">Email </span>
+                              {record.email || '—'}
+                            </span>
+                            {record.email && (
+                              <a href={`mailto:${record.email}`} className="text-xs text-[var(--theme-accent)] shrink-0">Email</a>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {(ce || record.source === 'pt_one_on_one') && (
+                            <Button size="small" onClick={() => openClassModal(record, 'transfer')}>
+                              {record.source === 'pt_one_on_one' ? 'Gán lớp' : 'Chuyển lớp'}
+                            </Button>
+                          )}
+                          {ce && record.source !== 'pt_one_on_one' && (
+                            <Button size="small" onClick={() => openClassModal(record, 'leave')}>Rời lớp</Button>
+                          )}
+                        </>
+                      )}
                       <Button size="small" danger onClick={() => { setEndRequestModal({ open: true, client: record }); setEndReason('MEMBER_COMPLETED'); setEndDetail('') }}>
                         Kết thúc phụ trách
                       </Button>
@@ -1327,8 +1443,12 @@ export default function PTClientsPage() {
       {/* ============ CHUYỂN LỚP / RỜI LỚP MODAL ============ */}
       <Modal
         open={classModal.open}
-        title={classModal.mode === 'transfer' ? 'Chuyển lớp cho hội viên' : 'Rời khỏi lớp hiện tại'}
-        okText={classModal.mode === 'transfer' ? 'Chuyển lớp' : 'Rời lớp'}
+        title={classModal.mode === 'transfer'
+          ? (classModal.client?.source === 'pt_one_on_one' ? 'Gán lớp cho hội viên' : 'Chuyển lớp cho hội viên')
+          : 'Rời khỏi lớp hiện tại'}
+        okText={classModal.mode === 'transfer'
+          ? (classModal.client?.source === 'pt_one_on_one' ? 'Gán lớp' : 'Chuyển lớp')
+          : 'Rời lớp'}
         cancelText="Hủy"
         confirmLoading={submittingClassAction}
         onOk={submitClassAction}
@@ -1349,9 +1469,11 @@ export default function PTClientsPage() {
 
             <div className="mb-4">
               <label className="mb-1 block text-sm font-medium text-[var(--gs-text)]">Lớp hiện tại</label>
-              {enrollmentPreview?.currentEnrollment ? (
+              {classModal.client?.source === 'pt_one_on_one' ? (
+                <p className="text-sm text-[var(--gs-text)]"><Tag color="purple">PT RIÊNG 1-1</Tag></p>
+              ) : enrollmentPreview?.currentEnrollment ? (
                 <p className="text-sm text-[var(--gs-text)]">
-                  [{enrollmentPreview.currentEnrollment.code}] {enrollmentPreview.currentEnrollment.name}
+                  {enrollmentPreview.currentEnrollment.name}
                 </p>
               ) : (
                 <p className="text-sm text-[var(--gs-text-muted)] italic">Không có lớp active</p>
@@ -1368,11 +1490,26 @@ export default function PTClientsPage() {
                   placeholder="Chọn lớp..."
                   value={selectedTargetClass || undefined}
                   onChange={(v) => setSelectedTargetClass(v)}
-                  options={(enrollmentPreview?.availableClasses || []).map((c) => ({
-                    value: c._id,
-                    label: `[${c.code}] ${c.name}${c.isCurrent ? ' (lớp hiện tại)' : c.isFull ? ' (đã đầy)' : ''} — ${c.current}/${c.max}`,
-                    disabled: c.isFull || c.isCurrent,
-                  }))}
+                    options={(enrollmentPreview?.availableClasses || []).map((c) => ({
+                      value: c._id,
+                      label: c.name,
+                      disabled: c.isFull || c.isCurrent,
+                    }))}
+                    optionRender={(opt) => {
+                      const cls = enrollmentPreview?.availableClasses?.find((c: any) => c._id === opt.value)
+                      if (!cls) return <span>{opt.label}</span>
+                      const isDisabled = cls.isFull || cls.isCurrent
+                      return (
+                        <div className={isDisabled ? 'opacity-60' : ''}>
+                          <div className="text-sm font-medium text-[var(--gs-text)]">{cls.name}</div>
+                          <div className="text-xs text-[var(--gs-text-muted)] mt-0.5">
+                            {cls.current}/{cls.max} học viên
+                            {(cls as any).time && <span> • {(cls as any).time}</span>}
+                            {(cls as any).room && <span> • {(cls as any).room}</span>}
+                          </div>
+                        </div>
+                      )
+                    }}
                 />
               </div>
             )}

@@ -119,3 +119,15 @@ export const emitWorkoutReportCountUpdate = async () => {
   const count = await WorkoutReport.countDocuments({ status: 'pending' })
   io.to('staff').emit('workout_report:count_updated', { pendingCount: count })
 }
+
+export const emitPersonalTrainingCountUpdate = async () => {
+  if (!io) return
+  const { default: PersonalTrainingRequest } = await import('../models/PersonalTrainingRequest.js')
+  const count = await PersonalTrainingRequest.countDocuments({ status: 'pending' })
+  io.to('staff').emit('personal_training:count_updated', { pendingCount: count })
+}
+
+export const emitPersonalTrainingNewRequest = (request) => {
+  if (!io) return
+  io.to('staff').emit('personal_training:new_request', request)
+}

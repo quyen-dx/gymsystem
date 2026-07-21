@@ -74,6 +74,7 @@ export interface PTAssignment {
   cancelReason?: string
   scheduleCount?: number
   _fromClass?: boolean
+  _isPersonalTraining?: boolean
   membershipStatus?: 'active' | 'pending_initial_activation' | null
   createdAt?: string
   updatedAt?: string

@@ -264,8 +264,6 @@ workoutSchema.pre('save', function () {
 })
 
 // Index
-workoutSchema.index({ memberId: 1 });
-workoutSchema.index({ ptId: 1 });
 workoutSchema.index({ memberId: 1, createdAt: -1 });
 
 workoutSchema.index({ isTemplate: 1, createdAt: -1 });
