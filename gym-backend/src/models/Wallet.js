@@ -14,9 +14,19 @@ const walletSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+        heldBalance: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
         currency: {
             type: String,
             default: 'VND',
+        },
+        status: {
+            type: String,
+            enum: ['active', 'frozen', 'closed'],
+            default: 'active',
         },
     },
     { timestamps: true },

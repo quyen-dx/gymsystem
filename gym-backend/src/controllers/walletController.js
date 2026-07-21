@@ -6,7 +6,7 @@ import Payment from '../models/Payment.js'
 import Transaction from '../models/Transaction.js'
 import User from '../models/User.js'
 import Wallet from '../models/Wallet.js'
-import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, transferWalletBalance } from '../services/walletService.js'
+import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, transferWalletBalance, requestWithdrawal, approveWithdrawal, rejectWithdrawal } from '../services/walletService.js'
 import { createVnpayPaymentUrl, verifyVnpayReturn } from '../services/vnpayService.js'
 import AppError from '../utils/appError.js'
 import { assertPolicyConsent } from '../utils/policyConsent.js'
@@ -823,6 +823,119 @@ export const staffListAllPayments = async (req, res, next) => {
         return res.json({
             success: true,
             data: { payments, pagination: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) } },
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const requestWithdrawalController = async (req, res, next) => {
+    try {
+        const amount = Number(req.body.amount)
+        if (!amount || Number.isNaN(amount) || amount <= 0) {
+            throw new AppError('Invalid withdrawal amount', 400)
+        }
+
+        const bankInfo = req.body.bankInfo
+        if (!bankInfo || !bankInfo.bank || !bankInfo.accountNumber || !bankInfo.holder) {
+            throw new AppError('Bank information required (bank, accountNumber, holder)', 400)
+        }
+
+        const idempotencyKey = req.headers['idempotency-key'] || `wdr_${req.user._id}_${Date.now()}`
+
+        const { wallet, transaction } = await requestWithdrawal({
+            userId: req.user._id,
+            amount,
+            bankInfo,
+            idempotencyKey,
+        })
+
+        return res.status(201).json({
+            success: true,
+            data: { wallet, withdrawal: transaction },
+            message: 'Withdrawal request submitted for admin review',
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const listMyWithdrawals = async (req, res, next) => {
+    try {
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1)
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20))
+        const skip = (page - 1) * limit
+
+        const filter = { userId: req.user._id, type: 'withdrawal' }
+        const [transactions, total] = await Promise.all([
+            Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+            Transaction.countDocuments(filter),
+        ])
+
+        return res.json({
+            success: true,
+            data: transactions,
+            pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const approveWithdrawalController = async (req, res, next) => {
+    try {
+        const { txnId } = req.params
+        const { wallet, transaction } = await approveWithdrawal({
+            transactionId: txnId,
+            adminId: req.user._id,
+        })
+
+        return res.json({
+            success: true,
+            data: { wallet, withdrawal: transaction },
+            message: 'Withdrawal approved',
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const rejectWithdrawalController = async (req, res, next) => {
+    try {
+        const { txnId } = req.params
+        const reason = req.body.reason || 'Admin decision'
+        const { wallet, transaction } = await rejectWithdrawal({
+            transactionId: txnId,
+            adminId: req.user._id,
+            reason,
+        })
+
+        return res.json({
+            success: true,
+            data: { wallet, withdrawal: transaction },
+            message: 'Withdrawal rejected',
+        })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const listPendingWithdrawals = async (req, res, next) => {
+    try {
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1)
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20))
+        const skip = (page - 1) * limit
+
+        const filter = { type: 'withdrawal', status: 'pending' }
+        const [transactions, total] = await Promise.all([
+            Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+            Transaction.countDocuments(filter),
+        ])
+
+        return res.json({
+            success: true,
+            data: transactions,
+            pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
         })
     } catch (error) {
         next(error)

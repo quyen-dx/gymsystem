@@ -16,7 +16,7 @@ const transactionSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ['deposit', 'payment', 'transfer', 'refund', 'payout', 'REFUND_TO_WALLET'],
+            enum: ['deposit', 'payment', 'transfer', 'refund', 'payout', 'REFUND_TO_WALLET', 'withdrawal', 'hold', 'release', 'correction'],
             required: true,
         },
         provider: {
@@ -50,7 +50,7 @@ const transactionSchema = new mongoose.Schema(
         },
         status: {
             type: String,
-            enum: ['pending', 'completed', 'failed', 'cancelled'],
+            enum: ['pending', 'completed', 'failed', 'cancelled', 'approved', 'rejected'],
             default: 'pending',
         },
         expiredAt: {
@@ -66,7 +66,14 @@ const transactionSchema = new mongoose.Schema(
         idempotencyKey: {
             type: String,
             trim: true,
+            unique: true,
+            sparse: true,
             index: true,
+        },
+        ledgerEntryId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'LedgerEntry',
+            default: null,
         },
     },
     { timestamps: true },
