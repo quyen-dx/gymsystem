@@ -90,16 +90,6 @@ const orderSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
-        discountCode: {
-            type: String,
-            trim: true,
-            default: '',
-        },
-        discountAmount: {
-            type: Number,
-            default: 0,
-            min: 0,
-        },
         address: {
             recipientName: { type: String, required: true },
             phone: { type: String, required: true },
@@ -112,12 +102,12 @@ const orderSchema = new mongoose.Schema(
         },
         status: {
             type: String,
-            enum: ['CHỜ XÁC NHẬN', 'ĐANG GIAO HÀNG', 'GIAO THÀNH CÔNG'],
+            enum: ['CHỜ XÁC NHẬN', 'ĐANG GIAO HÀNG', 'GIAO THÀNH CÔNG', 'ĐÃ HỦY'],
             default: 'CHỜ XÁC NHẬN',
         },
         paymentStatus: {
             type: String,
-            enum: ['unpaid', 'paid', 'failed'],
+            enum: ['unpaid', 'paid', 'failed', 'refunded'],
             default: 'unpaid',
         },
         shippingId: {
@@ -141,6 +131,32 @@ const orderSchema = new mongoose.Schema(
         hiddenForUserAt: {
             type: Date,
             default: null,
+        },
+        sellerEscrowAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        escrowReleased: {
+            type: Boolean,
+            default: false,
+        },
+        confirmedByBuyer: {
+            type: Boolean,
+            default: false,
+        },
+        confirmedAt: {
+            type: Date,
+            default: null,
+        },
+        cancelledAt: {
+            type: Date,
+            default: null,
+        },
+        cancellationReason: {
+            type: String,
+            trim: true,
+            default: '',
         },
     },
     { timestamps: true },

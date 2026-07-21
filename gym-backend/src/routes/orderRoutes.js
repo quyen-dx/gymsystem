@@ -1,5 +1,5 @@
 import express from 'express'
-import { calculateShippingController, checkoutOrder, deleteMyOrderHistory, getMyOrders, getOrder, getSellerOrders, trackOrder, updateSellerOrderStatusController, validateDiscountCode } from '../controllers/orderController.js'
+import { calculateShippingController, cancelOrderController, checkoutOrder, confirmDeliveryController, deleteMyOrderHistory, getMyOrders, getOrder, getSellerOrders, trackOrder, updateSellerOrderStatusController, validateDiscountCode } from '../controllers/orderController.js'
 import { protect, sellerOnly } from '../middlewares/authMiddleware.js'
 import { requireFeature } from '../middlewares/systemSettingsMiddleware.js'
 
@@ -15,5 +15,7 @@ router.get('/seller', sellerOnly, requireFeature('shop.productStoreEnabled'), ge
 router.patch('/seller/:id/status', sellerOnly, requireFeature('shop.productStoreEnabled'), updateSellerOrderStatusController)
 router.get('/track/:id', trackOrder)
 router.get('/:id', getOrder)
+router.post('/:id/cancel', cancelOrderController)
+router.post('/:id/confirm-delivery', confirmDeliveryController)
 
 export default router

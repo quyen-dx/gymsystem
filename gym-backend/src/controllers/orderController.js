@@ -1,5 +1,5 @@
 import { getDefaultAddress } from '../services/addressService.js'
-import { calculateCheckoutDiscount, calculateOrderShipping, createOrder, getOrderById, getOrdersBySeller, getOrdersByUser, getSellerOrderById, getShippingByOrder, hideOrderForUser, updateSellerOrderStatus } from '../services/orderService.js'
+import { calculateCheckoutDiscount, calculateOrderShipping, cancelOrder, confirmDelivery, createOrder, getOrderById, getOrdersBySeller, getOrdersByUser, getSellerOrderById, getShippingByOrder, hideOrderForUser, updateSellerOrderStatus } from '../services/orderService.js'
 
 export const checkoutOrder = async (req, res, next) => {
     try {
@@ -148,6 +148,32 @@ export const trackOrder = async (req, res, next) => {
         }
 
         return res.json({ success: true, data: shipping })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const cancelOrderController = async (req, res, next) => {
+    try {
+        const reason = req.body?.reason || ''
+        const order = await cancelOrder({
+            orderId: req.params.id,
+            userId: req.user._id,
+            reason,
+        })
+        return res.json({ success: true, data: order, message: 'Đơn hàng đã được hủy' })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const confirmDeliveryController = async (req, res, next) => {
+    try {
+        const order = await confirmDelivery({
+            orderId: req.params.id,
+            userId: req.user._id,
+        })
+        return res.json({ success: true, data: order, message: 'Xác nhận đã nhận hàng thành công' })
     } catch (error) {
         next(error)
     }

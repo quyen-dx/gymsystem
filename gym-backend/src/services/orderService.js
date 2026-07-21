@@ -10,10 +10,18 @@ import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 
 const PLATFORM_FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.02)
-export const ORDER_STATUSES = ['CHỜ XÁC NHẬN', 'ĐANG GIAO HÀNG', 'GIAO THÀNH CÔNG']
+export const ORDER_STATUSES = ['CHỜ XÁC NHẬN', 'ĐANG GIAO HÀNG', 'GIAO THÀNH CÔNG', 'ĐÃ HỦY']
 const DELIVERED_STATUS = 'GIAO THÀNH CÔNG'
+const CANCELLABLE_STATUSES = ['CHỜ XÁC NHẬN']
 
 import { calculateShippingGHN } from './ghnService.js'
+
+const VALID_TRANSITIONS = {
+    'CHỜ XÁC NHẬN': ['ĐANG GIAO HÀNG'],
+    'ĐANG GIAO HÀNG': ['GIAO THÀNH CÔNG'],
+    'GIAO THÀNH CÔNG': [],
+    'ĐÃ HỦY': [],
+}
 
 const buildShippingAddress = (address) => {
     const city = address.city || address.province
@@ -205,6 +213,54 @@ export const createOrder = async ({ userId, items, address, paymentReference, di
     const session = await mongoose.startSession()
     try {
         session.startTransaction()
+
+        // BR-SHP-001: Atomic inventory reservation using direct stock decrement.
+        // The Product schema uses a single `stock` field (no qty_available / qty_reserved split).
+        // Reservation is modeled as stock → stock - qty at checkout, stock + qty on cancel/return.
+        // The atomic $gte guard below prevents negative inventory and concurrent oversell.
+        for (const item of orderItems) {
+            const product = await Product.findById(item.productId).session(session)
+            if (!product) {
+                throw new AppError(`Sản phẩm ${item.name} không còn tồn tại`, 400)
+            }
+
+            const quantity = item.quantity
+            const variantWeight = String(item.variant?.weight || '').trim()
+
+            if (Array.isArray(product.weightVariants) && product.weightVariants.length > 0) {
+                const variantQty = Number(quantity || 0)
+                if (variantWeight === '') {
+                    throw new AppError(`Vui lòng chọn biến thể cho sản phẩm ${product.name}`, 400)
+                }
+
+                const updated = await Product.findOneAndUpdate(
+                    {
+                        _id: item.productId,
+                        'weightVariants': {
+                            $elemMatch: {
+                                label: variantWeight,
+                                stock: { $gte: variantQty },
+                            },
+                        },
+                    },
+                    { $inc: { 'weightVariants.$.stock': -variantQty } },
+                    { new: true, session },
+                )
+                if (!updated) {
+                    throw new AppError(`Tồn kho không đủ cho ${product.name} (${variantWeight})`, 400)
+                }
+            } else {
+                const updated = await Product.findOneAndUpdate(
+                    { _id: item.productId, stock: { $gte: quantity } },
+                    { $inc: { stock: -quantity } },
+                    { new: true, session },
+                )
+                if (!updated) {
+                    throw new AppError(`Tồn kho không đủ cho ${product.name}`, 400)
+                }
+            }
+        }
+
         const { wallet } = await applyWalletTransaction({
             userId,
             amount: -grandTotal,
@@ -268,21 +324,10 @@ export const createOrder = async ({ userId, items, address, paymentReference, di
             const groupSubtotalDiscount = Math.min(group.subtotal, groupDiscount)
             const payoutBase = Math.max(0, group.subtotal - groupSubtotalDiscount)
             const payoutAmount = Math.max(0, payoutBase * (1 - PLATFORM_FEE_RATE))
-            await getOrCreateWallet(group.sellerId, session)
-            await applyWalletTransaction({
-                userId: group.sellerId,
-                amount: payoutAmount,
-                type: 'payout',
-                provider: 'marketplace',
-                referenceId: `payout_${order[0]._id}_${group.sellerId}`,
-                status: 'completed',
-                metadata: {
-                    orderId: order[0]._id,
-                    items: group.items,
-                    feeRate: PLATFORM_FEE_RATE,
-                },
-                session,
-            })
+
+            order[0].sellerEscrowAmount = payoutAmount
+            order[0].escrowReleased = false
+            await order[0].save({ session })
         }
 
         await session.commitTransaction()
@@ -379,40 +424,12 @@ export const updateSellerOrderStatus = async ({ orderId, sellerId, status }) => 
             throw new AppError('Không tìm thấy đơn hàng của shop', 404)
         }
 
-        const shouldDeductInventory = status === DELIVERED_STATUS && !order.inventoryDeducted
-        if (shouldDeductInventory) {
-            for (const item of order.items) {
-                const product = await Product.findById(item.productId).session(session)
-                if (!product) {
-                    console.warn(`Skip inventory deduction, product not found: ${item.productId}`)
-                    continue
-                }
+        const allowedTargets = VALID_TRANSITIONS[order.status] || []
+        if (!allowedTargets.includes(status)) {
+            throw new AppError(`Không thể chuyển trạng thái từ ${order.status} sang ${status}`, 400)
+        }
 
-                const quantity = Number(item.quantity || 0)
-                const variantWeight = String(item.variant?.weight || '').trim()
-                if (Array.isArray(product.weightVariants) && product.weightVariants.length > 0) {
-                    const variant = product.weightVariants.find((entry) => String(entry.label || '').trim() === variantWeight)
-                    if (!variant) {
-                        throw new AppError(`Không tìm thấy biến thể ${variantWeight} của sản phẩm ${product.name}`, 400)
-                    }
-
-                    const nextVariantStock = Number(variant.stock || 0) - quantity
-                    if (nextVariantStock < 0) {
-                        throw new AppError(`Tồn kho biến thể ${variantWeight} không đủ cho sản phẩm ${product.name}`, 400)
-                    }
-                    variant.stock = nextVariantStock
-                    product.stock = product.weightVariants.reduce((sum, entry) => sum + Number(entry.stock || 0), 0)
-                } else {
-                    const nextStock = Number(product.stock || 0) - quantity
-                    if (nextStock < 0) {
-                        throw new AppError(`Tồn kho không đủ cho sản phẩm ${product.name}`, 400)
-                    }
-                    product.stock = nextStock
-                }
-
-                await product.save({ session })
-                console.info(`Inventory deducted | order=${order._id} product=${product._id} quantity=${quantity} stock=${product.stock}`)
-            }
+        if (status === DELIVERED_STATUS) {
             order.inventoryDeducted = true
         }
 
@@ -449,4 +466,177 @@ export const updateSellerOrderStatus = async ({ orderId, sellerId, status }) => 
         .populate('items.productId', 'name image images')
         .populate('userId', 'name fullName phone email')
         .populate('shopId', 'name avatar')
+}
+
+export const cancelOrder = async ({ orderId, userId, reason }) => {
+    const session = await mongoose.startSession()
+    session.startTransaction()
+
+    try {
+        const order = await Order.findOne({ _id: orderId, userId }).session(session)
+        if (!order) {
+            throw new AppError('Không tìm thấy đơn hàng', 404)
+        }
+        if (!CANCELLABLE_STATUSES.includes(order.status)) {
+            throw new AppError('Đơn hàng không thể hủy ở trạng thái hiện tại', 400)
+        }
+
+        for (const item of order.items) {
+            const quantity = Number(item.quantity || 0)
+            const variantWeight = String(item.variant?.weight || '').trim()
+            const product = await Product.findById(item.productId).session(session)
+            if (!product) continue
+
+            if (Array.isArray(product.weightVariants) && product.weightVariants.length > 0 && variantWeight) {
+                await Product.findOneAndUpdate(
+                    {
+                        _id: item.productId,
+                        'weightVariants.label': variantWeight,
+                    },
+                    { $inc: { 'weightVariants.$.stock': quantity } },
+                    { session },
+                )
+            } else {
+                await Product.findByIdAndUpdate(
+                    item.productId,
+                    { $inc: { stock: quantity } },
+                    { session },
+                )
+            }
+        }
+
+        if (order.sellerEscrowAmount > 0 && !order.escrowReleased) {
+            const shop = await Shop.findById(order.shopId).lean().session(session)
+            const sellerId = shop?.user_id
+            if (sellerId) {
+                const refundAmount = order.totalAmount
+                await getOrCreateWallet(userId, session)
+                await applyWalletTransaction({
+                    userId,
+                    amount: refundAmount,
+                    type: 'refund',
+                    provider: 'marketplace',
+                    referenceId: `cancel_${orderId}_${userId}`,
+                    status: 'completed',
+                    metadata: { orderId, reason, escrowRefund: true },
+                    session,
+                })
+            }
+        }
+
+        order.status = 'ĐÃ HỦY'
+        order.cancelledAt = new Date()
+        order.cancellationReason = reason || ''
+        order.paymentStatus = 'refunded'
+
+        await Shipping.updateMany({ orderId }, { trackingStatus: 'ĐÃ HỦY' }, { session })
+
+        await order.save({ session })
+        await session.commitTransaction()
+
+        createNotification({
+            receiverId: userId,
+            receiverRole: 'member',
+            notificationType: NOTIFICATION_TYPES.REFUND_APPROVED,
+            title: 'Đơn hàng đã hủy',
+            content: `Đơn hàng của bạn đã được hủy và hoàn tiền. ${reason ? `Lý do: ${reason}` : ''}`,
+            relatedId: order._id,
+            relatedType: 'Order',
+            redirectUrl: '/my-orders',
+            createdBy: 'System',
+        }).catch(err => console.error('Notify cancelOrder failed:', err.message))
+
+        return order
+    } catch (error) {
+        await session.abortTransaction()
+        throw error
+    } finally {
+        session.endSession()
+    }
+}
+
+export const confirmDelivery = async ({ orderId, userId }) => {
+    const session = await mongoose.startSession()
+    session.startTransaction()
+
+    try {
+        const order = await Order.findOne({
+            _id: orderId,
+            userId,
+            status: DELIVERED_STATUS,
+            confirmedByBuyer: false,
+        }).session(session)
+
+        if (!order) {
+            throw new AppError('Không tìm thấy đơn hàng để xác nhận', 404)
+        }
+
+        let sellerId = null
+        const shop = await Shop.findById(order.shopId).lean().session(session)
+        sellerId = shop?.user_id || null
+
+        order.confirmedByBuyer = true
+        order.confirmedAt = new Date()
+        await order.save({ session })
+
+        if (order.sellerEscrowAmount > 0 && !order.escrowReleased) {
+            if (sellerId) {
+                await getOrCreateWallet(sellerId, session)
+                await applyWalletTransaction({
+                    userId: sellerId,
+                    amount: order.sellerEscrowAmount,
+                    type: 'payout',
+                    provider: 'marketplace',
+                    referenceId: `payout_${orderId}_${sellerId}`,
+                    status: 'completed',
+                    metadata: {
+                        orderId,
+                        items: order.items.map(i => ({
+                            productId: i.productId,
+                            quantity: i.quantity,
+                            price: i.price,
+                        })),
+                        feeRate: PLATFORM_FEE_RATE,
+                    },
+                    session,
+                })
+                order.escrowReleased = true
+                await order.save({ session })
+            }
+        }
+
+        await session.commitTransaction()
+
+        if (sellerId) {
+            createNotification({
+                receiverId: sellerId,
+                receiverRole: 'seller',
+                notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+                title: 'Đã nhận thanh toán',
+                content: 'Người mua đã xác nhận nhận hàng. Tiền đã được chuyển vào ví của bạn.',
+                relatedId: order._id,
+                relatedType: 'Order',
+                redirectUrl: '/seller/orders',
+                createdBy: 'System',
+            }).catch(err => console.error('Notify confirmDelivery seller failed:', err.message))
+        }
+        createNotification({
+            receiverId: userId,
+            receiverRole: 'member',
+            notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+            title: 'Xác nhận đã nhận hàng',
+            content: 'Bạn đã xác nhận nhận hàng thành công.',
+            relatedId: order._id,
+            relatedType: 'Order',
+            redirectUrl: '/my-orders',
+            createdBy: 'System',
+        }).catch(err => console.error('Notify confirmDelivery buyer failed:', err.message))
+
+        return order
+    } catch (error) {
+        await session.abortTransaction()
+        throw error
+    } finally {
+        session.endSession()
+    }
 }

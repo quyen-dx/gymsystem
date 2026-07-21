@@ -58,6 +58,7 @@ import trainerReplacementRoutes from './routes/trainerReplacementRoutes.js'
 import shiftSwapRoutes from './routes/shiftSwapRoutes.js'
 import groupClassRoutes from './routes/groupClassRoutes.js'
 import reportRoutes from './routes/reportRoutes.js'
+import returnRoutes from './routes/returnRoutes.js'
 import notificationRoutes from './routes/notificationRoutes.js'
 import userRoutes from './routes/userRoutes.js'
 
@@ -125,8 +126,9 @@ const createApp = () => {
   app.use('/api/shops', shopRoutes)
   app.use('/api/wallet', walletRoutes)
   app.use('/api/addresses', addressRoutes)
-  app.use('/api/orders', orderRoutes)
-  app.use('/api/seller', sellerRoutes)
+app.use('/api/orders', orderRoutes)
+app.use('/api/seller', sellerRoutes)
+app.use('/api/returns', returnRoutes)
   app.use('/api/memberships', membershipRoutes)
   app.use('/api/memberships', freezeRoutes)
   app.use('/api/partnership-requests', partnershipRequestRoutes)
