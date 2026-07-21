@@ -1,6 +1,9 @@
 import Product from '../models/Product.js'
+import ProductVariant from '../models/ProductVariant.js'
 import Shop from '../models/Shop.js'
 import { recordAuditLog } from '../services/auditLogService.js'
+import * as categoryService from '../services/categoryService.js'
+import * as productService from '../services/productService.js'
 import AppError from '../utils/appError.js'
 
 const getUserDisplayName = (user, fallback = '') =>
@@ -326,5 +329,117 @@ export const addReview = async (req, res, next) => {
       { path: 'reviews.userId', select: 'name fullName displayName avatar' },
     ])
     res.status(201).json({ message: 'Đánh giá thành công', product: hydrateProductReviews(product) })
+  } catch (err) { next(err) }
+}
+
+// ============ CATEGORY MANAGEMENT ============
+
+export const createCategory = async (req, res, next) => {
+  try {
+    const category = await categoryService.createCategory(req.body)
+    await recordAuditLog({
+      req,
+      module: 'products',
+      action: 'create',
+      entity: category,
+      details: 'Tạo danh mục sản phẩm',
+    })
+    res.status(201).json(category)
+  } catch (err) {
+    if (err.code === 11000) return next(new AppError('Danh mục đã tồn tại', 409))
+    next(err)
+  }
+}
+
+export const getCategories = async (req, res, next) => {
+  try {
+    const result = await categoryService.getCategories(req.query)
+    res.json(result)
+  } catch (err) { next(err) }
+}
+
+export const getCategoryTree = async (req, res, next) => {
+  try {
+    const tree = await categoryService.getCategoryTree()
+    res.json({ categories: tree })
+  } catch (err) { next(err) }
+}
+
+export const getCategoryById = async (req, res, next) => {
+  try {
+    const category = await categoryService.getCategoryById(req.params.id)
+    if (!category) return next(new AppError('Không tìm thấy danh mục', 404))
+    res.json(category)
+  } catch (err) { next(err) }
+}
+
+export const updateCategory = async (req, res, next) => {
+  try {
+    const category = await categoryService.updateCategory(req.params.id, req.body)
+    if (!category) return next(new AppError('Không tìm thấy danh mục', 404))
+    await recordAuditLog({
+      req,
+      module: 'products',
+      action: 'update',
+      entity: category,
+      details: 'Cập nhật danh mục sản phẩm',
+    })
+    res.json(category)
+  } catch (err) {
+    if (err.code === 11000) return next(new AppError('Danh mục đã tồn tại', 409))
+    next(err)
+  }
+}
+
+export const deleteCategory = async (req, res, next) => {
+  try {
+    const category = await categoryService.deleteCategory(req.params.id)
+    if (!category) return next(new AppError('Không tìm thấy danh mục', 404))
+    await recordAuditLog({
+      req,
+      module: 'products',
+      action: 'delete',
+      entity: category,
+      details: 'Xóa danh mục sản phẩm',
+    })
+    res.json({ message: 'Đã xoá danh mục' })
+  } catch (err) { next(err) }
+}
+
+// ============ VARIANT MANAGEMENT ============
+
+export const getProductVariants = async (req, res, next) => {
+  try {
+    const variants = await productService.getVariants(req.params.id)
+    res.json({ variants })
+  } catch (err) { next(err) }
+}
+
+export const createProductVariant = async (req, res, next) => {
+  try {
+    const variant = await productService.createVariant(req.params.id, req.body)
+    res.status(201).json(variant)
+  } catch (err) {
+    if (err.code === 11000) return next(new AppError('SKU đã tồn tại', 409))
+    next(err)
+  }
+}
+
+export const updateProductVariant = async (req, res, next) => {
+  try {
+    const variant = await productService.updateVariant(req.params.variantId, req.body)
+    if (!variant) return next(new AppError('Không tìm thấy biến thể', 404))
+    res.json(variant)
+  } catch (err) {
+    if (err.code === 11000) return next(new AppError('SKU đã tồn tại', 409))
+    next(err)
+  }
+}
+
+export const deleteProductVariant = async (req, res, next) => {
+  try {
+    const variant = await productService.deleteVariant(req.params.variantId)
+    if (!variant) return next(new AppError('Không tìm thấy biến thể', 404))
+    res.json({ message: 'Đã xoá biến thể' })
   } catch (err) { next(err) }
 }

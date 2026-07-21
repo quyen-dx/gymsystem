@@ -17,6 +17,7 @@ const weightVariantSchema = new mongoose.Schema({
 const productSchema = new mongoose.Schema({
   shop_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Shop', required: true, index: true },
   name: { type: String, required: true, trim: true },
+  slug: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   description: { type: String, default: '' },
   descriptionHtml: { type: String, default: '' },
   price: { type: Number, required: true, min: 0 },
@@ -26,6 +27,7 @@ const productSchema = new mongoose.Schema({
   descriptionImages: [{ type: String }],
   image: { type: String, default: '' },
   category: { type: String, default: 'Khác' },
+  categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', default: null, index: true },
   stock: { type: Number, default: 0, min: 0 },
   isActive: { type: Boolean, default: true },
   partner: {
@@ -37,5 +39,18 @@ const productSchema = new mongoose.Schema({
   rating: { type: Number, default: 0 },
   reviewCount: { type: Number, default: 0 },
 }, { timestamps: true })
+
+productSchema.pre('validate', function () {
+  if (!this.slug && this.name) {
+    this.slug = this.name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[đĐ]/g, 'd')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+      .substring(0, 100)
+  }
+})
 
 export default mongoose.model('Product', productSchema)

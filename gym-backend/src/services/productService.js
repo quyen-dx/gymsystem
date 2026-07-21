@@ -1,4 +1,8 @@
 import Product from '../models/Product.js'
+import ProductVariant from '../models/ProductVariant.js'
+import mongoose from 'mongoose'
+
+const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id)
 
 const buildSearchRegex = (value = '') => {
   const terms = String(value)
@@ -51,4 +55,46 @@ export const getRecommendedProducts = async ({ goal = '' } = {}) => {
       link: `/dashboard/member/store/${product._id}`,
     })),
   }
+}
+
+export const getVariants = async (productId) => {
+  if (!isValidObjectId(productId)) return []
+  const variants = await ProductVariant.find({ productId, isActive: true })
+    .sort({ sortOrder: 1, createdAt: 1 })
+    .lean()
+  return variants
+}
+
+export const createVariant = async (productId, data) => {
+  const variant = await ProductVariant.create({
+    productId,
+    name: data.name,
+    sku: data.sku,
+    price: data.price || 0,
+    stock: data.stock || 0,
+    sortOrder: data.sortOrder || 0,
+  })
+  return variant
+}
+
+export const updateVariant = async (variantId, data) => {
+  if (!isValidObjectId(variantId)) return null
+  const variant = await ProductVariant.findById(variantId)
+  if (!variant) return null
+
+  const fields = ['name', 'sku', 'price', 'stock', 'reserved', 'isActive', 'sortOrder']
+  for (const field of fields) {
+    if (data[field] !== undefined) {
+      variant[field] = data[field]
+    }
+  }
+
+  await variant.save()
+  return variant
+}
+
+export const deleteVariant = async (variantId) => {
+  if (!isValidObjectId(variantId)) return null
+  const variant = await ProductVariant.findByIdAndUpdate(variantId, { isActive: false }, { new: true })
+  return variant
 }
