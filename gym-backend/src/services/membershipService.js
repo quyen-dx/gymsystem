@@ -35,6 +35,7 @@ import {
 } from '../utils/dateUtils.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification, notifyPtMemberChanged } from '../services/notificationService.js'
+import { assertPurchaseEligibility } from './membershipBusinessRules.js'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
 
@@ -199,15 +200,11 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
   const effectiveDays = plan.durationDays * multiplier
   const amount = Number(plan.price || 0) * multiplier
 
+  await assertPurchaseEligibility(memberId, mode)
+
   const existingActiveCycle = await MembershipCycle.findOne({
     memberId, status: 'active',
   }).sort({ createdAt: -1 }).lean()
-
-  if (mode === 'register' && existingActiveCycle) {
-    const error = new Error('Bạn đang có gói tập hoạt động. Vui lòng gia hạn trong mục Gói tập của tôi.')
-    error.statusCode = 400
-    throw error
-  }
 
   if (mode === 'renew') {
     if (!existingActiveCycle) {
@@ -607,6 +604,8 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
 const createActivatedMembership = async ({ userId, planId, source = 'manual', paymentId = null, mode = 'register' }) => {
   const { user, plan, memberId, planObjectId } = await ensureMemberAndPlan({ userId, planId })
 
+  await assertPurchaseEligibility(memberId, mode)
+
   const existingActiveCycle = await MembershipCycle.findOne({
     memberId, status: 'active',
   }).sort({ createdAt: -1 }).lean()
@@ -909,6 +908,9 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
 
 const createManualRegistration = async ({ userId, planId }) => {
   const { user, plan } = await ensureMemberAndPlan({ userId, planId })
+
+  await assertPurchaseEligibility(user._id, 'register')
+
   const existingActive = await MembershipCycle.findOne({
     memberId: user._id, status: 'active',
   })
@@ -964,6 +966,8 @@ const createCheckoutSession = async ({ userId, planId, mode = 'register' }) => {
   }
 
   const { user, plan } = await ensureMemberAndPlan({ userId, planId })
+
+  await assertPurchaseEligibility(user._id, mode)
 
   if (mode === 'register') {
     const existingActive = await MembershipCycle.findOne({
