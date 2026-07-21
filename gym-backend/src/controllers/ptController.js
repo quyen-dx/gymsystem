@@ -604,42 +604,66 @@ export const updatePTSchedule = async (req, res) => {
     if (!user || user.role !== 'pt') throw new AppError('Không tìm thấy PT', 404)
 
     const now = new Date()
+    const midnightNow = new Date(now)
+    midnightNow.setHours(0, 0, 0, 0)
     const twentyFourHoursFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
-    const upcomingConfirmed = await Booking.findOne({
+
+    const upcomingConfirmed = await Booking.find({
       ptId: req.params.id,
       status: 'confirmed',
-      date: { $gte: now, $lte: twentyFourHoursFromNow },
-    })
-    if (upcomingConfirmed) {
-      throw new AppError('Không thể thay đổi lịch làm việc khi có buổi tập đã xác nhận trong vòng 24 giờ tới', 400)
-    }
+      date: { $gte: midnightNow, $lte: twentyFourHoursFromNow },
+    }).lean()
+
+    const lockedDayOfWeeks = new Set(upcomingConfirmed.map(b => new Date(b.date).getDay()))
 
     let pt = await PT.findOne({ userId: user._id })
     if (!pt) {
       pt = await PT.create({ userId: user._id })
     }
 
+    const existingSchedules = await PTSchedule.find({ ptId: pt._id }).lean()
+    const preservedEntries = existingSchedules.filter(s => lockedDayOfWeeks.has(s.dayOfWeek))
+
+    // M-2: Lock granularity is day-of-week based because PTSchedule stores only
+    // (dayOfWeek, shift) pairs — there is no per-slot datetime field to lock
+    // individual 10-minute slots. Full per-slot fidelity would require a schema
+    // change to add slot-level timestamps to PTSchedule.
     await PTSchedule.deleteMany({ ptId: pt._id })
 
     if (Array.isArray(schedules) && schedules.length > 0) {
+      const incomingEntries = schedules
+        .filter(s => !lockedDayOfWeeks.has(s.dayOfWeek))
+        .map((s) => ({ ptId: userId, dayOfWeek: s.dayOfWeek, shift: s.shift }))
+      await PTSchedule.insertMany(incomingEntries)
+    }
+
+    if (preservedEntries.length > 0) {
       await PTSchedule.insertMany(
-        schedules.map((s) => ({ ptId: userId, dayOfWeek: s.dayOfWeek, shift: s.shift })),
+        preservedEntries.map(s => ({ ptId: s.ptId, dayOfWeek: s.dayOfWeek, shift: s.shift })),
       )
     }
+
+    const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
+    const lockedNotice = lockedDayOfWeeks.size > 0
+      ? ` Các ngày ${[...lockedDayOfWeeks].map(d => dayNames[d]).join(', ')} được giữ nguyên do có buổi tập xác nhận trong 24h tới.`
+      : ''
 
     createNotification({
       receiverId: req.params.id,
       receiverRole: 'pt',
       notificationType: NOTIFICATION_TYPES.PT_SCHEDULE_CHANGED,
       title: 'Lịch làm việc đã được cập nhật',
-      content: `Lịch làm việc của bạn đã được Admin cập nhật.`,
+      content: `Lịch làm việc của bạn đã được Admin cập nhật.${lockedNotice}`,
       relatedId: req.params.id,
       relatedType: 'PTSchedule',
       redirectUrl: '/pt/schedule',
       createdBy: 'Admin',
     }).catch(err => console.error('Notify PT schedule failed:', err.message))
 
-    res.json({ message: 'Cập nhật lịch làm việc thành công' })
+    res.json({
+      message: 'Cập nhật lịch làm việc thành công',
+      lockedDays: [...lockedDayOfWeeks],
+    })
   } catch (error) {
     return sendError(res, error)
   }

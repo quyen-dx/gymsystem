@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import User from '../models/User.js'
 import PT from '../models/PT.js'
 import PTSchedule from '../models/PTSchedule.js'
+import Booking from '../models/Booking.js'
 
 const DAY_LABELS = { vi: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] }
 const SHIFT_LABELS = { vi: { morning: 'Sáng', afternoon: 'Chiều', evening: 'Tối' }, en: { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' } }
@@ -82,5 +83,34 @@ export const getAvailablePTs = async ({ specialization = '' } = {}) => {
         scheduleRaw: schedules.map((s) => ({ dayOfWeek: s.dayOfWeek, shift: s.shift })),
       }
     }),
+  }
+}
+
+export const checkPTDailySessionLimit = async (ptId, date, session = null) => {
+  const bookingDate = new Date(date)
+  bookingDate.setHours(0, 0, 0, 0)
+  const query = Booking.countDocuments({
+    ptId,
+    date: bookingDate,
+    status: { $nin: ['cancelled', 'rejected'] },
+  })
+  if (session) query.session(session)
+  const count = await query
+  return { allowed: count < 8, message: count >= 8 ? 'PT đã đạt giới hạn 8 buổi tập trong ngày' : null }
+}
+
+export const checkPTMemberCapacity = async (ptId, memberId, session = null) => {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const agg = Booking.aggregate([
+    { $match: { ptId: new mongoose.Types.ObjectId(String(ptId)), status: 'confirmed', date: { $gte: thirtyDaysAgo } } },
+    { $group: { _id: '$memberId' } },
+  ])
+  if (session) agg.session(session)
+  const groups = await agg
+  const atLimit = groups.length >= 10
+  const isExisting = groups.some(g => g._id.toString() === memberId.toString())
+  return {
+    allowed: !atLimit || isExisting,
+    message: (atLimit && !isExisting) ? 'PT đã đạt giới hạn 10 hội viên trong 30 ngày' : null,
   }
 }

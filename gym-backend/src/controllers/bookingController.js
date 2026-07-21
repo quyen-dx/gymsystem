@@ -9,6 +9,7 @@ import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import { checkMemberFeature } from '../utils/featureCheck.js'
 import { markBenefitUsed } from '../services/membershipCycleService.js'
+import { checkPTDailySessionLimit, checkPTMemberCapacity } from '../services/ptService.js'
 
 const activeStatus = ['pending', 'awaiting_payment', 'confirmed']
 
@@ -195,24 +196,14 @@ export const createBooking = async (req, res) => {
         })
       }
 
-    const ptSessionCount = await Booking.countDocuments({
-      ptId,
-      date: bookingDate,
-      status: { $in: ['pending', 'awaiting_payment', 'confirmed'] },
-    })
-    if (ptSessionCount >= 8) {
-      return res.status(400).json({ message: 'PT đã đạt giới hạn 8 buổi tập trong ngày' })
+    const ptDailyCheck = await checkPTDailySessionLimit(ptId, date)
+    if (!ptDailyCheck.allowed) {
+      return res.status(400).json({ message: ptDailyCheck.message })
     }
 
-    const today = new Date()
-    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
-    const activeMemberIds = await Booking.distinct('memberId', {
-      ptId,
-      status: { $nin: ['cancelled'] },
-      date: { $gte: thirtyDaysAgo },
-    })
-    if (activeMemberIds.length >= 10 && !activeMemberIds.some(id => id.toString() === req.user._id.toString())) {
-      return res.status(400).json({ message: 'PT đã đạt giới hạn 10 hội viên trong 30 ngày' })
+    const ptMemberCheck = await checkPTMemberCapacity(ptId, req.user._id.toString())
+    if (!ptMemberCheck.allowed) {
+      return res.status(400).json({ message: ptMemberCheck.message })
     }
 
     // FIX: priceAtBooking/ totalAmount hardcoded to 0 because PT pricing is not yet implemented.
@@ -222,6 +213,18 @@ export const createBooking = async (req, res) => {
     const session = await mongoose.startSession()
     try {
       session.startTransaction()
+
+      const ptDailyRecheck = await checkPTDailySessionLimit(ptId, date, session)
+      if (!ptDailyRecheck.allowed) {
+        await session.abortTransaction()
+        return res.status(400).json({ message: ptDailyRecheck.message })
+      }
+
+      const ptMemberRecheck = await checkPTMemberCapacity(ptId, req.user._id.toString(), session)
+      if (!ptMemberRecheck.allowed) {
+        await session.abortTransaction()
+        return res.status(400).json({ message: ptMemberRecheck.message })
+      }
 
       // Re-check conflicts inside transaction to prevent race condition (TOCTOU)
       const [memberConflict, ptConflict] = await Promise.all([
@@ -340,6 +343,11 @@ export const createRecurringBooking = async (req, res) => {
 
     if (!(await checkNoShowBlock(req.user._id, res))) return
 
+    const ptMemberCheck = await checkPTMemberCapacity(ptId, req.user._id.toString())
+    if (!ptMemberCheck.allowed) {
+      return res.status(400).json({ message: ptMemberCheck.message })
+    }
+
     const session = await mongoose.startSession()
     const createdBookings = []
     const conflicts = []
@@ -347,9 +355,21 @@ export const createRecurringBooking = async (req, res) => {
     try {
       session.startTransaction()
 
+      const ptMemberRecheck = await checkPTMemberCapacity(ptId, req.user._id.toString(), session)
+      if (!ptMemberRecheck.allowed) {
+        await session.abortTransaction()
+        return res.status(400).json({ message: ptMemberRecheck.message })
+      }
+
       for (let i = 0; i < Number(weeks); i++) {
         const bookingDate = normalizeDate(date)
         bookingDate.setDate(bookingDate.getDate() + i * 7)
+
+        const ptDailyCheck = await checkPTDailySessionLimit(ptId, bookingDate, session)
+        if (!ptDailyCheck.allowed) {
+          conflicts.push({ date: bookingDate, slot, reason: ptDailyCheck.message })
+          continue
+        }
 
         const conflict = await Booking.findOne({
           $or: [
@@ -456,12 +476,23 @@ export const scheduleWeeklyBooking = async (req, res) => {
 
     if (!(await checkNoShowBlock(req.user._id, res))) return
 
+    const ptMemberCheck = await checkPTMemberCapacity(ptId, req.user._id.toString())
+    if (!ptMemberCheck.allowed) {
+      return res.status(400).json({ message: ptMemberCheck.message })
+    }
+
     const session = await mongoose.startSession()
     const results = []
     const errors = []
 
     try {
       session.startTransaction()
+
+      const ptMemberRecheck = await checkPTMemberCapacity(ptId, req.user._id.toString(), session)
+      if (!ptMemberRecheck.allowed) {
+        await session.abortTransaction()
+        return res.status(400).json({ message: ptMemberRecheck.message })
+      }
 
       for (const day of daysOfWeek) {
         const bookingDate = getNextWeekDate(day)
@@ -471,6 +502,12 @@ export const scheduleWeeklyBooking = async (req, res) => {
         if (!(await requireActiveMembershipForDate(req.user._id, bookingDate, res))) {
           await session.abortTransaction()
           return
+        }
+
+        const ptDailyCheck = await checkPTDailySessionLimit(ptId, bookingDate, session)
+        if (!ptDailyCheck.allowed) {
+          errors.push({ day, date: bookingDate, reason: ptDailyCheck.message })
+          continue
         }
 
         const conflict = await Booking.findOne({
