@@ -15,6 +15,17 @@ const waitlistSchema = new mongoose.Schema(
       index: true,
     },
 
+    position: {
+      type: Number,
+      required: true,
+    },
+
+    status: {
+      type: String,
+      enum: ['waiting', 'promoted', 'expired', 'cancelled'],
+      default: 'waiting',
+    },
+
     notifiedAt: {
       type: Date,
       default: null,

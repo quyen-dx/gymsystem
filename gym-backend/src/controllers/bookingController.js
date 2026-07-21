@@ -86,24 +86,32 @@ const checkSelfBooking = (reqUserId, ptId, res) => {
   return true
 }
 
-const checkNoShowBlock = async (memberId, res) => {
+const isBlockedByNoShow = async (memberId, opts = {}) => {
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   const count = await ViolationLog.countDocuments({
     memberId,
     type: 'no_show',
     createdAt: { $gte: ninetyDaysAgo },
-  })
+  }).session(opts.session || null)
   if (count >= 3) {
     const latestViolation = await ViolationLog.findOne({
       memberId,
       type: 'no_show',
       createdAt: { $gte: ninetyDaysAgo },
-    }).sort({ createdAt: -1 }).lean()
+    }).sort({ createdAt: -1 }).session(opts.session || null).lean()
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     if (latestViolation && latestViolation.createdAt > thirtyDaysAgo) {
-      res.status(400).json({ message: 'Bạn đã bị khóa đặt lịch trong 30 ngày do vi phạm không điểm danh 3 lần' })
-      return false
+      return true
     }
+  }
+  return false
+}
+
+const checkNoShowBlock = async (memberId, res) => {
+  const blocked = await isBlockedByNoShow(memberId)
+  if (blocked) {
+    res.status(400).json({ message: 'Bạn đã bị khóa đặt lịch trong 30 ngày do vi phạm không điểm danh 3 lần' })
+    return false
   }
   return true
 }
@@ -895,19 +903,124 @@ export const cancelBooking = async (req, res) => {
 
     const bookingSlotId = makeSlotId(booking.ptId, booking.date, booking.slot)
 
+    let promotedBooking = null
+
     const firstWaitlist = await Waitlist.findOne({
       bookingSlotId,
-      notifiedAt: null,
-    }).sort({ createdAt: 1 }).session(session)
+      $or: [
+        { status: 'waiting' },
+        { status: { $exists: false } },
+      ],
+    }).sort({ position: 1 }).session(session)
 
     if (firstWaitlist) {
-      firstWaitlist.notifiedAt = new Date()
-      await firstWaitlist.save({ session })
+      const pMemberId = firstWaitlist.memberId
+
+      const canBook = pMemberId.toString() !== String(booking.ptId)
+        && await hasActiveMembershipForDate(pMemberId, booking.date)
+
+      let promoBlocked = !canBook
+
+      if (!promoBlocked) {
+        promoBlocked = await isBlockedByNoShow(pMemberId, { session })
+      }
+
+      if (!promoBlocked) {
+        const ptDailyCheck = await checkPTDailySessionLimit(booking.ptId, booking.date, session)
+        if (!ptDailyCheck.allowed) promoBlocked = true
+      }
+
+      if (!promoBlocked) {
+        const ptMemberCheck = await checkPTMemberCapacity(booking.ptId, pMemberId.toString(), session)
+        if (!ptMemberCheck.allowed) promoBlocked = true
+      }
+
+      if (!promoBlocked) {
+        const slotConflict = await Booking.findOne({
+          $or: [
+            { memberId: pMemberId, date: booking.date, slot: booking.slot, status: { $in: activeStatus } },
+            { ptId: booking.ptId, date: booking.date, slot: booking.slot, status: { $in: activeStatus } },
+          ],
+        }).session(session)
+        if (slotConflict) promoBlocked = true
+      }
+
+      if (!promoBlocked) {
+        const sameDaySessions = await Booking.find({
+          ptId: booking.ptId,
+          date: booking.date,
+          status: { $in: activeStatus },
+        }).session(session)
+        if (sameDaySessions.some(b => slotsOverlap(b.slot, booking.slot))) promoBlocked = true
+      }
+
+      if (promoBlocked) {
+        firstWaitlist.status = 'expired'
+        await firstWaitlist.save({ session })
+      } else {
+        let createFailed = false
+        try {
+          const benefitType = booking.trainingType === 'group' ? 'pt_group' : 'pt_1on1'
+          await markBenefitUsed(pMemberId, benefitType, { session })
+          const [pb] = await Booking.create([{
+            memberId: pMemberId,
+            ptId: booking.ptId,
+            date: booking.date,
+            slot: booking.slot,
+            note: 'Được chuyển từ danh sách chờ',
+            trainingType: booking.trainingType || 'one_to_one',
+            priceAtBooking: booking.priceAtBooking || 0,
+            totalAmount: booking.totalAmount || 0,
+            paymentStatus: 'unpaid',
+            status: 'pending',
+          }], { session })
+          promotedBooking = pb
+        } catch (createErr) {
+          createFailed = true
+        }
+
+        if (createFailed) {
+          firstWaitlist.status = 'expired'
+          await firstWaitlist.save({ session })
+        } else {
+          firstWaitlist.status = 'promoted'
+          firstWaitlist.notifiedAt = new Date()
+          await firstWaitlist.save({ session })
+        }
+      }
     }
 
     await session.commitTransaction()
 
     emitBookingCancelled({ userId: booking.ptId, booking })
+
+    if (promotedBooking) {
+      emitBookingCreated({ ptId: booking.ptId, booking: promotedBooking })
+
+      createNotification({
+        receiverId: promotedBooking.memberId,
+        receiverRole: 'member',
+        notificationType: NOTIFICATION_TYPES.BOOKING_CONFIRMED,
+        title: 'Bạn đã được chuyển từ danh sách chờ',
+        content: `Bạn đã được đặt lịch tập từ danh sách chờ vào ${booking.date.toLocaleDateString('vi-VN')}, slot ${booking.slot}.`,
+        relatedId: promotedBooking._id,
+        relatedType: 'Booking',
+        redirectUrl: '/my-bookings',
+        createdBy: 'System',
+      }).catch(err => console.error('Notify promoted member failed:', err.message))
+
+      createNotification({
+        receiverId: booking.ptId,
+        receiverRole: 'pt',
+        notificationType: NOTIFICATION_TYPES.BOOKING_CONFIRMED,
+        title: 'Có lịch đặt mới từ danh sách chờ',
+        content: `Hội viên mới đã được đặt lịch tập từ danh sách chờ vào ${booking.date.toLocaleDateString('vi-VN')}, slot ${booking.slot}.`,
+        relatedId: promotedBooking._id,
+        relatedType: 'Booking',
+        redirectUrl: '/pt/bookings',
+        createdBy: 'System',
+      }).catch(err => console.error('Notify PT promotion failed:', err.message))
+    }
 
     return res.json({
       message: booking.isViolation
@@ -915,6 +1028,7 @@ export const cancelBooking = async (req, res) => {
         : 'Hủy lịch thành công',
       booking,
       notifiedWaitlistMember: firstWaitlist || null,
+      promotedBooking: promotedBooking || null,
     })
   } catch (error) {
     await session.abortTransaction()
@@ -984,13 +1098,26 @@ export const joinWaitlist = async (req, res) => {
       })
     }
 
+    const existingCount = await Waitlist.countDocuments({
+      bookingSlotId: slotId,
+      $or: [
+        { status: 'waiting' },
+        { status: { $exists: false } },
+      ],
+    })
+
     const waitlist = await Waitlist.create({
       bookingSlotId: slotId,
       memberId: req.user._id,
+      position: existingCount + 1,
     })
 
     const count = await Waitlist.countDocuments({
       bookingSlotId: slotId,
+      $or: [
+        { status: 'waiting' },
+        { status: { $exists: false } },
+      ],
     })
 
     return res.status(201).json({
@@ -1001,6 +1128,38 @@ export const joinWaitlist = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: 'Lỗi tham gia danh sách chờ',
+      error: error.message,
+    })
+  }
+}
+
+export const leaveWaitlist = async (req, res) => {
+  try {
+    const { slotId } = req.params
+
+    const entry = await Waitlist.findOneAndUpdate(
+      {
+        bookingSlotId: slotId,
+        memberId: req.user._id,
+        $or: [{ status: 'waiting' }, { status: { $exists: false } }],
+      },
+      { status: 'cancelled' },
+      { new: true },
+    )
+
+    if (!entry) {
+      return res.status(404).json({
+        message: 'Không tìm thấy mục chờ hoặc đã được xử lý',
+      })
+    }
+
+    res.json({
+      message: 'Đã rời khỏi danh sách chờ',
+      waitlist: entry,
+    })
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Lỗi rời danh sách chờ',
       error: error.message,
     })
   }

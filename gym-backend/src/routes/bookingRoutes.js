@@ -13,6 +13,7 @@ import {
   cancelBooking,
   completeBooking,
   joinWaitlist,
+  leaveWaitlist,
   reviewPT,
   payBooking,
 } from '../controllers/bookingController.js'
@@ -46,6 +47,8 @@ router.patch('/:id/complete', protect, authorize('pt'), completeBooking)
 router.post('/:id/pay', protect, authorize('member'), payBooking)
 
 router.post('/:slotId/waitlist', protect, authorize('member'), joinWaitlist)
+
+router.delete('/:slotId/waitlist', protect, authorize('member'), leaveWaitlist)
 
 router.post('/:id/review', protect, authorize('member'), reviewPT)
 
