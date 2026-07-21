@@ -7,6 +7,7 @@ import mongoose from 'mongoose'
 import { applyWalletTransaction } from '../services/walletService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
+import { emitBookingCreated, emitBookingConfirmed, emitBookingCancelled } from '../services/socketService.js'
 import { checkMemberFeature } from '../utils/featureCheck.js'
 import { markBenefitUsed } from '../services/membershipCycleService.js'
 import { checkPTDailySessionLimit, checkPTMemberCapacity } from '../services/ptService.js'
@@ -276,6 +277,8 @@ export const createBooking = async (req, res) => {
       await markBenefitUsed(req.user._id, benefitType, { session })
 
       await session.commitTransaction()
+
+      emitBookingCreated({ ptId, booking: createdBooking })
 
       await createNotification({
         receiverId: ptId,
@@ -708,6 +711,8 @@ export const confirmBooking = async (req, res) => {
 
     await session.commitTransaction()
 
+    emitBookingConfirmed({ memberId: booking.memberId, booking })
+
     await createNotification({
       receiverId: booking.memberId,
       receiverRole: 'member',
@@ -754,7 +759,10 @@ export const rejectBooking = async (req, res) => {
     booking.rejectReason = reason || 'PT từ chối lịch'
     await booking.save()
 
+    emitBookingCancelled({ userId: booking.memberId, booking })
+
     await createNotification({
+
       receiverId: booking.memberId,
       receiverRole: 'member',
       notificationType: NOTIFICATION_TYPES.BOOKING_REJECTED,
@@ -844,6 +852,8 @@ export const cancelBooking = async (req, res) => {
     }
 
     await session.commitTransaction()
+
+    emitBookingCancelled({ userId: booking.ptId, booking })
 
     return res.json({
       message: booking.isViolation

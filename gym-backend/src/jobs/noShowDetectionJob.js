@@ -5,11 +5,13 @@ export const runNoShowDetectionJob = async () => {
     try {
         const now = new Date()
         const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000)
-        const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+        const midnightToday = new Date(now)
+        midnightToday.setHours(0, 0, 0, 0)
+        const ninetyDaysAgo = new Date(midnightToday.getTime() - 90 * 24 * 60 * 60 * 1000)
 
         const missedBookings = await Booking.find({
             status: { $in: ['pending', 'awaiting_payment', 'confirmed'] },
-            date: { $gte: ninetyDaysAgo, $lt: twoHoursAgo },
+            date: { $gte: ninetyDaysAgo, $lt: midnightToday },
         }).lean()
 
         const noShows = missedBookings.filter((b) => {

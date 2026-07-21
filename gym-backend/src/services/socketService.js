@@ -131,3 +131,23 @@ export const emitPersonalTrainingNewRequest = (request) => {
   if (!io) return
   io.to('staff').emit('personal_training:new_request', request)
 }
+
+export const emitBookingCreated = ({ ptId, booking }) => {
+  if (!io || !ptId) return
+  io.to(ptId.toString()).emit('booking:created', booking)
+}
+
+export const emitBookingConfirmed = ({ memberId, booking }) => {
+  if (!io || !memberId) return
+  io.to(memberId.toString()).emit('booking:confirmed', booking)
+}
+
+export const emitBookingCancelled = ({ userId, booking }) => {
+  if (!io || !userId) return
+  io.to(userId.toString()).emit('booking:cancelled', booking)
+}
+
+export const emitBookingAutoConfirmed = ({ memberId, booking }) => {
+  if (!io || !memberId) return
+  io.to(memberId.toString()).emit('booking:auto_confirmed', booking)
+}
