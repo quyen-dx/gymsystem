@@ -155,13 +155,14 @@ export const getWorkoutLogs = async (req, res) => {
           if (!assignedMemberIds.some(id => String(id) === String(filters.userId))) {
             return res.status(403).json({ message: 'Ban khong co quyen xem nhat ky cua hoi vien nay' })
           }
+          filters.workoutIds = allVisibleWorkouts
         } else if (filters.workoutId) {
           if (!allVisibleWorkouts.includes(String(filters.workoutId))) {
             return res.status(403).json({ message: 'Ban khong co quyen xem nhat ky cua workout nay' })
           }
+        } else {
+          filters.workoutIds = allVisibleWorkouts
         }
-
-        filters.workoutIds = allVisibleWorkouts
       } else {
         filters.userId = req.user._id
       }
