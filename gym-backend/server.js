@@ -5,15 +5,19 @@ import connectDB from './src/config/db.js'
 import logger from './src/config/logger.js'
 import config from './src/config/env.js'
 import { initSocketIO } from './src/services/socketService.js'
+import { initPushService } from './src/services/pushService.js'
 
 const app = createApp()
 
 const httpServer = http.createServer(app)
 initSocketIO(httpServer)
+initPushService()
 
 import cron from 'node-cron'
 import { runRefundReminderJob } from './src/jobs/refundReminderJob.js'
 import { runActivateRenewalCyclesJob } from './src/jobs/activateRenewalCyclesJob.js'
+import { runNotificationCleanupJob } from './src/jobs/notificationCleanupJob.js'
+import { runMembershipExpiryRemindersJob } from './src/jobs/membershipExpiryRemindersJob.js'
 
 cron.schedule('0 1 * * *', () => {
   logger.info('Running refundReminderJob')
@@ -28,6 +32,20 @@ cron.schedule('0 */6 * * *', () => {
   )
 })
 logger.info('activateRenewalCyclesJob scheduled every 6 hours')
+
+cron.schedule('30 2 * * *', () => {
+  logger.info('Running notificationCleanupJob')
+  runNotificationCleanupJob().catch((err) => logger.error('notificationCleanupJob failed', { error: err.message }))
+})
+logger.info('notificationCleanupJob scheduled daily at 09:30 VN time')
+
+cron.schedule('0 7 * * *', () => {
+  logger.info('Running membershipExpiryRemindersJob')
+  runMembershipExpiryRemindersJob().catch((err) =>
+    logger.error('membershipExpiryRemindersJob failed', { error: err.message }),
+  )
+})
+logger.info('membershipExpiryRemindersJob scheduled daily at 14:00 VN time (07:00 UTC)')
 
 let server = null
 

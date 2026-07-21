@@ -216,6 +216,24 @@ const notificationSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    status: {
+      type: String,
+      enum: ['queued', 'sent', 'delivered', 'read', 'failed'],
+      default: 'sent',
+    },
+    channels: [{
+      type: String,
+      enum: ['in_app', 'email', 'sms', 'push'],
+    }],
+    priority: {
+      type: String,
+      enum: ['high', 'medium', 'low'],
+      default: 'medium',
+    },
+    expiresAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -225,6 +243,7 @@ const notificationSchema = new mongoose.Schema(
 )
 
 notificationSchema.index({ receiverId: 1, isRead: 1, createdAt: -1 })
+notificationSchema.index({ receiverId: 1, status: 1, createdAt: -1 })
 notificationSchema.index({ receiverRole: 1, createdAt: -1 })
 notificationSchema.index({ notificationType: 1 })
 
@@ -233,12 +252,20 @@ notificationSchema.pre('validate', function () {
   if (this.notificationType && !this.category) {
     this.category = getCategory(this.notificationType)
   }
-  // Đồng bộ receiverId với userId legacy nếu cần
   if (!this.receiverId && this.userId) {
     this.receiverId = this.userId
   }
   if (!this.userId && this.receiverId) {
     this.userId = this.receiverId
+  }
+  if (!this.channels || this.channels.length === 0) {
+    this.channels = ['in_app']
+  }
+  if (this.isRead && this.status === 'sent') {
+    this.status = 'read'
+  }
+  if (!this.isRead && this.status === 'read') {
+    this.status = 'sent'
   }
 })
 
