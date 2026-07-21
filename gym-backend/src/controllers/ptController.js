@@ -13,6 +13,8 @@ import { isValidEmail, normalizePhone } from '../utils/identifier.js'
 import sendError from '../utils/sendError.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
+import { validateSevenDayPublication } from '../services/trainerScheduleService.js'
+import { emitScheduleChanged } from '../services/socketService.js'
 
 export const getPTs = async (req, res) => {
   try {
@@ -616,6 +618,11 @@ export const updatePTSchedule = async (req, res) => {
 
     const lockedDayOfWeeks = new Set(upcomingConfirmed.map(b => new Date(b.date).getDay()))
 
+    const entriesToValidate = Array.isArray(schedules) && schedules.length > 0
+      ? schedules.filter(s => !lockedDayOfWeeks.has(s.dayOfWeek))
+      : []
+    validateSevenDayPublication(entriesToValidate)
+
     let pt = await PT.findOne({ userId: user._id })
     if (!pt) {
       pt = await PT.create({ userId: user._id })
@@ -659,6 +666,8 @@ export const updatePTSchedule = async (req, res) => {
       redirectUrl: '/pt/schedule',
       createdBy: 'Admin',
     }).catch(err => console.error('Notify PT schedule failed:', err.message))
+
+    emitScheduleChanged({ trainerId: req.params.id })
 
     res.json({
       message: 'Cập nhật lịch làm việc thành công',

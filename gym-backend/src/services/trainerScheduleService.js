@@ -18,6 +18,30 @@ function timesOverlap(start1, end1, start2, end2) {
   return toMinutes(start1) < toMinutes(end2) && toMinutes(start2) < toMinutes(end1)
 }
 
+function getNextDateForDay(dayOfWeek) {
+  const now = new Date()
+  const currentDay = now.getDay()
+  let daysUntil = dayOfWeek - currentDay
+  if (daysUntil <= 0) daysUntil += 7
+  const date = new Date(now)
+  date.setDate(date.getDate() + daysUntil)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+export function validateSevenDayPublication(schedules) {
+  if (!Array.isArray(schedules) || schedules.length === 0) return
+  const sevenDaysFromNow = new Date()
+  sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7)
+  sevenDaysFromNow.setHours(0, 0, 0, 0)
+  for (const s of schedules) {
+    const nextDate = getNextDateForDay(s.dayOfWeek)
+    if (nextDate < sevenDaysFromNow) {
+      throw new Error('Lịch làm việc phải được công bố trước ít nhất 7 ngày')
+    }
+  }
+}
+
 async function validateNoClassConflict(trainerId, schedules) {
   // Lấy class từ TrainingAssignment thay vì TrainingClass.ptId
   const assignments = await TrainingAssignment.find({ trainerId, status: 'active' })
@@ -42,6 +66,7 @@ async function validateNoClassConflict(trainerId, schedules) {
 }
 
 export const setSchedule = async ({ trainerId, schedules }) => {
+  validateSevenDayPublication(schedules)
   await validateNoClassConflict(trainerId, schedules)
 
   await TrainerSchedule.deleteMany({ trainerId })

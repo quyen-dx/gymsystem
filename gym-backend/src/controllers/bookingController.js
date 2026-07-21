@@ -14,6 +14,16 @@ import { checkPTDailySessionLimit, checkPTMemberCapacity } from '../services/ptS
 
 const activeStatus = ['pending', 'awaiting_payment', 'confirmed']
 
+const SESSION_MINUTES = 60
+
+function slotsOverlap(slot1, slot2) {
+  const [h1, m1] = slot1.split(':').map(Number)
+  const [h2, m2] = slot2.split(':').map(Number)
+  const start1 = h1 * 60 + m1
+  const start2 = h2 * 60 + m2
+  return Math.abs(start1 - start2) < SESSION_MINUTES
+}
+
 const normalizeDate = (date) => {
   const d = new Date(date)
   d.setHours(0, 0, 0, 0)
@@ -257,6 +267,20 @@ export const createBooking = async (req, res) => {
         })
       }
 
+      const sameDaySessions = await Booking.find({
+        ptId,
+        date: bookingDate,
+        status: { $in: activeStatus },
+      }).session(session)
+
+      const hasOverlap = sameDaySessions.some(b => slotsOverlap(b.slot, slot))
+      if (hasOverlap) {
+        await session.abortTransaction()
+        return res.status(400).json({
+          message: 'Khung giờ bị trùng lặp với buổi tập khác, vui lòng chọn giờ khác',
+        })
+      }
+
       const booking = await Booking.create([{
         memberId: req.user._id,
         ptId,
@@ -400,6 +424,21 @@ export const createRecurringBooking = async (req, res) => {
           continue
         }
 
+        const sameDaySessions = await Booking.find({
+          ptId,
+          date: bookingDate,
+          status: { $in: activeStatus },
+        }).session(session)
+
+        if (sameDaySessions.some(b => slotsOverlap(b.slot, slot))) {
+          conflicts.push({
+            date: bookingDate,
+            slot,
+            reason: 'Khung giờ bị trùng lặp với buổi tập khác',
+          })
+          continue
+        }
+
         try {
           const [booking] = await Booking.create([{
             memberId: req.user._id,
@@ -525,6 +564,21 @@ export const scheduleWeeklyBooking = async (req, res) => {
             day,
             date: bookingDate,
             reason: 'Trùng lịch, vui lòng chọn giờ khác',
+          })
+          continue
+        }
+
+        const sameDaySessions = await Booking.find({
+          ptId,
+          date: bookingDate,
+          status: { $in: activeStatus },
+        }).session(session)
+
+        if (sameDaySessions.some(b => slotsOverlap(b.slot, time))) {
+          errors.push({
+            day,
+            date: bookingDate,
+            reason: 'Khung giờ bị trùng lặp với buổi tập khác',
           })
           continue
         }

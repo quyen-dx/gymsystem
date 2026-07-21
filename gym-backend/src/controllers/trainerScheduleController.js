@@ -1,12 +1,14 @@
 import * as trainerScheduleService from '../services/trainerScheduleService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
+import { emitScheduleChanged } from '../services/socketService.js'
 
 export const setSchedule = async (req, res) => {
   try {
     const { schedules } = req.body
     const trainerId = req.params.trainerId || req.user._id
     const result = await trainerScheduleService.setSchedule({ trainerId, schedules: schedules || [] })
+    emitScheduleChanged({ trainerId: trainerId.toString() })
     createNotification({
       receiverId: trainerId,
       receiverRole: 'pt',

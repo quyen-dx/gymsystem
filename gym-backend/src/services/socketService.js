@@ -151,3 +151,8 @@ export const emitBookingAutoConfirmed = ({ memberId, booking }) => {
   if (!io || !memberId) return
   io.to(memberId.toString()).emit('booking:auto_confirmed', booking)
 }
+
+export const emitScheduleChanged = ({ trainerId }) => {
+  if (!io || !trainerId) return
+  io.to(trainerId.toString()).emit('schedule:changed', { trainerId })
+}
