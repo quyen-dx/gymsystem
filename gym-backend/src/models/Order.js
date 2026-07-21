@@ -100,10 +100,21 @@ const orderSchema = new mongoose.Schema(
             city: { type: String, required: true },
             note: { type: String },
         },
+        orderNumber: {
+            type: String,
+            unique: true,
+            sparse: true,
+            index: true,
+        },
         status: {
             type: String,
-            enum: ['CHỜ XÁC NHẬN', 'ĐANG GIAO HÀNG', 'GIAO THÀNH CÔNG', 'ĐÃ HỦY'],
+            enum: ['CHỜ XÁC NHẬN', 'ĐANG GIAO HÀNG', 'GIAO THÀNH CÔNG', 'ĐÃ HỦY', 'ĐANG HOÀN TRẢ', 'ĐÃ HOÀN TRẢ', 'ĐÃ HOÀN TIỀN'],
             default: 'CHỜ XÁC NHẬN',
+        },
+        trackingCode: {
+            type: String,
+            index: true,
+            sparse: true,
         },
         paymentStatus: {
             type: String,
@@ -150,6 +161,10 @@ const orderSchema = new mongoose.Schema(
             default: null,
         },
         cancelledAt: {
+            type: Date,
+            default: null,
+        },
+        returnedAt: {
             type: Date,
             default: null,
         },

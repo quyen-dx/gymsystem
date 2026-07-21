@@ -19,6 +19,9 @@ import { runActivateRenewalCyclesJob } from './src/jobs/activateRenewalCyclesJob
 import { runNotificationCleanupJob } from './src/jobs/notificationCleanupJob.js'
 import { runMembershipExpiryRemindersJob } from './src/jobs/membershipExpiryRemindersJob.js'
 import { runPaymentTimeoutJob } from './src/jobs/paymentTimeoutJob.js'
+import { runInventoryReleaseJob } from './src/jobs/inventoryReleaseJob.js'
+import { runShipmentTrackingJob } from './src/jobs/shipmentTrackingJob.js'
+import { runEscrowSettlementJob } from './src/jobs/escrowSettlementJob.js'
 
 cron.schedule('0 1 * * *', () => {
   logger.info('Running refundReminderJob')
@@ -54,6 +57,27 @@ cron.schedule('*/5 * * * *', () => {
   )
 })
 logger.info('paymentTimeoutJob scheduled every 5 minutes (BR-PAY-004)')
+
+cron.schedule('*/10 * * * *', () => {
+  runInventoryReleaseJob().catch((err) =>
+    logger.error('inventoryReleaseJob failed', { error: err.message }),
+  )
+})
+logger.info('inventoryReleaseJob scheduled every 10 minutes')
+
+cron.schedule('*/30 * * * *', () => {
+  runShipmentTrackingJob().catch((err) =>
+    logger.error('shipmentTrackingJob failed', { error: err.message }),
+  )
+})
+logger.info('shipmentTrackingJob scheduled every 30 minutes (EC-SHP-002)')
+
+cron.schedule('0 */6 * * *', () => {
+  runEscrowSettlementJob().catch((err) =>
+    logger.error('escrowSettlementJob failed', { error: err.message }),
+  )
+})
+logger.info('escrowSettlementJob scheduled every 6 hours (BR-SHP-003)')
 
 let server = null
 

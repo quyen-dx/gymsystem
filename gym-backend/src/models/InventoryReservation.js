@@ -46,6 +46,11 @@ const inventoryReservationSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+
+    inventoryRestored: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 )

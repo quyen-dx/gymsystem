@@ -1,5 +1,7 @@
 import { getDefaultAddress } from '../services/addressService.js'
 import { calculateCheckoutDiscount, calculateOrderShipping, cancelOrder, confirmDelivery, createOrder, getOrderById, getOrdersBySeller, getOrdersByUser, getSellerOrderById, getShippingByOrder, hideOrderForUser, updateSellerOrderStatus } from '../services/orderService.js'
+import { convertCartToOrderItems, clearCart } from '../services/cartService.js'
+import { getTrackingInfo } from '../services/shippingService.js'
 
 export const checkoutOrder = async (req, res, next) => {
     try {

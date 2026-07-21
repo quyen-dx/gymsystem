@@ -68,6 +68,8 @@ import gdprExportRoutes from './routes/gdprExportRoutes.js'
 import gdprSelfServiceRoutes from './routes/gdprSelfServiceRoutes.js'
 import notificationRoutes from './routes/notificationRoutes.js'
 import userRoutes from './routes/userRoutes.js'
+import cartRoutes from './routes/cartRoutes.js'
+import ghnWebhookHandler from './services/ghnWebhookHandler.js'
 
 const createApp = () => {
   const app = express()
@@ -98,6 +100,7 @@ const createApp = () => {
 
   app.post('/api/wallet/stripe-webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
   app.post('/api/memberships/stripe-webhook', express.raw({ type: 'application/json' }), stripeMembershipWebhook)
+  app.post('/api/shipping/ghn/webhook', express.raw({ type: 'application/json' }), ghnWebhookHandler)
 
   app.use(express.json({ limit: '5mb' }))
   app.use(express.urlencoded({ extended: true, limit: '5mb' }))
@@ -138,6 +141,7 @@ const createApp = () => {
   app.use('/api/wallet', walletRoutes)
   app.use('/api/addresses', addressRoutes)
 app.use('/api/orders', orderRoutes)
+app.use('/api/cart', cartRoutes)
 app.use('/api/seller', sellerRoutes)
 app.use('/api/returns', returnRoutes)
   app.use('/api/admin/gdpr', gdprExportRoutes)

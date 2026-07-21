@@ -8,9 +8,10 @@ import AppError from '../utils/appError.js'
 import { applyWalletTransaction, getOrCreateWallet } from './walletService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
+import { generateOrderNumber } from './orderNumberService.js'
 
 const PLATFORM_FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.02)
-export const ORDER_STATUSES = ['CHỜ XÁC NHẬN', 'ĐANG GIAO HÀNG', 'GIAO THÀNH CÔNG', 'ĐÃ HỦY']
+export const ORDER_STATUSES = ['CHỜ XÁC NHẬN', 'ĐANG GIAO HÀNG', 'GIAO THÀNH CÔNG', 'ĐÃ HỦY', 'ĐANG HOÀN TRẢ', 'ĐÃ HOÀN TRẢ', 'ĐÃ HOÀN TIỀN']
 const DELIVERED_STATUS = 'GIAO THÀNH CÔNG'
 const CANCELLABLE_STATUSES = ['CHỜ XÁC NHẬN']
 
@@ -19,8 +20,11 @@ import { calculateShippingGHN } from './ghnService.js'
 const VALID_TRANSITIONS = {
     'CHỜ XÁC NHẬN': ['ĐANG GIAO HÀNG'],
     'ĐANG GIAO HÀNG': ['GIAO THÀNH CÔNG'],
-    'GIAO THÀNH CÔNG': [],
+    'GIAO THÀNH CÔNG': ['ĐANG HOÀN TRẢ'],
+    'ĐANG HOÀN TRẢ': ['ĐÃ HOÀN TRẢ'],
+    'ĐÃ HOÀN TRẢ': ['ĐÃ HOÀN TIỀN'],
     'ĐÃ HỦY': [],
+    'ĐÃ HOÀN TIỀN': [],
 }
 
 const buildShippingAddress = (address) => {
@@ -294,6 +298,7 @@ export const createOrder = async ({ userId, items, address, paymentReference, di
                     userId,
                     shopId: group.shopId,
                     items: group.items,
+                    orderNumber: await generateOrderNumber(),
                     totalAmount: groupTotal,
                     totalPrice: Math.max(0, group.subtotal - Math.min(group.subtotal, groupDiscount)),
                     shippingFee: group.shippingInfo.shippingFee,

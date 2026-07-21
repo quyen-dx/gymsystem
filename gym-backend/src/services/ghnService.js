@@ -3,6 +3,9 @@ import axios from 'axios';
 const GHN_API_URL = 'https://online-gateway.ghn.vn/shiip/public-api/v2';
 const cache = new Map();
 
+export const GHN_REQUIRED_ENV = ['GHN_TOKEN', 'GHN_SHOP_ID']
+export const GHN_SERVICE_TYPE_ID = 2
+
 const normalizeLocationPart = (value) =>
     String(value || '')
         .trim()
@@ -173,3 +176,95 @@ export const calculateShippingGHN = async (params) => {
         return getFallbackShipping({ fromAddress, toAddress, totalWeight, total_weight });
     }
 };
+
+export const createShipmentGHN = async ({ orderId, items, address, shippingFee }) => {
+    const token = process.env.GHN_TOKEN
+    const shopId = process.env.GHN_SHOP_ID
+    const fromDistrictId = Number(process.env.GHN_FROM_DISTRICT_ID || 1442)
+
+    if (!token || !shopId) {
+        return { isMock: true, message: 'GHN not configured' }
+    }
+
+    const headers = { Token: token, ShopId: shopId }
+
+    const toName = address?.recipientName || 'Customer'
+    const toPhone = address?.phone || '0900000000'
+    const toAddress = address?.street || address?.city || 'Unknown'
+    const toWardCode = String(address?.ward_code || address?.ward || '20101')
+    const toDistrictId = Number(address?.district_id || 1442)
+
+    const itemNames = (items || []).map((item) => item.productName || item.name || 'Product').slice(0, 3)
+    const itemQuantity = (items || []).reduce((sum, item) => sum + (item.quantity || 1), 0)
+    const itemWeight = (items || []).reduce((sum, item) => sum + (item.weight || 0) * (item.quantity || 1), 0)
+
+    const payload = {
+        to_name: toName,
+        to_phone: toPhone,
+        to_address: toAddress,
+        to_ward_code: toWardCode,
+        to_district_id: toDistrictId,
+        from_district_id: fromDistrictId,
+        weight: Math.max(10, Math.ceil(itemWeight * 1000)),
+        length: 20,
+        width: 15,
+        height: 10,
+        service_type_id: GHN_SERVICE_TYPE_ID,
+        payment_type_id: 1,
+        required_note: 'KHONGCHOXEMHANG',
+        note: `Order: ${orderId}`,
+        items: itemNames.map((name, i) => ({
+            name: name.slice(0, 100),
+            quantity: i === 0 ? itemQuantity : 1,
+            price: 0,
+        })),
+    }
+
+    try {
+        const response = await axios.post(`${GHN_API_URL}/shipping-order/create`, payload, { headers })
+        const data = response.data
+
+        if (data.code === 200) {
+            return {
+                trackingCode: data.data?.order_code,
+                expectedDeliveryTime: data.data?.expected_delivery_time,
+                fee: data.data?.total_fee,
+            }
+        }
+
+        throw new Error(data.message || 'GHN create shipment failed')
+    } catch (error) {
+        console.error('GHN createShipment Error:', error?.response?.data || error.message)
+        return { isMock: true, error: error.message }
+    }
+}
+
+export const getTrackingInfoGHN = async (trackingCode) => {
+    const token = process.env.GHN_TOKEN
+    if (!token || !trackingCode) return null
+
+    try {
+        const response = await axios.post(
+            `${GHN_API_URL}/shipping-order/detail`,
+            { order_code: String(trackingCode) },
+            { headers: { Token: token } },
+        )
+
+        const data = response.data
+        if (data.code === 200 && data.data) {
+            return {
+                status: data.data.status,
+                trackingCode: data.data.order_code,
+                trackingLogs: (data.data.tracking_logs || []).map((log) => ({
+                    status: log.status,
+                    updatedDate: log.updated_date,
+                })),
+            }
+        }
+
+        return null
+    } catch (error) {
+        console.error('GHN getTracking Error:', error?.response?.data || error.message)
+        return null
+    }
+}
