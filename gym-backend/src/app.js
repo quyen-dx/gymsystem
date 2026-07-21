@@ -23,6 +23,7 @@ import authRoutes from './routes/authRoutes.js'
 import authV2Routes from './routes/authV2Routes.js'
 import checkInRoutes from './routes/checkInRoutes.js'
 import cmsRoutes from './routes/cmsRoutes.js'
+import freezeRoutes from './routes/freezeRoutes.js'
 import memberRoutes from './routes/memberRoutes.js'
 import membershipRoutes from './routes/membershipRoutes.js'
 import ptRoutes from './routes/ptRoutes.js'
@@ -127,6 +128,7 @@ const createApp = () => {
   app.use('/api/orders', orderRoutes)
   app.use('/api/seller', sellerRoutes)
   app.use('/api/memberships', membershipRoutes)
+  app.use('/api/memberships', freezeRoutes)
   app.use('/api/partnership-requests', partnershipRequestRoutes)
   app.use('/api/pts', ptRoutes)
   app.use('/api/system-experience', systemExperienceRoutes)

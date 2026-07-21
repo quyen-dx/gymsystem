@@ -67,6 +67,10 @@ const membershipCycleSchema = new mongoose.Schema({
     type: [Number],
     default: [],
   },
+  freezeCount: {
+    type: Number,
+    default: 0,
+  },
   previousCycleId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'MembershipCycle',
