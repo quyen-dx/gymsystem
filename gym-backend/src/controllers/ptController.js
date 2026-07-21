@@ -603,6 +603,17 @@ export const updatePTSchedule = async (req, res) => {
     const user = await User.findById(req.params.id)
     if (!user || user.role !== 'pt') throw new AppError('Không tìm thấy PT', 404)
 
+    const now = new Date()
+    const twentyFourHoursFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    const upcomingConfirmed = await Booking.findOne({
+      ptId: req.params.id,
+      status: 'confirmed',
+      date: { $gte: now, $lte: twentyFourHoursFromNow },
+    })
+    if (upcomingConfirmed) {
+      throw new AppError('Không thể thay đổi lịch làm việc khi có buổi tập đã xác nhận trong vòng 24 giờ tới', 400)
+    }
+
     let pt = await PT.findOne({ userId: user._id })
     if (!pt) {
       pt = await PT.create({ userId: user._id })

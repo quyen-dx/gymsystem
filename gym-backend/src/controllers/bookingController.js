@@ -2,6 +2,7 @@ import Booking from '../models/Booking.js'
 import MembershipCycle from '../models/MembershipCycle.js'
 import Waitlist from '../models/Waitlist.js'
 import PT from '../models/PT.js'
+import ViolationLog from '../models/ViolationLog.js'
 import mongoose from 'mongoose'
 import { applyWalletTransaction } from '../services/walletService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
@@ -51,6 +52,48 @@ const requireActiveMembershipForDate = async (memberId, date, res) => {
     message: 'Bạn cần có gói tập đang hoạt động để đặt lịch PT',
   })
   return false
+}
+
+const checkBookingWindow = (date, res) => {
+  const bookingDate = normalizeDate(date)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diffDays = (bookingDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  if (diffDays > 30) {
+    res.status(400).json({ message: 'Chỉ có thể đặt lịch trong vòng 30 ngày' })
+    return false
+  }
+  return true
+}
+
+const checkSelfBooking = (reqUserId, ptId, res) => {
+  if (reqUserId.toString() === String(ptId)) {
+    res.status(400).json({ message: 'PT không thể đặt lịch cho chính mình' })
+    return false
+  }
+  return true
+}
+
+const checkNoShowBlock = async (memberId, res) => {
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+  const count = await ViolationLog.countDocuments({
+    memberId,
+    type: 'no_show',
+    createdAt: { $gte: ninetyDaysAgo },
+  })
+  if (count >= 3) {
+    const latestViolation = await ViolationLog.findOne({
+      memberId,
+      type: 'no_show',
+      createdAt: { $gte: ninetyDaysAgo },
+    }).sort({ createdAt: -1 }).lean()
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    if (latestViolation && latestViolation.createdAt > thirtyDaysAgo) {
+      res.status(400).json({ message: 'Bạn đã bị khóa đặt lịch trong 30 ngày do vi phạm không điểm danh 3 lần' })
+      return false
+    }
+  }
+  return true
 }
 
 export const checkConflicts = async (req, res) => {
@@ -124,6 +167,12 @@ export const createBooking = async (req, res) => {
 
     const bookingDate = normalizeDate(date)
 
+    if (!checkBookingWindow(date, res)) return
+
+    if (!checkSelfBooking(req.user._id, ptId, res)) return
+
+    if (!(await checkNoShowBlock(req.user._id, res))) return
+
     // Validate plan feature for booking type
     if (finalTrainingType === 'one_to_one') {
       const featureCheck = await checkMemberFeature(req.user._id, 'BOOK_PT_PRIVATE')
@@ -145,6 +194,26 @@ export const createBooking = async (req, res) => {
           message: 'Không tìm thấy PT',
         })
       }
+
+    const ptSessionCount = await Booking.countDocuments({
+      ptId,
+      date: bookingDate,
+      status: { $in: ['pending', 'awaiting_payment', 'confirmed'] },
+    })
+    if (ptSessionCount >= 8) {
+      return res.status(400).json({ message: 'PT đã đạt giới hạn 8 buổi tập trong ngày' })
+    }
+
+    const today = new Date()
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const activeMemberIds = await Booking.distinct('memberId', {
+      ptId,
+      status: { $nin: ['cancelled'] },
+      date: { $gte: thirtyDaysAgo },
+    })
+    if (activeMemberIds.length >= 10 && !activeMemberIds.some(id => id.toString() === req.user._id.toString())) {
+      return res.status(400).json({ message: 'PT đã đạt giới hạn 10 hội viên trong 30 ngày' })
+    }
 
     // FIX: priceAtBooking/ totalAmount hardcoded to 0 because PT pricing is not yet implemented.
     // TODO: Fetch PT session price from PlanFeature or SystemSettings when implemented
@@ -251,6 +320,10 @@ export const createRecurringBooking = async (req, res) => {
       })
     }
 
+    if (Number(weeks) > 4) {
+      return res.status(400).json({ message: 'Đặt lịch định kỳ tối đa 4 tuần' })
+    }
+
     const lastBookingDate = normalizeDate(date)
     lastBookingDate.setDate(lastBookingDate.getDate() + (Number(weeks) - 1) * 7)
     if (!(await requireActiveMembershipForDate(req.user._id, lastBookingDate, res))) return
@@ -260,6 +333,12 @@ export const createRecurringBooking = async (req, res) => {
     if (!featureCheck.allowed) {
       return res.status(403).json({ message: featureCheck.reason })
     }
+
+    if (!checkSelfBooking(req.user._id, ptId, res)) return
+
+    if (!checkBookingWindow(date, res)) return
+
+    if (!(await checkNoShowBlock(req.user._id, res))) return
 
     const session = await mongoose.startSession()
     const createdBookings = []
@@ -373,6 +452,10 @@ export const scheduleWeeklyBooking = async (req, res) => {
       return res.status(403).json({ message: featureCheck.reason })
     }
 
+    if (!checkSelfBooking(req.user._id, ptId, res)) return
+
+    if (!(await checkNoShowBlock(req.user._id, res))) return
+
     const session = await mongoose.startSession()
     const results = []
     const errors = []
@@ -382,6 +465,8 @@ export const scheduleWeeklyBooking = async (req, res) => {
 
       for (const day of daysOfWeek) {
         const bookingDate = getNextWeekDate(day)
+
+        if (!checkBookingWindow(bookingDate, res)) continue
 
         if (!(await requireActiveMembershipForDate(req.user._id, bookingDate, res))) {
           await session.abortTransaction()
@@ -676,12 +761,36 @@ export const cancelBooking = async (req, res) => {
     }
 
     const now = new Date()
-    const bookingDate = new Date(booking.date)
-    const diffHours = (bookingDate - now) / (1000 * 60 * 60)
+    const bookingDateTime = new Date(booking.date)
+    const diffHours = (bookingDateTime - now) / (1000 * 60 * 60)
 
     booking.status = 'cancelled'
     booking.cancelReason = reason || 'Member hủy lịch'
-    booking.isViolation = diffHours < 24
+
+    if (diffHours < 2 && booking.totalAmount && booking.totalAmount > 0) {
+      const penalty = Math.floor(booking.totalAmount * 0.5)
+      try {
+        await applyWalletTransaction({
+          userId: req.user._id,
+          amount: -penalty,
+          type: 'payment',
+          provider: 'wallet',
+          source: 'booking_penalty',
+          description: 'Phí hủy lịch PT trong vòng 2 giờ',
+          referenceId: booking._id.toString(),
+          status: 'completed',
+          metadata: { bookingId: booking._id, penaltyType: 'late_cancel' },
+          idempotencyKey: `late_cancel_${booking._id}`,
+          session,
+        })
+      } catch (penaltyError) {
+        await session.abortTransaction()
+        return res.status(400).json({
+          message: 'Không đủ số dư ví để thanh toán phí hủy lịch (50% giá buổi tập)',
+        })
+      }
+    }
+    booking.isViolation = diffHours < 2
 
     await booking.save({ session })
 
@@ -701,7 +810,7 @@ export const cancelBooking = async (req, res) => {
 
     return res.json({
       message: booking.isViolation
-        ? 'Hủy lịch thành công. Ghi nhận vi phạm do hủy trong vòng 24h'
+        ? 'Hủy lịch thành công. Ghi nhận vi phạm do hủy trong vòng 2h'
         : 'Hủy lịch thành công',
       booking,
       notifiedWaitlistMember: firstWaitlist || null,

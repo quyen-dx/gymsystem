@@ -9,6 +9,7 @@ import PTAssignmentEndRequest from '../models/PTAssignmentEndRequest.js'
 import PersonalTrainingRequest from '../models/PersonalTrainingRequest.js'
 import ClassEnrollment from '../models/ClassEnrollment.js'
 import MembershipCycle from '../models/MembershipCycle.js'
+import Booking from '../models/Booking.js'
 
 const nearestFutureDay = (startDate, targetDayOfWeek) => {
   const d = new Date(startDate)
@@ -437,6 +438,16 @@ export const findHistoryByPt = async ({ ptId, page = 1, limit = 20, type, fromDa
 
 export const createAssignment = async ({ memberId, ptId, membershipId, session }) => {
   const opts = session ? { session } : {}
+
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const activeMemberIds = await Booking.aggregate([
+    { $match: { ptId: new mongoose.Types.ObjectId(ptId), status: { $nin: ['cancelled'] }, date: { $gte: thirtyDaysAgo } } },
+    { $group: { _id: '$memberId' } },
+  ]).session(session || null)
+  if (activeMemberIds.length >= 10 && !activeMemberIds.some(m => String(m._id) === String(memberId))) {
+    throw Object.assign(new Error('PT đã đạt giới hạn 10 hội viên trong 30 ngày'), { statusCode: 400 })
+  }
 
   // BUSINESS RULE: 1 (memberId, ptId) pair can have AT MOST 1 active PTAssignment at a time.
   //  - If an active assignment exists for the SAME pair (memberId, ptId): reuse it (idempotent).
