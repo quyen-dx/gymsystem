@@ -1,20 +1,21 @@
 import mongoose from 'mongoose'
-import jwt from 'jsonwebtoken'
 import CheckIn from '../models/CheckIn.js'
 import MembershipCycle from '../models/MembershipCycle.js'
 import User from '../models/User.js'
 import Plan from '../models/Plan.js'
+import SystemSettings from '../models/SystemSettings.js'
 import { activateCycle } from '../services/membershipCycleService.js'
 import { recordUserActivity } from '../services/userActivityService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
+import { generateCheckinQR, verifyCheckinQR } from '../services/qrService.js'
+import { calculateStreak } from '../services/streakService.js'
 import AppError from '../utils/appError.js'
 import sendError from '../utils/sendError.js'
 
 const getUserDisplayName = (user, fallback = '') =>
   String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
 
-const QR_TOKEN_TTL = Number(process.env.QR_TOKEN_TTL) || 30
 const DUPLICATE_WINDOW_MS = 60 * 60 * 1000
 const VIETNAM_UTC_OFFSET = '+07:00'
 
@@ -29,6 +30,27 @@ const addDaysToDateString = (dateString, days) => {
   date.setUTCDate(date.getUTCDate() + days)
   const vietnamTime = new Date(date.getTime() + 7 * 60 * 60 * 1000)
   return vietnamTime.toISOString().slice(0, 10)
+}
+
+const getVietnamHour = () => (new Date().getUTCHours() + 7) % 24
+
+const checkGymOpen = () => {
+  const openHour = Number(process.env.GYM_OPEN_HOUR) ?? 0
+  const closeHour = Number(process.env.GYM_CLOSE_HOUR) ?? 24
+  if (openHour === 0 && closeHour === 24) return
+  const currentHour = getVietnamHour()
+  if (currentHour < openHour || currentHour >= closeHour) {
+    throw new AppError(`Phòng gym đã đóng cửa. Giờ hoạt động: ${openHour}:00 - ${closeHour}:00`, 403)
+  }
+}
+
+const checkGymClosedToday = async () => {
+  const today = getVietnamDateString()
+  const settingsDoc = await SystemSettings.findOne({ singletonKey: 'global' }).select('settings').lean().catch(() => null)
+  const closedDates = settingsDoc?.settings?.closedDates || []
+  if (closedDates.includes(today)) {
+    throw new AppError('Phòng gym đóng cửa hôm nay. Vui lòng quay lại vào ngày mai.', 403)
+  }
 }
 
 const buildVietnamDateRange = ({ mode = 'today', date }) => {
@@ -86,23 +108,8 @@ const getActiveMembership = (memberId) => MembershipCycle.findOne({
 
 const resolveMemberFromCheckinPayload = async ({ token, memberId }) => {
   if (token) {
-    let decoded
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET)
-    } catch {
-      throw new AppError('Mã QR không hợp lệ hoặc đã hết hạn', 401)
-    }
-
-    if (decoded.purpose !== 'checkin' || !decoded.memberId) {
-      throw new AppError('Mã QR không hợp lệ', 401)
-    }
-
-    const alreadyUsed = await CheckIn.findOne({ qrToken: token }).lean()
-    if (alreadyUsed) {
-      throw new AppError('Mã QR này đã được sử dụng', 409)
-    }
-
-    return User.findById(decoded.memberId)
+    const { memberId: qrMemberId } = await verifyCheckinQR(token)
+    return User.findById(qrMemberId)
   }
 
   const keyword = String(memberId || '').trim()
@@ -158,42 +165,12 @@ const formatHistoryItem = (checkin, membershipByMemberId = {}) => {
   }
 }
 
-const calculateStreak = async (memberId) => {
-  const checkins = await CheckIn.find({ memberId, status: 'success' })
-    .sort({ checkinTime: -1 })
-    .lean()
-
-  if (checkins.length === 0) return 0
-
-  let streak = 1
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const lastCheckin = new Date(checkins[0].checkinTime)
-  lastCheckin.setHours(0, 0, 0, 0)
-
-  const diffFromToday = Math.floor((today - lastCheckin) / (24 * 60 * 60 * 1000))
-  if (diffFromToday > 1) return 0
-
-  for (let i = 1; i < checkins.length; i++) {
-    const curr = new Date(checkins[i].checkinTime)
-    curr.setHours(0, 0, 0, 0)
-    const prev = new Date(checkins[i - 1].checkinTime)
-    prev.setHours(0, 0, 0, 0)
-    const diff = Math.floor((prev - curr) / (24 * 60 * 60 * 1000))
-    if (diff === 1) {
-      streak++
-    } else {
-      break
-    }
-  }
-
-  return streak
-}
-
 export const generateQRToken = async (req, res) => {
   try {
     const memberId = req.user._id
+
+    checkGymOpen()
+    await checkGymClosedToday()
 
     const activeMembership = await MembershipCycle.findOne({
       memberId,
@@ -224,23 +201,12 @@ export const generateQRToken = async (req, res) => {
       })
     }
 
-    const now = new Date()
-    const expiredAt = new Date(now.getTime() + QR_TOKEN_TTL * 1000)
-
-    const token = jwt.sign(
-      {
-        memberId: memberId.toString(),
-        iat: Math.floor(now.getTime() / 1000),
-        exp: Math.floor(expiredAt.getTime() / 1000),
-        purpose: 'checkin',
-      },
-      process.env.JWT_SECRET,
-    )
+    const { token, expiredAt, ttl } = generateCheckinQR(memberId)
 
     res.json({
       token,
       expiredAt,
-      ttl: QR_TOKEN_TTL,
+      ttl,
       memberId: memberId.toString(),
     })
   } catch (error) {
@@ -344,6 +310,9 @@ export const searchMemberForCheckin = async (req, res) => {
 export const staffVerifyCheckin = async (req, res) => {
   let mongoSession = null
   try {
+    checkGymOpen()
+    await checkGymClosedToday()
+
     const { token, memberId, manualReason } = req.body
     const staffId = req.user._id
     const checkInMethod = req.user.role === 'reception' ? 'RECEPTION' : 'STAFF'
