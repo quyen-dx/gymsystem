@@ -1,6 +1,9 @@
 import mongoose from 'mongoose'
 import { applyWalletTransaction, getOrCreateWallet } from './walletService.js'
 import AppError from '../utils/appError.js'
+import SellerPayout from '../models/SellerPayout.js'
+
+const PLATFORM_FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.02)
 
 export const holdEscrow = async ({ sellerId, orderId, amount, session }) => {
   if (amount <= 0) return null
@@ -70,18 +73,35 @@ export const settleStaleEscrow = async (order) => {
       return null
     }
 
+    const platformFee = Math.floor(order.sellerEscrowAmount * PLATFORM_FEE_RATE)
+    const netAmount = order.sellerEscrowAmount - platformFee
+
     await getOrCreateWallet(sellerId, session)
     await applyWalletTransaction({
       userId: sellerId,
-      amount: order.sellerEscrowAmount,
+      amount: netAmount,
       type: 'payout',
       provider: 'marketplace',
       referenceId: `escrow_settle_${order._id}`,
       status: 'completed',
-      metadata: { orderId: order._id, action: 'settle_stale_escrow' },
+      metadata: { orderId: order._id, action: 'settle_stale_escrow', platformFee },
       idempotencyKey: `escrow_settle_${order._id}_${Date.now()}`,
       session,
     })
+
+    await SellerPayout.create(
+      [{
+        sellerId,
+        orderId: order._id,
+        amount: order.sellerEscrowAmount,
+        platformFee,
+        netAmount,
+        status: 'completed',
+        method: 'wallet',
+        settledAt: new Date(),
+      }],
+      { session },
+    )
 
     await mongoose.model('Order').updateOne(
       { _id: order._id },
@@ -90,7 +110,7 @@ export const settleStaleEscrow = async (order) => {
     )
 
     await session.commitTransaction()
-    return { settled: true }
+    return { settled: true, platformFee, netAmount }
   } catch (error) {
     await session.abortTransaction()
     throw error

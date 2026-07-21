@@ -22,6 +22,7 @@ import { runPaymentTimeoutJob } from './src/jobs/paymentTimeoutJob.js'
 import { runInventoryReleaseJob } from './src/jobs/inventoryReleaseJob.js'
 import { runShipmentTrackingJob } from './src/jobs/shipmentTrackingJob.js'
 import { runEscrowSettlementJob } from './src/jobs/escrowSettlementJob.js'
+import { runReturnApprovalTimeoutJob } from './src/jobs/returnApprovalTimeoutJob.js'
 
 cron.schedule('0 1 * * *', () => {
   logger.info('Running refundReminderJob')
@@ -78,6 +79,13 @@ cron.schedule('0 */6 * * *', () => {
   )
 })
 logger.info('escrowSettlementJob scheduled every 6 hours (BR-SHP-003)')
+
+cron.schedule('0 * * * *', () => {
+  runReturnApprovalTimeoutJob().catch((err) =>
+    logger.error('returnApprovalTimeoutJob failed', { error: err.message }),
+  )
+})
+logger.info('returnApprovalTimeoutJob scheduled every hour (BR-SHP-004)')
 
 let server = null
 
