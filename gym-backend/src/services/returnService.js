@@ -161,6 +161,7 @@ export const approveReturn = async ({ returnId, approverId }) => {
                     quantity: i.quantity,
                 })),
             },
+            idempotencyKey: `return_refund_${returnId}`,
             session,
         })
 

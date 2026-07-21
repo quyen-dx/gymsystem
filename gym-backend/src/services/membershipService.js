@@ -24,6 +24,7 @@ import PlanChangeHistory from '../models/PlanChangeHistory.js'
 import { endEnrollments as endClassEnrollments } from './classEnrollmentService.js'
 import { getSystemSettingsValue } from './systemSettingsService.js'
 import { recordUserActivity } from './userActivityService.js'
+import { applyWalletTransaction } from './walletService.js'
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
 import { assertPolicyConsent } from '../utils/policyConsent.js'
 import { sendRenewalSuccessEmail, sendPeriodCompletedEmail, sendPeriodActivatedEmail, sendCancelRenewalEmail } from './emailService.js'
@@ -227,20 +228,6 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
   try {
     session.startTransaction()
 
-    const wallet = await Wallet.findOneAndUpdate(
-      { userId: memberId, balance: { $gte: amount } },
-      { $inc: { balance: -amount } },
-      { new: false, session },
-    )
-
-    if (!wallet) {
-      const error = new Error('Đăng ký không thành công, tài khoản không đủ số dư')
-      error.statusCode = 400
-      throw error
-    }
-
-    const balanceBefore = Number(wallet.balance || 0)
-    const walletBalance = balanceBefore - amount
     const today = startOfTodayVN()
 
     const isRenew = mode === 'renew'
@@ -325,6 +312,25 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
       }
     }
 
+    const { wallet, transaction: walletTxn } = await applyWalletTransaction({
+      userId: memberId,
+      amount: -amount,
+      type: 'payment',
+      provider: 'wallet',
+      source: 'membership',
+      description: `Thanh toán gói tập ${plan.nameVi || plan.nameEn}`,
+      status: 'completed',
+      metadata: {
+        planId: plan._id,
+        membershipId: membership._id,
+      },
+      idempotencyKey: `subscribe_wallet_${memberId}_${membership._id}`,
+      session,
+    })
+
+    const balanceBefore = walletTxn.balanceBefore
+    const walletBalance = walletTxn.balanceAfter
+
     const [payment] = await Payment.createWithIdempotency(
       [
         {
@@ -340,33 +346,8 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
           metadata: {
             walletBalanceBefore: balanceBefore,
             walletBalanceAfter: walletBalance,
+            walletTransactionId: walletTxn._id,
           },
-        },
-      ],
-      { session },
-    )
-
-    await Transaction.create(
-      [
-        {
-          userId: memberId,
-          walletId: wallet._id,
-          type: 'payment',
-          provider: 'wallet',
-          source: 'membership',
-          description: `Thanh toán gói tập ${plan.nameVi || plan.nameEn}`,
-          amount: -amount,
-          balanceBefore,
-          balanceAfter: walletBalance,
-          referenceId: payment._id.toString(),
-          status: 'completed',
-          completedAt: new Date(),
-          metadata: {
-            paymentId: payment._id,
-            planId: plan._id,
-            membershipId: membership._id,
-          },
-          idempotencyKey: payment._id.toString(),
         },
       ],
       { session },
@@ -1564,28 +1545,15 @@ const cancelRenewal = async ({ userId, renewalId }) => {
     // Hoàn tiền: cộng vào ví
     const refundAmount = renewal.price
     if (refundAmount > 0) {
-      let wallet = await Wallet.findOne({ userId: memberId }).session(session)
-      if (!wallet) {
-        [wallet] = await Wallet.create([{ userId: memberId, balance: 0 }], { session })
-      }
-
-      const balanceBefore = Number(wallet.balance || 0)
-      wallet.balance = balanceBefore + refundAmount
-      await wallet.save({ session })
-
-      await Transaction.create([{
+      await applyWalletTransaction({
         userId: memberId,
-        walletId: wallet._id,
+        amount: refundAmount,
         type: 'REFUND_TO_WALLET',
         provider: 'wallet',
         source: 'membership',
         description: `Hoàn tiền hủy gia hạn (+${renewal.days} ngày)`,
-        amount: refundAmount,
-        balanceBefore,
-        balanceAfter: balanceBefore + refundAmount,
         referenceId: renewal._id.toString(),
         status: 'completed',
-        completedAt: new Date(),
         metadata: {
           renewalId: renewal._id,
           membershipId: membership._id,
@@ -1593,7 +1561,8 @@ const cancelRenewal = async ({ userId, renewalId }) => {
           renewalPrice: renewal.price,
         },
         idempotencyKey: `cancel_renewal_refund_${renewal._id}`,
-      }], { session })
+        session,
+      })
     }
 
     await recordUserActivity({
@@ -1878,25 +1847,18 @@ const getMyPeriods = async ({ userId }) => {
   })
 }
 
-const refundPeriodToWallet = async ({ period, wallet, session }) => {
+const refundPeriodToWallet = async ({ period, session }) => {
   if (!period.price || period.price <= 0) return 0
-  const balanceBefore = Number(wallet.balance || 0)
-  wallet.balance = balanceBefore + period.price
-  await wallet.save({ session })
 
-  await Transaction.create([{
+  await applyWalletTransaction({
     userId: period.memberId,
-    walletId: wallet._id,
+    amount: period.price,
     type: 'REFUND_TO_WALLET',
     provider: 'wallet',
     source: 'membership',
     description: `Hoàn tiền kỳ hạn (+${period.totalDays} ngày)`,
-    amount: period.price,
-    balanceBefore,
-    balanceAfter: balanceBefore + period.price,
     referenceId: period._id.toString(),
     status: 'completed',
-    completedAt: new Date(),
     metadata: {
       periodId: period._id,
       membershipId: period.membershipId,
@@ -1904,7 +1866,8 @@ const refundPeriodToWallet = async ({ period, wallet, session }) => {
       periodPrice: period.price,
     },
     idempotencyKey: `period_refund_${period._id}`,
-  }], { session })
+    session,
+  })
 
   return period.price
 }
@@ -1955,31 +1918,19 @@ const autoCancelPendingPeriod = async ({ userId, periodId }) => {
 
     // Hoàn tiền vào ví
     if (refundAmount > 0) {
-      let wallet = await Wallet.findOne({ userId: memberId }).session(session)
-      if (!wallet) {
-        [wallet] = await Wallet.create([{ userId: memberId, balance: 0 }], { session })
-      }
-
-      const balanceBefore = Number(wallet.balance || 0)
-      wallet.balance = balanceBefore + refundAmount
-      await wallet.save({ session })
-
-      await Transaction.create([{
+      await applyWalletTransaction({
         userId: memberId,
-        walletId: wallet._id,
+        amount: refundAmount,
         type: 'REFUND_TO_WALLET',
         provider: 'wallet',
         source: 'membership',
         description: `Hoàn tiền hủy gia hạn (+${period.totalDays} ngày)`,
-        amount: refundAmount,
-        balanceBefore,
-        balanceAfter: wallet.balance,
         referenceId: period._id.toString(),
         status: 'completed',
-        completedAt: new Date(),
         metadata: { periodId: period._id, membershipId: period.membershipId, periodDays: period.totalDays, periodPrice: period.price },
         idempotencyKey: `auto_cancel_period_${period._id}`,
-      }], { session })
+        session,
+      })
     }
 
     // Cập nhật period status + refund info

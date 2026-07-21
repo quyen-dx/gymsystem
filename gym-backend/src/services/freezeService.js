@@ -57,6 +57,8 @@ export const createFreezeRequest = async (userId, { startDate, endDate, reason }
   const session = await mongoose.startSession()
 
   try {
+    session.startTransaction()
+
     const doc = await MembershipCycle.findOneAndUpdate(
       { _id: activeCycle._id, freezeCount: { $lt: MAX_FREEZES_PER_CYCLE } },
       { $inc: { freezeCount: 1 } },
@@ -86,6 +88,8 @@ export const createFreezeRequest = async (userId, { startDate, endDate, reason }
       { session },
     )
 
+    await session.commitTransaction()
+
     logger.info('Freeze request created', {
       freezeId: freeze._id.toString(),
       userId,
@@ -95,6 +99,7 @@ export const createFreezeRequest = async (userId, { startDate, endDate, reason }
 
     return freeze
   } catch (err) {
+    await session.abortTransaction()
     throw err
   } finally {
     session.endSession()

@@ -261,12 +261,13 @@ export const createOrder = async ({ userId, items, address, paymentReference, di
             }
         }
 
+        const idempotencyKey = paymentReference ? `order_${paymentReference}` : `order_${Date.now()}`
         const { wallet } = await applyWalletTransaction({
             userId,
             amount: -grandTotal,
             type: 'payment',
             provider: 'wallet',
-            referenceId: paymentReference || `order_${Date.now()}`,
+            referenceId: paymentReference || idempotencyKey,
             status: 'completed',
             metadata: {
                 items: orderItems,
@@ -274,6 +275,7 @@ export const createOrder = async ({ userId, items, address, paymentReference, di
                 discountCode: discount.code,
                 discountAmount: discount.amount,
             },
+            idempotencyKey,
             session,
         })
 
@@ -519,6 +521,7 @@ export const cancelOrder = async ({ orderId, userId, reason }) => {
                     referenceId: `cancel_${orderId}_${userId}`,
                     status: 'completed',
                     metadata: { orderId, reason, escrowRefund: true },
+                    idempotencyKey: `cancel_refund_${orderId}_${userId}`,
                     session,
                 })
             }
@@ -598,6 +601,7 @@ export const confirmDelivery = async ({ orderId, userId }) => {
                         })),
                         feeRate: PLATFORM_FEE_RATE,
                     },
+                    idempotencyKey: `payout_${orderId}_${sellerId}`,
                     session,
                 })
                 order.escrowReleased = true

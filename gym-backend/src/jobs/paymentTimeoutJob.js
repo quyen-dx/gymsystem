@@ -1,3 +1,4 @@
+import mongoose from 'mongoose'
 import Payment from '../models/Payment.js'
 import MembershipRegistration from '../models/MembershipRegistration.js'
 import { createNotification } from '../services/notificationService.js'
@@ -8,6 +9,7 @@ const VNPAY_TIMEOUT_MS = 15 * 60 * 1000
 const STRIPE_TIMEOUT_MS = 30 * 60 * 1000
 
 export const runPaymentTimeoutJob = async () => {
+  const session = await mongoose.startSession()
   try {
     const now = new Date()
     const vnpayCutoff = new Date(now - VNPAY_TIMEOUT_MS)
@@ -20,21 +22,22 @@ export const runPaymentTimeoutJob = async () => {
       ],
     }
 
-    const timedOutPayments = await Payment.find(filter).lean()
+    const timedOutPayments = await Payment.find(filter).session(session).lean()
 
-    if (timedOutPayments.length === 0) return
+    if (timedOutPayments.length === 0) {
+      await session.endSession()
+      return
+    }
+
+    session.startTransaction()
 
     const paymentIds = timedOutPayments.map((p) => p._id)
 
-    await Payment.updateMany({ _id: { $in: paymentIds } }, { $set: { status: 'FAILED' } })
-
-    logger.info('paymentTimeoutJob completed', {
-      timedOut: timedOutPayments.length,
-    })
+    await Payment.updateMany({ _id: { $in: paymentIds } }, { $set: { status: 'FAILED' } }).session(session)
 
     for (const payment of timedOutPayments) {
       if (payment.registrationId) {
-        MembershipRegistration.updateOne(
+        await MembershipRegistration.updateOne(
           { _id: payment.registrationId, status: 'pending' },
           {
             $set: {
@@ -43,11 +46,18 @@ export const runPaymentTimeoutJob = async () => {
               cancelledAt: now,
             },
           },
-        ).catch((err) =>
-          logger.error('paymentTimeoutJob: registration cancel failed', { error: err.message }),
+          { session },
         )
       }
+    }
 
+    await session.commitTransaction()
+
+    logger.info('paymentTimeoutJob completed', {
+      timedOut: timedOutPayments.length,
+    })
+
+    for (const payment of timedOutPayments) {
       createNotification({
         receiverId: payment.userId,
         receiverRole: 'member',
@@ -63,6 +73,9 @@ export const runPaymentTimeoutJob = async () => {
       )
     }
   } catch (err) {
+    await session.abortTransaction()
     logger.error('paymentTimeoutJob failed', { error: err.message })
+  } finally {
+    session.endSession()
   }
 }
