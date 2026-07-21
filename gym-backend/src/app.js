@@ -44,6 +44,7 @@ import workoutRoutes from './routes/workoutRoutes.js'
 import workoutLibraryRoutes from './routes/workoutLibraryRoutes.js'
 import workoutImprovementRoutes from './routes/workoutImprovementRoutes.js'
 import workoutReportRoutes from './routes/workoutReportRoutes.js'
+import exerciseRoutes from './routes/exerciseRoutes.js'
 import specializationRoutes from './routes/specializationRoutes.js'
 import scheduleRoutes from './routes/scheduleRoutes.js'
 import ptAssignmentRoutes from './routes/ptAssignmentRoutes.js'
@@ -150,6 +151,7 @@ app.use('/api/returns', returnRoutes)
   app.use('/api/workout-library', workoutLibraryRoutes)
   app.use('/api/workout-improvements', workoutImprovementRoutes)
   app.use('/api/workout-reports', workoutReportRoutes)
+  app.use('/api/exercises', exerciseRoutes)
   app.use('/api/specializations', specializationRoutes)
   app.use('/api/schedules', scheduleRoutes)
   app.use('/api/pt-assignments', ptAssignmentRoutes)
