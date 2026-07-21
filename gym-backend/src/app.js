@@ -33,6 +33,7 @@ import planRoutes from './routes/planRoutes.js'
 import planFeatureRoutes from './routes/planFeatureRoutes.js'
 import productRoutes from './routes/productRoutes.js'
 import sellerRoutes from './routes/sellerRoutes.js'
+import dashboardRoutes from './routes/dashboardRoutes.js'
 import shopRoutes from './routes/shopRoutes.js'
 import systemExperienceRoutes from './routes/systemExperienceRoutes.js'
 import systemSettingsRoutes from './routes/systemSettingsRoutes.js'
@@ -143,6 +144,7 @@ const createApp = () => {
 app.use('/api/orders', orderRoutes)
 app.use('/api/cart', cartRoutes)
 app.use('/api/seller', sellerRoutes)
+app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/returns', returnRoutes)
   app.use('/api/admin/gdpr', gdprExportRoutes)
   app.use('/api/gdpr/me', gdprSelfServiceRoutes)
