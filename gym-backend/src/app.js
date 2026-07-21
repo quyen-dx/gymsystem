@@ -59,6 +59,8 @@ import shiftSwapRoutes from './routes/shiftSwapRoutes.js'
 import groupClassRoutes from './routes/groupClassRoutes.js'
 import reportRoutes from './routes/reportRoutes.js'
 import returnRoutes from './routes/returnRoutes.js'
+import gdprExportRoutes from './routes/gdprExportRoutes.js'
+import gdprSelfServiceRoutes from './routes/gdprSelfServiceRoutes.js'
 import notificationRoutes from './routes/notificationRoutes.js'
 import userRoutes from './routes/userRoutes.js'
 
@@ -71,6 +73,10 @@ const createApp = () => {
   ])]
 
   app.use(helmet())
+
+  if (process.env.TRUST_PROXY === 'true') {
+    app.set('trust proxy', 1)
+  }
 
   app.use(cors({
     origin: (origin, callback) => {
@@ -129,6 +135,8 @@ const createApp = () => {
 app.use('/api/orders', orderRoutes)
 app.use('/api/seller', sellerRoutes)
 app.use('/api/returns', returnRoutes)
+  app.use('/api/admin/gdpr', gdprExportRoutes)
+  app.use('/api/gdpr/me', gdprSelfServiceRoutes)
   app.use('/api/memberships', membershipRoutes)
   app.use('/api/memberships', freezeRoutes)
   app.use('/api/partnership-requests', partnershipRequestRoutes)

@@ -248,6 +248,17 @@ export const approveRefundRequest = async ({ refundRequestId, staffId, staffNote
     throw error
   }
 
+  const REFUND_APPROVAL_THRESHOLD = 1_000_000
+  const estimatedAmount = refundRequest.refundAmount || 0
+  if (estimatedAmount > REFUND_APPROVAL_THRESHOLD) {
+    const staff = await User.findById(staffId).select('role').lean()
+    if (!['admin', 'super_admin'].includes(staff?.role)) {
+      const error = new Error('Hoàn tiền trên 1,000,000 VND cần được phê duyệt bởi quản trị viên (admin).')
+      error.statusCode = 403
+      throw error
+    }
+  }
+
   const session = await mongoose.startSession()
   let committed = false
 

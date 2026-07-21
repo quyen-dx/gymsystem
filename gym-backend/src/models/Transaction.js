@@ -79,4 +79,31 @@ const transactionSchema = new mongoose.Schema(
     { timestamps: true },
 )
 
+transactionSchema.pre('save', function (next) {
+    if (!this.isNew) {
+        return next(new Error('Transactions are immutable and cannot be updated'))
+    }
+    next()
+})
+
+transactionSchema.pre('findOneAndUpdate', function () {
+    throw new Error('Transactions are immutable and cannot be updated')
+})
+
+transactionSchema.pre('updateOne', function () {
+    throw new Error('Transactions are immutable and cannot be updated')
+})
+
+transactionSchema.pre('deleteOne', function () {
+    throw new Error('Transactions cannot be deleted')
+})
+
+transactionSchema.pre('deleteMany', function () {
+    throw new Error('Transactions cannot be deleted')
+})
+
+transactionSchema.pre('findOneAndDelete', function () {
+    throw new Error('Transactions cannot be deleted')
+})
+
 export default mongoose.model('Transaction', transactionSchema)

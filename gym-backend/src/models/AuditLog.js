@@ -4,7 +4,7 @@ const auditLogSchema = new mongoose.Schema(
   {
     module: {
       type: String,
-      enum: ['users', 'plans', 'products', 'shops', 'ai', 'system_settings', 'planFeatures', 'specializations'],
+      enum: ['users', 'plans', 'products', 'shops', 'ai', 'system_settings', 'planFeatures', 'specializations', 'memberships', 'bookings', 'payments', 'wallets', 'checkins', 'notifications', 'trainers', 'refunds', 'freezes', 'orders', 'returns'],
       required: true,
       index: true,
     },
@@ -32,6 +32,24 @@ const auditLogSchema = new mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+    },
+    oldValue: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    newValue: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    ip: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    userAgent: {
+      type: String,
+      trim: true,
+      default: '',
     },
   },
   { timestamps: true },
