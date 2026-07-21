@@ -156,3 +156,13 @@ export const emitScheduleChanged = ({ trainerId }) => {
   if (!io || !trainerId) return
   io.to(trainerId.toString()).emit('schedule:changed', { trainerId })
 }
+
+export const emitAvailabilityChanged = ({ ptId, date, slot, available }) => {
+  if (!io || !ptId) return
+  io.to(ptId.toString()).emit('availability:changed', {
+    ptId: ptId.toString(),
+    date,
+    slot,
+    available,
+  })
+}

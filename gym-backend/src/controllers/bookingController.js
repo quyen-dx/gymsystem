@@ -7,7 +7,7 @@ import mongoose from 'mongoose'
 import { applyWalletTransaction } from '../services/walletService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
-import { emitBookingCreated, emitBookingConfirmed, emitBookingCancelled } from '../services/socketService.js'
+import { emitBookingCreated, emitBookingConfirmed, emitBookingCancelled, emitAvailabilityChanged } from '../services/socketService.js'
 import { checkMemberFeature } from '../utils/featureCheck.js'
 import { markBenefitUsed } from '../services/membershipCycleService.js'
 import { checkPTDailySessionLimit, checkPTMemberCapacity } from '../services/ptService.js'
@@ -312,6 +312,13 @@ export const createBooking = async (req, res) => {
 
       emitBookingCreated({ ptId, booking: createdBooking })
 
+      emitAvailabilityChanged({
+        ptId,
+        date: bookingDate,
+        slot,
+        available: false,
+      })
+
       await createNotification({
         receiverId: ptId,
         receiverRole: 'pt',
@@ -362,10 +369,6 @@ export const createRecurringBooking = async (req, res) => {
       return res.status(400).json({ message: 'Đặt lịch định kỳ tối đa 4 tuần' })
     }
 
-    const lastBookingDate = normalizeDate(date)
-    lastBookingDate.setDate(lastBookingDate.getDate() + (Number(weeks) - 1) * 7)
-    if (!(await requireActiveMembershipForDate(req.user._id, lastBookingDate, res))) return
-
     // FIX: standardize feature code to match createBooking
     const featureCheck = await checkMemberFeature(req.user._id, 'BOOK_PT_PRIVATE')
     if (!featureCheck.allowed) {
@@ -399,6 +402,15 @@ export const createRecurringBooking = async (req, res) => {
       for (let i = 0; i < Number(weeks); i++) {
         const bookingDate = normalizeDate(date)
         bookingDate.setDate(bookingDate.getDate() + i * 7)
+
+        if (!(await hasActiveMembershipForDate(req.user._id, bookingDate))) {
+          conflicts.push({
+            date: bookingDate,
+            slot,
+            reason: 'Hội viên không có gói tập hiệu lực cho ngày này. Chuỗi đặt lịch bị cắt ngắn.',
+          })
+          break
+        }
 
         const ptDailyCheck = await checkPTDailySessionLimit(ptId, bookingDate, session)
         if (!ptDailyCheck.allowed) {
@@ -549,9 +561,13 @@ export const scheduleWeeklyBooking = async (req, res) => {
 
         if (!checkBookingWindow(bookingDate, res)) continue
 
-        if (!(await requireActiveMembershipForDate(req.user._id, bookingDate, res))) {
-          await session.abortTransaction()
-          return
+        if (!(await hasActiveMembershipForDate(req.user._id, bookingDate))) {
+          errors.push({
+            day,
+            date: bookingDate,
+            reason: 'Hội viên không có gói tập hiệu lực cho ngày này',
+          })
+          continue
         }
 
         const ptDailyCheck = await checkPTDailySessionLimit(ptId, bookingDate, session)
@@ -993,6 +1009,15 @@ export const cancelBooking = async (req, res) => {
     await session.commitTransaction()
 
     emitBookingCancelled({ userId: booking.ptId, booking })
+
+    if (!promotedBooking) {
+      emitAvailabilityChanged({
+        ptId: booking.ptId,
+        date: booking.date,
+        slot: booking.slot,
+        available: true,
+      })
+    }
 
     if (promotedBooking) {
       emitBookingCreated({ ptId: booking.ptId, booking: promotedBooking })
