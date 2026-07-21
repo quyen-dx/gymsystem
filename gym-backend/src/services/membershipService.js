@@ -325,7 +325,7 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
       }
     }
 
-    const [payment] = await Payment.create(
+    const [payment] = await Payment.createWithIdempotency(
       [
         {
           userId: memberId,
@@ -939,7 +939,7 @@ const createManualRegistration = async ({ userId, planId }) => {
     status: 'pending',
   })
 
-  const payment = await Payment.create({
+  const payment = await Payment.createWithIdempotency({
     userId: user._id,
     planId: plan._id,
     registrationId: registration._id,
@@ -947,6 +947,7 @@ const createManualRegistration = async ({ userId, planId }) => {
     currency: 'vnd',
     status: 'PENDING',
     paymentMethod: 'MANUAL',
+    idempotencyKey: `reg_${registration._id}`,
   })
 
   return {
@@ -984,7 +985,7 @@ const createCheckoutSession = async ({ userId, planId, mode = 'register' }) => {
     await createActivatedMembershipDryRun({ userId: user._id, planId: plan._id })
   }
 
-  const payment = await Payment.create({
+  const payment = await Payment.createWithIdempotency({
     userId: user._id,
     planId: plan._id,
     amount: plan.price,
@@ -992,6 +993,7 @@ const createCheckoutSession = async ({ userId, planId, mode = 'register' }) => {
     status: 'PENDING',
     paymentMethod: 'STRIPE',
     source: 'ONLINE',
+    idempotencyKey: `stripe_checkout_${user._id}_${Date.now()}`,
     metadata: { mode },
   })
 

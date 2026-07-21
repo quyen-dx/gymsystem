@@ -353,7 +353,7 @@ export const createManualQrDepositPayment = async (req, res, next) => {
             width: 320,
         })
 
-        const payment = await Payment.create({
+        const payment = await Payment.createWithIdempotency({
             userId: req.user._id,
             amount,
             currency: 'vnd',
@@ -362,6 +362,7 @@ export const createManualQrDepositPayment = async (req, res, next) => {
             method: 'MANUAL_QR',
             source: 'OFFLINE',
             txnRef,
+            idempotencyKey: txnRef,
             metadata: {
                 purpose: 'WALLET_DEPOSIT',
                 provider: 'MANUAL_QR',
@@ -400,7 +401,7 @@ export const createVnpayDepositPayment = async (req, res, next) => {
 
         await getOrCreateWallet(req.user._id)
         const txnRef = generateTxnRef(req.user._id)
-        const payment = await Payment.create({
+        const payment = await Payment.createWithIdempotency({
             userId: req.user._id,
             amount,
             currency: 'vnd',
@@ -409,6 +410,7 @@ export const createVnpayDepositPayment = async (req, res, next) => {
             method: 'VNPAY',
             source: 'ONLINE',
             txnRef,
+            idempotencyKey: txnRef,
             metadata: {
                 purpose: 'WALLET_DEPOSIT',
                 provider: 'VNPAY',

@@ -39,10 +39,17 @@ const paymentSchema = new mongoose.Schema(
       sparse: true,
       index: true,
     },
+    idempotencyKey: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     amount: {
       type: Number,
       required: true,
-      min: 0,
+      min: 1000,
     },
     type: {
       type: String,
@@ -91,5 +98,37 @@ const paymentSchema = new mongoose.Schema(
 )
 
 paymentSchema.index({ createdAt: -1 })
+
+const IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1000
+
+paymentSchema.statics.createWithIdempotency = async function (docs, options) {
+  const doc = Array.isArray(docs) ? docs[0] : docs
+  const idempotencyKey = doc?.idempotencyKey
+
+  if (idempotencyKey) {
+    const cutoff = new Date(Date.now() - IDEMPOTENCY_WINDOW_MS)
+    const findOptions = options?.session ? { session: options.session } : {}
+    const existing = await this.findOne(
+      { idempotencyKey, createdAt: { $gte: cutoff } },
+      null,
+      findOptions,
+    )
+    if (existing) return existing
+  }
+
+  try {
+    return await this.create(docs, options)
+  } catch (err) {
+    if (err.code === 11000 && err.keyPattern?.idempotencyKey) {
+      const findOptions = options?.session ? { session: options.session } : {}
+      return await this.findOne(
+        { idempotencyKey: doc.idempotencyKey },
+        null,
+        findOptions,
+      )
+    }
+    throw err
+  }
+}
 
 export default mongoose.model('Payment', paymentSchema)

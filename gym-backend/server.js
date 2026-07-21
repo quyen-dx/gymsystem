@@ -18,6 +18,7 @@ import { runRefundReminderJob } from './src/jobs/refundReminderJob.js'
 import { runActivateRenewalCyclesJob } from './src/jobs/activateRenewalCyclesJob.js'
 import { runNotificationCleanupJob } from './src/jobs/notificationCleanupJob.js'
 import { runMembershipExpiryRemindersJob } from './src/jobs/membershipExpiryRemindersJob.js'
+import { runPaymentTimeoutJob } from './src/jobs/paymentTimeoutJob.js'
 
 cron.schedule('0 1 * * *', () => {
   logger.info('Running refundReminderJob')
@@ -46,6 +47,13 @@ cron.schedule('0 7 * * *', () => {
   )
 })
 logger.info('membershipExpiryRemindersJob scheduled daily at 14:00 VN time (07:00 UTC)')
+
+cron.schedule('*/5 * * * *', () => {
+  runPaymentTimeoutJob().catch((err) =>
+    logger.error('paymentTimeoutJob failed', { error: err.message }),
+  )
+})
+logger.info('paymentTimeoutJob scheduled every 5 minutes (BR-PAY-004)')
 
 let server = null
 

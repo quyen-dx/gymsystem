@@ -428,7 +428,7 @@ export const createOfflinePlanPayment = async (req, res) => {
 
     const transferContent = buildTransferContent(member, plan)
     const status = paymentMethod === 'BANK_TRANSFER' ? 'PENDING' : 'PAID'
-    const payment = await Payment.create({
+    const payment = await Payment.createWithIdempotency({
       userId: member._id,
       planId: plan._id,
       amount: Number(plan.price || 0),
@@ -1064,7 +1064,7 @@ export const createMemberAndRegister = async (req, res) => {
       activatedAt: new Date(),
     })
 
-    const payment = await Payment.create({
+    const payment = await Payment.createWithIdempotency({
       userId: user._id,
       planId: plan._id,
       membershipId: membership._id,
@@ -1257,7 +1257,7 @@ export const offlineRegisterMembership = async (req, res) => {
       activatedAt: new Date(),
     })
 
-    const payment = await Payment.create({
+    const payment = await Payment.createWithIdempotency({
       userId: member._id,
       planId: plan._id,
       membershipId: membership._id,

@@ -106,7 +106,7 @@ export const cancelPendingMembership = async (req, res, next) => {
           idempotencyKey: `cancel_pending_refund_${cycle._id}`,
         }], { session })
 
-        await Payment.create([{
+        await Payment.createWithIdempotency([{
           userId: memberId,
           membershipId: membership?._id,
           planId: plan?._id,
@@ -741,7 +741,7 @@ export const approveCancellationRequest = async (req, res, next) => {
           { session },
         );
 
-        await Payment.create(
+        await Payment.createWithIdempotency(
           [{
             userId: cancellationRequest.memberId,
             membershipId: cancellationRequest.membershipId,

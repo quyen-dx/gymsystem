@@ -120,7 +120,7 @@ export const upgradePlan = async (req, res) => {
     wallet.balance -= amountToPay
     await wallet.save({ session })
 
-    const [payment] = await Payment.create([{
+    const [payment] = await Payment.createWithIdempotency([{
       userId: memberId,
       planId: newPlan._id,
       membershipId,
@@ -415,7 +415,7 @@ export const changePlan = async (req, res) => {
       wallet.balance -= amountToPay
       await wallet.save({ session })
 
-      const [p] = await Payment.create([{
+      const [p] = await Payment.createWithIdempotency([{
         userId: memberId, planId: newPlan._id, membershipId,
         amount: amountToPay, currency: 'vnd', status: 'PAID', paymentMethod: 'WALLET', source: 'ONLINE', paidAt: new Date(),
         metadata: { changeType, fromPlanId: oldPlan._id, walletBalanceBefore: balanceBefore, walletBalanceAfter: wallet.balance },
