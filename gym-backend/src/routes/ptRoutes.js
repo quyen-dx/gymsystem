@@ -12,7 +12,7 @@ import {
   updatePTSchedule,
   getPTAvailability,
 } from '../controllers/ptController.js'
-import { adminOrStaff, protect } from '../middlewares/authMiddleware.js'
+import { adminOrStaff, protect, authorize } from '../middlewares/authMiddleware.js'
 
 const router = express.Router()
 
@@ -26,7 +26,7 @@ router.get('/my-week-attendees', getPTMyWeekAttendees)
 router.get('/:id/availability', getPTAvailability)
 
 // Admin / Staff routes
-router.get('/', adminOrStaff, getPTs)
+router.get('/', authorize('super_admin', 'admin', 'staff', 'member'), getPTs)
 router.get('/schedule/:id', adminOrStaff, getPTSchedule)
 router.get('/:id', adminOrStaff, getPTById)
 router.post('/', adminOrStaff, upload.fields([{ name: 'avatar', maxCount: 1 }]), createPT)

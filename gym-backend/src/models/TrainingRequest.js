@@ -2,6 +2,12 @@ import mongoose from 'mongoose'
 
 const trainingRequestSchema = new mongoose.Schema({
   memberId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  type: {
+    type: String,
+    enum: ['group', 'pt1on1'],
+    default: 'group',
+    index: true,
+  },
   specialization: { type: String, trim: true, default: 'GYM' },
   goals: [{ type: String, trim: true }],
   desiredSessions: { type: Number, min: 3, max: 5, default: 3 },
@@ -10,6 +16,9 @@ const trainingRequestSchema = new mongoose.Schema({
   healthNotes: { type: String, default: '', trim: true },
   isNewToGym: { type: Boolean, default: false },
   note: { type: String, default: '', trim: true },
+  contactPhone: { type: String, default: '', trim: true },
+  contactEmail: { type: String, default: '', trim: true },
+  preferredTrainerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   status: {
     type: String,
     enum: ['pending', 'assigned', 'cancelled'],

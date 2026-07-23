@@ -11,6 +11,8 @@ router.get('/my', ctrl.getMyRequests)
 router.patch('/my/:id/cancel', authorize('member'), ctrl.cancelMyRequest)
 router.get('/:id', ctrl.getRequestById)
 router.patch('/:id/assign', authorize('admin', 'super_admin', 'staff'), ctrl.assignToClass)
+router.patch('/:id/assign-trainer', authorize('admin', 'super_admin', 'staff'), ctrl.assignTrainer)
+router.patch('/:id/cancel', authorize('admin', 'super_admin', 'staff'), ctrl.cancelByAdmin)
 router.get('/', authorize('admin', 'super_admin', 'staff'), ctrl.getAllRequests)
 
 export default router

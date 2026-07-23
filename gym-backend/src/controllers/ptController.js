@@ -21,12 +21,13 @@ export const getPTs = async (req, res) => {
     const userFilter = { role: 'pt' }
 
     if (search) {
-      const phone = search.replace(/\s/g, '')
-      const isPhoneSearch = /^(0|\+84)\d{8,9}$/.test(phone)
-      if (isPhoneSearch) {
-        userFilter.phone = { $regex: phone.replace(/^0/, '(+84|0)'), $options: 'i' }
+      const normalized = search.trim().replace(/\s+/g, '')
+      const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const isEmailSearch = /^.+@.+\..+$/.test(normalized)
+      if (isEmailSearch) {
+        userFilter.email = { $regex: escaped, $options: 'i' }
       } else {
-        userFilter.name = { $regex: search, $options: 'i' }
+        userFilter.phone = { $regex: escaped, $options: 'i' }
       }
     }
 

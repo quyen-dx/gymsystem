@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Tag, Radio, message, Input, Spin, Tooltip } from 'antd'
-import { CheckCircleFilled, FireOutlined, AimOutlined, ThunderboltOutlined, HeartOutlined, RiseOutlined, MedicineBoxOutlined, SafetyOutlined, QuestionCircleOutlined, EnvironmentOutlined, TeamOutlined, UserOutlined, ArrowLeftOutlined, CalendarOutlined, LockOutlined } from '@ant-design/icons'
+import { Button, Tag, Radio, message, Input, Spin, Tooltip, Avatar } from 'antd'
+import { CheckCircleFilled, FireOutlined, AimOutlined, ThunderboltOutlined, HeartOutlined, RiseOutlined, MedicineBoxOutlined, SafetyOutlined, QuestionCircleOutlined, EnvironmentOutlined, TeamOutlined, UserOutlined, ArrowLeftOutlined, CalendarOutlined, LockOutlined, PhoneOutlined, MailOutlined, SearchOutlined, CloseCircleFilled } from '@ant-design/icons'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import MembershipRequired from '../../../components/membership/MembershipRequired'
 import { membershipService } from '../../../services/membershipService'
@@ -9,6 +9,9 @@ import { trainingRequestService, type TrainingRequest } from '../../../services/
 import { memberService, type EnrollmentStatus } from '../../../services/memberService'
 import { socketService } from '../../../services/socketService'
 import { planFeatureService, type PlanFeature } from '../../../services/planFeatureService'
+import { trainerService } from '../../../services/trainerService'
+import { authService } from '../../../services/authService'
+import type { PT } from '../../../types/admin/trainer'
 
 const SPECIALIZATIONS = [
   { value: 'GYM', label: 'GYM', color: '#6366f1', icon: <ThunderboltOutlined /> },
@@ -24,7 +27,6 @@ const GOALS = [
   { value: 'Giảm mỡ', icon: <FireOutlined />, color: '#f97316' },
   { value: 'Tăng cân', icon: <RiseOutlined />, color: '#10b981' },
   { value: 'Tăng cơ', icon: <ThunderboltOutlined />, color: '#6366f1' },
-
   { value: 'Tăng sức bền', icon: <HeartOutlined />, color: '#ef4444' },
   { value: 'Nâng cao thể lực', icon: <RiseOutlined />, color: '#06b6d4' },
   { value: 'Phục hồi sau chấn thương', icon: <MedicineBoxOutlined />, color: '#84cc16' },
@@ -90,6 +92,8 @@ export default function BookingPage() {
   const [planName, setPlanName] = useState<string | null>(null)
 
   const [requests, setRequests] = useState<TrainingRequest[]>([])
+
+  // Group training form
   const [specialization, setSpecialization] = useState<string>('GYM')
   const [goals, setGoals] = useState<string[]>([])
   const [desiredSessions, setDesiredSessions] = useState<number>(3)
@@ -100,6 +104,27 @@ export default function BookingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [bookingType, setBookingType] = useState<string | null>(null)
+
+  // PT 1-1 form
+  const [ptSpecialization, setPtSpecialization] = useState<string>('GYM')
+  const [ptGoals, setPtGoals] = useState<string[]>([])
+  const [ptPhone, setPtPhone] = useState('')
+  const [ptEmail, setPtEmail] = useState('')
+  const [ptPreferredTrainer, setPtPreferredTrainer] = useState<'none' | 'specific'>('none')
+  const [ptPreferredTrainerId, setPtPreferredTrainerId] = useState<string | null>(null)
+  const [ptNote, setPtNote] = useState('')
+  const [ptSubmitting, setPtSubmitting] = useState(false)
+  const [ptSubmitted, setPtSubmitted] = useState(false)
+  const [pt1on1Requests, setPt1on1Requests] = useState<TrainingRequest[]>([])
+
+  // Realtime PT search
+  const [ptSearchQuery, setPtSearchQuery] = useState('')
+  const [ptSearchResults, setPtSearchResults] = useState<PT[]>([])
+  const [ptSearchLoading, setPtSearchLoading] = useState(false)
+  const [ptSearchOpen, setPtSearchOpen] = useState(false)
+  const ptSearchRef = useRef<HTMLDivElement>(null)
+  const ptSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   const [enrollmentLoading, setEnrollmentLoading] = useState(true)
   const [enrollment, setEnrollment] = useState<EnrollmentStatus | null>(null)
@@ -129,6 +154,12 @@ export default function BookingPage() {
     }).catch(() => setCanRequest(false))
       .finally(() => setMembershipLoading(false))
 
+    authService.getProfile().then((res) => {
+      const u = res.data?.user
+      if (u?.phone) setPtPhone(u.phone)
+      if (u?.email) setPtEmail(u.email)
+    }).catch(() => {})
+
     fetchEnrollment().finally(() => setEnrollmentLoading(false))
   }, [])
 
@@ -143,13 +174,20 @@ export default function BookingPage() {
     return () => { socketService.off('pt_end_request:status_changed', handler) }
   }, [])
 
-  const loadData = async () => {
+  const loadGroupRequests = async () => {
     if (!canRequest) return
-    const reqRes = await trainingRequestService.getMyRequests()
+    const reqRes = await trainingRequestService.getMyRequests({ type: 'group' })
     setRequests(reqRes.data.requests || [])
   }
 
-  useEffect(() => { if (canRequest) loadData() }, [canRequest])
+  const loadPt1on1Requests = async () => {
+    if (!canRequest) return
+    const reqRes = await trainingRequestService.getMyRequests({ type: 'pt1on1' })
+    setPt1on1Requests(reqRes.data.requests || [])
+  }
+
+  useEffect(() => { if (canRequest) loadGroupRequests() }, [canRequest])
+  useEffect(() => { if (canRequest) loadPt1on1Requests() }, [canRequest])
 
   const toggleTimeSlot = (s: string) => {
     setTimeSlots((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s])
@@ -164,10 +202,10 @@ export default function BookingPage() {
     if (!desiredSessions) { message.warning('Chọn số buổi mong muốn'); return }
     if (timeSlots.length === 0) { message.warning('Chọn ít nhất 1 khung giờ'); return }
 
-
     setSubmitting(true)
     try {
       await trainingRequestService.create({
+        type: 'group',
         specialization,
         goals,
         desiredSessions,
@@ -178,7 +216,7 @@ export default function BookingPage() {
       })
       setSubmitted(true)
       setSpecialization('GYM'); setGoals([]); setDesiredSessions(3); setTimeSlots([]); setDaysOfWeek([]); setIsNewToGym(false); setHealthNotes('')
-      loadData()
+      loadGroupRequests()
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Gửi yêu cầu thất bại')
     } finally {
@@ -186,18 +224,113 @@ export default function BookingPage() {
     }
   }
 
+  const handlePt1on1Submit = async () => {
+    if (!ptSpecialization) { message.warning('Chọn chuyên môn muốn tập'); return }
+    if (!ptPhone.trim()) { message.warning('Vui lòng nhập số điện thoại'); return }
+    if (!ptEmail.trim()) { message.warning('Vui lòng nhập email'); return }
+
+    setPtSubmitting(true)
+    try {
+      await trainingRequestService.create({
+        type: 'pt1on1',
+        specialization: ptSpecialization,
+        goals: ptGoals,
+        contactPhone: ptPhone,
+        contactEmail: ptEmail,
+        preferredTrainerId: ptPreferredTrainer === 'specific' ? ptPreferredTrainerId : null,
+        note: ptNote,
+      })
+      setPtSubmitted(true)
+      setPtSpecialization('GYM'); setPtGoals([]); setPtNote(''); setPtPreferredTrainer('none'); setPtPreferredTrainerId(null)
+      loadPt1on1Requests()
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Gửi yêu cầu thất bại')
+    } finally {
+      setPtSubmitting(false)
+    }
+  }
+
+  const doPtSearch = async (query: string) => {
+    if (abortRef.current) abortRef.current.abort()
+    if (!query.trim()) {
+      setPtSearchResults([])
+      setPtSearchOpen(false)
+      return
+    }
+    setPtSearchLoading(true)
+    setPtSearchOpen(true)
+    const controller = new AbortController()
+    abortRef.current = controller
+    try {
+      const res = await trainerService.getPTs({ search: query, isActive: true, limit: 10 })
+      if (!controller.signal.aborted) {
+        setPtSearchResults(res.data.pts || [])
+        setPtSearchOpen(true)
+      }
+    } catch {
+      if (!controller.signal.aborted) setPtSearchResults([])
+    } finally {
+      if (!controller.signal.aborted) setPtSearchLoading(false)
+    }
+  }
+
+  const handlePtSearchChange = (value: string) => {
+    setPtSearchQuery(value)
+    if (ptSearchTimerRef.current) clearTimeout(ptSearchTimerRef.current)
+    if (!value.trim()) {
+      setPtSearchResults([])
+      setPtSearchOpen(false)
+      return
+    }
+    ptSearchTimerRef.current = setTimeout(() => doPtSearch(value), 300)
+  }
+
+  const selectTrainer = (trainer: PT) => {
+    setPtPreferredTrainerId(trainer._id)
+    const name = trainer.fullName || trainer.name || ''
+    const contact = trainer.phone || (trainer.email && trainer.email !== 'undefined' ? trainer.email : '')
+    setPtSearchQuery(name + (contact ? ' • ' + contact : ''))
+    setPtSearchOpen(false)
+  }
+
+  const clearSelectedTrainer = () => {
+    setPtPreferredTrainerId(null)
+    setPtSearchQuery('')
+    setPtSearchResults([])
+    setPtSearchOpen(false)
+  }
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ptSearchRef.current && !ptSearchRef.current.contains(e.target as Node)) {
+        setPtSearchOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (ptSearchTimerRef.current) clearTimeout(ptSearchTimerRef.current)
+      if (abortRef.current) abortRef.current.abort()
+    }
+  }, [])
+
   const statusTag = (s: string) => {
-    const map: Record<string, [string, string]> = { pending: ['orange', 'Chờ xử lý'], assigned: ['green', 'Đã xếp lớp'], cancelled: ['red', 'Đã hủy'] }
+    const map: Record<string, [string, string]> = { pending: ['orange', 'Chờ xử lý'], assigned: ['green', 'Đã phân công'], cancelled: ['red', 'Đã hủy'] }
     const [color, label] = map[s] || ['default', s]
     return <Tag color={color}>{label}</Tag>
   }
 
-  const pendingRequests = requests.filter((r) => r.status === 'pending')
-  const hasPending = pendingRequests.length > 0
+  const pendingGroupRequests = requests.filter((r) => r.status === 'pending')
+  const hasPendingGroup = pendingGroupRequests.length > 0
+
+  const pendingPt1on1Requests = pt1on1Requests.filter((r) => r.status === 'pending')
+  const hasPendingPt1on1 = pendingPt1on1Requests.length > 0
 
   const canBookGroup = featuresLoading ? true : hasFeature('BOOK_PT_GROUP')
   const canBookPTPrivate = featuresLoading ? true : hasFeature('BOOK_PT_PRIVATE')
-  const canBookPTGroup = featuresLoading ? true : hasFeature('BOOK_PT_GROUP')
 
   return (
     <MemberLayout>
@@ -301,9 +434,14 @@ export default function BookingPage() {
                 </button>
               </Tooltip>
               <Tooltip title={canBookPTPrivate ? undefined : 'Gói tập của bạn không hỗ trợ PT riêng 1-1'}>
-                <div className={`relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left transition-all duration-200 ${
-                  canBookPTPrivate ? 'hover:scale-[1.03] hover:border-[var(--theme-accent)] hover:shadow-lg cursor-pointer' : 'opacity-60'
-                }`}>
+                <button type="button"
+                  onClick={() => canBookPTPrivate && setBookingType('pt1on1')}
+                  disabled={!canBookPTPrivate}
+                  className={`group relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left transition-all duration-200 ${
+                    canBookPTPrivate
+                      ? 'hover:scale-[1.03] hover:border-[var(--theme-accent)] hover:shadow-lg cursor-pointer'
+                      : 'opacity-60 cursor-not-allowed'
+                  }`}>
                   {!canBookPTPrivate && (
                     <div className="absolute -top-2.5 right-4 z-10">
                       <span className="inline-block rounded-full bg-gradient-to-r from-orange-400 to-pink-500 px-3 py-1 text-[11px] font-bold text-white uppercase tracking-wide shadow-md">
@@ -316,16 +454,16 @@ export default function BookingPage() {
                       <LockOutlined className="text-2xl text-[var(--gs-text-muted)]" />
                     </div>
                   )}
-                  <div className="text-5xl mb-4 text-[var(--gs-text-muted)]"><UserOutlined /></div>
+                  <div className="text-5xl mb-4 text-[var(--gs-text)]"><UserOutlined /></div>
                   <h3 className="text-xl font-bold text-[var(--gs-text)] mb-2">Đăng ký PT riêng 1-1</h3>
                   <p className="text-sm text-[var(--gs-text-muted)] leading-relaxed">
                     1 kèm 1 với huấn luyện viên cá nhân, cam kết đầu ra, thiết lập giáo án chuẩn xác 100% cho riêng bạn.
                   </p>
-                </div>
+                </button>
               </Tooltip>
             </div>
           </div>
-        ) : (
+        ) : bookingType === 'group' ? (
           <>
             <div className="flex items-center gap-3">
               <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setBookingType(null)}
@@ -335,18 +473,18 @@ export default function BookingPage() {
                 <p className="text-sm text-[var(--gs-text-muted)]">Chia sẻ nhu cầu của bạn, admin sẽ xếp bạn vào lớp phù hợp</p>
               </div>
             </div>
-            {pendingRequests.length > 0 && (
+            {pendingGroupRequests.length > 0 && (
               <div className="space-y-3">
                 <h2 className="text-lg font-semibold text-[var(--gs-text)]">Yêu cầu đã gửi</h2>
                 <div className="flex flex-wrap gap-3">
-                  {pendingRequests.map((r) => {
+                  {pendingGroupRequests.map((r) => {
                     const specLabel = SPECIALIZATIONS.find(s => s.value === r.specialization)?.label || r.specialization || 'GYM'
                     const displayText = r.goals?.[0] ? `${specLabel} - ${r.goals[0]}` : specLabel
                     return (
                       <div key={r._id} className="rounded-xl border border-[var(--theme-border)] bg-[var(--gs-card)] p-3 flex items-center gap-3">
                         <span className="text-sm text-[var(--gs-text)] uppercase">{displayText}</span>
                         {statusTag(r.status)}
-                        <Button size="small" danger onClick={() => trainingRequestService.cancelMyRequest(r._id).then(loadData)}>
+                        <Button size="small" danger onClick={() => trainingRequestService.cancelMyRequest(r._id).then(loadGroupRequests)}>
                           Hủy
                         </Button>
                       </div>
@@ -356,7 +494,7 @@ export default function BookingPage() {
               </div>
             )}
 
-            {submitted && !hasPending ? (
+            {submitted && !hasPendingGroup ? (
               <div className="rounded-2xl border border-green-200 bg-green-50 p-8 text-center dark:border-green-800 dark:bg-green-900/20">
                 <CheckCircleFilled className="text-4xl text-green-500 mb-3" />
                 <h2 className="text-xl font-semibold text-green-700 dark:text-green-400">Đã gửi yêu cầu thành công!</h2>
@@ -365,15 +503,14 @@ export default function BookingPage() {
               </div>
             ) : (
               <>
-                {hasPending && (
+                {hasPendingGroup && (
                   <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
                     <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
                       Bạn hiện đang có một yêu cầu tập luyện đang chờ xử lý. Vui lòng đợi Admin duyệt hoặc hủy yêu cầu hiện tại để gửi yêu cầu mới.
                     </p>
                   </div>
                 )}
-                <div className={`rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-card)] p-6 space-y-6 ${hasPending ? 'pointer-events-none opacity-60' : ''}`}>
-                {/* Specialization */}
+                <div className={`rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-card)] p-6 space-y-6 ${hasPendingGroup ? 'pointer-events-none opacity-60' : ''}`}>
                 <div>
                   <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Chuyên môn muốn tập *</label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -399,7 +536,6 @@ export default function BookingPage() {
                   </div>
                 </div>
 
-                {/* Goal — only show when Gym is selected */}
                 {specialization === 'GYM' && (
                 <div>
                   <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Mục tiêu tập luyện <span className="text-[var(--gs-text-muted)] font-normal">(không bắt buộc — gợi ý cho PT thiết kế giáo án)</span></label>
@@ -423,7 +559,6 @@ export default function BookingPage() {
                 </div>
                 )}
 
-                {/* Sessions per week */}
                 <div>
                   <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Số buổi mong muốn mỗi tuần *</label>
                   <Radio.Group onChange={(e) => setDesiredSessions(e.target.value)} value={desiredSessions}>
@@ -442,7 +577,6 @@ export default function BookingPage() {
                   <p className="text-xs text-[var(--gs-text-muted)] mt-2">Khuyến nghị tập từ 3–5 buổi/tuần để đạt hiệu quả luyện tập tốt nhất.</p>
                 </div>
 
-                {/* Time slots */}
                 <div>
                   <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Khung giờ mong muốn *</label>
                   <div className="flex flex-wrap gap-2">
@@ -463,7 +597,6 @@ export default function BookingPage() {
                   </div>
                 </div>
 
-                {/* Days of week */}
                 <div>
                   <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Ngày có thể tập *</label>
                   <div className="flex flex-wrap gap-2">
@@ -487,7 +620,6 @@ export default function BookingPage() {
                   </p>
                 </div>
 
-                {/* New to gym */}
                 <div className="flex items-center gap-3">
                   <input
                     type="checkbox"
@@ -501,7 +633,6 @@ export default function BookingPage() {
                   </label>
                 </div>
 
-                {/* Health notes */}
                 <div>
                   <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Ghi chú sức khỏe</label>
                   <Input.TextArea rows={2} value={healthNotes} onChange={(e) => setHealthNotes(e.target.value)}
@@ -514,7 +645,250 @@ export default function BookingPage() {
               </div>
             </>
             )}
-          </> 
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-3">
+              <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setBookingType(null)}
+                className="text-[var(--gs-text-muted)] hover:text-[var(--gs-text)] !px-1" />
+              <div>
+                <h2 className="text-lg font-semibold text-[var(--gs-text)]">Đăng ký PT riêng 1-1</h2>
+                <p className="text-sm text-[var(--gs-text-muted)]">Gửi yêu cầu, Admin sẽ phân công PT phù hợp cho bạn</p>
+              </div>
+            </div>
+
+            {pendingPt1on1Requests.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="text-lg font-semibold text-[var(--gs-text)]">Yêu cầu đã gửi</h2>
+                <div className="flex flex-wrap gap-3">
+                  {pendingPt1on1Requests.map((r) => {
+                    const specLabel = SPECIALIZATIONS.find(s => s.value === r.specialization)?.label || r.specialization || 'GYM'
+                    const displayText = r.goals?.[0] ? `${specLabel} - ${r.goals[0]}` : specLabel
+                    return (
+                      <div key={r._id} className="rounded-xl border border-[var(--theme-border)] bg-[var(--gs-card)] p-3 flex items-center gap-3">
+                        <span className="text-sm text-[var(--gs-text)] uppercase">{displayText}</span>
+                        {statusTag(r.status)}
+                        {r.status === 'pending' && (
+                          <Button size="small" danger onClick={() => trainingRequestService.cancelMyRequest(r._id).then(loadPt1on1Requests)}>
+                            Hủy
+                          </Button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {ptSubmitted && !hasPendingPt1on1 ? (
+              <div className="rounded-2xl border border-green-200 bg-green-50 p-8 text-center dark:border-green-800 dark:bg-green-900/20">
+                <CheckCircleFilled className="text-4xl text-green-500 mb-3" />
+                <h2 className="text-xl font-semibold text-green-700 dark:text-green-400">Đã gửi yêu cầu thành công!</h2>
+                <p className="text-sm text-green-600 dark:text-green-500 mt-1">Admin sẽ phân công PT phù hợp cho bạn. PT sẽ chủ động liên hệ qua SĐT hoặc Email.</p>
+                <Button className="mt-4" onClick={() => setPtSubmitted(false)}>Gửi yêu cầu khác</Button>
+              </div>
+            ) : (
+              <>
+                {hasPendingPt1on1 && (
+                  <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                      Bạn hiện đang có yêu cầu PT 1-1 đang chờ xử lý.
+                    </p>
+                  </div>
+                )}
+                <div className={`rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-card)] p-6 space-y-6 ${hasPendingPt1on1 ? 'pointer-events-none opacity-60' : ''}`}>
+
+                  {/* Section 1: Thông tin tập luyện */}
+                  <div>
+                    <h3 className="text-base font-semibold text-[var(--gs-text)] mb-4">1. Thông tin tập luyện</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Chuyên môn *</label>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          {SPECIALIZATIONS.map((s) => (
+                            <button
+                              key={s.value}
+                              type="button"
+                              disabled={s.disabled}
+                              onClick={() => setPtSpecialization(s.value)}
+                              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-all ${
+                                s.disabled ? 'opacity-30 cursor-not-allowed' : ''
+                              } ${
+                                ptSpecialization === s.value
+                                  ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                                  : 'border-[var(--theme-border)] text-[var(--gs-text)] hover:border-[var(--theme-accent)]'
+                              }`}
+                            >
+                              <span style={{ color: s.disabled ? undefined : s.color }}>{s.icon}</span>
+                              <span>{s.label}</span>
+                              {s.disabled && <span className="text-[10px] text-[var(--gs-text-muted)] ml-auto">Sắp ra mắt</span>}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Mục tiêu tập luyện</label>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {GOALS.map((g) => (
+                            <button
+                              key={g.value}
+                              type="button"
+                              onClick={() => setPtGoals((prev) => prev.includes(g.value) ? prev.filter((x) => x !== g.value) : [...prev, g.value])}
+                              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-all ${
+                                ptGoals.includes(g.value)
+                                  ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                                  : 'border-[var(--theme-border)] text-[var(--gs-text)] hover:border-[var(--theme-accent)]'
+                              }`}
+                            >
+                              <span style={{ color: g.color }}>{g.icon}</span>
+                              <span>{g.value}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 2: Thông tin liên hệ */}
+                  <div>
+                    <h3 className="text-base font-semibold text-[var(--gs-text)] mb-4">2. Thông tin liên hệ</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--gs-text)] mb-1">
+                          <PhoneOutlined className="mr-1" /> Số điện thoại *
+                        </label>
+                        <Input
+                          value={ptPhone}
+                          onChange={(e) => setPtPhone(e.target.value)}
+                          placeholder="Nhập số điện thoại"
+                          prefix={<PhoneOutlined />}
+                          className="!rounded-xl"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--gs-text)] mb-1">
+                          <MailOutlined className="mr-1" /> Email *
+                        </label>
+                        <Input
+                          value={ptEmail}
+                          onChange={(e) => setPtEmail(e.target.value)}
+                          placeholder="Nhập email"
+                          prefix={<MailOutlined />}
+                          className="!rounded-xl"
+                        />
+                      </div>
+                      <p className="text-xs text-[var(--gs-text-muted)] italic">
+                        PT sẽ sử dụng các thông tin này để liên hệ và trao đổi lịch tập.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Section 3: PT mong muốn */}
+                  <div>
+                    <h3 className="text-base font-semibold text-[var(--gs-text)] mb-4">3. PT mong muốn</h3>
+                    <div className="space-y-3">
+                      <Radio.Group value={ptPreferredTrainer} onChange={(e) => setPtPreferredTrainer(e.target.value)}>
+                        <div className="flex flex-col gap-2">
+                          <Radio value="none">
+                            <span className="text-sm">Không yêu cầu</span>
+                          </Radio>
+                          <Radio value="specific">
+                            <span className="text-sm">Có PT mong muốn</span>
+                          </Radio>
+                        </div>
+                      </Radio.Group>
+
+                      {ptPreferredTrainer === 'specific' && (
+                        <div ref={ptSearchRef} className="relative">
+                          <div className="relative">
+                            <Input
+                              value={ptSearchQuery}
+                              onChange={(e) => handlePtSearchChange(e.target.value)}
+                              onFocus={() => ptSearchQuery.trim() && setPtSearchOpen(true)}
+                              placeholder="Nhập tên PT..."
+                              prefix={<SearchOutlined style={{ color: 'var(--gs-text-muted)' }} />}
+                              suffix={
+                                ptPreferredTrainerId && ptSearchQuery ? (
+                                  <CloseCircleFilled
+                                    style={{ color: 'var(--gs-text-muted)', cursor: 'pointer' }}
+                                    onClick={clearSelectedTrainer}
+                                  />
+                                ) : ptSearchLoading ? (
+                                  <Spin size="small" />
+                                ) : null
+                              }
+                              className="!rounded-xl"
+                            />
+                          </div>
+
+                          {ptSearchOpen && (
+                            <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] shadow-lg max-h-[280px] overflow-y-auto">
+                              {ptSearchLoading && ptSearchResults.length === 0 ? (
+                                <div className="flex items-center justify-center py-6">
+                                  <Spin size="small" />
+                                </div>
+                              ) : ptSearchResults.length === 0 ? (
+                                <div className="py-6 text-center text-sm text-[var(--gs-text-muted)]">
+                                  Không tìm thấy PT có số điện thoại hoặc email này.
+                                </div>
+                              ) : (
+                                ptSearchResults.map((t) => (
+                                  <div
+                                    key={t._id}
+                                    onClick={() => selectTrainer(t)}
+                                    className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors hover:bg-[var(--gs-active-bg)] ${
+                                      ptPreferredTrainerId === t._id ? 'bg-[var(--theme-accent-muted)]' : ''
+                                    }`}
+                                  >
+                                    <Avatar src={t.avatar} size={36} className="shrink-0">
+                                      {(t.fullName || t.name || 'PT').charAt(0)}
+                                    </Avatar>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-sm font-medium text-[var(--gs-text)] truncate">
+                                        {t.fullName || t.name}
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-x-2 text-xs text-[var(--gs-text-muted)]">
+                                        {t.specialties?.length > 0 && (
+                                          <span>{t.specialties.join(' • ')}</span>
+                                        )}
+                                        {t.phone && <span>{t.phone}</span>}
+                                        {t.email && t.email !== 'undefined' && <span className="truncate max-w-[160px]">{t.email}</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Section 4: Ghi chú */}
+                  <div>
+                    <h3 className="text-base font-semibold text-[var(--gs-text)] mb-4">4. Ghi chú</h3>
+                    <Input.TextArea
+                      rows={3}
+                      value={ptNote}
+                      onChange={(e) => setPtNote(e.target.value)}
+                      placeholder="Ví dụ:
+- Tôi muốn tập tăng cơ.
+- Đã từng chấn thương vai.
+- Muốn PT có kinh nghiệm.
+- Tôi sẽ trao đổi lịch trực tiếp với PT."
+                      className="!rounded-xl"
+                    />
+                  </div>
+
+                  <Button type="primary" size="large" block loading={ptSubmitting} onClick={handlePt1on1Submit}>
+                    Gửi yêu cầu
+                  </Button>
+                </div>
+              </>
+            )}
+          </>
         )}
       </div>
     </MemberLayout>

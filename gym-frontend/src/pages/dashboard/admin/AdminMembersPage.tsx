@@ -5,6 +5,8 @@ import {
   MailOutlined,
   PlusOutlined,
   UnlockOutlined,
+  UserOutlined,
+  PhoneOutlined,
 } from '@ant-design/icons'
 import {
   Badge,
@@ -18,16 +20,20 @@ import {
   Tag,
   Tooltip,
   message,
+  Avatar,
+  Empty,
 } from 'antd'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import api from '../../../services/api'
 import { trainingRequestService, type TrainingRequest } from '../../../services/trainingRequestService'
 import { trainerService } from '../../../services/trainerService'
+import { socketService } from '../../../services/socketService'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { memberService } from '../../../services/memberService'
 import type { MemberListItem } from '../../../types/admin/member'
+import type { PT } from '../../../types/admin/trainer'
 import { getUserDisplayName } from '../../../utils/userDisplay'
 import MemberFormModal from './MemberFormModal'
 import MemberRegisterPlanModal from './MemberRegisterPlanModal'
@@ -52,6 +58,25 @@ const SPEC_LABELS: Record<string, string> = {
   MUAYTHAI: 'Muay Thái',
   FUNCTIONAL: 'Functional Training',
   OTHER: 'Khác',
+}
+
+const PT_1ON1_TABS = [
+  { key: 'pending', label: 'Chờ xử lý' },
+  { key: 'assigned', label: 'Đã phân công' },
+  { key: 'cancelled', label: 'Đã hủy' },
+  { key: '', label: 'Tất cả' },
+]
+
+const STATUS_COLORS: Record<string, string> = {
+  pending: 'orange',
+  assigned: 'green',
+  cancelled: 'red',
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Chờ xử lý',
+  assigned: 'Đã phân công',
+  cancelled: 'Đã hủy',
 }
 
 export default function AdminMembersPage() {
@@ -79,40 +104,106 @@ export default function AdminMembersPage() {
   const [renewPlanName, setRenewPlanName] = useState('')
   const [renewCurrentPlanId, setRenewCurrentPlanId] = useState('')
   const [pendingTrainingCount, setPendingTrainingCount] = useState(0)
+  const [pendingPt1on1Count, setPendingPt1on1Count] = useState(0)
 
+  // Group training request modal
   const [modalOpen, setModalOpen] = useState(false)
   const [reqFilter, setReqFilter] = useState<string>('pending')
   const [reqLoading, setReqLoading] = useState(false)
   const [requests, setRequests] = useState<TrainingRequest[]>([])
   const [msgModal, setMsgModal] = useState<{ open: boolean; request: TrainingRequest | null; text: string; sending: boolean }>({ open: false, request: null, text: '', sending: false })
 
-  const loadRequests = async () => {
+  // PT 1-1 request modal
+  const [pt1on1ModalOpen, setPt1on1ModalOpen] = useState(false)
+  const [pt1on1Tab, setPt1on1Tab] = useState('pending')
+  const [pt1on1Loading, setPt1on1Loading] = useState(false)
+  const [pt1on1Requests, setPt1on1Requests] = useState<TrainingRequest[]>([])
+
+  // Assign PT modal
+  const [assignModalOpen, setAssignModalOpen] = useState(false)
+  const [assignRequest, setAssignRequest] = useState<TrainingRequest | null>(null)
+  const [assignSearch, setAssignSearch] = useState('')
+  const [assignTrainers, setAssignTrainers] = useState<PT[]>([])
+  const [assignLoading, setAssignLoading] = useState(false)
+  const [selectedTrainerId, setSelectedTrainerId] = useState<string | null>(null)
+  const [assignSubmitting, setAssignSubmitting] = useState(false)
+
+  // Pending badge polling for group
+  const loadPendingGroupCount = useCallback(async () => {
+    try {
+      const res = await trainingRequestService.getAllRequests({ type: 'group', status: 'pending', page: 1, limit: 1 })
+      setPendingTrainingCount(res.data.pagination?.total || 0)
+    } catch {}
+  }, [])
+
+  // Pending badge polling for PT 1-1
+  const loadPendingPt1on1Count = useCallback(async () => {
+    try {
+      const res = await trainingRequestService.getAllRequests({ type: 'pt1on1', status: 'pending', page: 1, limit: 1 })
+      setPendingPt1on1Count(res.data.pagination?.total || 0)
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    loadPendingGroupCount()
+    loadPendingPt1on1Count()
+    const interval = setInterval(() => {
+      loadPendingGroupCount()
+      loadPendingPt1on1Count()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [loadPendingGroupCount, loadPendingPt1on1Count])
+
+  const pt1on1ModalRef = useRef(pt1on1ModalOpen)
+  pt1on1ModalRef.current = pt1on1ModalOpen
+
+  useEffect(() => {
+    socketService.connect()
+    const handler = (data?: { request?: TrainingRequest }) => {
+      loadPendingPt1on1Count()
+      if (pt1on1ModalRef.current && data?.request) {
+        setPt1on1Requests((prev) => {
+          const exists = prev.some((r) => r._id === data.request._id)
+          if (exists) return prev.map((r) => r._id === data.request._id ? { ...r, ...data.request } : r)
+          return [data.request, ...prev]
+        })
+      }
+    }
+    socketService.on('pt1on1:new_request', handler)
+    socketService.on('pt1on1:status_changed', handler)
+    return () => {
+      socketService.off('pt1on1:new_request', handler)
+      socketService.off('pt1on1:status_changed', handler)
+    }
+  }, [loadPendingPt1on1Count])
+
+  const loadGroupRequests = async () => {
     setReqLoading(true)
     try {
-      const reqRes = await trainingRequestService.getAllRequests({ status: reqFilter })
+      const reqRes = await trainingRequestService.getAllRequests({ type: 'group', status: reqFilter })
       setRequests(reqRes.data.requests || [])
     } finally {
       setReqLoading(false)
     }
   }
 
-  useEffect(() => { if (modalOpen) loadRequests() }, [modalOpen, reqFilter])
+  const loadPt1on1Requests = async () => {
+    setPt1on1Loading(true)
+    try {
+      const reqRes = await trainingRequestService.getAllRequests({ type: 'pt1on1', status: pt1on1Tab || undefined })
+      setPt1on1Requests(reqRes.data.requests || [])
+    } finally {
+      setPt1on1Loading(false)
+    }
+  }
+
+  useEffect(() => { if (modalOpen) loadGroupRequests() }, [modalOpen, reqFilter])
+  useEffect(() => { if (pt1on1ModalOpen) loadPt1on1Requests() }, [pt1on1ModalOpen, pt1on1Tab])
+
   useEffect(() => {
     api.get<{ plans: PlanOption[] }>('/plans', { params: { limit: 100 } }).then(({ data }) => {
       setPlans(data.plans || [])
     }).catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await trainingRequestService.getAllRequests({ status: 'pending', page: 1, limit: 1 })
-        setPendingTrainingCount(res.data.pagination?.total || 0)
-      } catch {}
-    }
-    load()
-    const interval = setInterval(load, 30000)
-    return () => clearInterval(interval)
   }, [])
 
   const fetchMembers = useCallback(async (p = page, s = search, plan = planFilter, status = statusFilter, remaining = remainingFilter) => {
@@ -201,6 +292,54 @@ export default function AdminMembersPage() {
     setRenewPlanName(member.activeMembership?.planId?.nameVi || '')
     setRenewCurrentPlanId(member.activeMembership?.planId?._id || '')
     setRenewModalOpen(true)
+  }
+
+  const openAssignTrainer = (r: TrainingRequest) => {
+    setAssignRequest(r)
+    setAssignSearch('')
+    setSelectedTrainerId(null)
+    loadAssignTrainers()
+    setAssignModalOpen(true)
+  }
+
+  const loadAssignTrainers = async () => {
+    setAssignLoading(true)
+    try {
+      const res = await trainerService.getPTs({ isActive: true, limit: 100 })
+      setAssignTrainers(res.data.pts || [])
+    } catch {
+      message.error('Không thể tải danh sách PT')
+    } finally {
+      setAssignLoading(false)
+    }
+  }
+
+  const handleAssignTrainer = async () => {
+    if (!selectedTrainerId || !assignRequest) return
+    setAssignSubmitting(true)
+    try {
+      await trainingRequestService.assignTrainer(assignRequest._id, selectedTrainerId)
+      message.success('Đã phân công PT thành công')
+      setAssignModalOpen(false)
+      setAssignRequest(null)
+      loadPt1on1Requests()
+      loadPendingPt1on1Count()
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Phân công thất bại')
+    } finally {
+      setAssignSubmitting(false)
+    }
+  }
+
+  const handleCancelPt1on1 = async (r: TrainingRequest) => {
+    try {
+      await trainingRequestService.cancelByAdmin(r._id, 'Admin hủy yêu cầu')
+      message.success('Đã hủy yêu cầu')
+      loadPt1on1Requests()
+      loadPendingPt1on1Count()
+    } catch {
+      message.error('Hủy yêu cầu thất bại')
+    }
   }
 
   const columns = [
@@ -302,23 +441,159 @@ export default function AdminMembersPage() {
     },
   ]
 
+  const pt1on1Columns = [
+    {
+      title: 'Hội viên',
+      width: 250,
+      render: (_: any, r: TrainingRequest) => {
+        const m = typeof r.memberId === 'object' ? r.memberId : null
+        return (
+          <div className="flex items-center gap-2">
+            {m?.avatar ? (
+              <img src={m.avatar} className="h-9 w-9 rounded-full object-cover shrink-0" />
+            ) : (
+              <div className="h-9 w-9 rounded-full bg-[var(--gs-border)] flex items-center justify-center shrink-0">
+                <UserOutlined style={{ color: 'var(--gs-text-muted)', fontSize: 16 }} />
+              </div>
+            )}
+            <div>
+              <div className="font-medium text-[var(--gs-text)] text-sm leading-tight">{m ? getUserDisplayName(m) : '—'}</div>
+              <div className="text-[11px] text-[var(--gs-text-muted)]">
+                {m?.memberCode || ''}{m?.phone ? ` • ${m.phone}` : ''}
+              </div>
+            </div>
+          </div>
+        )
+      },
+    },
+    {
+      title: 'Chuyên môn & Mục tiêu',
+      width: 220,
+      render: (_: any, r: TrainingRequest) => (
+        <div>
+          <Tag color="blue" className="m-0 text-xs font-semibold">{SPEC_LABELS[r.specialization || 'GYM'] || r.specialization}</Tag>
+          {r.goals?.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {r.goals.map((g, i) => <Tag key={i} className="m-0 text-xs" color="purple">{g}</Tag>)}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      title: 'Liên hệ',
+      width: 200,
+      render: (_: any, r: TrainingRequest) => (
+        <div className="text-xs space-y-0.5">
+          <div className="flex items-center gap-1">
+            <PhoneOutlined style={{ fontSize: 11, color: 'var(--gs-text-muted)' }} />
+            <span>{r.contactPhone || '—'}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <MailOutlined style={{ fontSize: 11, color: 'var(--gs-text-muted)' }} />
+            <span className="truncate block max-w-[140px]">{r.contactEmail || '—'}</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'PT mong muốn',
+      width: 150,
+      render: (_: any, r: TrainingRequest) => {
+        if (r.preferredTrainerId) {
+          const name = typeof r.preferredTrainerId === 'object'
+            ? (r.preferredTrainerId.fullName || r.preferredTrainerId.name)
+            : null
+          return name ? <span className="text-sm">{name}</span> : <Tag className="m-0">Có yêu cầu</Tag>
+        }
+        return <span className="text-xs text-[var(--gs-text-muted)]">Không yêu cầu</span>
+      },
+    },
+    {
+      title: 'Ghi chú',
+      width: 160,
+      render: (_: any, r: TrainingRequest) => (
+        <div className="text-xs text-[var(--gs-text)] truncate max-w-[160px]" title={r.note}>
+          {r.note || <span className="text-[var(--gs-text-muted)]">—</span>}
+        </div>
+      ),
+    },
+    {
+      title: 'Ngày gửi',
+      width: 100,
+      render: (_: any, r: TrainingRequest) => {
+        const d = new Date(r.createdAt)
+        return <span className="text-xs text-[var(--gs-text-muted)]">{d.toLocaleDateString('vi-VN')}</span>
+      },
+    },
+    {
+      title: 'Trạng thái',
+      width: 110,
+      render: (_: any, r: TrainingRequest) => (
+        <Tag color={STATUS_COLORS[r.status]}>{STATUS_LABELS[r.status] || r.status}</Tag>
+      ),
+    },
+    {
+      title: 'Thao tác',
+      width: 220,
+      render: (_: any, r: TrainingRequest) => {
+        if (r.status !== 'pending') {
+          return <span className="text-xs text-[var(--gs-text-muted)]">Đã xử lý</span>
+        }
+        return (
+          <Space size={4}>
+            <Button type="primary" size="small" icon={<UserOutlined />}
+              onClick={() => openAssignTrainer(r)}>
+              Phân công PT
+            </Button>
+            <Button size="small" danger onClick={() => handleCancelPt1on1(r)}>
+              Hủy yêu cầu
+            </Button>
+          </Space>
+        )
+      },
+    },
+  ]
+
+  const filteredAssignTrainers = assignTrainers.filter((t) => {
+    if (!assignSearch) return true
+    const q = assignSearch.toLowerCase()
+    return (t.fullName || t.name || '').toLowerCase().includes(q)
+      || (t.email || '').toLowerCase().includes(q)
+      || (t.specialties || []).some((s) => s.toLowerCase().includes(q))
+  })
+
   return (
     <DashboardLayout>
       <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Quản lý</p>
         <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý thành viên</h1>
-        <button
-          type="button"
-          onClick={() => setModalOpen(true)}
-          className="mt-3 inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white"
-        >
-          <span>Yêu cầu tập luyện</span>
-          {pendingTrainingCount > 0 && (
-            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f5222d] px-1.5 text-xs font-bold text-white">
-              {pendingTrainingCount > 99 ? '99+' : pendingTrainingCount}
-            </span>
-          )}
-        </button>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white"
+          >
+            <span>Yêu cầu tập nhóm</span>
+            {pendingTrainingCount > 0 && (
+              <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f5222d] px-1.5 text-xs font-bold text-white">
+                {pendingTrainingCount > 99 ? '99+' : pendingTrainingCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setPt1on1ModalOpen(true); loadPt1on1Requests() }}
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white"
+          >
+            <span>Yêu cầu PT 1-1</span>
+            {pendingPt1on1Count > 0 && (
+              <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f5222d] px-1.5 text-xs font-bold text-white">
+                {pendingPt1on1Count > 99 ? '99+' : pendingPt1on1Count}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
@@ -411,6 +686,7 @@ export default function AdminMembersPage() {
         onSuccess={() => { setRenewModalOpen(false); fetchMembers() }}
       />
 
+      {/* Group Training Request Modal (unchanged) */}
       <Modal title="Yêu cầu tập luyện" open={modalOpen} onCancel={() => setModalOpen(false)}
         width={1100} centered footer={null} destroyOnClose
         styles={{ body: { paddingTop: 8, maxHeight: '75vh', overflowY: 'auto' } }}
@@ -645,6 +921,110 @@ export default function AdminMembersPage() {
             </div>
           )
         })()}
+      </Modal>
+
+      {/* PT 1-1 Request Modal */}
+      <Modal title="Yêu cầu PT 1-1" open={pt1on1ModalOpen} onCancel={() => setPt1on1ModalOpen(false)}
+        width={1300} centered footer={null} destroyOnClose
+        styles={{ body: { paddingTop: 8, maxHeight: '75vh', overflowY: 'auto' } }}
+        className="!w-[min(95vw,1500px)] max-sm:!w-[98vw]">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex gap-2">
+            {PT_1ON1_TABS.map((t) => (
+              <Button key={t.key} type={pt1on1Tab === t.key ? 'primary' : 'default'} size="small" onClick={() => setPt1on1Tab(t.key)}>
+                {t.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <Table
+          dataSource={pt1on1Requests}
+          rowKey="_id"
+          loading={pt1on1Loading}
+          pagination={false}
+          locale={{ emptyText: 'Không có yêu cầu PT 1-1 nào' }}
+          scroll={{ x: 1400 }}
+          columns={pt1on1Columns}
+        />
+      </Modal>
+
+      {/* Assign PT Modal */}
+      <Modal title="Phân công PT" open={assignModalOpen} onCancel={() => { setAssignModalOpen(false); setAssignRequest(null) }}
+        width={600} centered footer={null} destroyOnClose>
+        <div className="py-2 space-y-4">
+          {assignRequest && (() => {
+            const m = typeof assignRequest.memberId === 'object' ? assignRequest.memberId : null
+            return (
+              <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 text-sm space-y-1">
+                <div className="font-semibold text-[var(--gs-text)]">
+                  {m ? getUserDisplayName(m) : '—'}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Tag color="blue">{SPEC_LABELS[assignRequest.specialization || 'GYM']}</Tag>
+                  {assignRequest.goals?.map((g, i) => <Tag key={i} color="purple">{g}</Tag>)}
+                </div>
+                <div className="text-xs text-[var(--gs-text-muted)]">
+                  <PhoneOutlined className="mr-1" />{assignRequest.contactPhone || '—'}
+                </div>
+              </div>
+            )
+          })()}
+
+          <Input.Search
+            placeholder="Tìm kiếm PT theo tên, email, chuyên môn..."
+            value={assignSearch}
+            onChange={(e) => setAssignSearch(e.target.value)}
+            allowClear
+          />
+
+          <div className="max-h-[300px] overflow-y-auto space-y-2">
+            {assignLoading ? (
+              <div className="text-center py-8 text-sm text-[var(--gs-text-muted)]">Đang tải...</div>
+            ) : filteredAssignTrainers.length === 0 ? (
+              <Empty description="Không tìm thấy PT" />
+            ) : (
+              filteredAssignTrainers.map((t) => (
+                <div
+                  key={t._id}
+                  onClick={() => setSelectedTrainerId(t._id)}
+                  className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all ${
+                    selectedTrainerId === t._id
+                      ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
+                      : 'border-[var(--gs-border)] hover:border-[var(--theme-accent)]'
+                  }`}
+                >
+                  <Avatar src={t.avatar} size={40} className="shrink-0">
+                    {(t.fullName || t.name || 'PT').charAt(0)}
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm text-[var(--gs-text)]">{t.fullName || t.name}</div>
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {t.specialties?.map((s, i) => (
+                        <Tag key={i} className="m-0 text-xs">{s}</Tag>
+                      ))}
+                    </div>
+                    <div className="text-xs text-[var(--gs-text-muted)] mt-0.5">
+                      {t.totalStudents || 0} hội viên đang phụ trách
+                    </div>
+                  </div>
+                  {selectedTrainerId === t._id && (
+                    <div className="h-5 w-5 rounded-full bg-[var(--theme-accent)] flex items-center justify-center">
+                      <span className="text-white text-xs">✓</span>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button onClick={() => { setAssignModalOpen(false); setAssignRequest(null) }}>Hủy</Button>
+            <Button type="primary" loading={assignSubmitting} disabled={!selectedTrainerId} onClick={handleAssignTrainer}>
+              Xác nhận phân công
+            </Button>
+          </div>
+        </div>
       </Modal>
 
     </DashboardLayout>

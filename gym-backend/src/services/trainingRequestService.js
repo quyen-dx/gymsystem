@@ -9,23 +9,34 @@ import { notifyPtMemberChanged } from './notificationService.js'
 import { calculateRemainingDays } from '../utils/dateUtils.js'
 
 export const createRequest = async ({ memberId, data }) => {
-  const request = await TrainingRequest.create({
+  const type = data.type || 'group'
+  const base = {
     memberId,
+    type,
     specialization: data.specialization || 'GYM',
     goals: data.goals || [],
-    desiredSessions: data.desiredSessions || 3,
-    timeSlots: data.timeSlots || [],
-    daysOfWeek: data.daysOfWeek || [],
-    healthNotes: data.healthNotes || '',
-    isNewToGym: data.isNewToGym || false,
     note: data.note || '',
     status: 'pending',
-  })
+  }
+  if (type === 'pt1on1') {
+    base.contactPhone = data.contactPhone || ''
+    base.contactEmail = data.contactEmail || ''
+    base.preferredTrainerId = data.preferredTrainerId || null
+    base.healthNotes = data.healthNotes || ''
+  } else {
+    base.desiredSessions = data.desiredSessions || 3
+    base.timeSlots = data.timeSlots || []
+    base.daysOfWeek = data.daysOfWeek || []
+    base.healthNotes = data.healthNotes || ''
+    base.isNewToGym = data.isNewToGym || false
+  }
+  const request = await TrainingRequest.create(base)
   return request
 }
 
-export const getMyRequests = async ({ memberId, status }) => {
+export const getMyRequests = async ({ memberId, type, status }) => {
   const filter = { memberId }
+  if (type) filter.type = type
   if (status) filter.status = status
   return TrainingRequest.find(filter).sort({ createdAt: -1 })
 }
@@ -82,14 +93,17 @@ const getMemberMembershipInfo = async (memberId) => {
   }
 }
 
-export const getAllRequests = async ({ status, page = 1, limit = 20 }) => {
+export const getAllRequests = async ({ type, status, page = 1, limit = 20 }) => {
   const filter = {}
+  if (type) filter.type = type
   if (status) filter.status = status
   const skip = (Number(page) - 1) * Number(limit)
   const [items, total] = await Promise.all([
     TrainingRequest.find(filter)
       .populate('memberId', 'name fullName email phone avatar memberCode')
       .populate('assignedClassId', 'name trainerId schedule')
+      .populate('assignedTrainerId', 'name fullName avatar specialties')
+      .populate('preferredTrainerId', 'name fullName avatar')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit)),
@@ -131,6 +145,8 @@ export const getRequestById = async (requestId) => {
   return TrainingRequest.findById(requestId)
     .populate('memberId', 'name fullName email phone avatar memberCode')
     .populate('assignedClassId', 'name trainerId schedule')
+    .populate('assignedTrainerId', 'name fullName avatar specialties')
+    .populate('preferredTrainerId', 'name fullName avatar')
 }
 
 export const assignToClass = async ({ requestId, classId, assignedBy }) => {
@@ -192,6 +208,59 @@ export const assignToClass = async ({ requestId, classId, assignedBy }) => {
       className: trainingClass.name || '',
       classId,
       ptId: trainingClass.ptId || null,
+    })
+  }
+
+  return request
+}
+
+export const assignTrainer = async ({ requestId, trainerId, assignedBy }) => {
+  const request = await TrainingRequest.findByIdAndUpdate(
+    requestId,
+    {
+      status: 'assigned',
+      assignedTrainerId: trainerId,
+      assignedAt: new Date(),
+      assignedBy: assignedBy || undefined,
+    },
+    { new: true },
+  )
+
+  if (request) {
+    const member = await (await import('../models/User.js')).default.findById(request.memberId)
+      .select('fullName name email phone').lean()
+    const trainer = await (await import('../models/User.js')).default.findById(trainerId)
+      .select('fullName name').lean()
+    const memberName = member?.fullName || member?.name || ''
+    const trainerName = trainer?.fullName || trainer?.name || ''
+
+    const { createNotification } = await import('./notificationService.js')
+    const { NOTIFICATION_TYPES } = await import('../models/Notification.js')
+
+    // Notify PT
+    createNotification({
+      receiverId: trainerId,
+      receiverRole: 'pt',
+      notificationType: NOTIFICATION_TYPES.MEMBER_ASSIGNED,
+      title: 'Phân công hội viên mới',
+      content: `Bạn vừa được phân công hội viên ${memberName}.\nThông tin liên hệ: SĐT ${member?.phone || '—'}, Email ${member?.email || '—'}\nVui lòng chủ động liên hệ hội viên để trao đổi lịch tập.`,
+      relatedId: request._id,
+      relatedType: 'TrainingRequest',
+      redirectUrl: '/pt/clients',
+      createdBy: 'Admin',
+    })
+
+    // Notify member
+    createNotification({
+      receiverId: request.memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.PT_ASSIGNED,
+      title: 'Đã được phân công PT',
+      content: `Bạn đã được phân công PT ${trainerName}.\nPT sẽ chủ động liên hệ với bạn qua SĐT hoặc Email.`,
+      relatedId: request._id,
+      relatedType: 'TrainingRequest',
+      redirectUrl: '/my-membership',
+      createdBy: 'System',
     })
   }
 
