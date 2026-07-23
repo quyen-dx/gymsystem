@@ -280,8 +280,6 @@ function AppWithTheme() {
         <Route path="/bank-transfer/:paymentId" element={<BankTransferPage />} />
         <Route path="/hop-tac" element={<PartnershipPage />} />
         <Route path="/about" element={<AboutPage />} />
-        <Route path="/help" element={<PrivateRoute><HelpCenterPage /></PrivateRoute>} />
-        <Route path="/policies" element={<PrivateRoute><PolicyPage /></PrivateRoute>} />
 
 
         {/* ADMIN */}
@@ -383,6 +381,8 @@ function AppWithTheme() {
         <Route path="/feedback" element={<PrivateRoute><MyFeedbackPage /></PrivateRoute>} />
         <Route path="/my-feedback" element={<PrivateRoute><MyFeedbackPage /></PrivateRoute>} />
         <Route path="/my-activity" element={<PrivateRoute><MyActivityPage /></PrivateRoute>} />
+        <Route path="/help" element={<PrivateRoute><HelpCenterPage /></PrivateRoute>} />
+        <Route path="/policies" element={<PrivateRoute><PolicyPage /></PrivateRoute>} />
         </Routes>
       </AntdApp>
     </ConfigProvider>

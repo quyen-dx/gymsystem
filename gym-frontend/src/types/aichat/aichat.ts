@@ -4,7 +4,7 @@ export type PlanPayloadPlan = {
     price: number
     durationDays: number
     descriptionVi?: string
-    featuresVi?: string[]
+    features?: Array<{ _id: string; code: string; name: string; description?: string }>
     color: string
 }
 
@@ -258,6 +258,13 @@ export type DragState = {
     originY: number
     moved: boolean
     source?: 'trigger' | 'panel'
+}
+
+export type AiAction = {
+  label: string
+  route: string
+  icon: string
+  variant: 'primary' | 'secondary'
 }
 
 export type AiToolPayload =

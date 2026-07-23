@@ -63,6 +63,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [pendingNotificationCount, setPendingNotificationCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  useEffect(() => {
+    if (sidebarOpen) window.dispatchEvent(new CustomEvent('gympro:overlay-open'))
+  }, [sidebarOpen])
+
   const location = useLocation()
 
   const actualRole = user?.role

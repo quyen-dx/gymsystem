@@ -128,8 +128,6 @@ const serializePlan = (plan) => ({
   durationDays: plan?.durationDays,
   descriptionVi: plan?.descriptionVi,
   descriptionEn: plan?.descriptionEn,
-  featuresVi: plan?.featuresVi || [],
-  featuresEn: plan?.featuresEn || [],
   featureIds: plan?.featureIds || [],
   color: plan?.color,
 })

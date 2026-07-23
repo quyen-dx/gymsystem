@@ -221,7 +221,7 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {availablePlans.map((plan) => {
                   const selected = selectedPlanId === plan._id
-                  const features = plan.featuresVi || []
+                  const features = plan.featureIds || []
                   return (
                     <button
                       type="button"
@@ -240,7 +240,7 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
                       </div>
                       <Tag>{plan.durationDays} ngày</Tag>
                       <ul className="mt-3 space-y-1 pl-4 text-sm text-[var(--gs-text-muted)]">
-                        {features.slice(0, 4).map((feature) => <li key={feature} className="list-disc">{feature}</li>)}
+                        {features.slice(0, 4).map((feature) => <li key={feature._id} className="list-disc">{feature.name}</li>)}
                       </ul>
                     </button>
                   )

@@ -806,6 +806,16 @@ body.member-interaction-lock .ai-chat-message-content :where(strong, b) {
   letter-spacing: 0;
 }
 
+@keyframes aiThinking {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.9); }
+  40% { opacity: 1; transform: scale(1.2); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 @keyframes ai-loading-ellipsis {
 
   0%,

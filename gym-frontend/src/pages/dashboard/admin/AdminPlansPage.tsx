@@ -79,13 +79,7 @@ export default function AdminPlansPage() {
 
 
   const resolveFeatureIds = (plan: AdminPlan): string[] => {
-    if (plan.featureIds && plan.featureIds.length > 0) {
-      return plan.featureIds.map((f: any) => typeof f === 'string' ? f : f._id)
-    }
-    if (allFeatures.length === 0) return []
-    return allFeatures
-      .filter((f) => plan.featuresVi?.includes(f.name))
-      .map((f) => f._id)
+    return (plan.featureIds || []).map((f: any) => typeof f === 'string' ? f : f._id)
   }
 
   const openEdit = (plan: AdminPlan) => {
@@ -136,14 +130,9 @@ export default function AdminPlansPage() {
   const handleSubmit = async (values: any) => {
     setSubmitLoading(true)
     try {
-      const featureNames = allFeatures
-        .filter((f) => selectedFeatureIds.includes(f._id))
-        .map((f) => f.name)
-
       const body = {
         ...values,
         featureIds: selectedFeatureIds,
-        featuresVi: featureNames,
       }
       await api.put(`/plans/${editingPlan?._id}`, body)
       message.success('Cập nhật gói tập thành công')
@@ -186,12 +175,14 @@ export default function AdminPlansPage() {
     {
       title: 'Quyền lợi',
       render: (_: any, record: AdminPlan) => {
-        const feats = record.featuresVi || []
-        return feats.length > 0
-          ? feats.slice(0, 3).map((f, i) => <Tag key={i} style={{ marginBottom: 2 }}>{f}</Tag>).concat(
-            feats.length > 3 ? <Tag key="more">+{feats.length - 3}</Tag> : []
-          )
-          : <Tag>—</Tag>
+        const feats = record.featureIds || []
+        if (feats.length === 0) return <Tag>—</Tag>
+        const tags = feats.slice(0, 3).map((f: any, i: number) => {
+          const name = typeof f === 'string' ? f : f.name
+          return <Tag key={f._id || i} style={{ marginBottom: 2 }}>{name}</Tag>
+        })
+        if (feats.length > 3) tags.push(<Tag key="more">+{feats.length - 3}</Tag>)
+        return tags
       },
     },
     {

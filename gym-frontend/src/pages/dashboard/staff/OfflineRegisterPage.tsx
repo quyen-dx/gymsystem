@@ -179,10 +179,10 @@ export default function OfflineRegisterPage() {
                         <div className="mb-2 text-base font-semibold">{plan.nameVi}</div>
                         <div className="mb-1 text-lg font-bold text-[var(--gs-accent)]">{formatMoney(plan.price)}</div>
                         <div className="mb-2 text-xs text-[var(--gs-text-muted)]">{plan.durationDays} ngày</div>
-                        {plan.featuresVi?.slice(0, 3).map((f, i) => (
+                        {plan.featureIds?.slice(0, 3).map((f, i) => (
                           <div key={i} className="flex items-center gap-1.5 text-xs text-[var(--gs-text-soft)]">
                             <CheckCircleOutlined style={{ fontSize: 11, color: 'var(--gs-accent)' }} />
-                            <span>{f}</span>
+                            <span>{f.name}</span>
                           </div>
                         ))}
                       </div>

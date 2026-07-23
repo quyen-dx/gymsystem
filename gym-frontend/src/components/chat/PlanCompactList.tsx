@@ -14,8 +14,8 @@ export function PlanCompactList({ plans, lang = 'vi' }: Props) {
                 const name = p.nameVi
                 const price = p.price != null ? `${Number(p.price).toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')}đ` : ''
                 const duration = p.durationDays != null ? (lang === 'en' ? `${p.durationDays} days` : `${p.durationDays} ngày`) : ''
-                const features = p.featuresVi || []
-                const featureLine = features.filter(Boolean).slice(0, 6).join(' · ')
+                const features = p.features || []
+                const featureLine = features.filter(Boolean).slice(0, 6).map((f) => f.name).join(' · ')
 
                 return (
                     <div key={p._id || idx} className="plan-compact-card">

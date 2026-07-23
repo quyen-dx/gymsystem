@@ -53,6 +53,8 @@ import shiftSwapRoutes from './src/routes/shiftSwapRoutes.js'
 import groupClassRoutes from "./src/routes/groupClassRoutes.js"
 import reportRoutes from "./src/routes/reportRoutes.js"
 import notificationRoutes from "./src/routes/notificationRoutes.js"
+import aiRoutes from './src/routes/aiRoutes.js'
+import visionRoutes from './src/routes/visionRoutes.js'
 import { initSocketIO } from './src/services/socketService.js'
 
 const app = express()
@@ -139,6 +141,8 @@ app.use('/api/health', healthRoutes)
 app.use("/api/group-classes", groupClassRoutes)
 app.use("/api/admin/reports", reportRoutes)
 app.use("/api/notifications", notificationRoutes)
+app.use('/api/ai', aiRoutes)
+app.use('/api/ai', visionRoutes)
 
 app.get('/api/system/status', (_req, res) => {
   res.json({
@@ -187,11 +191,13 @@ cron.schedule('0 */6 * * *', () => {
 })
 console.log('[Cron] activateRenewalCyclesJob scheduled every 6 hours')
 
-httpServer.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`)
-})
-
 connectDB()
+  .then(() => {
+    httpServer.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`)
+    })
+  })
   .catch((error) => {
     console.error('Kết nối MongoDB thất bại:', error.message)
+    process.exit(1)
   })

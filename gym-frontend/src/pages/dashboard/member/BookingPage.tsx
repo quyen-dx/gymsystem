@@ -63,13 +63,10 @@ function useMemberFeatureCodes(): { codes: string[]; loading: boolean; features:
         setAllFeatures(features)
 
         const m = memRes.data.membership
-        const planFeatures = m?.plan?.features || m?.plan?.featureIds
+        const planFeatures = m?.plan?.featureIds || []
 
-        if (planFeatures && planFeatures.length > 0) {
-          const mapped = typeof planFeatures[0] === 'string'
-            ? features.filter((f) => planFeatures.includes(f._id)).map((f) => f.code)
-            : planFeatures.map((f: any) => f.code || f)
-          setCodes(mapped)
+        if (planFeatures.length > 0) {
+          setCodes(planFeatures.map((f) => f.code))
         } else {
           setCodes(features.map((f) => f.code))
         }

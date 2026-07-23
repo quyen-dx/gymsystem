@@ -1,0 +1,82 @@
+[
+  {
+    "name": "Wallet Balance",
+    "question": "Ví của tôi còn bao nhiêu?",
+    "expectedTool": "database",
+    "expectedIntent": "wallet_balance",
+    "expectedCard": "wallet",
+    "expectedSuccess": true
+  },
+  {
+    "name": "Membership Status",
+    "question": "Gói tập của tôi đang thế nào?",
+    "expectedTool": "database",
+    "expectedIntent": "membership_status",
+    "expectedCard": "membership",
+    "expectedSuccess": true
+  },
+  {
+    "name": "Membership Expiry",
+    "question": "Khi nào gói tập của tôi hết hạn?",
+    "expectedTool": "database",
+    "expectedIntent": "membership_expiry",
+    "expectedCard": "plan",
+    "expectedSuccess": true
+  },
+  {
+    "name": "Upcoming Booking",
+    "question": "Tôi có buổi tập nào sắp tới không?",
+    "expectedTool": "database",
+    "expectedIntent": "upcoming_booking",
+    "expectedCard": "booking",
+    "expectedSuccess": true
+  },
+  {
+    "name": "Unread Notifications",
+    "question": "Có thông báo nào mới không?",
+    "expectedTool": "database",
+    "expectedIntent": "unread_notifications",
+    "expectedCard": "notification",
+    "expectedSuccess": true
+  },
+  {
+    "name": "Greeting - No Tool",
+    "question": "Xin chào",
+    "expectedTool": "none",
+    "expectedIntent": null,
+    "expectedCard": null,
+    "expectedSuccess": true
+  },
+  {
+    "name": "Refund Policy",
+    "question": "Chính sách hoàn tiền như thế nào?",
+    "expectedTool": "vector",
+    "expectedIntent": null,
+    "expectedCard": "generalInfo",
+    "expectedSuccess": true
+  },
+  {
+    "name": "Check-in Guide",
+    "question": "Hướng dẫn check-in",
+    "expectedTool": "vector",
+    "expectedIntent": null,
+    "expectedCard": "generalInfo",
+    "expectedSuccess": true
+  },
+  {
+    "name": "Exercise Question",
+    "question": "Tôi nên ăn bao nhiêu protein khi tập gym?",
+    "expectedTool": "vector",
+    "expectedIntent": null,
+    "expectedCard": "generalInfo",
+    "expectedSuccess": true
+  },
+  {
+    "name": "General Knowledge - Web",
+    "question": "Tin tức mới nhất về thể hình là gì?",
+    "expectedTool": "web",
+    "expectedIntent": null,
+    "expectedCard": "searchResult",
+    "expectedSuccess": true
+  }
+]

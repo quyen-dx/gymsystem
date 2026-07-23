@@ -1,51 +1,46 @@
 import mongoose from 'mongoose';
 import Plan from '../models/Plan.js';
+import PlanFeature from '../models/PlanFeature.js';
 
-const defaultPlans = [
+async function resolveFeatureCodes(codes) {
+  const features = await PlanFeature.find({ code: { $in: codes } }).lean()
+  const missing = codes.filter(c => !features.find(f => f.code === c))
+  if (missing.length) {
+    console.warn(`⚠  Không tìm thấy PlanFeature codes: ${missing.join(', ')}`)
+  }
+  return features.map(f => f._id)
+}
+
+const defaultPlanDefs = [
   {
-    nameVi: 'Gói Cơ Bản',
-    price: 300000,
-    durationDays: 30,
+    nameVi: 'Gói Cơ Bản', price: 300000, durationDays: 30,
     descriptionVi: 'Gói tập cơ bản dành cho hội viên mới bắt đầu.',
-    featuresVi: ['Sử dụng phòng tập', 'Check-in QR'],
-    color: '#3B82F6',
-    isActive: true,
+    featureCodes: ['GYM_ACCESS', 'QR_CHECKIN'],
+    color: '#3B82F6', isActive: true,
   },
   {
-    nameVi: 'Gói Nâng Cao',
-    price: 700000,
-    durationDays: 90,
+    nameVi: 'Gói Nâng Cao', price: 700000, durationDays: 90,
     descriptionVi: 'Gói tập nâng cao với nhiều tiện ích hơn.',
-    featuresVi: ['Sử dụng phòng tập', 'Check-in QR', 'Theo dõi sức khỏe'],
-    color: '#8B5CF6',
-    isActive: true,
+    featureCodes: ['GYM_ACCESS', 'QR_CHECKIN', 'HEALTH_TRACKING'],
+    color: '#8B5CF6', isActive: true,
   },
   {
-    nameVi: 'Gói VIP',
-    price: 1500000,
-    durationDays: 365,
+    nameVi: 'Gói VIP', price: 1500000, durationDays: 365,
     descriptionVi: 'Gói VIP cao cấp dành cho hội viên thân thiết.',
-    featuresVi: ['Sử dụng phòng tập', 'Check-in QR', 'Theo dõi sức khỏe', 'Ưu tiên hỗ trợ'],
-    color: '#F59E0B',
-    isActive: true,
+    featureCodes: ['GYM_ACCESS', 'QR_CHECKIN', 'HEALTH_TRACKING', 'SUPPORT_PRIORITY'],
+    color: '#F59E0B', isActive: true,
   },
   {
-    nameVi: 'Gói Huấn Luyện Cá Nhân',
-    price: 2000000,
-    durationDays: 30,
+    nameVi: 'Gói Huấn Luyện Cá Nhân', price: 2000000, durationDays: 30,
     descriptionVi: 'Gói huấn luyện 1-1 với PT chuyên nghiệp.',
-    featuresVi: ['Huấn luyện cá nhân', 'Giáo án riêng'],
-    color: '#EF4444',
-    isActive: true,
+    featureCodes: ['BOOK_PT_PRIVATE', 'WORKOUT_PLAN'],
+    color: '#EF4444', isActive: true,
   },
   {
-    nameVi: 'Gói Doanh Nghiệp',
-    price: 5000000,
-    durationDays: 365,
+    nameVi: 'Gói Doanh Nghiệp', price: 5000000, durationDays: 365,
     descriptionVi: 'Gói tập dành cho doanh nghiệp, quản lý nhóm nhân viên.',
-    featuresVi: ['Dành cho doanh nghiệp', 'Quản lý nhóm nhân viên'],
-    color: '#10B981',
-    isActive: true,
+    featureCodes: ['ENTERPRISE', 'GROUP_CLASS'],
+    color: '#10B981', isActive: true,
   },
 ];
 
@@ -56,8 +51,13 @@ export async function seedPlans() {
     return;
   }
 
-  await Plan.insertMany(defaultPlans);
-  console.log(`Đã seed ${defaultPlans.length} gói tập mặc định.`);
+  const plans = await Promise.all(defaultPlanDefs.map(async (def) => {
+    const { featureCodes, ...rest } = def
+    return { ...rest, featureIds: await resolveFeatureCodes(featureCodes) }
+  }))
+
+  await Plan.insertMany(plans);
+  console.log(`Đã seed ${plans.length} gói tập mặc định.`);
 }
 
 // Chạy độc lập: node src/scripts/seedPlans.js

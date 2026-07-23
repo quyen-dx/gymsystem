@@ -2,7 +2,8 @@ import Plan from '../models/Plan.js'
 
 export const getActivePlans = async () => {
   const plans = await Plan.find({ isActive: true })
-    .select('nameVi price durationDays descriptionVi featuresVi color updatedAt')
+    .select('nameVi price durationDays descriptionVi featureIds color updatedAt')
+    .populate('featureIds')
     .sort({ price: 1 })
     .lean()
 
@@ -18,7 +19,7 @@ export const getActivePlans = async () => {
       durationDays: p.durationDays,
       description: p.descriptionVi,
       descriptionVi: p.descriptionVi,
-      featuresVi: p.featuresVi || [],
+      features: p.featureIds || [],
       color: p.color || '#000',
       updatedAt: p.updatedAt,
     })),

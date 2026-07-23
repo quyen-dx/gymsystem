@@ -38,8 +38,8 @@ const getPlanText = (plan: PlanPayloadPlan, key: 'name' | 'description') => (
 )
 
 const getFeatures = (plan: PlanPayloadPlan) => (
-  Array.isArray(plan.featuresVi) && plan.featuresVi.length > 0
-  ? plan.featuresVi
+  Array.isArray(plan.features) && plan.features.length > 0
+  ? plan.features
   : []
 )
 
@@ -82,7 +82,7 @@ export function MembershipPlanCards({ plans, excludeIds = [], lang = 'vi', compa
                     {features.map((feature, i) => (
                       <div key={i} className="ai-plan-benefit mpc-benefit">
                         <span className="mpc-dot" />
-                        <span>{feature}</span>
+                        <span>{feature.name}</span>
                       </div>
                     ))}
                   </div>

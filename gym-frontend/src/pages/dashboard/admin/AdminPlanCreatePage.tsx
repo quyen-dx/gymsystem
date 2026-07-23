@@ -44,16 +44,11 @@ export default function AdminPlanCreatePage() {
 
     setSubmitLoading(true)
     try {
-      const featureNames = allFeatures
-        .filter((f) => selectedFeatureIds.includes(f._id))
-        .map((f) => f.name)
-
       const payload = {
         nameVi: values.nameVi,
         price: values.price,
         durationDays: values.durationDays,
         descriptionVi: values.descriptionVi || '',
-        featuresVi: featureNames,
         featureIds: selectedFeatureIds,
         isActive: true,
         color: typeof values.color === 'string' ? values.color : values.color?.toHexString?.() || '#3B82F6',

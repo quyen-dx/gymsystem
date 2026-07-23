@@ -151,4 +151,95 @@ api.interceptors.response.use(
   },
 )
 
+export const sendChatMessage = async (message: string, sessionId?: string) => {
+  const { data } = await api.post('/ai/chat', { message, sessionId })
+  return data as {
+    reply: string
+    cards?: Array<{ type: string; title: string; data: Record<string, unknown>; deeplink?: string; suggestions?: string[] }>
+    suggestions?: string[]
+    deeplinks?: string[]
+    actions?: Array<{ label: string; route: string; icon: string; variant: string }>
+  }
+}
+
+export const sendVisionImage = async (file: File, prompt?: string) => {
+  const formData = new FormData()
+  formData.append('image', file)
+  if (prompt) formData.append('prompt', prompt)
+  const { data } = await api.post('/ai/vision', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data as { analysis: string; fileName: string; fileSize: number }
+}
+
+type StreamCallbacks = {
+  onToken: (text: string) => void
+  onCard: (card: unknown) => void
+  onSuggestion: (text: string) => void
+  onDeeplink: (url: string) => void
+  onAction: (action: { label: string; route: string; icon: string; variant: string }) => void
+  onDone: (reply: string) => void
+  onError: (message: string) => void
+}
+
+export async function streamChatMessage(
+  message: string,
+  callbacks: StreamCallbacks,
+  signal?: AbortSignal,
+): Promise<{ reply: string } | null> {
+  try {
+    const res = await fetch(`${API_URL}/ai/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ message }),
+      signal,
+    })
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+    const reader = res.body?.getReader()
+    if (!reader) throw new Error('No response body')
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let reply = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      let eventType = ''
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim()
+        } else if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6)
+          try {
+            const data = JSON.parse(dataStr)
+            if (eventType === 'token') callbacks.onToken(data.text)
+            else if (eventType === 'card') callbacks.onCard(data)
+            else if (eventType === 'suggestion') callbacks.onSuggestion(data.text)
+            else if (eventType === 'deeplink') callbacks.onDeeplink(data.url)
+            else if (eventType === 'action') callbacks.onAction(data)
+            else if (eventType === 'done') { reply = data.reply; callbacks.onDone(data.reply) }
+            else if (eventType === 'error') callbacks.onError(data.message)
+          } catch { /* skip malformed JSON */ }
+          eventType = ''
+        }
+      }
+    }
+
+    return { reply }
+  } catch (err: any) {
+    if (err.name === 'AbortError') return null
+    callbacks.onError(err.message || 'Stream error')
+    return null
+  }
+}
+
 export default api

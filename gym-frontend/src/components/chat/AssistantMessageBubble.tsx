@@ -8,6 +8,8 @@ import { PlanCompareTable } from './PlanCompareTable'
 import { PlanDetailCard } from './PlanDetailCard'
 import { PlanRecommendCard } from './PlanRecommendCard'
 import { WorkoutAnalyzeCard, WorkoutPlanCard } from './WorkoutAnalyzeCard'
+import { AICardRenderer } from './AICardRenderer'
+import type { RichResponseCard } from './AICardRenderer'
 
 interface Props {
   message: ChatMessage
@@ -432,6 +434,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
     <div className="ai-assistant-content ai-text-content" style={{ whiteSpace: 'pre-line', lineHeight: 1.7 }}>
       {displayText && renderText(displayText)}
       {renderGenericCards()}
+      <AICardRenderer cards={(message.cards || []) as RichResponseCard[]} />
       {renderSourceList()}
       {renderNavigationLinks()}
       {displayText && sourceType === 'gympro' && (

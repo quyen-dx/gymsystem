@@ -45,7 +45,7 @@ const getName = (plan: PlanPayloadPlan) => plan.nameVi
 
 const getDescription = (plan: PlanPayloadPlan) => plan.descriptionVi
 
-const getFeatures = (plan: PlanPayloadPlan) => plan.featuresVi || []
+const getFeatures = (plan: PlanPayloadPlan) => plan.features || []
 
 const splitReasonItems = (reason?: string | string[]) => {
   if (Array.isArray(reason)) {
@@ -105,7 +105,7 @@ export function PlanRecommendCard({ recommendedPlan, reason, conclusion, alterna
             {features.map((feature, i) => (
               <div key={i} className="ai-plan-benefit ai-plan-recommend-benefit">
                 <span>✓</span>
-                {feature}
+                {feature.name}
               </div>
             ))}
           </div>

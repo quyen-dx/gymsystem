@@ -32,6 +32,7 @@ import { getShops } from '../../../services/shopService'
 import { socketService } from '../../../services/socketService'
 import type { ProductShop } from '../../../types/member/product'
 import { getUserDisplayName, getUserInitialName } from '../../../utils/userDisplay'
+import AiChatWidget from '../../chat/AiChatWidget'
 import MemberFooter from '../footer/MemberFooter'
 
 const { Header, Content } = Layout
@@ -64,6 +65,11 @@ export default function MemberLayout({
   const { user } = useAuth()
   const { settings, isEnabled } = useSystemSettings()
   const [menuOpen, setMenuOpen] = useState(false)
+
+  // Notify AI chat when drawer opens
+  useEffect(() => {
+    if (menuOpen) window.dispatchEvent(new CustomEvent('gympro:overlay-open'))
+  }, [menuOpen])
   const [hovered, setHovered] = useState(false)
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false)
   const [storeDropdownLoading, setStoreDropdownLoading] = useState(false)
@@ -550,6 +556,7 @@ export default function MemberLayout({
 
       </Drawer>
 
+      <AiChatWidget drawerOpen={menuOpen} />
     </Layout >
   )
 }

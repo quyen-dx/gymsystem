@@ -38,7 +38,7 @@ export default function PlansPage() {
 
   const getName = (plan: MembershipPlan) => plan.nameVi
   const getDesc = (plan: MembershipPlan) => plan.descriptionVi
-  const getFeatures = (plan: MembershipPlan) => plan.featuresVi || []
+  const getFeatures = (plan: MembershipPlan) => plan.featureIds || []
 
   const handleRegister = async () => {
     if (!selectedPlan) return
@@ -115,9 +115,9 @@ export default function PlansPage() {
                   <p className="min-h-[44px] text-sm text-[var(--gs-text-muted)]">{getDesc(plan) || 'Gói tập phù hợp với nhu cầu của bạn'}</p>
                   <div className="mb-5 flex-1 space-y-2">
                     {getFeatures(plan).map((feature) => (
-                      <div key={feature} className="flex items-center gap-2 text-sm">
+                      <div key={feature._id} className="flex items-center gap-2 text-sm">
                         <CheckCircleOutlined style={{ color: plan.color || '#1677ff' }} />
-                        <span>{feature}</span>
+                        <span>{feature.name}</span>
                       </div>
                     ))}
                   </div>

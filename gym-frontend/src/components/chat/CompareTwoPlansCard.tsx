@@ -34,11 +34,11 @@ const planName = (plan: PlanPayloadPlan) => plan.nameVi
 
 const planDescription = (plan: PlanPayloadPlan) => plan.descriptionVi
 
-const planFeatures = (plan: PlanPayloadPlan) => plan.featuresVi || []
+const planFeatures = (plan: PlanPayloadPlan) => plan.features || []
 
 const suitability = (plan: PlanPayloadPlan, otherPlan: PlanPayloadPlan, lang: 'vi' | 'en') => {
-  const featureCount = plan.featuresVi?.length || 0
-  const otherFeatureCount = otherPlan.featuresVi?.length || 0
+  const featureCount = plan.features?.length || 0
+  const otherFeatureCount = otherPlan.features?.length || 0
   if ((plan.price || 0) < (otherPlan.price || 0)) return lang === 'en' ? 'Best for saving cost or trying first.' : 'Phù hợp nếu muốn tiết kiệm hoặc tập thử.'
   if ((plan.durationDays || 0) > (otherPlan.durationDays || 0)) return lang === 'en' ? 'Best for longer commitment.' : 'Phù hợp nếu muốn tập lâu dài.'
   if (featureCount > otherFeatureCount) return lang === 'en' ? 'Best for more services and benefits.' : 'Phù hợp nếu muốn nhiều quyền lợi hơn.'
@@ -63,8 +63,8 @@ export function CompareTwoPlansCard({ plans, conclusion, lang = 'vi' }: Props) {
   const colorB = planB.color || 'var(--theme-accent)'
 
   const allFeatures = new Set<string>()
-  if (Array.isArray(featuresA)) featuresA.forEach((f) => allFeatures.add(f))
-  if (Array.isArray(featuresB)) featuresB.forEach((f) => allFeatures.add(f))
+  if (Array.isArray(featuresA)) featuresA.forEach((f) => allFeatures.add(f.name))
+  if (Array.isArray(featuresB)) featuresB.forEach((f) => allFeatures.add(f.name))
 
   return (
     <div className="ai-compare-two">
@@ -79,7 +79,7 @@ export function CompareTwoPlansCard({ plans, conclusion, lang = 'vi' }: Props) {
           {Array.isArray(featuresA) && featuresA.length > 0 && (
             <div className="ai-compare-two-list">
               {featuresA.map((feature, i) => (
-                <div key={i} className="ai-plan-benefit ai-compare-two-benefit"><span>✓</span>{feature}</div>
+                <div key={i} className="ai-plan-benefit ai-compare-two-benefit"><span>✓</span>{feature.name}</div>
               ))}
             </div>
           )}
@@ -96,7 +96,7 @@ export function CompareTwoPlansCard({ plans, conclusion, lang = 'vi' }: Props) {
           {Array.isArray(featuresB) && featuresB.length > 0 && (
             <div className="ai-compare-two-list">
               {featuresB.map((feature, i) => (
-                <div key={i} className="ai-plan-benefit ai-compare-two-benefit"><span>✓</span>{feature}</div>
+                <div key={i} className="ai-plan-benefit ai-compare-two-benefit"><span>✓</span>{feature.name}</div>
               ))}
             </div>
           )}
@@ -112,8 +112,8 @@ export function CompareTwoPlansCard({ plans, conclusion, lang = 'vi' }: Props) {
             {t.differences}
           </div>
           {Array.from(allFeatures).map((feature, i) => {
-            const hasA = Array.isArray(featuresA) && featuresA.includes(feature)
-            const hasB = Array.isArray(featuresB) && featuresB.includes(feature)
+            const hasA = Array.isArray(featuresA) && featuresA.some((f) => f.name === feature)
+            const hasB = Array.isArray(featuresB) && featuresB.some((f) => f.name === feature)
             return (
               <div key={i} className="ai-compare-two-feature-row">
                 <span className="ai-compare-two-feature-name">{feature}</span>

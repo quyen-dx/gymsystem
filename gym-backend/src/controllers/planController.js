@@ -6,17 +6,9 @@ import { recordAuditLog } from '../services/auditLogService.js';
 // ==================== TẠO GÓI TẬP ====================
 export const createPlan = async (req, res) => {
   try {
-    const { nameVi, price, durationDays, descriptionVi, featuresVi, color, isActive, featureIds } = req.body;
+    const { nameVi, price, durationDays, descriptionVi, color, isActive, featureIds } = req.body;
 
-    let resolvedFeatureIds = featureIds || [];
-    if (!resolvedFeatureIds.length && featuresVi && featuresVi.length) {
-      const matched = await PlanFeature.find({
-        name: { $in: featuresVi.map((f) => new RegExp(`^${f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')) },
-      }).lean();
-      resolvedFeatureIds = matched.map((f) => f._id);
-    }
-
-    const plan = await Plan.create({ nameVi, price, durationDays, descriptionVi, featuresVi, color, isActive, featureIds: resolvedFeatureIds });
+    const plan = await Plan.create({ nameVi, price, durationDays, descriptionVi, color, isActive, featureIds: featureIds || [] });
     const populated = await Plan.findById(plan._id).populate('featureIds');
     await recordAuditLog({
       req,
@@ -113,7 +105,7 @@ export const getPlanById = async (req, res) => {
 // ==================== CẬP NHẬT GÓI TẬP ====================
 export const updatePlan = async (req, res) => {
   try {
-    const { nameVi, price, durationDays, descriptionVi, featuresVi, color, isActive, featureIds } = req.body;
+    const { nameVi, price, durationDays, descriptionVi, color, isActive, featureIds } = req.body;
 
     const plan = await Plan.findById(req.params.id);
     if (!plan) return res.status(404).json({ message: 'Không tìm thấy gói tập' });
@@ -122,7 +114,6 @@ export const updatePlan = async (req, res) => {
     plan.price = price;
     plan.durationDays = durationDays;
     plan.descriptionVi = descriptionVi;
-    plan.featuresVi = featuresVi || [];
 
     if (featureIds !== undefined) {
       plan.featureIds = featureIds;

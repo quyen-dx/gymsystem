@@ -42,7 +42,7 @@ export function PlanCompareTable({ plans, lang = 'vi' }: Props) {
         {plans.map((plan) => {
         const name = plan.nameVi
         const description = plan.descriptionVi
-        const features = plan.featuresVi
+        const features = plan.features || []
         const accentColor = plan.color || 'var(--theme-accent)'
 
         return (
@@ -61,7 +61,7 @@ export function PlanCompareTable({ plans, lang = 'vi' }: Props) {
               <div className="ai-plan-compare-features">
                 {features.map((f, i) => (
                   <div key={i} className="ai-plan-compare-feature">
-                    <span className="ai-plan-compare-bullet">&#10003;</span> {f}
+                    <span className="ai-plan-compare-bullet">&#10003;</span> {f.name}
                   </div>
                 ))}
               </div>

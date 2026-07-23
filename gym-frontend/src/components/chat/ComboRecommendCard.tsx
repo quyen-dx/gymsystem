@@ -51,10 +51,10 @@ export function ComboRecommendCard({ data, lang: propLang }: Props) {
             {plan.reason && plan.reason.length > 0 && (
               <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>{plan.reason[0]}</div>
             )}
-            {Array.isArray(plan.featuresVi) && plan.featuresVi.length > 0 && (
+            {Array.isArray(plan.features) && plan.features.length > 0 && (
               <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {(plan.featuresVi)?.slice(0, 3).map((f, i) => (
-                  <span key={i} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.08)' }}>{f}</span>
+                {(plan.features)?.slice(0, 3).map((f, i) => (
+                  <span key={i} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.08)' }}>{f.name}</span>
                 ))}
               </div>
             )}

@@ -2,23 +2,18 @@ import { CheckCircleFilled } from '@ant-design/icons'
 import { QrCode, Dumbbell, Users, UserRound } from 'lucide-react'
 import type { PlanFeature } from '../../services/planFeatureService'
 
-const FEATURE_ICONS: Record<string, { icon: React.ReactNode; label: string }> = {
-  QR_CHECKIN: { icon: <QrCode className="w-5 h-5" />, label: 'Check-in QR' },
-  CHECK_IN: { icon: <QrCode className="w-5 h-5" />, label: 'Check-in QR' },
-  USE_GYM: { icon: <Dumbbell className="w-5 h-5" />, label: 'Sử dụng phòng tập' },
-  TRAINING: { icon: <Dumbbell className="w-5 h-5" />, label: 'Sử dụng phòng tập' },
-  BOOK_PT_GROUP: { icon: <Users className="w-5 h-5" />, label: 'Đặt lịch PT nhóm' },
-  BOOK_PT_PRIVATE: { icon: <UserRound className="w-5 h-5" />, label: 'Đặt lịch PT cá nhân' },
+const FEATURE_ICONS: Record<string, React.ReactNode> = {
+  QR_CHECKIN: <QrCode className="w-5 h-5" />,
+  CHECK_IN: <QrCode className="w-5 h-5" />,
+  USE_GYM: <Dumbbell className="w-5 h-5" />,
+  TRAINING: <Dumbbell className="w-5 h-5" />,
+  BOOK_PT_GROUP: <Users className="w-5 h-5" />,
+  BOOK_PT_PRIVATE: <UserRound className="w-5 h-5" />,
 }
 
 const getFeatureIcon = (code?: string) => {
-  if (code && FEATURE_ICONS[code]) return FEATURE_ICONS[code].icon
+  if (code && FEATURE_ICONS[code]) return FEATURE_ICONS[code]
   return <CheckCircleFilled className="text-lg" />
-}
-
-const getFeatureName = (feature: PlanFeature) => {
-  if (feature.code && FEATURE_ICONS[feature.code]) return FEATURE_ICONS[feature.code].label
-  return feature.name
 }
 
 type Props = {
@@ -44,9 +39,9 @@ export default function MembershipBenefits({ features }: Props) {
               {getFeatureIcon(f.code)}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-[var(--gs-text)]">{getFeatureName(f)}</div>
-              {f.category && (
-                <span className="text-xs text-[var(--gs-text-muted)]">{f.category}</span>
+              <div className="text-sm font-semibold text-[var(--gs-text)]">{f.name}</div>
+              {f.description && (
+                <span className="text-xs text-[var(--gs-text-muted)]">{f.description}</span>
               )}
             </div>
           </div>

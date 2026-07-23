@@ -1,4 +1,5 @@
 import api from './api'
+import type { PlanFeature } from './planFeatureService'
 
 export interface MembershipPlan {
   _id: string
@@ -7,9 +8,7 @@ export interface MembershipPlan {
   price: number
   durationDays: number
   descriptionVi?: string
-  featuresVi?: string[]
-  featureIds?: string[]
-  features?: Array<{ _id: string; code: string; name: string; icon: string; color: string; category: string }>
+  featureIds?: PlanFeature[]
   color?: string
   isActive?: boolean
   memberCount?: number

@@ -29,7 +29,6 @@ export async function checkMemberFeature(memberId, featureCode) {
     return { allowed: false, feature: null, plan: null, reason: 'Gói tập không có thông tin Plan' }
   }
 
-  // Check via featureIds first (new)
   if (plan.featureIds && plan.featureIds.length > 0) {
     const featureIds = plan.featureIds.map(f => (typeof f === 'object' && f._id) ? f._id : f).map(id => id.toString())
     const feature = await PlanFeature.findOne({ code: featureCode }).lean()
@@ -38,15 +37,6 @@ export async function checkMemberFeature(memberId, featureCode) {
     }
     if (featureIds.includes(feature._id.toString())) {
       return { allowed: true, feature, plan, reason: '' }
-    }
-  }
-
-  // Fallback: match by featuresVi strings against PlanFeature names
-  const allFeatures = await PlanFeature.find({}).lean()
-  const featuresVi = plan.featuresVi || []
-  for (const f of allFeatures) {
-    if (f.code === featureCode && featuresVi.some(v => v.toLowerCase().includes(f.name.toLowerCase()))) {
-      return { allowed: true, feature: f, plan, reason: '' }
     }
   }
 
@@ -78,11 +68,5 @@ export async function getMemberFeatures(memberId) {
 
   if (!cycle || !cycle.currentPlanId) return []
 
-  const plan = cycle.currentPlanId
-  if (plan.featureIds && plan.featureIds.length > 0) {
-    return plan.featureIds
-  }
-
-  // Fallback legacy
-  return plan.featuresVi || []
+  return cycle.currentPlanId.featureIds || []
 }

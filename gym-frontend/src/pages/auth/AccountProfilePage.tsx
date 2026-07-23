@@ -353,6 +353,10 @@ function ProfileContent() {
   const [resendCooldown, setResendCooldown] = useState(0)
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  useEffect(() => {
+    if (mobileMenuOpen) window.dispatchEvent(new CustomEvent('gympro:overlay-open'))
+  }, [mobileMenuOpen])
   const [mobileSubTabPicker, setMobileSubTabPicker] = useState(true)
   const fileRef = useRef<HTMLInputElement>(null)
   const coverRef = useRef<HTMLInputElement>(null)

@@ -40,7 +40,7 @@ const labels = {
 export function PlanDetailCard({ plan, lang = 'vi' }: Props) {
   const name = plan.nameVi
   const description = plan.descriptionVi
-  const features = plan.featuresVi
+  const features = plan.features || []
   const accentColor = plan.color || 'var(--theme-accent)'
   const t = labels[lang]
 
@@ -68,7 +68,7 @@ export function PlanDetailCard({ plan, lang = 'vi' }: Props) {
           {features.map((feature, i) => (
             <div key={i} className="ai-plan-benefit ai-plan-detail-feature-row">
               <span className="ai-plan-detail-check">&#10003;</span>
-              <span>{feature}</span>
+              <span>{feature.name}</span>
             </div>
           ))}
         </div>

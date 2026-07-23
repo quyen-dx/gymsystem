@@ -9,7 +9,7 @@ import api from '../../../services/api'
 import { useWallet } from '../../../context/WalletProvider'
 import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 import { membershipService, type CancellationRequest, type MembershipPeriod, type MembershipRenewal, type MyMembership, type PendingCancelRequest } from '../../../services/membershipService'
-import { planFeatureService, type PlanFeature } from '../../../services/planFeatureService'
+import type { PlanFeature } from '../../../services/planFeatureService'
 import MembershipBenefits from '../../../components/membership/MembershipBenefits'
 
 const formatMoney = (value?: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
@@ -61,7 +61,7 @@ export default function MyMembershipPage() {
     walletBalance: number
     planName: string
   } | null>(null)
-  const [allFeatures, setAllFeatures] = useState<PlanFeature[]>([])
+
   const [pendingCancelModal, setPendingCancelModal] = useState<{ open: boolean; loading: boolean; result: { message: string; refundAmount: number } | null }>({ open: false, loading: false, result: null })
   const [changeModalOpen, setChangeModalOpen] = useState(false)
   const [availablePlans, setAvailablePlans] = useState<any>(null)
@@ -117,25 +117,11 @@ export default function MyMembershipPage() {
 
   useEffect(loadData, [])
 
-  useEffect(() => {
-    planFeatureService.getAll({ isActive: true })
-      .then((res) => setAllFeatures(res.data.data || []))
-      .catch(() => {})
-  }, [])
+
 
   const memberPlanFeatures = useMemo(() => {
-    const planFeatures = membership?.plan?.features || membership?.plan?.featureIds
-    if (!planFeatures || planFeatures.length === 0) return []
-    if (allFeatures.length === 0) return []
-
-    if (typeof planFeatures[0] === 'string') {
-      return allFeatures.filter((f) => planFeatures.includes(f._id))
-    }
-    return planFeatures.map((pf: any) => {
-      const match = allFeatures.find((af) => af._id === pf._id || af._id === pf)
-      return match || pf
-    })
-  }, [membership?.plan, allFeatures])
+    return membership?.plan?.featureIds || []
+  }, [membership?.plan])
 
   const isCancelled = membership?.status === 'cancelled'
   const isPendingCancel = !!pendingCancel
@@ -1105,8 +1091,8 @@ export default function MyMembershipPage() {
                             <div className="text-sm text-[var(--gs-text-muted)]">{formatMoney(plan.price)} / {plan.durationDays} ngày</div>
                             {plan.featureIds?.length > 0 && (
                               <div className="mt-1 flex flex-wrap gap-1">
-                                {plan.featureIds.slice(0, 3).map((f: any) => (
-                                  <Tag key={f._id || f} style={{ fontSize: 10 }}>{f.name || '...'}</Tag>
+                                {plan.featureIds.slice(0, 3).map((f) => (
+                                  <Tag key={f._id} style={{ fontSize: 10 }}>{f.name}</Tag>
                                 ))}
                               </div>
                             )}

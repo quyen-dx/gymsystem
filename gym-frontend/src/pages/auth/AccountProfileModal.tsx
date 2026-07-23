@@ -428,6 +428,10 @@ export default function AccountProfileModal({
   const [coverRemoved, setCoverRemoved] = useState(false)
   const [activeTab, setActiveTab] = useState<ProfileTabKey>('profile')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  useEffect(() => {
+    if (mobileMenuOpen) window.dispatchEvent(new CustomEvent('gympro:overlay-open'))
+  }, [mobileMenuOpen])
   const [addresses, setAddresses] = useState<any[]>([])
   const [addressModalOpen, setAddressModalOpen] = useState(false)
   const [editAddress, setEditAddress] = useState<any>(null)

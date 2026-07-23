@@ -12,6 +12,8 @@
     "migrate:backfill-pt": "node --env-file=.env src/scripts/backfillPTAssignments.js",
     "migrate:class-enrollments": "node --env-file=.env src/scripts/migrateClassEnrollments.js",
     "migrate:restore-force-ended-schedules": "node --env-file=.env src/scripts/migrateRestoreForceEndedSchedules.js",
+    "seed:knowledge": "node --env-file=.env scripts/seedKnowledge.js",
+    "ai:test": "node --env-file=.env tests/ai/runner.js",
     "cleanup:dup-pt-assignments": "node --env-file=.env src/scripts/cleanupDupPTAssignments.js"
   },
   "keywords": [],
@@ -19,6 +21,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@google/genai": "^1.0.0",
     "axios": "^1.16.0",
     "bcrypt": "^6.0.0",
     "cloudinary": "^1.41.3",
