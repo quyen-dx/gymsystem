@@ -430,7 +430,6 @@ function AppWithTheme() {
         <Route path="/admin/workout-reports" element={<PrivateRoute feature="pt.moduleEnabled"><AdminWorkoutReportsPage /></PrivateRoute>} />
         <Route path="/admin/pt-assignment-end-requests" element={<PrivateRoute><AdminPTAssignmentEndRequestsPage /></PrivateRoute>} />
         <Route path="/admin/trainer-end-requests" element={<PrivateRoute><AdminPTAssignmentEndRequestsPage /></PrivateRoute>} />
-        <Route path="/admin/notifications" element={<PrivateRoute><AdminNotificationsPage /></PrivateRoute>} />
         {/* SELLER */}
         <Route path="/seller" element={<Navigate to="/seller/products" />} />
         <Route path="/seller/products" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerProductsPage /></PrivateRoute>} />
@@ -447,7 +446,6 @@ function AppWithTheme() {
         <Route path="/staff/members/:memberId/register-plan" element={<PrivateRoute><StaffPlanCounterPage mode="register" /></PrivateRoute>} />
         <Route path="/staff/members/:memberId/renew-plan" element={<PrivateRoute><StaffPlanCounterPage mode="renew" /></PrivateRoute>} />
         <Route path="/staff/payments" element={<PrivateRoute><StaffPaymentsPage /></PrivateRoute>} />
-        <Route path="/staff/notifications" element={<PrivateRoute><StaffNotificationsPage /></PrivateRoute>} />
 
         {/* PT */}
         <Route path="/pt" element={<Navigate to="/pt/schedule" replace />} />

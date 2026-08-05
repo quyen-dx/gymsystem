@@ -154,7 +154,6 @@ export const sendMailWithLog = async (mailOptions) => {
 
 const logTransportStartup = () => {
   const summary = getEmailTransportSummary()
-  console.log('[EmailService] Transport config:', summary)
   if (summary.transportType === 'mock (jsonTransport)') {
     console.warn(
       '[EmailService] WARNING: EMAIL_USER/EMAIL_PASS missing -> using jsonTransport, emails will NOT be sent!'

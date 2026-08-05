@@ -3,12 +3,12 @@ import mongoose from 'mongoose'
 const policySchema = new mongoose.Schema(
   {
     titleVi: { type: String, required: true, trim: true },
-    titleEn: { type: String, required: true, trim: true },
+    titleEn: { type: String, default: '', trim: true },
     slug: { type: String, required: true, unique: true, trim: true, lowercase: true },
     categoryVi: { type: String, default: 'Chung', trim: true },
     categoryEn: { type: String, default: 'General', trim: true },
     contentVi: { type: String, required: true, trim: true },
-    contentEn: { type: String, required: true, trim: true },
+    contentEn: { type: String, default: '', trim: true },
     isPublished: { type: Boolean, default: true, index: true },
     type: { type: String, enum: ['payment', 'refund', 'membership', 'wallet', 'terms', ''], default: '', index: true },
     version: { type: String, default: '1.0', trim: true },

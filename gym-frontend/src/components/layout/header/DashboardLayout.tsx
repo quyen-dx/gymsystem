@@ -246,12 +246,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { key: '/admin/trainers', label: badgeLabel('Huấn luyện viên (PT)', pendingEndRequestCount + pendingWorkoutReportCount + pendingShiftChangeCount), icon: <UserOutlined /> },
       ] : []),
       { key: '/admin/floors-zones', label: 'Tầng & Khu vực', icon: <DashboardOutlined /> },
-      ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: 'Báo cáo', icon: <BarChartOutlined /> }] : []),
+      ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: 'Thống kê', icon: <BarChartOutlined /> }] : []),
       { key: '/admin/faqs', label: 'Quản lý FAQ', icon: <QuestionCircleOutlined /> },
       { key: '/admin/feedback', label: 'Quản lý phản hồi', icon: <CommentOutlined /> },
       { key: '/admin/policies', label: 'Chính sách', icon: <FileTextOutlined /> },
       ...(isEnabled('pt.moduleEnabled') ? [] : []),
-      { key: '/admin/notifications', label: 'Thông báo', icon: <BellOutlined /> },
+      // { key: '/admin/notifications', label: 'Thông báo', icon: <BellOutlined /> },
       // { key: '/admin/system-settings', label: 'Cài đặt hệ thống', icon: <SettingOutlined /> },
     ],
     staff: [
@@ -277,7 +277,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         ),
         icon: <CreditCardOutlined />,
       },
-      { key: '/staff/notifications', label: 'Thông báo', icon: <CommentOutlined /> },
     ],
     pt: [
       { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },

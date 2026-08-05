@@ -3,9 +3,9 @@ import mongoose from 'mongoose'
 const faqSchema = new mongoose.Schema(
   {
     questionVi: { type: String, required: true, trim: true },
-    questionEn: { type: String, required: true, trim: true },
+    questionEn: { type: String, default: '', trim: true },
     answerVi: { type: String, required: true, trim: true },
-    answerEn: { type: String, required: true, trim: true },
+    answerEn: { type: String, default: '', trim: true },
     categoryVi: { type: String, default: 'Chung', trim: true, index: true },
     categoryEn: { type: String, default: 'General', trim: true, index: true },
     isPublished: { type: Boolean, default: true, index: true },

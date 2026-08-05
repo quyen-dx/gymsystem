@@ -218,7 +218,12 @@ export const getFaqById = async (req, res) => {
 }
 
 export const createFaq = async (req, res) => {
-  const faq = await Faq.create(req.body)
+  const { questionEn, answerEn, ...rest } = req.body
+  const faq = await Faq.create({
+    ...rest,
+    questionEn: questionEn || '',
+    answerEn: answerEn || '',
+  })
 
   res.status(201).json({ message: 'Tạo FAQ thành công', faq })
 }
@@ -272,8 +277,14 @@ export const getPolicyBySlug = async (req, res) => {
 }
 
 export const createPolicy = async (req, res) => {
-  const slug = req.body.slug || slugify(req.body.titleVi || req.body.titleEn)
-  const policy = await Policy.create({ ...req.body, slug })
+  const { titleEn, contentEn, ...rest } = req.body
+  const slug = rest.slug || slugify(rest.titleVi || titleEn)
+  const policy = await Policy.create({
+    ...rest,
+    slug,
+    titleEn: titleEn || '',
+    contentEn: contentEn || '',
+  })
   res.status(201).json({ message: 'Tạo chính sách thành công', policy })
 }
 

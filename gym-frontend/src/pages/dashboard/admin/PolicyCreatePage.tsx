@@ -7,11 +7,6 @@ import { systemExperienceService } from '../../../services/systemExperienceServi
 
 const normalizeCategory = (cat: string) => cat.trim().replace(/\s+/g, ' ')
 
-interface CategoryPair {
-  vi: string
-  en: string
-}
-
 export default function PolicyCreatePage() {
   const navigate = useNavigate()
   const { policyId } = useParams()
@@ -20,10 +15,8 @@ export default function PolicyCreatePage() {
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(false)
   const [allPolicies, setAllPolicies] = useState<any[]>([])
-  const [selectedCategoryVi, setSelectedCategoryVi] = useState<string | undefined>(undefined)
-  const [selectedCategoryEn, setSelectedCategoryEn] = useState<string | undefined>(undefined)
-  const [newCategoryVi, setNewCategoryVi] = useState('')
-  const [newCategoryEn, setNewCategoryEn] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined)
+  const [newCategory, setNewCategory] = useState('')
 
   useEffect(() => {
     systemExperienceService.getPolicies({ includeHidden: true })
@@ -39,11 +32,7 @@ export default function PolicyCreatePage() {
         const policy = res.data.policy
         form.setFieldsValue(policy)
         const vi = policy.categoryVi || policy.category
-        const en = policy.categoryEn || policy.category
-        if (vi || en) {
-          setNewCategoryVi(normalizeCategory(vi || ''))
-          setNewCategoryEn(normalizeCategory(en || ''))
-        }
+        if (vi) setNewCategory(normalizeCategory(vi))
       })
       .catch((error) => {
         message.error(error.response?.data?.message || 'Lưu thất bại')
@@ -52,89 +41,41 @@ export default function PolicyCreatePage() {
       .finally(() => setInitialLoading(false))
   }, [policyId, form, navigate])
 
-  const existingCategoryPairs = useMemo(() => {
-    const map = new Map<string, CategoryPair>()
+  const existingCategories = useMemo(() => {
+    const set = new Set<string>()
     allPolicies.forEach((item) => {
       const vi = item.categoryVi || item.category
-      const en = item.categoryEn || item.category
-      if (!vi || !en) return
-      const normalizedVi = normalizeCategory(vi)
-      const normalizedEn = normalizeCategory(en)
-      const key = normalizedVi.toLowerCase()
-      if (!map.has(key)) {
-        map.set(key, { vi: normalizedVi, en: normalizedEn })
-      }
+      if (vi) set.add(normalizeCategory(vi))
     })
-    return Array.from(map.values()).sort((a, b) => a.vi.localeCompare(b.vi))
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [allPolicies])
 
-  const findExistingPair = (vi = '', en = '') => {
-    const nvi = vi ? normalizeCategory(vi).toLowerCase() : ''
-    const nen = en ? normalizeCategory(en).toLowerCase() : ''
-    return existingCategoryPairs.find((pair) => (
-      nvi && normalizeCategory(pair.vi).toLowerCase() === nvi
-    ) || (
-      nen && normalizeCategory(pair.en).toLowerCase() === nen
-    ))
+  const getCanonicalCategory = (value: string) => {
+    const normalized = normalizeCategory(value)
+    const existing = allPolicies.find((item) => {
+      const vi = item.categoryVi || item.category
+      return vi && normalizeCategory(vi).toLowerCase() === normalized.toLowerCase()
+    })
+    const existingVi = existing?.categoryVi || existing?.category
+    return existingVi ? normalizeCategory(existingVi) : normalized
   }
 
-  const getCanonicalPair = (vi: string, en: string): CategoryPair => {
-    const nvi = normalizeCategory(vi)
-    const nen = normalizeCategory(en)
-    const existing = findExistingPair(nvi, nen)
-    if (existing) return existing
-    return { vi: nvi, en: nen }
-  }
-
-  const handleSelectVi = (value: string | undefined) => {
+  const handleSelectCategory = (value: string | undefined) => {
     if (!value) {
-      setSelectedCategoryVi(undefined)
-      setSelectedCategoryEn(undefined)
+      setSelectedCategory(undefined)
       return
     }
-    const pair = existingCategoryPairs.find((p) => normalizeCategory(p.vi).toLowerCase() === normalizeCategory(value).toLowerCase())
-    if (pair) {
-      setSelectedCategoryVi(pair.vi)
-      setSelectedCategoryEn(pair.en)
-      setNewCategoryVi('')
-      setNewCategoryEn('')
-    }
-  }
-
-  const handleSelectEn = (value: string | undefined) => {
-    if (!value) {
-      setSelectedCategoryVi(undefined)
-      setSelectedCategoryEn(undefined)
-      return
-    }
-    const pair = existingCategoryPairs.find((p) => normalizeCategory(p.en).toLowerCase() === normalizeCategory(value).toLowerCase())
-    if (pair) {
-      setSelectedCategoryVi(pair.vi)
-      setSelectedCategoryEn(pair.en)
-      setNewCategoryVi('')
-      setNewCategoryEn('')
-    }
+    setSelectedCategory(value)
+    setNewCategory('')
   }
 
   const handleSave = async () => {
     const values = await form.validateFields()
 
-    const hasSelected = selectedCategoryVi && selectedCategoryEn
-    const hasAnyNew = newCategoryVi.trim() || newCategoryEn.trim()
-    const hasCompleteNew = newCategoryVi.trim() && newCategoryEn.trim()
-
-    if (hasSelected) {
-      values.categoryVi = selectedCategoryVi
-      values.categoryEn = selectedCategoryEn
-    } else if (hasAnyNew) {
-      const existing = findExistingPair(newCategoryVi, newCategoryEn)
-      if (!hasCompleteNew && !existing) {
-        message.error('Vui lòng chọn hoặc nhập danh mục')
-        return
-      }
-      const pair = getCanonicalPair(newCategoryVi, newCategoryEn)
-      values.categoryVi = pair.vi
-      values.categoryEn = pair.en
+    if (selectedCategory) {
+      values.categoryVi = getCanonicalCategory(selectedCategory)
+    } else if (newCategory.trim()) {
+      values.categoryVi = getCanonicalCategory(newCategory)
     } else {
       message.error('Vui lòng chọn hoặc nhập danh mục')
       return
@@ -184,60 +125,43 @@ export default function PolicyCreatePage() {
 
       <div style={cardStyle} className="p-6 max-[640px]:p-4">
         <Form form={form} layout="vertical" initialValues={{ isPublished: true }} disabled={initialLoading}>
-          <Form.Item name="titleVi" label='Tiêu đề (Tiếng Việt)' rules={[{ required: true }]}>
+          <Form.Item name="titleVi" label="Tiêu đề" rules={[{ required: true }]}>
             <Input size="large" />
           </Form.Item>
-          <Form.Item name="titleEn" label='Tiêu đề (Tiếng Anh)' rules={[{ required: true }]}>
+          <Form.Item name="slug" label="Slug">
             <Input size="large" />
           </Form.Item>
-          <Form.Item name="slug" label='Slug'>
-            <Input size="large" />
-          </Form.Item>
-          <Form.Item name="contentVi" label='Nội dung (Tiếng Việt)' rules={[{ required: true }]}>
+          <Form.Item name="contentVi" label="Nội dung" rules={[{ required: true }]}>
             <Input.TextArea rows={6} size="large" />
           </Form.Item>
-          <Form.Item name="contentEn" label='Nội dung (Tiếng Anh)' rules={[{ required: true }]}>
-            <Input.TextArea rows={6} size="large" />
-          </Form.Item>
-          <Form.Item label='Danh mục'>
+          <Form.Item label="Danh mục">
             <div className="grid gap-3">
-              <div className="text-sm font-medium text-[var(--gs-text-soft)]">Chọn danh mục có sẵn</div>
-              <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
-                <Select
-                  placeholder="Tiếng Việt"
-                  allowClear
-                  value={selectedCategoryVi}
-                  onChange={handleSelectVi}
-                  options={existingCategoryPairs.map((p) => ({ label: p.vi, value: p.vi }))}
-                  size="large"
-                />
-                <Select
-                  placeholder="English"
-                  allowClear
-                  value={selectedCategoryEn}
-                  onChange={handleSelectEn}
-                  options={existingCategoryPairs.map((p) => ({ label: p.en, value: p.en }))}
-                  size="large"
-                />
-              </div>
+              {existingCategories.length > 0 && (
+                <>
+                  <div className="text-sm font-medium text-[var(--gs-text-soft)]">Chọn danh mục có sẵn</div>
+                  <Select
+                    placeholder="Chọn danh mục"
+                    allowClear
+                    value={selectedCategory}
+                    onChange={handleSelectCategory}
+                    options={existingCategories.map((c) => ({ label: c, value: c }))}
+                    size="large"
+                  />
+                </>
+              )}
               <div className="text-sm font-medium text-[var(--gs-text-soft)]">Hoặc thêm danh mục mới</div>
-              <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
-                <Input
-                  placeholder='Nhập tên danh mục (Tiếng Việt)'
-                  value={newCategoryVi}
-                  onChange={(e) => { setNewCategoryVi(e.target.value); if (e.target.value) { setSelectedCategoryVi(undefined); setSelectedCategoryEn(undefined) } }}
-                  size="large"
-                />
-                <Input
-                  placeholder='Nhập tên danh mục (Tiếng Anh)'
-                  value={newCategoryEn}
-                  onChange={(e) => { setNewCategoryEn(e.target.value); if (e.target.value) { setSelectedCategoryVi(undefined); setSelectedCategoryEn(undefined) } }}
-                  size="large"
-                />
-              </div>
+              <Input
+                placeholder="Tên danh mục"
+                value={newCategory}
+                onChange={(e) => {
+                  setNewCategory(e.target.value)
+                  if (e.target.value) setSelectedCategory(undefined)
+                }}
+                size="large"
+              />
             </div>
           </Form.Item>
-          <Form.Item name="isPublished" label='Xuất bản' valuePropName="checked">
+          <Form.Item name="isPublished" label="Xuất bản" valuePropName="checked">
             <Switch />
           </Form.Item>
         </Form>

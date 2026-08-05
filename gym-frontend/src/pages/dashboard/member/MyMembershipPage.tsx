@@ -543,6 +543,16 @@ export default function MyMembershipPage() {
               <InfoCell label="Ngày đăng ký" value={formatDate(cycle?.purchasedAt || membership?.createdAt)} />
               <InfoCell label="Ngày bắt đầu" value={cycle?.startDate ? formatDate(cycle.startDate) : formatDate(cycle?.purchasedAt || membership?.createdAt)} />
               <InfoCell label="Ngày hết hạn" value={formatDate(cycle?.expiresAt || undefined)} wide />
+              <InfoCell
+                label="Còn lại"
+                value={
+                  membership.displayStatus === 'cancelled' || membership.displayStatus === 'refunded'
+                    ? 'Đã hủy'
+                    : membership.remainingDays > 0
+                      ? `${membership.remainingDays} ngày`
+                      : 'Đã hết hạn'
+                }
+              />
               <div className="col-span-1 sm:col-span-2 lg:col-span-3 flex flex-col gap-0.5 bg-[var(--gs-card)] px-4 py-3.5">
                 <span className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">Quyền hoàn tiền</span>
                 <span className={`text-sm font-semibold ${refundInfo?.eligible ? 'text-[var(--gs-success)]' : 'text-[var(--gs-text-muted)]'}`}>
