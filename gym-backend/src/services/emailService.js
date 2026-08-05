@@ -19,6 +19,13 @@ const getSiteName = async () => {
   return cachedSiteName
 }
 
+const buildGmailTransport = ({ user, pass }) => ({
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false,
+  auth: { user, pass },
+})
+
 const createTransporter = () => {
   if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
     const smtpHost = process.env.SMTP_HOST
@@ -33,8 +40,15 @@ const createTransporter = () => {
         },
       })
     }
+    // Không có SMTP_HOST: dùng mặc định an toàn (587/STARTTLS) thay vì
+    // nodemailer `service:'gmail'` (cổng 465) để hành vi localhost == deploy.
+    if ((process.env.EMAIL_SERVICE || 'gmail').toLowerCase() === 'gmail') {
+      return nodemailer.createTransport(
+        buildGmailTransport({ user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }),
+      )
+    }
     return nodemailer.createTransport({
-      service: process.env.EMAIL_SERVICE || 'gmail',
+      service: process.env.EMAIL_SERVICE,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
@@ -85,12 +99,24 @@ export const getEmailTransportSummary = () => {
       authUser: process.env.EMAIL_USER,
     }
   }
+  if ((process.env.EMAIL_SERVICE || 'gmail').toLowerCase() === 'gmail') {
+    return {
+      EMAIL_USER_exists: true,
+      EMAIL_PASS_exists: true,
+      transportType: 'smtp',
+      host: 'smtp.gmail.com',
+      service: null,
+      port: 587,
+      secure: false,
+      authUser: process.env.EMAIL_USER,
+    }
+  }
   return {
     EMAIL_USER_exists: true,
     EMAIL_PASS_exists: true,
     transportType: 'service',
     host: null,
-    service: process.env.EMAIL_SERVICE || 'gmail',
+    service: process.env.EMAIL_SERVICE,
     port: null,
     secure: null,
     authUser: process.env.EMAIL_USER,

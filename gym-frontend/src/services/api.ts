@@ -6,7 +6,7 @@ import { API_URL } from '../config/env'
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
-  timeout: 10000,
+  timeout: 30000,
 })
 
 let refreshPromise: Promise<string | null> | null = null

@@ -257,6 +257,13 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
 
   const session = await mongoose.startSession()
   let committed = false
+  let membership = null
+  let payment = null
+  let renewalPeriodsData = null
+  let newRegistrationPeriodData = null
+  let walletBalance = 0
+
+  const isRenew = mode === 'renew'
 
   try {
     session.startTransaction()
@@ -274,18 +281,15 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
     }
 
     const balanceBefore = Number(wallet.balance || 0)
-    const walletBalance = balanceBefore - amount
+    walletBalance = balanceBefore - amount
     const today = startOfTodayVN()
 
-    const isRenew = mode === 'renew'
     const existingActive = existingActiveCycle
       ? await Membership.findById(existingActiveCycle.currentMembershipId).session(session)
       : null
     let oldEndDate = null
-    let renewalPeriodsData = null
-    let newRegistrationPeriodData = null
 
-    let membership = isRenew && existingActive ? existingActive : null
+    membership = isRenew && existingActive ? existingActive : null
 
     if (membership) {
       // Gia hạn: tạo nhiều MembershipPeriod (mỗi period = một chu kỳ chuẩn của Plan)
@@ -328,7 +332,6 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
 
       membership.planId = planObjectId
       membership.source = 'manual'
-      await membership.save({ session })
 
       // Lưu thông tin để tạo MembershipPeriod sau khi có paymentId
       renewalPeriodsData = periodsData
@@ -359,7 +362,7 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
       }
     }
 
-    const [payment] = await Payment.create(
+    const [createdPayment] = await Payment.create(
       [
         {
           userId: memberId,
@@ -379,76 +382,77 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
       ],
       { session },
     )
-
-    await Transaction.create(
-      [
-        {
-          userId: memberId,
-          walletId: wallet._id,
-          type: 'payment',
-          provider: 'wallet',
-          source: 'membership',
-          description: `Thanh toán gói tập ${plan.nameVi || plan.nameEn}`,
-          amount: -amount,
-          balanceBefore,
-          balanceAfter: walletBalance,
-          referenceId: payment._id.toString(),
-          status: 'completed',
-          completedAt: new Date(),
-          metadata: {
-            paymentId: payment._id,
-            planId: plan._id,
-            membershipId: membership._id,
-          },
-          idempotencyKey: payment._id.toString(),
-        },
-      ],
-      { session },
-    )
+    payment = createdPayment
 
     membership.paymentId = payment._id
-    await membership.save({ session })
+
+    // === BATCH: các write độc lập chạy song song (giảm round-trip tới MongoDB) ===
+    const tasks = [
+      Transaction.create(
+        [
+          {
+            userId: memberId,
+            walletId: wallet._id,
+            type: 'payment',
+            provider: 'wallet',
+            source: 'membership',
+            description: `Thanh toán gói tập ${plan.nameVi || plan.nameEn}`,
+            amount: -amount,
+            balanceBefore,
+            balanceAfter: walletBalance,
+            referenceId: payment._id.toString(),
+            status: 'completed',
+            completedAt: new Date(),
+            metadata: {
+              paymentId: payment._id,
+              planId: plan._id,
+              membershipId: membership._id,
+            },
+            idempotencyKey: payment._id.toString(),
+          },
+        ],
+        { session },
+      ),
+      membership.save({ session }),
+    ]
 
     if (newRegistrationPeriodData) {
       // Tạo MembershipPeriod đầu tiên (ACTIVE) cho đăng ký mới
-      await MembershipPeriod.create([{
-        ...newRegistrationPeriodData,
-        paymentId: payment._id,
-        status: 'ACTIVE',
-        activatedAt: new Date(),
-      }], { session })
+      tasks.push(
+        MembershipPeriod.create([{
+          ...newRegistrationPeriodData,
+          paymentId: payment._id,
+          status: 'ACTIVE',
+          activatedAt: new Date(),
+        }], { session }),
+      )
     }
 
     if (renewalPeriodsData && renewalPeriodsData.length > 0) {
       // Tạo nhiều MembershipPeriod (mỗi period = một chu kỳ chuẩn)
-      await MembershipPeriod.create(
-        renewalPeriodsData.map((pd) => ({
-          ...pd,
+      tasks.push(
+        MembershipPeriod.create(
+          renewalPeriodsData.map((pd) => ({
+            ...pd,
+            paymentId: payment._id,
+            status: 'PENDING',
+          })),
+          { session, ordered: true },
+        ),
+        MembershipRenewal.create([{
+          membershipId: membership._id,
+          planId: planObjectId,
+          memberId,
+          days: effectiveDays,
+          price: amount,
+          oldEndDate,
+          newEndDate: renewalPeriodsData[renewalPeriodsData.length - 1].endDate,
+          renewedAt: new Date(),
+          status: 'ACTIVE',
           paymentId: payment._id,
-          status: 'PENDING',
-        })),
-        { session, ordered: true },
+          durationMultiplier: multiplier,
+        }], { session }),
       )
-
-      const lastPeriodEnd = renewalPeriodsData[renewalPeriodsData.length - 1].endDate
-      await MembershipRenewal.create([{
-        membershipId: membership._id,
-        planId: planObjectId,
-        memberId,
-        days: effectiveDays,
-        price: amount,
-        oldEndDate,
-        newEndDate: lastPeriodEnd,
-        renewedAt: new Date(),
-        status: 'ACTIVE',
-        paymentId: payment._id,
-        durationMultiplier: multiplier,
-      }], { session })
-
-    }
-
-    if ((renewalPeriodsData && renewalPeriodsData.length > 0) || newRegistrationPeriodData) {
-      await rebuildMembershipTimeline({ membershipId: membership._id, session })
     }
 
     // === MembershipCycle integration (cycle-based) ===
@@ -461,166 +465,48 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
       const lastPeriodEnd = renewalPeriodsData
         ? renewalPeriodsData[renewalPeriodsData.length - 1].endDate
         : existingActiveCycle?.expiresAt
-      await MembershipCycle.updateOne(
-        { _id: existingActiveCycle._id },
-        {
-          $inc: { durationDays: effectiveDays },
-          $set: {
-            currentMembershipId: membership._id,
-            currentPlanId: planObjectId,
-            endDate: lastPeriodEnd,
-            expiresAt: lastPeriodEnd,
+      tasks.push(
+        MembershipCycle.updateOne(
+          { _id: existingActiveCycle._id },
+          {
+            $inc: { durationDays: effectiveDays },
+            $set: {
+              currentMembershipId: membership._id,
+              currentPlanId: planObjectId,
+              endDate: lastPeriodEnd,
+              expiresAt: lastPeriodEnd,
+            },
           },
-        },
-      ).session(session)
+        ).session(session),
+      )
     } else {
       // Mua mới: cycle được kích hoạt NGAY khi thanh toán thành công.
       // startDate = thời điểm thanh toán, expiresAt = startDate + durationDays
       const periodEnd = newRegistrationPeriodData?.endDate || now
-      await MembershipCycle.create([{
-        memberId,
-        currentMembershipId: membership._id,
-        currentPlanId: planObjectId,
-        purchasedAt: now,
-        startDate: now,
-        activatedAt: now,
-        endDate: periodEnd,
-        expiresAt: periodEnd,
-        durationDays: effectiveDays,
-        status: 'active',
-        refundEligible: false,
-        refundExpiredAt,
-        previousCycleId: null,
-      }], { session })
+      tasks.push(
+        MembershipCycle.create([{
+          memberId,
+          currentMembershipId: membership._id,
+          currentPlanId: planObjectId,
+          purchasedAt: now,
+          startDate: now,
+          activatedAt: now,
+          endDate: periodEnd,
+          expiresAt: periodEnd,
+          durationDays: effectiveDays,
+          status: 'active',
+          refundEligible: false,
+          refundExpiredAt,
+          previousCycleId: null,
+        }], { session }),
+      )
     }
 
-    await PlanChangeHistory.create([{
-      memberId,
-      membershipId: membership._id,
-      fromPlanId: null,
-      toPlanId: planObjectId,
-      changedAt: new Date(),
-      changeType: isRenew ? 'renew' : 'purchase',
-      type: isRenew ? 'renew' : 'purchase',
-      amount: amount || 0,
-      priceDifference: 0,
-      proratedValue: 0,
-      proratedCredit: 0,
-      walletCredit: 0,
-    }], { session })
+    await Promise.all(tasks)
     // === end MembershipCycle integration ===
 
     await session.commitTransaction()
     committed = true
-
-    if (isRenew) {
-      createNotification({
-        receiverId: memberId,
-        receiverRole: 'member',
-        notificationType: NOTIFICATION_TYPES.MEMBERSHIP_RENEWAL_SUCCESS,
-        title: 'Gia hạn gói tập thành công',
-        content: `Bạn đã gia hạn thành công gói "${plan.nameVi || plan.nameEn}".`,
-        relatedId: membership._id,
-        relatedType: 'Membership',
-        redirectUrl: '/my-membership',
-        createdBy: 'System',
-      }).catch(err => console.error('Notify renewal failed:', err.message))
-
-      createNotification({
-        receiverId: memberId,
-        receiverRole: 'member',
-        notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
-        title: 'Thanh toán gia hạn thành công',
-        content: `Bạn đã thanh toán ${amount.toLocaleString('vi-VN')}đ để gia hạn gói tập.`,
-        relatedId: payment._id,
-        relatedType: 'Payment',
-        redirectUrl: '/my-membership',
-        createdBy: 'System',
-      }).catch(err => console.error('Notify payment failed:', err.message))
-    } else {
-      createNotification({
-        receiverId: memberId,
-        receiverRole: 'member',
-        notificationType: NOTIFICATION_TYPES.MEMBERSHIP_ACTIVATED,
-        title: 'Gói tập đang hoạt động',
-        content: `Gói "${plan.nameVi || plan.nameEn}" của bạn đang hoạt động. Thời hạn được tính từ thời điểm thanh toán thành công.`,
-        relatedId: membership._id,
-        relatedType: 'Membership',
-        redirectUrl: '/my-membership',
-        createdBy: 'System',
-      }).catch(err => console.error('Notify membership activated failed:', err.message))
-
-      createNotification({
-        receiverId: memberId,
-        receiverRole: 'member',
-        notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
-        title: 'Thanh toán gói tập thành công',
-        content: `Bạn đã thanh toán ${amount.toLocaleString('vi-VN')}đ cho gói "${plan.nameVi || plan.nameEn}".`,
-        relatedId: payment._id,
-        relatedType: 'Payment',
-        redirectUrl: '/my-membership',
-        createdBy: 'System',
-      }).catch(err => console.error('Notify payment failed:', err.message))
-    }
-
-    if (!isRenew) {
-      await cleanupMemberPTData({ memberId })
-    }
-
-    try {
-      await recordUserActivity({
-        userId: user._id,
-        type: 'membership',
-        title: isRenew ? 'Gia hạn gói tập' : 'Đăng ký gói tập',
-        description: `${isRenew ? 'Gia hạn' : 'Đăng ký'} gói "${plan.nameVi}" bằng ví tài khoản`,
-        metadata: { membershipId: membership._id, planId: plan._id, paymentId: payment._id, paymentMethod: 'WALLET' },
-      })
-    } catch (activityError) {
-      console.error('Không thể ghi hoạt động đăng ký gói tập:', activityError.message)
-    }
-
-    if (isRenew && user.email) {
-      const existingPeriodCount = renewalPeriodsData
-        ? await MembershipPeriod.countDocuments({ membershipId: membership._id })
-        : 0
-      sendRenewalSuccessEmail({
-        toEmail: user.email,
-        userName: user.fullName || user.name || user.email,
-        planName: plan.nameVi || plan.nameEn,
-        endDate: renewalPeriodsData
-          ? renewalPeriodsData[0].endDate
-          : existingActiveCycle?.expiresAt,
-        periodIndex: existingPeriodCount > 0 ? existingPeriodCount + 1 : undefined,
-      }).catch((e) => console.error('Gửi email gia hạn thất bại:', e.message))
-    }
-
-    const [populatedMembership, latestCycle] = await Promise.all([
-      Membership.findById(membership._id).populate('planId').session(null),
-      MembershipCycle.find({ memberId })
-        .sort({ createdAt: -1 })
-        .limit(1)
-        .lean()
-        .session(null),
-    ])
-    const cycle = latestCycle?.[0] || null
-    return {
-      message: isRenew ? 'Gia hạn thành công' : 'Đăng ký gói tập thành công',
-      walletBalance,
-      membership: serializeMembership(populatedMembership, cycle),
-      cycle: cycle
-        ? {
-            id: cycle._id,
-            status: cycle.status,
-            expiresAt: cycle.expiresAt,
-            durationDays: cycle.durationDays,
-            refundExpiredAt: cycle.refundExpiredAt,
-          }
-        : undefined,
-      payment,
-      ...(renewalPeriodsData && renewalPeriodsData.length > 0
-        ? { newEndDate: renewalPeriodsData[renewalPeriodsData.length - 1].endDate }
-        : {}),
-    }
   } catch (error) {
     if (!committed) {
       await session.abortTransaction()
@@ -628,6 +514,149 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
     throw error
   } finally {
     session.endSession()
+  }
+
+  // === SAU COMMIT: chỉ giữ bước bắt buộc cho response.
+  // Mọi tác vụ không ảnh hưởng business (notification, history, timeline,
+  // dọn dữ liệu PT/lớp, analytics, email) chạy fire-and-forget
+  // để response luôn về trong thời gian ngắn, không phụ thuộc SMTP/MongoDB. ===
+
+  const planName = plan.nameVi || plan.nameEn
+
+  if (isRenew) {
+    createNotification({
+      receiverId: memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.MEMBERSHIP_RENEWAL_SUCCESS,
+      title: 'Gia hạn gói tập thành công',
+      content: `Bạn đã gia hạn thành công gói "${planName}".`,
+      relatedId: membership._id,
+      relatedType: 'Membership',
+      redirectUrl: '/my-membership',
+      createdBy: 'System',
+    }).catch(err => console.error('Notify renewal failed:', err.message))
+
+    createNotification({
+      receiverId: memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+      title: 'Thanh toán gia hạn thành công',
+      content: `Bạn đã thanh toán ${amount.toLocaleString('vi-VN')}đ để gia hạn gói tập.`,
+      relatedId: payment._id,
+      relatedType: 'Payment',
+      redirectUrl: '/my-membership',
+      createdBy: 'System',
+    }).catch(err => console.error('Notify payment failed:', err.message))
+  } else {
+    createNotification({
+      receiverId: memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.MEMBERSHIP_ACTIVATED,
+      title: 'Gói tập đang hoạt động',
+      content: `Gói "${planName}" của bạn đang hoạt động. Thời hạn được tính từ thời điểm thanh toán thành công.`,
+      relatedId: membership._id,
+      relatedType: 'Membership',
+      redirectUrl: '/my-membership',
+      createdBy: 'System',
+    }).catch(err => console.error('Notify membership activated failed:', err.message))
+
+    createNotification({
+      receiverId: memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
+      title: 'Thanh toán gói tập thành công',
+      content: `Bạn đã thanh toán ${amount.toLocaleString('vi-VN')}đ cho gói "${planName}".`,
+      relatedId: payment._id,
+      relatedType: 'Payment',
+      redirectUrl: '/my-membership',
+      createdBy: 'System',
+    }).catch(err => console.error('Notify payment failed:', err.message))
+  }
+
+  // Lịch sử đổi gói (không ảnh hưởng business) — fire-and-forget
+  PlanChangeHistory.create([{
+    memberId,
+    membershipId: membership._id,
+    fromPlanId: null,
+    toPlanId: planObjectId,
+    changedAt: new Date(),
+    changeType: isRenew ? 'renew' : 'purchase',
+    type: isRenew ? 'renew' : 'purchase',
+    amount: amount || 0,
+    priceDifference: 0,
+    proratedValue: 0,
+    proratedCredit: 0,
+    walletCredit: 0,
+  }]).catch(() => {})
+
+  // Đồng bộ timeline các period (không ảnh hưởng business) — fire-and-forget
+  rebuildMembershipTimeline({ membershipId: membership._id })
+    .catch((e) => console.error('Rebuild timeline sau đăng ký thất bại:', e.message))
+
+  // Dọn dữ liệu PT/lớp cũ (không ảnh hưởng business) — fire-and-forget
+  if (!isRenew) {
+    cleanupMemberPTData({ memberId })
+      .catch((e) => console.error('Cleanup PT data sau đăng ký thất bại:', e.message))
+  }
+
+  // Ghi hoạt động (analytics) — fire-and-forget
+  recordUserActivity({
+    userId: user._id,
+    type: 'membership',
+    title: isRenew ? 'Gia hạn gói tập' : 'Đăng ký gói tập',
+    description: `${isRenew ? 'Gia hạn' : 'Đăng ký'} gói "${plan.nameVi}" bằng ví tài khoản`,
+    metadata: { membershipId: membership._id, planId: plan._id, paymentId: payment._id, paymentMethod: 'WALLET' },
+  }).catch((activityError) => console.error('Không thể ghi hoạt động đăng ký gói tập:', activityError.message))
+
+  // Email gia hạn (không ảnh hưởng business) — fire-and-forget
+  if (isRenew && user.email) {
+    (async () => {
+      try {
+        const existingPeriodCount = renewalPeriodsData
+          ? await MembershipPeriod.countDocuments({ membershipId: membership._id })
+          : 0
+        await sendRenewalSuccessEmail({
+          toEmail: user.email,
+          userName: user.fullName || user.name || user.email,
+          planName,
+          endDate: renewalPeriodsData
+            ? renewalPeriodsData[0].endDate
+            : existingActiveCycle?.expiresAt,
+          periodIndex: existingPeriodCount > 0 ? existingPeriodCount + 1 : undefined,
+        })
+      } catch (e) {
+        console.error('Gửi email gia hạn thất bại:', e.message)
+      }
+    })()
+  }
+
+  // === BẮT BUỘC cho response (song song, tối thiểu) ===
+  const [populatedMembership, latestCycle] = await Promise.all([
+    Membership.findById(membership._id).populate('planId').session(null),
+    MembershipCycle.find({ memberId })
+      .sort({ createdAt: -1 })
+      .limit(1)
+      .lean()
+      .session(null),
+  ])
+  const cycle = latestCycle?.[0] || null
+  return {
+    message: isRenew ? 'Gia hạn thành công' : 'Đăng ký gói tập thành công',
+    walletBalance,
+    membership: serializeMembership(populatedMembership, cycle),
+    cycle: cycle
+      ? {
+          id: cycle._id,
+          status: cycle.status,
+          expiresAt: cycle.expiresAt,
+          durationDays: cycle.durationDays,
+          refundExpiredAt: cycle.refundExpiredAt,
+        }
+      : undefined,
+    payment,
+    ...(renewalPeriodsData && renewalPeriodsData.length > 0
+      ? { newEndDate: renewalPeriodsData[renewalPeriodsData.length - 1].endDate }
+      : {}),
   }
 }
 
@@ -688,15 +717,16 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
       await Payment.findByIdAndUpdate(paymentId, { membershipId: membership._id })
     }
 
-    await cleanupMemberPTData({ memberId: user._id })
+    cleanupMemberPTData({ memberId: user._id })
+      .catch((e) => console.error('Cleanup PT data sau đăng ký thất bại:', e.message))
 
-    await recordUserActivity({
+    recordUserActivity({
       userId: user._id,
       type: 'membership',
       title: 'Đăng ký gói tập',
       description: `Đăng ký gói "${plan.nameVi}" - ${plan.durationDays} ngày`,
       metadata: { membershipId: membership._id, planId: plan._id, source },
-    })
+    }).catch((e) => console.error('Không thể ghi hoạt động đăng ký gói tập:', e.message))
 
     createNotification({
       receiverId: user._id,
@@ -732,7 +762,7 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
       previousCycleId: null,
     })
 
-    await PlanChangeHistory.create({
+    PlanChangeHistory.create({
       memberId,
       membershipId: membership._id,
       fromPlanId: null,
@@ -745,7 +775,7 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
       proratedValue: 0,
       proratedCredit: 0,
       walletCredit: 0,
-    })
+    }).catch(() => {})
     // === end MembershipCycle integration ===
 
     const [populated, latestCycle] = await Promise.all([
@@ -819,16 +849,17 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
     await Payment.findByIdAndUpdate(paymentId, { membershipId: existingActive._id })
   }
 
-  // Gọi rebuild để đồng bộ timeline của các period
-  await rebuildMembershipTimeline({ membershipId: existingActive._id })
+  // Gọi rebuild để đồng bộ timeline của các period (không ảnh hưởng business) — fire-and-forget
+  rebuildMembershipTimeline({ membershipId: existingActive._id })
+    .catch((e) => console.error('Rebuild timeline sau gia hạn thất bại:', e.message))
 
-  await recordUserActivity({
+  recordUserActivity({
     userId: user._id,
     type: 'membership',
     title: 'Gia hạn gói tập',
     description: `Gia hạn gói "${plan.nameVi}" thêm ${plan.durationDays} ngày`,
     metadata: { membershipId: existingActive._id, planId: plan._id, source },
-  })
+  }).catch((e) => console.error('Không thể ghi hoạt động gia hạn gói tập:', e.message))
 
   createNotification({
     receiverId: user._id,
@@ -889,7 +920,7 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
     })
   }
 
-  await PlanChangeHistory.create({
+  PlanChangeHistory.create({
     memberId,
     membershipId: existingActive._id,
     fromPlanId: null,
@@ -902,7 +933,7 @@ const createActivatedMembership = async ({ userId, planId, source = 'manual', pa
     proratedValue: 0,
     proratedCredit: 0,
     walletCredit: 0,
-  })
+  }).catch(() => {})
   // === end MembershipCycle integration ===
 
   const populated = await Membership.findById(existingActive._id).populate('planId')
@@ -1906,9 +1937,9 @@ const autoCancelPendingPeriod = async ({ userId, periodId }) => {
     error.statusCode = 400
     throw error
   }
-
   const session = await mongoose.startSession()
   let committed = false
+
   try {
     session.startTransaction()
 
