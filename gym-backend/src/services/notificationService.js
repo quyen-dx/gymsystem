@@ -1,7 +1,7 @@
 import Notification, { NOTIFICATION_TYPES, getCategory } from '../models/Notification.js'
 import User from '../models/User.js'
 import { getIO } from './socketService.js'
-import { transporter } from './emailService.js'
+import { sendMailWithLog } from './emailService.js'
 // TODO: Consider adding a retry/queue mechanism for notification delivery failures
 // Currently, fire-and-forget notification calls at ~30+ call sites silently drop errors.
 // A background queue (e.g., Bull/BullMQ) would ensure reliable delivery.
@@ -47,7 +47,7 @@ const EMAIL_EVENTS = new Set([
 async function sendPlainEmail(to, subject, htmlContent) {
   if (!to) return
   try {
-    await transporter.sendMail({
+    await sendMailWithLog({
       from: FROM_EMAIL,
       to,
       subject: `${subject} - ${SITE_NAME}`,

@@ -252,7 +252,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { key: '/admin/policies', label: 'Chính sách', icon: <FileTextOutlined /> },
       ...(isEnabled('pt.moduleEnabled') ? [] : []),
       { key: '/admin/notifications', label: 'Thông báo', icon: <BellOutlined /> },
-      { key: '/admin/system-settings', label: 'Cài đặt hệ thống', icon: <SettingOutlined /> },
+      // { key: '/admin/system-settings', label: 'Cài đặt hệ thống', icon: <SettingOutlined /> },
     ],
     staff: [
       { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },

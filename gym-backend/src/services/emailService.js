@@ -49,11 +49,100 @@ const createTransporter = () => {
 
 export const transporter = createTransporter()
 
+export const getEmailTransportSummary = () => {
+  const emailUserExists = !!process.env.EMAIL_USER
+  const emailPassExists = !!process.env.EMAIL_PASS
+  if (!emailUserExists || !emailPassExists) {
+    return {
+      EMAIL_USER_exists: emailUserExists,
+      EMAIL_PASS_exists: emailPassExists,
+      transportType: 'mock (jsonTransport)',
+      host: null,
+      service: null,
+      port: null,
+      secure: null,
+      authUser: null,
+    }
+  }
+  const smtpHost = process.env.SMTP_HOST
+  if (smtpHost) {
+    return {
+      EMAIL_USER_exists: true,
+      EMAIL_PASS_exists: true,
+      transportType: 'smtp',
+      host: smtpHost,
+      service: null,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      authUser: process.env.EMAIL_USER,
+    }
+  }
+  return {
+    EMAIL_USER_exists: true,
+    EMAIL_PASS_exists: true,
+    transportType: 'service',
+    host: null,
+    service: process.env.EMAIL_SERVICE || 'gmail',
+    port: null,
+    secure: null,
+    authUser: process.env.EMAIL_USER,
+  }
+}
+
+export const sendMailWithLog = async (mailOptions) => {
+  console.log('[EmailService] Sending email...', {
+    to: mailOptions.to,
+    subject: mailOptions.subject,
+  })
+  try {
+    const info = await transporter.sendMail(mailOptions)
+    console.log('[EmailService] sendMail OK', {
+      messageId: info.messageId,
+      accepted: info.accepted,
+      rejected: info.rejected,
+      response: info.response,
+    })
+    return info
+  } catch (err) {
+    console.error('[EmailService] sendMail FAILED', {
+      to: mailOptions.to,
+      subject: mailOptions.subject,
+      errCode: err.code,
+      errCommand: err.command,
+      errResponse: err.response,
+      errResponseCode: err.responseCode,
+    })
+    console.error('[EmailService] sendMail stack:', err?.stack || err)
+    throw err
+  }
+}
+
+const logTransportStartup = () => {
+  const summary = getEmailTransportSummary()
+  console.log('[EmailService] Transport config:', summary)
+  if (summary.transportType === 'mock (jsonTransport)') {
+    console.warn(
+      '[EmailService] WARNING: EMAIL_USER/EMAIL_PASS missing -> using jsonTransport, emails will NOT be sent!'
+    )
+  }
+  transporter
+    .verify()
+    .then(() => {
+      console.log('[EmailService] SMTP verify success (transport=' + summary.transportType + ')')
+    })
+    .catch((err) => {
+      console.error('[EmailService] SMTP verify failed:', err?.message || err)
+      console.error('[EmailService] SMTP verify stack:', err?.stack || err)
+    })
+}
+
+logTransportStartup()
+
 export const sendOtpEmail = async ({ toEmail, otp, purpose }) => {
   const purposeText =
     purpose === 'register' ? 'xác minh đăng ký tài khoản' : 'xác minh quên mật khẩu'
 
-  const info = await transporter.sendMail({
+  const info = await sendMailWithLog({
     from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
     to: toEmail,
     subject: `Mã OTP ${purposeText} - GymPro`,
@@ -82,7 +171,7 @@ export const sendOtpEmail = async ({ toEmail, otp, purpose }) => {
 }
 
 export const sendShopDeletionEmail = async ({ toEmail, shopName, reason }) => {
-  const info = await transporter.sendMail({
+  const info = await sendMailWithLog({
     from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
     to: toEmail,
     subject: `Thông báo ngừng hợp tác - GymPro`,
@@ -110,7 +199,7 @@ export const sendShopDeletionEmail = async ({ toEmail, shopName, reason }) => {
 }
 
 export const sendPartnershipRequestEmail = async ({ toEmail, request }) => {
-  const info = await transporter.sendMail({
+  const info = await sendMailWithLog({
     from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
     to: toEmail,
     subject: `Yêu cầu hợp tác mới - ${request.brand_name}`,
@@ -142,7 +231,7 @@ export const sendPartnershipRequestEmail = async ({ toEmail, request }) => {
 
 export const sendRenewalSuccessEmail = async ({ toEmail, userName, planName, endDate, periodIndex }) => {
   const siteName = await getSiteName()
-  const info = await transporter.sendMail({
+  const info = await sendMailWithLog({
     from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
     to: toEmail,
     subject: `Gia hạn gói tập thành công - ${siteName}`,
@@ -171,7 +260,7 @@ export const sendRenewalSuccessEmail = async ({ toEmail, userName, planName, end
 }
 
 export const sendRenewalReminderEmail = async ({ toEmail, userName, planName, endDate, daysLeft }) => {
-  const info = await transporter.sendMail({
+  const info = await sendMailWithLog({
     from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
     to: toEmail,
     subject: `Gói tập sắp hết hạn - Còn ${daysLeft} ngày - GymPro`,
@@ -204,7 +293,7 @@ export const sendRenewalReminderEmail = async ({ toEmail, userName, planName, en
 
 export const sendPeriodCompletedEmail = async ({ toEmail, userName, planName, periodIndex, endDate }) => {
   const siteName = await getSiteName()
-  const info = await transporter.sendMail({
+  const info = await sendMailWithLog({
     from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
     to: toEmail,
     subject: `Đợt ${periodIndex} gói ${planName} đã kết thúc - ${siteName}`,
@@ -228,7 +317,7 @@ export const sendPeriodCompletedEmail = async ({ toEmail, userName, planName, pe
 
 export const sendPeriodActivatedEmail = async ({ toEmail, userName, planName, periodIndex, startDate, endDate }) => {
   const siteName = await getSiteName()
-  const info = await transporter.sendMail({
+  const info = await sendMailWithLog({
     from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
     to: toEmail,
     subject: `Đợt ${periodIndex} gói ${planName} đã bắt đầu - ${siteName}`,
@@ -256,7 +345,7 @@ export const sendPeriodActivatedEmail = async ({ toEmail, userName, planName, pe
 
 export const sendCancelRenewalEmail = async ({ toEmail, userName, planName, days, refundAmount }) => {
   const siteName = await getSiteName()
-  const info = await transporter.sendMail({
+  const info = await sendMailWithLog({
     from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
     to: toEmail,
     subject: `Đã hủy gia hạn gói ${planName} - ${siteName}`,
@@ -289,7 +378,7 @@ export const sendCancelRenewalEmail = async ({ toEmail, userName, planName, days
 
 export const sendRefundRequestSubmittedEmail = async ({ toEmail, userName, planName, periodDetail, isFullCancel }) => {
   const siteName = await getSiteName()
-  const info = await transporter.sendMail({
+  const info = await sendMailWithLog({
     from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
     to: toEmail,
     subject: `Yêu cầu hủy${isFullCancel ? ' gói' : ' gia hạn'} đã được gửi - ${siteName}`,
@@ -320,7 +409,7 @@ export const sendRefundRequestProcessedEmail = async ({ toEmail, userName, planN
   const siteName = await getSiteName()
   const isApproved = status === 'approved' || status === 'REFUNDED' || status === 'APPROVED'
   const processedDate = new Date().toLocaleDateString('vi-VN')
-  const info = await transporter.sendMail({
+  const info = await sendMailWithLog({
     from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
     to: toEmail,
     subject: `${isApproved ? 'Đã xác nhận' : 'Từ chối'} yêu cầu hủy${isFullCancel ? ' gói' : ' gia hạn'} - ${siteName}`,
