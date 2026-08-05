@@ -49,6 +49,14 @@ const createTransporter = () => {
 
 export const transporter = createTransporter()
 
+const DEFAULT_FROM_NAME = process.env.EMAIL_FROM_NAME || 'GymPro'
+
+export const getDefaultFrom = (displayName) => {
+  const name = displayName || DEFAULT_FROM_NAME
+  const address = process.env.EMAIL_USER || 'no-reply@gympro.local'
+  return `"${name}" <${address}>`
+}
+
 export const getEmailTransportSummary = () => {
   const emailUserExists = !!process.env.EMAIL_USER
   const emailPassExists = !!process.env.EMAIL_PASS
@@ -91,6 +99,7 @@ export const getEmailTransportSummary = () => {
 
 export const sendMailWithLog = async (mailOptions) => {
   console.log('[EmailService] Sending email...', {
+    from: mailOptions.from,
     to: mailOptions.to,
     subject: mailOptions.subject,
   })
@@ -143,7 +152,7 @@ export const sendOtpEmail = async ({ toEmail, otp, purpose }) => {
     purpose === 'register' ? 'xác minh đăng ký tài khoản' : 'xác minh quên mật khẩu'
 
   const info = await sendMailWithLog({
-    from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
+    from: getDefaultFrom(),
     to: toEmail,
     subject: `Mã OTP ${purposeText} - GymPro`,
     html: `
@@ -172,7 +181,7 @@ export const sendOtpEmail = async ({ toEmail, otp, purpose }) => {
 
 export const sendShopDeletionEmail = async ({ toEmail, shopName, reason }) => {
   const info = await sendMailWithLog({
-    from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
+    from: getDefaultFrom(),
     to: toEmail,
     subject: `Thông báo ngừng hợp tác - GymPro`,
     html: `
@@ -200,7 +209,7 @@ export const sendShopDeletionEmail = async ({ toEmail, shopName, reason }) => {
 
 export const sendPartnershipRequestEmail = async ({ toEmail, request }) => {
   const info = await sendMailWithLog({
-    from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
+    from: getDefaultFrom(),
     to: toEmail,
     subject: `Yêu cầu hợp tác mới - ${request.brand_name}`,
     html: `
@@ -232,7 +241,7 @@ export const sendPartnershipRequestEmail = async ({ toEmail, request }) => {
 export const sendRenewalSuccessEmail = async ({ toEmail, userName, planName, endDate, periodIndex }) => {
   const siteName = await getSiteName()
   const info = await sendMailWithLog({
-    from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
+    from: getDefaultFrom(),
     to: toEmail,
     subject: `Gia hạn gói tập thành công - ${siteName}`,
     html: `
@@ -261,7 +270,7 @@ export const sendRenewalSuccessEmail = async ({ toEmail, userName, planName, end
 
 export const sendRenewalReminderEmail = async ({ toEmail, userName, planName, endDate, daysLeft }) => {
   const info = await sendMailWithLog({
-    from: `"GymPro" <${process.env.EMAIL_USER || 'no-reply@gympro.local'}>`,
+    from: getDefaultFrom(),
     to: toEmail,
     subject: `Gói tập sắp hết hạn - Còn ${daysLeft} ngày - GymPro`,
     html: `
@@ -294,7 +303,7 @@ export const sendRenewalReminderEmail = async ({ toEmail, userName, planName, en
 export const sendPeriodCompletedEmail = async ({ toEmail, userName, planName, periodIndex, endDate }) => {
   const siteName = await getSiteName()
   const info = await sendMailWithLog({
-    from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
+    from: getDefaultFrom(),
     to: toEmail,
     subject: `Đợt ${periodIndex} gói ${planName} đã kết thúc - ${siteName}`,
     html: `
@@ -318,7 +327,7 @@ export const sendPeriodCompletedEmail = async ({ toEmail, userName, planName, pe
 export const sendPeriodActivatedEmail = async ({ toEmail, userName, planName, periodIndex, startDate, endDate }) => {
   const siteName = await getSiteName()
   const info = await sendMailWithLog({
-    from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
+    from: getDefaultFrom(),
     to: toEmail,
     subject: `Đợt ${periodIndex} gói ${planName} đã bắt đầu - ${siteName}`,
     html: `
@@ -346,7 +355,7 @@ export const sendPeriodActivatedEmail = async ({ toEmail, userName, planName, pe
 export const sendCancelRenewalEmail = async ({ toEmail, userName, planName, days, refundAmount }) => {
   const siteName = await getSiteName()
   const info = await sendMailWithLog({
-    from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
+    from: getDefaultFrom(),
     to: toEmail,
     subject: `Đã hủy gia hạn gói ${planName} - ${siteName}`,
     html: `
@@ -379,7 +388,7 @@ export const sendCancelRenewalEmail = async ({ toEmail, userName, planName, days
 export const sendRefundRequestSubmittedEmail = async ({ toEmail, userName, planName, periodDetail, isFullCancel }) => {
   const siteName = await getSiteName()
   const info = await sendMailWithLog({
-    from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
+    from: getDefaultFrom(),
     to: toEmail,
     subject: `Yêu cầu hủy${isFullCancel ? ' gói' : ' gia hạn'} đã được gửi - ${siteName}`,
     html: `
@@ -410,7 +419,7 @@ export const sendRefundRequestProcessedEmail = async ({ toEmail, userName, planN
   const isApproved = status === 'approved' || status === 'REFUNDED' || status === 'APPROVED'
   const processedDate = new Date().toLocaleDateString('vi-VN')
   const info = await sendMailWithLog({
-    from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
+    from: getDefaultFrom(),
     to: toEmail,
     subject: `${isApproved ? 'Đã xác nhận' : 'Từ chối'} yêu cầu hủy${isFullCancel ? ' gói' : ' gia hạn'} - ${siteName}`,
     html: `

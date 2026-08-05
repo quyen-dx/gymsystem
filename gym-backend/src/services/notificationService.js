@@ -1,13 +1,12 @@
 import Notification, { NOTIFICATION_TYPES, getCategory } from '../models/Notification.js'
 import User from '../models/User.js'
 import { getIO } from './socketService.js'
-import { sendMailWithLog } from './emailService.js'
+import { sendMailWithLog, getDefaultFrom } from './emailService.js'
 // TODO: Consider adding a retry/queue mechanism for notification delivery failures
 // Currently, fire-and-forget notification calls at ~30+ call sites silently drop errors.
 // A background queue (e.g., Bull/BullMQ) would ensure reliable delivery.
 
 const SITE_NAME = process.env.SITE_NAME || 'GymPro'
-const FROM_EMAIL = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@gympro.com'
 
 // Các notification type cần gửi email kèm
 const EMAIL_EVENTS = new Set([
@@ -48,7 +47,7 @@ async function sendPlainEmail(to, subject, htmlContent) {
   if (!to) return
   try {
     await sendMailWithLog({
-      from: FROM_EMAIL,
+      from: getDefaultFrom(),
       to,
       subject: `${subject} - ${SITE_NAME}`,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:24px">
