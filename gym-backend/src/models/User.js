@@ -141,6 +141,12 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Trạng thái sẵn sàng nhận ca: ACTIVE = có thể nhận ca thay; còn lại (ON_LEAVE/SICK/SUSPENDED) bị loại khỏi danh sách PT thay.
+    availabilityStatus: {
+      type: String,
+      enum: ['ACTIVE', 'ON_LEAVE', 'SICK', 'SUSPENDED'],
+      default: 'ACTIVE',
+    },
     refreshToken: {
       type: String,
       select: false,

@@ -9,6 +9,7 @@
     "start": "node server.js",
     "migrate:member-ids": "node --env-file=.env src/scripts/migrateMemberIdsToShortFormat.js",
     "migrate:specializations": "node --env-file=.env src/scripts/normalizeSpecializations.js",
+    "migrate:availability-status": "node --env-file=.env src/scripts/backfillAvailabilityStatus.js",
     "migrate:backfill-pt": "node --env-file=.env src/scripts/backfillPTAssignments.js",
     "migrate:class-enrollments": "node --env-file=.env src/scripts/migrateClassEnrollments.js",
     "migrate:restore-force-ended-schedules": "node --env-file=.env src/scripts/migrateRestoreForceEndedSchedules.js",

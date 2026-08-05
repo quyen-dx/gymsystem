@@ -7,7 +7,7 @@ import Wallet from '../models/Wallet.js'
 import Transaction from '../models/Transaction.js'
 import CheckIn from '../models/CheckIn.js'
 import Booking from '../models/Booking.js'
-import { rebuildMembershipTimeline } from './membershipService.js'
+import { rebuildMembershipTimeline, hasUsedMembershipBenefits, cleanupMemberPTData } from './membershipService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import { recordUserActivity } from './userActivityService.js'
@@ -21,33 +21,6 @@ const toObjectId = (value, fieldName) => {
     throw error
   }
   return new mongoose.Types.ObjectId(value)
-}
-
-const hasUsedMembershipBenefits = async ({ memberId, purchaseDate, session = null }) => {
-  const since = new Date(purchaseDate)
-  const now = new Date()
-
-  const checkInQuery = CheckIn.exists({
-    memberId,
-    status: 'success',
-    checkinTime: { $gte: since },
-  })
-  const bookingQuery = Booking.exists({
-    memberId,
-    status: { $in: ['completed', 'confirmed'] },
-    date: { $gte: since, $lte: now },
-  })
-
-  if (session) {
-    checkInQuery.session(session)
-    bookingQuery.session(session)
-    const checkIn = await checkInQuery
-    const booking = await bookingQuery
-    return Boolean(checkIn || booking)
-  }
-
-  const [checkIn, booking] = await Promise.all([checkInQuery, bookingQuery])
-  return Boolean(checkIn || booking)
 }
 
 const computePeriodStatus = (period) => {
@@ -96,17 +69,19 @@ export const createRefundRequest = async ({ userId, periodId, reason = '' }) => 
   }
 
   // === Tính toán Snapshot tại thời điểm gửi yêu cầu ===
+  // Business Rule: hoàn tiền dựa trên registeredAt (ngày đăng ký) + hasUsedBenefit.
+  // Với kỳ chính, registeredAt = activatedAt = thời điểm thanh toán (gói kích hoạt ngay).
   const now = new Date()
-  const activatedAt = period.activatedAt || period.startDate
-  const daysSinceActivation = Math.max(0, Math.floor((now.getTime() - new Date(activatedAt).getTime()) / (1000 * 60 * 60 * 24)))
-  const refundDeadline = new Date(new Date(activatedAt).getTime() + 7 * 24 * 60 * 60 * 1000)
+  const registeredAt = period.activatedAt || period.startDate
+  const daysSinceActivation = Math.max(0, Math.floor((now.getTime() - new Date(registeredAt).getTime()) / (1000 * 60 * 60 * 24)))
+  const refundDeadline = new Date(new Date(registeredAt).getTime() + 7 * 24 * 60 * 60 * 1000)
   const isWithinWindow = now.getTime() <= refundDeadline.getTime()
 
   // Check-in
   const checkInCount = await CheckIn.countDocuments({
     memberId,
     status: 'success',
-    checkinTime: { $gte: activatedAt },
+    checkinTime: { $gte: registeredAt },
   })
   const usedCheckIn = checkInCount > 0
 
@@ -114,7 +89,7 @@ export const createRefundRequest = async ({ userId, periodId, reason = '' }) => 
   const ptBookingCount = await Booking.countDocuments({
     memberId,
     status: { $in: ['completed', 'confirmed'] },
-    date: { $gte: activatedAt, $lte: now },
+    date: { $gte: registeredAt, $lte: now },
   })
   const usedPT = ptBookingCount > 0
 
@@ -122,8 +97,11 @@ export const createRefundRequest = async ({ userId, periodId, reason = '' }) => 
   const gymUsageCount = ptBookingCount // same Booking collection for PT/gym
   const usedGym = gymUsageCount > 0
 
-  const usedBenefits = usedCheckIn || usedPT || usedGym
-  const eligibleForRefund = isWithinWindow && !usedBenefits
+  // Đã sử dụng quyền lợi: check-in, đặt lịch PT, tham gia lớp học, hoặc tính năng yêu cầu quyền của gói
+  const hasUsedBenefit = usedCheckIn || usedPT || usedGym
+    || await hasUsedMembershipBenefits({ memberId, purchaseDate: registeredAt })
+  const usedBenefits = hasUsedBenefit
+  const eligibleForRefund = isWithinWindow && !hasUsedBenefit
 
   let refundPolicyResult = ''
   if (!isWithinWindow) {
@@ -149,7 +127,7 @@ export const createRefundRequest = async ({ userId, periodId, reason = '' }) => 
   }
   await rebuildMembershipTimeline({ membershipId: period.membershipId })
 
-  // Tính tổng tiền các MembershipPeriod PENDING (gia hạn chưa kích hoạt)
+  // Tính tổng tiền các MembershipPeriod PENDING (gia hạn chưa tới ngày bắt đầu)
   let pendingPeriodsTotal = 0
   let pendingPeriodsCount = 0
   if (isFullMembershipCancel) {
@@ -374,6 +352,13 @@ export const approveRefundRequest = async ({ refundRequestId, staffId, staffNote
           { $set: { status: totalRefundAmount > 0 ? 'refunded' : 'cancelled' } },
         ).session(session)
       }
+      // Cleanup toàn bộ PT/class/booking data khi hủy toàn bộ gói
+      await cleanupMemberPTData({
+        memberId: period.memberId,
+        session,
+        sourceReason: 'membership_cancelled',
+        note: totalRefundAmount > 0 ? 'Gói tập đã được hoàn tiền' : 'Gói tập đã bị hủy',
+      })
     }
 
     // Update refund request
@@ -603,6 +588,7 @@ export const listRefundRequests = async ({ page = 1, limit = 20, status, search 
             .populate('memberId', 'name fullName email phone memberCode memberNumber avatar')
             .populate('planId', 'nameVi nameEn price durationDays')
             .populate('membershipCycleId', 'activatedAt refundEligible firstBenefitType firstBenefitUsedAt purchasedAt startDate expiresAt durationDays createdAt')
+            .populate('handledBy', 'name fullName email')
             .sort({ createdAt: -1 })
             .lean()
         )
@@ -612,7 +598,7 @@ export const listRefundRequests = async ({ page = 1, limit = 20, status, search 
       .populate('planId', 'nameVi nameEn price durationDays')
       .populate('membershipId', 'status')
       .populate('membershipPeriodId', 'startDate endDate totalDays price activatedAt')
-      .populate('reviewedBy', 'name fullName')
+      .populate('reviewedBy', 'name fullName email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
@@ -654,7 +640,7 @@ export const listRefundRequests = async ({ page = 1, limit = 20, status, search 
     let refundPolicyResult = cr.policyLabel || ''
     if (!refundPolicyResult || refundPolicyResult === 'Không đủ thông tin để xét hoàn tiền.') {
       if (isActivated) {
-        refundPolicyResult = 'Gói tập đã được kích hoạt.'
+        refundPolicyResult = 'Gói tập đang hoạt động.'
       } else if (isEligible) {
         refundPolicyResult = 'Đủ điều kiện hoàn tiền'
       } else if (purchaseTime) {
@@ -675,8 +661,8 @@ export const listRefundRequests = async ({ page = 1, limit = 20, status, search 
       refundAmount: cr.estimatedRefundAmount || 0,
       status: cr.status === 'pending' ? 'PENDING' : cr.status === 'approved' ? 'APPROVED' : 'REJECTED',
       requestedAt: cr.requestedAt || cr.createdAt,
-      reviewedBy: null,
-      reviewedAt: null,
+      reviewedBy: cr.handledBy || null,
+      reviewedAt: cr.handledAt || null,
       staffNote: cr.staffNote || '',
       daysUsedAtRequest,
       eligibleWithin7Days: !isActivated && isWithin7Days,

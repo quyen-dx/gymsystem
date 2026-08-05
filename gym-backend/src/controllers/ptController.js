@@ -13,6 +13,7 @@ import { isValidEmail, normalizePhone } from '../utils/identifier.js'
 import sendError from '../utils/sendError.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
+import { getActiveReplacementsForPT } from '../services/shiftChangeService.js'
 
 export const getPTs = async (req, res) => {
   try {
@@ -269,12 +270,29 @@ export const getPTMyWeekAttendees = async (req, res) => {
 
     const classes = assignments.map(a => a.classId).filter(Boolean)
 
-    if (classes.length === 0) {
-      return res.json({ attendees: [] })
+    // Replacements (thay ca) còn hiệu lực trong tuần — chỉ để override khi render lịch,
+    // KHÔNG đổi assignedTrainer / TrainingClass.
+    const replacements = await getActiveReplacementsForPT({ ptId: req.user._id, weekStart }).catch(() => [])
+
+    // Lấy lớp gốc của các ca thay để tính số hội viên khi render card "Ca thay"
+    const replacementClasses = []
+    const seenClassIds = new Set(classes.map(c => String(c._id)))
+    for (const r of replacements) {
+      const cid = typeof r.classId === 'object' ? r.classId?._id : r.classId
+      if (!cid || seenClassIds.has(String(cid))) continue
+      seenClassIds.add(String(cid))
+      const cls = await TrainingClass.findById(cid).select('_id code name daysOfWeek startTime endTime').lean()
+      if (cls) replacementClasses.push(cls)
     }
 
-    const classCodes = classes.map(c => c.code).filter(Boolean)
-    const classIds = classes.map(c => c._id).filter(Boolean)
+    const allClasses = [...classes, ...replacementClasses]
+
+    if (allClasses.length === 0) {
+      return res.json({ attendees: [], replacements })
+    }
+
+    const classCodes = allClasses.map(c => c.code).filter(Boolean)
+    const classIds = allClasses.map(c => c._id).filter(Boolean)
 
     // Lấy enrolled members từ ClassEnrollment (bao gồm cả chưa có workout)
     const enrollments = await ClassEnrollment.find({
@@ -290,7 +308,7 @@ export const getPTMyWeekAttendees = async (req, res) => {
     for (const enrollment of enrollments) {
       const member = typeof enrollment.memberId === 'object' ? enrollment.memberId : null
       if (!member?._id) continue
-      const cls = classes.find(c => String(c._id) === String(enrollment.classId))
+      const cls = allClasses.find(c => String(c._id) === String(enrollment.classId))
       if (!cls) continue
       for (const dayOfWeek of cls.daysOfWeek || []) {
         const key = `${dayOfWeek}_${cls.code}`
@@ -384,7 +402,7 @@ export const getPTMyWeekAttendees = async (req, res) => {
     const attendees = []
     for (const [key, members] of attendeeMap) {
       const [dayOfWeek, code] = key.split('_')
-      const cls = classes.find(c => c.code === code)
+      const cls = allClasses.find(c => c.code === code)
       const isToday = parseInt(dayOfWeek) === todayDayOfWeek
 
       const memberList = Array.from(members.values()).map(m => {
@@ -415,7 +433,7 @@ export const getPTMyWeekAttendees = async (req, res) => {
       if (entry.count > 0) continue
 
       const classDate = new Date(startDate)
-      classDate.setDate(classDate.getDate() + entry.dayOfWeek)
+      classDate.setDate(classDate.getDate() + ((entry.dayOfWeek - startDate.getDay() + 7) % 7))
 
       if (classDate >= now && classDate <= in48h) {
         const cls = classes.find(c => c._id === entry.classId)
@@ -437,7 +455,7 @@ export const getPTMyWeekAttendees = async (req, res) => {
       }
     }
 
-    res.json({ attendees })
+    res.json({ attendees, replacements })
   } catch (error) {
     return sendError(res, error)
   }

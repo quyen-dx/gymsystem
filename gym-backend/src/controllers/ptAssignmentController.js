@@ -12,6 +12,7 @@ import AppError from '../utils/appError.js'
 import sendError from '../utils/sendError.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
+import { leaveCurrentTraining as cleanupCurrentTraining } from '../services/trainingCleanupService.js'
 
 export const getMyAssignment = async (req, res) => {
   try {
@@ -767,25 +768,36 @@ export const transferMemberClass = async (req, res) => {
 }
 
 /**
- * Rời khỏi lớp hiện tại (KHÔNG phải kết thúc phụ trách).
- * Body: { memberId, reason?(optional) }
+ * Rời khỏi lớp hiện tại (KHÔNG phải kết thúc phụ trách PT).
+ * Body: { memberId?, reason?(optional) } — memberId bắt buộc với PT/admin; hội viên tự rời lấy từ JWT.
  *
  * Hành vi:
- *   - End enrollment active hiện tại với sourceReason='member_request' (hoặc 'ended_by_pt' tuỳ actor)
- *   - KHÔNG đụng tới PTAssignment, WorkoutSchedule
+ *   - End enrollment active hiện tại (ClassEnrollment) với sourceReason='member_request' (hoặc 'ended_by_pt' tuỳ actor)
+ *   - Hủy assignment lớp (TrainingAssignment) tương ứng
+ *   - Cleanup WorkoutSchedule nếu member không còn PT riêng (chỉ ở nhóm)
+ *   - KHÔNG đụng tới PTAssignment
  */
 export const leaveMemberClass = async (req, res) => {
   const leaveSession = await mongoose.startSession()
   try {
     leaveSession.startTransaction()
 
-    const { memberId, reason } = req.body
     const actorRole = req.user?.role
+
+    // Nguồn duy nhất cho memberId:
+    // - Hội viên tự rời (role=member) → lấy từ JWT (req.user._id), không bắt frontend gửi.
+    // - PT/admin thao tác cho hội viên → body.memberId.
+    let memberId = req.body.memberId
+    if (!memberId && actorRole === 'member') {
+      memberId = req.user?._id
+    }
+    const reason = req.body.reason
 
     if (!memberId) {
       await leaveSession.abortTransaction()
       return res.status(400).json({ message: 'Thiếu memberId' })
     }
+    if (typeof memberId !== 'string') memberId = String(memberId)
 
     const current = await ClassEnrollment.findOne({ memberId, status: 'active' })
       .populate('classId', 'code name')
@@ -799,7 +811,28 @@ export const leaveMemberClass = async (req, res) => {
     const sourceReason = actorRole === 'member' ? 'member_request' : 'ended_by_pt'
     const note = `Rời lớp bởi ${actorRole || 'system'}${reason ? ` — lý do: ${reason}` : ''}`
 
+    // 1. Hủy enrollment lớp hiện tại (ClassEnrollment)
     const { modifiedCount } = await endClassEnrollments({ memberId, sourceReason, note, session: leaveSession })
+
+    // 2. Hủy assignment lớp (TrainingAssignment) để member không còn bị nhận diện trong lớp
+    const classObjId = current.classId?._id || current.classId
+    if (classObjId) {
+      await TrainingAssignment.updateMany(
+        { memberId, classId: classObjId, status: { $in: ['waiting_pt', 'active'] } },
+        { $set: { status: 'finished', endDate: new Date() } },
+        { session: leaveSession },
+      )
+    }
+
+    // 3. Cleanup workout/group schedule nếu member không còn PT riêng (chỉ ở nhóm)
+    const hasPrivatePt = await PTAssignment.exists({ memberId, status: 'active' }).session(leaveSession)
+    if (!hasPrivatePt) {
+      await WorkoutSchedule.updateMany(
+        { memberId, status: 'active' },
+        { $set: { status: 'cancelled' } },
+        { session: leaveSession },
+      )
+    }
 
     await leaveSession.commitTransaction()
 
@@ -846,6 +879,28 @@ export const leaveMemberClass = async (req, res) => {
   }
 }
 
+/**
+ * Member action: leave the entire current PT service (PRIVATE or GROUP).
+ * Unlike leaveMemberClass, this always cleans every current assignment and
+ * related member data in one transaction.
+ */
+export const leaveCurrentTraining = async (req, res) => {
+  const session = await mongoose.startSession()
+  try {
+    session.startTransaction()
+    const memberId = req.user?._id
+    const reason = req.body?.reason || ''
+    const result = await cleanupCurrentTraining({ memberId, reason, session })
+    await session.commitTransaction()
+    return res.json({ message: 'Đã rời toàn bộ dịch vụ PT', result })
+  } catch (error) {
+    if (session.inTransaction()) await session.abortTransaction()
+    return sendError(res, error)
+  } finally {
+    await session.endSession()
+  }
+}
+
 // === NEW: Request/Accept/Decline/BulkRelease ===
 
 export const requestClassAssignment = async (req, res) => {
@@ -867,6 +922,8 @@ export const requestClassAssignment = async (req, res) => {
       relatedType: 'TrainingClass',
       redirectUrl: '/pt/schedule',
       createdBy: 'Admin',
+      requiresAction: true,
+      actions: ['accept', 'decline'],
     }).catch(() => {})
 
     res.json({ message: 'Đã gửi yêu cầu đến PT', class: result })

@@ -2,6 +2,8 @@ import {
   CheckCircleFilled,
   ClockCircleOutlined,
   DeleteOutlined,
+  MailOutlined,
+  PhoneOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
@@ -13,7 +15,6 @@ import {
   Input,
   Modal,
   Popconfirm,
-  Radio,
   Select,
   Space,
   Table,
@@ -22,7 +23,7 @@ import {
   message,
 } from 'antd'
 import dayjs from 'dayjs'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
@@ -30,8 +31,6 @@ import { useAuth } from '../../../hooks/useAuth'
 import { socketService } from '../../../services/socketService'
 import {
   ptAssignmentService,
-  enrollmentService,
-  type EnrollmentPreviewClass,
   type HistoryEntry,
   type PendingApproval,
   type PTAssignment,
@@ -66,7 +65,13 @@ interface ClientInfo {
   goals?: string[]
   workout?: { _id: string; name: string; goal?: string } | null
   scheduleCount?: number
-  membershipStatus?: 'active' | 'pending_initial_activation' | null
+  membershipStatus?: 'active' | 'expired' | null
+  membershipStartAt?: string | null
+  membershipExpiresAt?: string | null
+  requestNote?: string
+  requestContactPhone?: string
+  requestContactEmail?: string
+  type?: 'GROUP' | 'PT_1_1'
   cancelledAt?: string
   cancelReason?: string
 }
@@ -95,6 +100,12 @@ function extractClient(assignment: PTAssignment): ClientInfo | null {
     workout,
     scheduleCount: assignment.scheduleCount ?? 0,
     membershipStatus: assignment.membershipStatus,
+    membershipStartAt: assignment.membershipStartAt,
+    membershipExpiresAt: assignment.membershipExpiresAt,
+    requestNote: assignment.requestNote,
+    requestContactPhone: assignment.requestContactPhone,
+    requestContactEmail: assignment.requestContactEmail,
+    type: assignment.type,
     cancelledAt: assignment.cancelledAt,
     cancelReason: assignment.cancelReason,
   }
@@ -107,11 +118,23 @@ function fmt(d: string | undefined | null): string {
   return dayjs(d).format(FORMAT_DATE)
 }
 
+function fmtDate(d: string | undefined | null): string {
+  if (!d) return '—'
+  return dayjs(d).format('DD/MM/YYYY')
+}
+
+function remainingDays(expiresAt?: string | null): number | null {
+  if (!expiresAt) return null
+  const diff = new Date(expiresAt).getTime() - Date.now()
+  return Math.max(0, Math.ceil(diff / 86400000))
+}
+
 export default function PTClientsPage() {
   useAuth()
   const navigate = useNavigate()
 
   const [activeTab, setActiveTab] = useState<'active' | 'pending' | 'history'>('active')
+  const [serviceTab, setServiceTab] = useState<'pt1on1' | 'group'>('pt1on1')
 
   // Tab 1: Active clients
   const [clients, setClients] = useState<ClientInfo[]>([])
@@ -119,7 +142,6 @@ export default function PTClientsPage() {
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null)
   const [clientSchedules, setClientSchedules] = useState<Record<string, WorkoutSchedule[]>>({})
   const [schedulesLoading, setSchedulesLoading] = useState<string | null>(null)
-  const [filterClass, setFilterClass] = useState<string | undefined>(undefined)
   const [filterSpecialization, setFilterSpecialization] = useState<string | undefined>(undefined)
   const [filterGoals, setFilterGoals] = useState<string[]>([])
 
@@ -138,30 +160,7 @@ export default function PTClientsPage() {
 
   // End request modal
   const [endRequestModal, setEndRequestModal] = useState<{ open: boolean; client: ClientInfo | null }>({ open: false, client: null })
-  const [endReason, setEndReason] = useState<string>('MEMBER_COMPLETED')
-  const [endDetail, setEndDetail] = useState('')
   const [submittingEnd, setSubmittingEnd] = useState(false)
-
-  // Class enrollment modal (transfer / leave)
-  const [classModal, setClassModal] = useState<{
-    open: boolean
-    client: ClientInfo | null
-    mode: 'transfer' | 'leave' | null
-  }>({ open: false, client: null, mode: null })
-  const [enrollmentPreview, setEnrollmentPreview] = useState<{
-    currentEnrollment: {
-      enrollmentId: string
-      classId: string
-      code?: string
-      name?: string
-      joinedAt?: string
-    } | null
-    availableClasses: EnrollmentPreviewClass[]
-  } | null>(null)
-  const [enrollmentLoading, setEnrollmentLoading] = useState(false)
-  const [selectedTargetClass, setSelectedTargetClass] = useState<string | null>(null)
-  const [classActionReason, setClassActionReason] = useState('')
-  const [submittingClassAction, setSubmittingClassAction] = useState(false)
 
   // ============ FETCH ============
 
@@ -231,9 +230,17 @@ export default function PTClientsPage() {
         if (activeTab === 'active') fetchClients()
       }
     }
+    // Socket: PT vừa chấp nhận hội viên PT 1-1 → danh sách học viên cập nhật ngay (không cần F5)
+    const clientsUpdatedHandler = () => {
+      if (activeTab === 'active') fetchClients()
+    }
     socketService.connect()
     socketService.on('pt_end_request:status_changed', handler)
-    return () => { socketService.off('pt_end_request:status_changed', handler) }
+    socketService.on('pt_clients:updated', clientsUpdatedHandler)
+    return () => {
+      socketService.off('pt_end_request:status_changed', handler)
+      socketService.off('pt_clients:updated', clientsUpdatedHandler)
+    }
   }, [activeTab, fetchClients, fetchPending])
 
   // ============ SCHEDULE ============
@@ -254,7 +261,8 @@ export default function PTClientsPage() {
   const handleExpand = (expanded: boolean, record: ClientInfo) => {
     if (expanded) {
       setExpandedMemberId(record._id)
-      if (!clientSchedules[record._id]) {
+      // PT 1-1 không dùng lịch chung của hệ thống → không cần tải lịch tập
+      if (record.type !== 'PT_1_1' && !clientSchedules[record._id]) {
         fetchClientSchedules(record._id)
       }
     } else {
@@ -278,36 +286,22 @@ export default function PTClientsPage() {
   const handleEndRequest = async () => {
     if (!endRequestModal.client) return
 
-    if (endReason === 'OTHER' && !endDetail.trim()) {
-      message.error('Vui lòng nhập lý do.')
-      return
-    }
-
     setSubmittingEnd(true)
     try {
       const client = endRequestModal.client
       const classId = client.classId && typeof client.classId === 'object'
         ? (client.classId as { _id: string })._id
         : client.classId
-      await ptAssignmentEndService.create({
+      const { data } = await ptAssignmentEndService.create({
         memberId: client._id,
-        reasonType: endReason,
-        reasonDetail: endReason === 'OTHER' ? endDetail.trim() : undefined,
+        reasonType: 'MEMBER_COMPLETED',
         assignmentId: client.assignmentId,
         classId,
       })
-      message.success('Đã gửi yêu cầu kết thúc phụ trách')
+      message.success(data.message || 'Đã gửi yêu cầu kết thúc phụ trách')
       setEndRequestModal({ open: false, client: null })
-      setEndReason('MEMBER_COMPLETED')
-      setEndDetail('')
-      // Remove member from active list immediately
-      if (endRequestModal.client) {
-        setClients((prev) => prev.filter((c) => c._id !== endRequestModal.client!._id))
-        if (expandedMemberId === endRequestModal.client._id) {
-          setExpandedMemberId(null)
-        }
-      }
-      fetchPending()
+      setExpandedMemberId(null)
+      fetchClients()
     } catch (error: any) {
       message.error(error?.response?.data?.message || 'Không thể gửi yêu cầu')
     } finally {
@@ -316,159 +310,6 @@ export default function PTClientsPage() {
   }
 
   // ============ COLUMNS ============
-
-  const hasActiveSchedule = useCallback((client: ClientInfo) => {
-    const schedules = clientSchedules[client._id] || []
-    return schedules.some((s) => s.status === 'active')
-  }, [clientSchedules])
-
-  const handleEndAllWorkouts = useCallback(async (client: ClientInfo) => {
-    const schedules = clientSchedules[client._id] || []
-    const activeSchedules = schedules.filter((s) => s.status === 'active')
-    if (activeSchedules.length === 0) return
-
-    if (!client.assignmentId) {
-      message.error('Không tìm thấy assignmentId — không thể kết thúc giáo án')
-      return
-    }
-
-    // Step 1: dry-check with backend to get authoritative preview of incomplete sessions
-    let dryCheck: {
-      allComplete: boolean
-      totalSessions: number
-      totalCompletedSessions: number
-      totalIncomplete: number
-      perSchedule: Array<{
-        scheduleId: string
-        weekLabel: string
-        totalSessions: number
-        completedSessions: number
-        incompleteSessions: number
-      }>
-    } | null = null
-
-    try {
-      const { data } = await ptAssignmentService.endWorkout(client.assignmentId, undefined, client._id)
-      if (!data?.dryCheck) {
-        // Backend performed the end directly (unexpected in dry-check mode) — just refresh
-        message.success(data?.message || 'Đã kết thúc toàn bộ giáo án')
-        if (expandedMemberId) fetchClientSchedules(expandedMemberId)
-        fetchClients()
-        return
-      }
-      dryCheck = {
-        allComplete: !!data.allComplete,
-        totalSessions: data.preview?.totalSessions ?? 0,
-        totalCompletedSessions: data.preview?.totalCompletedSessions ?? 0,
-        totalIncomplete: data.preview?.totalIncomplete ?? 0,
-        perSchedule: data.preview?.perSchedule ?? [],
-      }
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Không thể kiểm tra trạng thái giáo án')
-      return
-    }
-
-    // Step 2: show modal with detailed preview from backend, then call confirm=true
-    const detailLines = dryCheck.perSchedule
-      .map((w) => w.incompleteSessions > 0
-        ? `${w.weekLabel}: còn thiếu ${w.incompleteSessions} buổi (đã hoàn thành ${w.completedSessions}/${w.totalSessions})`
-        : `${w.weekLabel}: đã hoàn thành ${w.completedSessions}/${w.totalSessions} buổi`)
-      .join('\n')
-
-    const content = dryCheck.allComplete
-      ? 'Tất cả buổi tập đã hoàn thành. Bạn có chắc muốn kết thúc TOÀN BỘ giáo án? Hành động này không thể hoàn tác.'
-      : `${detailLines}\n\nTổng cộng còn ${dryCheck.totalIncomplete} buổi chưa hoàn thành.\n\nNếu tiếp tục, các buổi chưa hoàn thành sẽ bị đánh dấu là đã kết thúc vĩnh viễn. Hành động này không thể hoàn tác.`
-
-    Modal.confirm({
-      title: dryCheck.allComplete ? 'Kết thúc toàn bộ giáo án?' : 'Vẫn kết thúc giáo án (cảnh báo)?',
-      content: <pre className="whitespace-pre-wrap text-sm text-[var(--gs-text)]">{content}</pre>,
-      okText: dryCheck.allComplete ? 'Kết thúc' : 'Vẫn kết thúc giáo án',
-      cancelText: 'Hủy',
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        try {
-          const { data: result } = await ptAssignmentService.endWorkout(
-            client.assignmentId!,
-            undefined,
-            client._id,
-            true, // confirm=true → actually perform the end
-          )
-          message.success(result?.message || 'Đã kết thúc toàn bộ giáo án')
-          if (expandedMemberId) fetchClientSchedules(expandedMemberId)
-          fetchClients()
-        } catch (err: any) {
-          message.error(err?.response?.data?.message || 'Không thể kết thúc giáo án')
-        }
-      },
-    })
-  }, [clientSchedules, expandedMemberId, fetchClientSchedules, fetchClients])
-
-  // ============ CLASS ENROLLMENT: Transfer / Leave ============
-
-  const openClassModal = useCallback(async (client: ClientInfo, mode: 'transfer' | 'leave') => {
-    setClassModal({ open: true, client, mode })
-    setEnrollmentPreview(null)
-    setSelectedTargetClass(null)
-    setClassActionReason('')
-    setEnrollmentLoading(true)
-    try {
-      const { data } = await enrollmentService.getPreview(client._id)
-      setEnrollmentPreview(data)
-      // Preselect first non-full class that is not current
-      if (mode === 'transfer') {
-        const first = data.availableClasses.find(c => !c.isFull && !c.isCurrent)
-        if (first) setSelectedTargetClass(first._id)
-      }
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Không thể tải thông tin lớp')
-      setClassModal({ open: false, client: null, mode: null })
-    } finally {
-      setEnrollmentLoading(false)
-    }
-  }, [])
-
-  const submitClassAction = useCallback(async () => {
-    const { client, mode } = classModal
-    if (!client || !mode) return
-
-    if (mode === 'transfer' && !selectedTargetClass) {
-      message.warning('Vui lòng chọn lớp đích')
-      return
-    }
-
-    setSubmittingClassAction(true)
-    try {
-      if (mode === 'transfer') {
-        const { data } = await enrollmentService.transferClass({
-          memberId: client._id,
-          toClassId: selectedTargetClass!,
-          reason: classActionReason || undefined,
-        })
-        message.success(data.message)
-      } else {
-        const { data } = await enrollmentService.leaveClass({
-          memberId: client._id,
-          reason: classActionReason || undefined,
-        })
-        message.success(data.message)
-      }
-      setClassModal({ open: false, client: null, mode: null })
-      // Refresh schedules for this member so the class label updates if expanded
-      if (expandedMemberId) fetchClientSchedules(expandedMemberId)
-      fetchClients()
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Không thể thực hiện thao tác')
-    } finally {
-      setSubmittingClassAction(false)
-    }
-  }, [classModal, selectedTargetClass, classActionReason, expandedMemberId, fetchClientSchedules, fetchClients])
-
-  const closeClassModal = useCallback(() => {
-    setClassModal({ open: false, client: null, mode: null })
-    setEnrollmentPreview(null)
-    setSelectedTargetClass(null)
-    setClassActionReason('')
-  }, [])
 
   const expandedScheduleColumns = (client: ClientInfo) => [
     {
@@ -542,10 +383,233 @@ export default function PTClientsPage() {
     },
   ]
 
-  const activeColumns = [
+  // ============ PT 1-1: EXPAND CONTENT (giao diện riêng, không dùng chung với PT nhóm) ============
+
+  const pt1on1Expand = (record: ClientInfo) => {
+    const note = (record.requestNote || '').trim()
+    const contactPhone = record.requestContactPhone || record.phone
+    const contactEmail = record.requestContactEmail || record.email
+    const phoneHref = contactPhone?.trim()
+    const emailHref = contactEmail?.trim()
+    const membershipActive = record.membershipStatus === 'active'
+
+    // Responsive: mobile label/value xuống dòng; desktop "label : value" cùng dòng
+    const Row = ({ label, children }: { label: string; children: ReactNode }) => (
+      <div className="flex flex-col gap-0.5 text-sm md:flex-row md:items-start md:gap-2">
+        <span className="shrink-0 text-[var(--gs-text-muted)] md:w-36">{label}:</span>
+        <span className="min-w-0 text-[var(--gs-text)]">{children}</span>
+      </div>
+    )
+
+    const SectionCard = ({ title, children }: { title: string; children: ReactNode }) => (
+      <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4">
+        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--theme-accent)]">
+          {title}
+        </div>
+        {children}
+      </div>
+    )
+
+    return (
+      <div className="space-y-4 p-4">
+        {/* Kết thúc phụ trách */}
+        <div className="flex justify-end gap-2">
+          <Button size="small" icon={<ReloadOutlined />} onClick={() => fetchClientSchedules(record._id)}>
+            Tải lại
+          </Button>
+          <Button
+            danger
+            onClick={() => setEndRequestModal({ open: true, client: record })}
+          >
+            Kết thúc phụ trách
+          </Button>
+        </div>
+
+        {/* 4 section trong 2 cột */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* Cột trái */}
+          <div className="flex flex-col gap-4">
+            <SectionCard title="Thông tin hội viên">
+              <div className="mb-3 flex flex-col items-center gap-3 text-center md:flex-row md:text-left">
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: '50%',
+                    background: record.avatar ? `url(${record.avatar}) center/cover` : 'var(--gs-border)',
+                    flexShrink: 0,
+                  }}
+                />
+                <div>
+                  <div className="text-base font-semibold text-[var(--gs-text)]">{getUserDisplayName(record, 'Thành viên')}</div>
+                  <div className="text-sm text-[var(--gs-text-muted)]">{record.memberCode ? `Mã hội viên: ${record.memberCode}` : ''}</div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Row label="Chuyên môn">{record.specialization || '—'}</Row>
+                <Row label="Mục tiêu">{record.goals?.length ? record.goals.join(', ') : '—'}</Row>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Thông tin liên hệ">
+              <div className="space-y-2">
+                <Row label="Điện thoại">
+                  <span className="flex items-center gap-2">
+                    <span>{contactPhone || '—'}</span>
+                    {phoneHref && (
+                      <Tooltip title="Gọi điện">
+                        <button
+                          type="button"
+                          aria-label="Gọi điện"
+                          onClick={() => { window.location.href = `tel:${phoneHref}` }}
+                          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--theme-accent)] text-white shadow-sm transition-transform hover:brightness-110 active:scale-95 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] focus-visible:ring-offset-2 lg:hidden"
+                        >
+                          <PhoneOutlined />
+                        </button>
+                      </Tooltip>
+                    )}
+                  </span>
+                </Row>
+                <Row label="Email">
+                  <span className="flex items-center gap-2">
+                    <span>{contactEmail || '—'}</span>
+                    {emailHref && (
+                      <Tooltip title="Gửi email">
+                        <button
+                          type="button"
+                          aria-label="Gửi email"
+                          onClick={() => { window.location.href = `mailto:${emailHref}` }}
+                          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--theme-accent)] text-white shadow-sm transition-transform hover:brightness-110 active:scale-95 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] focus-visible:ring-offset-2 lg:hidden"
+                        >
+                          <MailOutlined />
+                        </button>
+                      </Tooltip>
+                    )}
+                  </span>
+                </Row>
+              </div>
+            </SectionCard>
+          </div>
+
+          {/* Cột phải */}
+          <div className="flex flex-col gap-4">
+            <SectionCard title="Thông tin gói">
+              <div className="space-y-2">
+                <Row label="Loại">
+                  <Tag color="purple" className="m-0">PT 1-1</Tag>
+                </Row>
+                <Row label="Trạng thái">
+                  {membershipActive
+                    ? <Tag color="blue" className="m-0">Đang hoạt động</Tag>
+                    : <Tag color="red" className="m-0">Đã hết hạn</Tag>}
+                </Row>
+                <Row label="Ngày bắt đầu">{fmtDate(record.membershipStartAt)}</Row>
+                <Row label="Ngày hết hạn">{fmtDate(record.membershipExpiresAt)}</Row>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Ghi chú">
+              <div className="text-sm text-[var(--gs-text)]">
+                {note ? note : <span className="text-[var(--gs-text-muted)]">— Không có ghi chú.</span>}
+              </div>
+            </SectionCard>
+          </div>
+        </div>
+
+        {/* Lưu ý */}
+        <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-bg)] p-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--theme-accent)]">
+            Lưu ý
+          </div>
+          <div className="flex items-start gap-2 text-sm text-[var(--gs-text)]">
+            <div className="flex shrink-0 gap-2 pt-0.5 text-[var(--theme-accent)]">
+              <PhoneOutlined />
+              <MailOutlined />
+            </div>
+            <span>PT và hội viên chủ động liên hệ qua số điện thoại hoặc email để thống nhất lịch tập.</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const pt1on1ActiveColumns = [
     {
-      title: 'Khách hàng',
-      width: 280,
+      title: 'Hội viên',
+      width: 260,
+      render: (_: unknown, record: ClientInfo) => (
+        <Space>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              background: record.avatar ? `url(${record.avatar}) center/cover` : 'var(--gs-border)',
+              flexShrink: 0,
+            }}
+          />
+          <div>
+            <div
+              style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--gs-text)' }}
+              onClick={() => navigate(`/admin/members/${record._id}`)}
+            >
+              {getUserDisplayName(record, 'Thành viên')}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--gs-text-muted)' }}>
+              {record.memberCode ? `${record.memberCode} • ` : ''}
+              {record.phone || record.email || '—'}
+            </div>
+          </div>
+        </Space>
+      ),
+    },
+    {
+      title: 'Chuyên môn',
+      width: 110,
+      render: (_: unknown, record: ClientInfo) => {
+        if (record.specialization) {
+          return <Tag color="blue">{record.specialization}</Tag>
+        }
+        return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
+      },
+    },
+    {
+      title: 'Mục tiêu',
+      width: 170,
+      render: (_: unknown, record: ClientInfo) => {
+        const goals = record.goals || []
+        if (goals.length > 0) {
+          return (
+            <Space size={4} wrap>
+              {goals.map((g, i) => (
+                <Tag key={i} color="green">{g}</Tag>
+              ))}
+            </Space>
+          )
+        }
+        return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
+      },
+    },
+    {
+      title: 'Gói PT',
+      width: 100,
+      render: () => <Tag color="purple">PT 1-1</Tag>,
+    },
+    {
+      title: 'Trạng thái',
+      width: 130,
+      render: (_: unknown, record: ClientInfo) => (
+        record.membershipStatus === 'active'
+          ? <Tag color="blue">Đang hoạt động</Tag>
+          : <Tag color="red">Đã hết hạn</Tag>
+      ),
+    },
+  ]
+
+  const groupActiveColumns = [
+    {
+      title: 'Hội viên',
+      width: 260,
       render: (_: unknown, record: ClientInfo) => (
         <Space>
           <div
@@ -596,46 +660,8 @@ export default function PTClientsPage() {
       },
     },
     {
-      title: 'Mục tiêu',
-      width: 160,
-      render: (_: unknown, record: ClientInfo) => {
-        const goals = record.goals || []
-        if (goals.length > 0) {
-          return (
-            <Space size={4} wrap>
-              {goals.map((g, i) => (
-                <Tag key={i} color="green">{g}</Tag>
-              ))}
-            </Space>
-          )
-        }
-        return <span className="text-sm text-[var(--gs-text-muted)]">—</span>
-      },
-    },
-    {
-      title: 'Gói tập',
-      width: 130,
-      render: (_: unknown, record: ClientInfo) => (
-        record.membershipStatus === 'pending_initial_activation'
-          ? <Tag color="orange">🟡 Chờ kích hoạt</Tag>
-          : record.membershipStatus === 'active'
-            ? <Tag color="green">🟢 Đang hoạt động</Tag>
-            : <span className="text-xs text-[var(--gs-text-muted)]">—</span>
-      ),
-    },
-    {
-      title: 'Lịch tập',
-      width: 120,
-      align: 'center' as const,
-      render: (_: unknown, record: ClientInfo) => (
-        <Tag color={(record.scheduleCount ?? 0) > 0 ? 'blue' : 'default'}>
-          {record.scheduleCount ?? 0} lịch
-        </Tag>
-      ),
-    },
-    {
-      title: 'Giáo án hiện tại',
-      width: 200,
+      title: 'Giáo án',
+      width: 180,
       render: (_: unknown, record: ClientInfo) => {
         if (record.workout) {
           return (
@@ -649,6 +675,16 @@ export default function PTClientsPage() {
         }
         return <span className="text-sm text-[var(--gs-text-muted)]">Chưa có giáo án</span>
       },
+    },
+    {
+      title: 'Lịch',
+      width: 90,
+      align: 'center' as const,
+      render: (_: unknown, record: ClientInfo) => (
+        <Tag color={(record.scheduleCount ?? 0) > 0 ? 'blue' : 'default'}>
+          {record.scheduleCount ?? 0} lịch
+        </Tag>
+      ),
     },
     {
       title: 'Thao tác',
@@ -814,37 +850,24 @@ export default function PTClientsPage() {
     },
   ]
 
-  const endRequestReasons = [
-    { value: 'MEMBER_COMPLETED', label: 'Hội viên hoàn thành khóa học' },
-    { value: 'MEMBER_REQUEST_CHANGE_PT', label: 'Hội viên yêu cầu đổi PT' },
-    { value: 'MEMBER_QUIT', label: 'Hội viên xin nghỉ tập' },
-    { value: 'PT_NO_LONGER_TEACHES', label: 'PT không còn phụ trách lớp' },
-    { value: 'OTHER', label: 'Khác' },
-  ]
-
   // ============ RENDER TABS ============
 
-  // Derive filter options from clients
-  const classOptions = Array.from(new Map(
-    clients.map(c => {
-      const ce = c.classEnrollment
-      return ce ? [ce._id, { value: ce._id, label: ce.name }] as const : null
-    }).filter(Boolean) as Array<readonly [string, { value: string; label: string }]>
-  ).values()).sort((a, b) => a.label.localeCompare(b.label))
+  const isPt1on1 = serviceTab === 'pt1on1'
+  const pt1on1Count = clients.filter(c => c.type === 'PT_1_1').length
+  const groupCount = clients.filter(c => c.type === 'GROUP').length
+  const activeLabel = isPt1on1 ? 'Đang phụ trách' : 'Đang hướng dẫn'
+  const serviceClients = clients.filter(c => (c.type === 'PT_1_1') === isPt1on1)
 
   const specializationOptions = Array.from(new Set(
-    clients.map(c => c.specialization).filter(Boolean)
+    serviceClients.map(c => c.specialization).filter(Boolean)
   )).sort().map(s => ({ value: s, label: s }))
 
   const goalOptions = Array.from(new Set(
-    clients.flatMap(c => c.goals || [])
+    serviceClients.flatMap(c => c.goals || [])
   )).sort().map(g => ({ value: g, label: g }))
 
   const filteredClients = clients.filter(c => {
-    if (filterClass) {
-      const ce = c.classEnrollment
-      if (!ce || ce._id !== filterClass) return false
-    }
+    if ((c.type === 'PT_1_1') !== isPt1on1) return false
     if (filterSpecialization) {
       if (c.specialization !== filterSpecialization) return false
     }
@@ -855,18 +878,22 @@ export default function PTClientsPage() {
     return true
   })
 
+  const filteredPending = pendingItems.filter(p =>
+    (p.type === 'PT_1_1') === isPt1on1
+  )
+  const filteredHistory = historyItems.filter(h =>
+    (h.type === 'PT_1_1') === isPt1on1
+  )
+  const pendingCols = isPt1on1
+    ? pendingColumns.filter(c => c.title !== 'Lớp' && c.title !== 'Giáo án hiện tại')
+    : pendingColumns
+  const historyCols = isPt1on1
+    ? historyColumns.filter(c => c.title !== 'Lớp')
+    : historyColumns
+
   const activeTabEl = (
     <div className="member-scroll-x">
       <div className="pt-clients-filters mb-4 flex flex-wrap items-center gap-3">
-        <Select
-          className="max-[767px]:!w-full"
-          style={{ minWidth: 200 }}
-          placeholder="Lọc theo lớp"
-          allowClear
-          value={filterClass}
-          onChange={(v) => setFilterClass(v || undefined)}
-          options={classOptions}
-        />
         <Select
           className="max-[767px]:!w-full"
           style={{ minWidth: 150 }}
@@ -889,13 +916,16 @@ export default function PTClientsPage() {
       </div>
       <Table className="pt-clients-table"
         dataSource={filteredClients}
-        columns={activeColumns}
+        columns={isPt1on1 ? pt1on1ActiveColumns : groupActiveColumns}
         rowKey="_id"
         loading={clientsLoading}
         pagination={{ pageSize: 15 }}
         locale={{ emptyText: <Empty description="Chưa có học viên nào" /> }}
         expandable={{
           expandedRowRender: (record) => {
+            if (record.type === 'PT_1_1') {
+              return pt1on1Expand(record)
+            }
             const schedules = clientSchedules[record._id] || []
             return (
               <div className="p-2">
@@ -911,35 +941,10 @@ export default function PTClientsPage() {
                     >
                       Tải lại
                     </Button>
-                    {hasActiveSchedule(record) && (
-                      <Button
-                        size="small"
-                        danger
-                        onClick={() => handleEndAllWorkouts(record)}
-                      >
-                        Kết thúc toàn bộ lịch tập
-                      </Button>
-                    )}
-                    <Button
-                      size="small"
-                      onClick={() => openClassModal(record, 'transfer')}
-                    >
-                      Chuyển lớp
-                    </Button>
-                    <Button
-                      size="small"
-                      onClick={() => openClassModal(record, 'leave')}
-                    >
-                      Rời lớp
-                    </Button>
                     <Button
                       size="small"
                       danger
-                      onClick={() => {
-                        setEndRequestModal({ open: true, client: record })
-                        setEndReason('MEMBER_COMPLETED')
-                        setEndDetail('')
-                      }}
+                      onClick={() => setEndRequestModal({ open: true, client: record })}
                     >
                       Kết thúc phụ trách
                     </Button>
@@ -968,6 +973,8 @@ export default function PTClientsPage() {
           const genderIcon = record.gender === 'female' ? '♀' : record.gender === 'male' ? '♂' : ''
           const isExpanded = expandedMemberId === record._id
           const schedules = clientSchedules[record._id] || []
+          const days = remainingDays(record.membershipExpiresAt)
+          const isPt1on1 = record.type === 'PT_1_1'
           return (
             <div key={record._id} className="pt-client-card">
               <div className="pt-client-header" style={{ cursor: 'pointer' }} onClick={() => handleExpand(expandedMemberId !== record._id, record)}>
@@ -980,44 +987,80 @@ export default function PTClientsPage() {
                   {isExpanded ? '−' : '+'}
                 </div>
               </div>
-              <div className="pt-client-detail">
-                <span className="pt-label">Lớp</span>
-                <span className="pt-value">{ce ? ce.name : <span className="italic text-[var(--gs-text-muted)]">Chưa xếp lớp</span>}</span>
-              </div>
-              {record.specialization && (
+              {isPt1on1 ? (
+                <>
+                  <div className="pt-client-detail">
+                    <span className="pt-label">Gói PT</span>
+                    <span className="pt-value"><Tag color="purple" className="m-0">PT 1-1</Tag></span>
+                  </div>
+                  {record.specialization && (
+                    <div className="pt-client-detail">
+                      <span className="pt-label">Chuyên môn</span>
+                      <span className="pt-value"><Tag color="blue" className="m-0">{record.specialization}</Tag></span>
+                    </div>
+                  )}
+                  {goals.length > 0 && (
+                    <div className="pt-client-detail">
+                      <span className="pt-label">Mục tiêu</span>
+                      <span className="pt-value">{goals.join(', ')}</span>
+                    </div>
+                  )}
+                  <div className="pt-client-detail">
+                    <span className="pt-label">Trạng thái</span>
+                    <span className="pt-value">
+                      {record.membershipStatus === 'active'
+                        ? <Tag color="blue" className="m-0">Đang hoạt động</Tag>
+                        : <Tag color="red" className="m-0">Đã hết hạn</Tag>}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="pt-client-detail">
+                    <span className="pt-label">Lớp</span>
+                    <span className="pt-value">{ce ? ce.name : <span className="italic text-[var(--gs-text-muted)]">Chưa xếp lớp</span>}</span>
+                  </div>
+                  {record.specialization && (
+                    <div className="pt-client-detail">
+                      <span className="pt-label">Chuyên môn</span>
+                      <span className="pt-value"><Tag color="blue" className="m-0">{record.specialization}</Tag></span>
+                    </div>
+                  )}
+                  {goals.length > 0 && (
+                    <div className="pt-client-detail">
+                      <span className="pt-label">Mục tiêu</span>
+                      <span className="pt-value">{goals.join(', ')}</span>
+                    </div>
+                  )}
+                  <div className="pt-client-detail">
+                    <span className="pt-label">Gói tập</span>
+                    <span className="pt-value">
+                      {record.membershipStatus === 'active'
+                        ? <>
+                            <Tag color="success" className="m-0">🟢 Đang hoạt động</Tag>
+                            {days !== null && <div className="mt-1 text-xs text-[var(--gs-text-muted)]">Còn {days} ngày</div>}
+                          </>
+                        : <Tag color="red" className="m-0">🔴 Đã hết hạn</Tag>}
+                    </span>
+                  </div>
+                </>
+              )}
+              {!isPt1on1 && (
                 <div className="pt-client-detail">
-                  <span className="pt-label">Chuyên môn</span>
-                  <span className="pt-value"><Tag color="blue" className="m-0">{record.specialization}</Tag></span>
+                  <span className="pt-label">Lịch tập</span>
+                  <span className="pt-value"><Tag color={(record.scheduleCount ?? 0) > 0 ? 'blue' : 'default'} className="m-0">{record.scheduleCount ?? 0} lịch</Tag></span>
                 </div>
               )}
-              {goals.length > 0 && (
+              {!isPt1on1 && (
                 <div className="pt-client-detail">
-                  <span className="pt-label">Mục tiêu</span>
-                  <span className="pt-value">{goals.join(', ')}</span>
+                  <span className="pt-label">Giáo án</span>
+                  <span className="pt-value">
+                    {record.workout
+                      ? <span>{record.workout.name}</span>
+                      : <span className="text-[var(--gs-text-muted)]">Chưa có giáo án</span>}
+                  </span>
                 </div>
               )}
-              <div className="pt-client-detail">
-                <span className="pt-label">Gói tập</span>
-                <span className="pt-value">
-                  {record.membershipStatus === 'pending_initial_activation'
-                    ? <Tag color="orange" className="m-0">🟡 Chờ kích hoạt</Tag>
-                    : record.membershipStatus === 'active'
-                      ? <Tag color="green" className="m-0">🟢 Đang hoạt động</Tag>
-                      : <span className="text-[var(--gs-text-muted)]">—</span>}
-                </span>
-              </div>
-              <div className="pt-client-detail">
-                <span className="pt-label">Lịch tập</span>
-                <span className="pt-value"><Tag color={(record.scheduleCount ?? 0) > 0 ? 'blue' : 'default'} className="m-0">{record.scheduleCount ?? 0} lịch</Tag></span>
-              </div>
-              <div className="pt-client-detail">
-                <span className="pt-label">Giáo án</span>
-                <span className="pt-value">
-                  {record.workout
-                    ? <span>{record.workout.name}</span>
-                    : <span className="text-[var(--gs-text-muted)]">Chưa có giáo án</span>}
-                </span>
-              </div>
               <div className="pt-client-actions">
                 <Button
                   type="primary"
@@ -1031,16 +1074,15 @@ export default function PTClientsPage() {
               </div>
               {isExpanded && (
                 <div className="mt-3 border-t border-[var(--gs-border)] pt-3">
+                  {isPt1on1 ? (
+                    pt1on1Expand(record)
+                  ) : (
+                    <>
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-medium text-[var(--gs-text-muted)]">{schedules.length} lịch tập</span>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex gap-2">
                       <Button size="small" icon={<ReloadOutlined />} onClick={() => fetchClientSchedules(record._id)}>Tải lại</Button>
-                      {hasActiveSchedule(record) && (
-                        <Button size="small" danger onClick={() => handleEndAllWorkouts(record)}>Kết thúc toàn bộ lịch tập</Button>
-                      )}
-                      {ce && <Button size="small" onClick={() => openClassModal(record, 'transfer')}>Chuyển lớp</Button>}
-                      {ce && <Button size="small" onClick={() => openClassModal(record, 'leave')}>Rời lớp</Button>}
-                      <Button size="small" danger onClick={() => { setEndRequestModal({ open: true, client: record }); setEndReason('MEMBER_COMPLETED'); setEndDetail('') }}>
+                      <Button size="small" danger onClick={() => setEndRequestModal({ open: true, client: record })}>
                         Kết thúc phụ trách
                       </Button>
                     </div>
@@ -1088,6 +1130,8 @@ export default function PTClientsPage() {
                   ) : (
                     <div className="py-4 text-center text-sm text-[var(--gs-text-muted)]">Chưa có lịch tập</div>
                   )}
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1101,8 +1145,8 @@ export default function PTClientsPage() {
     <div>
       <div className="pt-clients-table member-scroll-x">
         <Table
-          dataSource={pendingItems}
-          columns={pendingColumns}
+          dataSource={filteredPending}
+          columns={pendingCols}
           rowKey="_id"
           loading={pendingLoading}
           pagination={{ pageSize: 20 }}
@@ -1110,7 +1154,7 @@ export default function PTClientsPage() {
         />
       </div>
       <div className="pt-clients-cards">
-        {pendingItems.map((record: PendingApproval) => {
+        {filteredPending.map((record: PendingApproval) => {
           const member = typeof record.memberId === 'object' ? record.memberId as PTAssignmentMember : null
           const cls = typeof record.classId === 'object' ? record.classId : null
           const label = REASON_LABELS[record.reasonType] || record.reasonType
@@ -1120,7 +1164,7 @@ export default function PTClientsPage() {
                 <div className="pt-client-name">{getUserDisplayName(member, '—')}</div>
                 {member?.memberCode && <div className="pt-client-code truncate">{member.memberCode}</div>}
               </div>
-              <div className="pt-client-detail"><span className="pt-label">Lớp</span><span className="pt-value">{cls?.name || '—'}</span></div>
+              {!isPt1on1 && <div className="pt-client-detail"><span className="pt-label">Lớp</span><span className="pt-value">{cls?.name || '—'}</span></div>}
               {member?.specialization && <div className="pt-client-detail"><span className="pt-label">Chuyên môn</span><span className="pt-value"><Tag color="blue" className="m-0">{member.specialization}</Tag></span></div>}
               <div className="pt-client-detail"><span className="pt-label">Ngày gửi</span><span className="pt-value">{fmt(record.createdAt)}</span></div>
               <div className="pt-client-detail"><span className="pt-label">Lý do</span><span className="pt-value">{record.reasonType === 'OTHER' && record.reasonDetail ? record.reasonDetail : label}</span></div>
@@ -1131,7 +1175,7 @@ export default function PTClientsPage() {
             </div>
           )
         })}
-        {pendingItems.length === 0 && !pendingLoading && (
+        {filteredPending.length === 0 && !pendingLoading && (
           <div className="text-center py-10 text-[var(--gs-text-muted)]">Không có yêu cầu chờ duyệt</div>
         )}
       </div>
@@ -1180,8 +1224,8 @@ export default function PTClientsPage() {
       </div>
       <div className="pt-clients-table member-scroll-x">
         <Table
-          dataSource={historyItems}
-          columns={historyColumns}
+          dataSource={filteredHistory}
+          columns={historyCols}
           rowKey={(r) => `${r._type}_${r._id}`}
           loading={historyLoading}
           pagination={{
@@ -1194,7 +1238,7 @@ export default function PTClientsPage() {
         />
       </div>
       <div className="pt-clients-cards">
-        {historyItems.map((record: HistoryEntry) => {
+        {filteredHistory.map((record: HistoryEntry) => {
           const member = typeof record.memberId === 'object' ? record.memberId as PTAssignmentMember : null
           const cls = typeof record.classId === 'object' ? record.classId : null
           const pt = typeof (record as any).ptId === 'object' ? (record as any).ptId : null
@@ -1207,7 +1251,7 @@ export default function PTClientsPage() {
                 {member?.memberCode && <div className="pt-client-code truncate">{member.memberCode}</div>}
               </div>
               <div className="pt-client-detail"><span className="pt-label">Loại</span><span className="pt-value">{record._type === 'workout_end' ? <Tag color="blue" className="m-0">Kết thúc giáo án</Tag> : <Tag color="purple" className="m-0">Kết thúc phụ trách</Tag>}</span></div>
-              <div className="pt-client-detail"><span className="pt-label">Lớp</span><span className="pt-value">{cls?.name || '—'}</span></div>
+              {!isPt1on1 && <div className="pt-client-detail"><span className="pt-label">Lớp</span><span className="pt-value">{cls?.name || '—'}</span></div>}
               {record._type === 'workout_end' ? (
                 <div className="pt-client-detail"><span className="pt-label">Ngày kết thúc</span><span className="pt-value">{fmt((record as any).endedAt)}</span></div>
               ) : (
@@ -1221,14 +1265,14 @@ export default function PTClientsPage() {
             </div>
           )
         })}
-        {historyItems.length === 0 && !historyLoading && (
+        {filteredHistory.length === 0 && !historyLoading && (
           <div className="text-center py-10 text-[var(--gs-text-muted)]">Chưa có dữ liệu</div>
         )}
       </div>
     </div>
   )
 
-  const tabContent = activeTab === 'active' || activeTab === 'pending_first' ? activeTabEl : activeTab === 'pending' ? pendingTabEl : historyTabEl
+  const tabContent = activeTab === 'active' ? activeTabEl : activeTab === 'pending' ? pendingTabEl : historyTabEl
 
   // ============ RENDER ============
 
@@ -1240,12 +1284,37 @@ export default function PTClientsPage() {
           Học viên của tôi
         </h1>
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
-          {activeTab === 'active' ? `${clients.length} học viên` :
-           activeTab === 'pending' ? `${pendingItems.length} yêu cầu` :
-           `${historyPagination.total} mục`}
+          {activeTab === 'active' ? `${(isPt1on1 ? pt1on1Count : groupCount)} học viên` :
+           activeTab === 'pending' ? `${filteredPending.length} yêu cầu` :
+           `${filteredHistory.length} mục`}
         </p>
       </div>
 
+      {/* Main tab: loại dịch vụ (PT 1-1 | PT nhóm) */}
+      <div className="pt-clients-tabs mb-2 flex gap-6 border-b border-[var(--gs-border)] max-[767px]:overflow-x-auto max-[767px]:whitespace-nowrap max-[767px]:pb-1 max-[767px]:gap-4">
+        <button
+          onClick={() => setServiceTab('pt1on1')}
+          className={`pb-3 font-semibold transition ${
+            serviceTab === 'pt1on1'
+              ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-accent)]'
+              : 'text-[var(--gs-text-muted)] hover:text-[var(--gs-text)]'
+          }`}
+        >
+          PT 1-1 {pt1on1Count > 0 && <span className="ml-1 text-xs">({pt1on1Count})</span>}
+        </button>
+        <button
+          onClick={() => setServiceTab('group')}
+          className={`pb-3 font-semibold transition ${
+            serviceTab === 'group'
+              ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-accent)]'
+              : 'text-[var(--gs-text-muted)] hover:text-[var(--gs-text)]'
+          }`}
+        >
+          PT nhóm {groupCount > 0 && <span className="ml-1 text-xs">({groupCount})</span>}
+        </button>
+      </div>
+
+      {/* Status sub-tab */}
       <div className="pt-clients-tabs mb-4 flex gap-4 border-b border-[var(--gs-border)] max-[767px]:overflow-x-auto max-[767px]:whitespace-nowrap max-[767px]:pb-1 max-[767px]:gap-3">
         <button
           onClick={() => setActiveTab('active')}
@@ -1255,7 +1324,7 @@ export default function PTClientsPage() {
               : 'text-[var(--gs-text-muted)] hover:text-[var(--gs-text)]'
           }`}
         >
-          Đang hướng dẫn
+          {activeLabel}
         </button>
         <button
           onClick={() => setActiveTab('pending')}
@@ -1288,119 +1357,23 @@ export default function PTClientsPage() {
         open={endRequestModal.open}
         onCancel={() => {
           setEndRequestModal({ open: false, client: null })
-          setEndReason('MEMBER_COMPLETED')
-          setEndDetail('')
         }}
-        okText="Gửi yêu cầu"
+        okText="Xác nhận kết thúc"
         cancelText="Hủy"
         confirmLoading={submittingEnd}
         onOk={handleEndRequest}
       >
-        <p className="mb-4 text-sm text-[var(--gs-text-muted)]">
-          Bạn có chắc muốn kết thúc việc phụ trách hội viên này?
-        </p>
-        <div className="mb-4">
-          <label className="mb-2 block text-sm font-medium text-[var(--gs-text)]">Lý do</label>
-          <Radio.Group value={endReason} onChange={(e) => setEndReason(e.target.value)}>
-            <Space direction="vertical">
-              {endRequestReasons.map((r) => (
-                <Radio key={r.value} value={r.value}>{r.label}</Radio>
-              ))}
-            </Space>
-          </Radio.Group>
+        <div className="space-y-3 text-sm text-[var(--gs-text)]">
+          <p className="font-semibold">Kết thúc phụ trách học viên?</p>
+          <p>Sau khi xác nhận:</p>
+          <ul className="list-disc space-y-1 pl-5 text-[var(--gs-text-muted)]">
+            <li>PT sẽ không còn phụ trách hội viên này.</li>
+            <li>Hội viên sẽ không còn xuất hiện trong danh sách khách hàng của PT.</li>
+            <li>Lịch tập nhóm/PT sẽ kết thúc.</li>
+            <li>Giáo án đang gán sẽ được ngừng sử dụng.</li>
+            <li>Hội viên có thể đăng ký PT hoặc lớp mới sau đó.</li>
+          </ul>
         </div>
-        {endReason === 'OTHER' && (
-          <div className="mb-4">
-            <label className="mb-2 block text-sm font-medium text-[var(--gs-text)]">
-              Lý do khác <span className="text-red-500">*</span>
-            </label>
-            <Input.TextArea
-              rows={3}
-              value={endDetail}
-              onChange={(e) => setEndDetail(e.target.value)}
-              placeholder="Vui lòng nhập lý do..."
-            />
-          </div>
-        )}
-      </Modal>
-
-      {/* ============ CHUYỂN LỚP / RỜI LỚP MODAL ============ */}
-      <Modal
-        open={classModal.open}
-        title={classModal.mode === 'transfer' ? 'Chuyển lớp cho hội viên' : 'Rời khỏi lớp hiện tại'}
-        okText={classModal.mode === 'transfer' ? 'Chuyển lớp' : 'Rời lớp'}
-        cancelText="Hủy"
-        confirmLoading={submittingClassAction}
-        onOk={submitClassAction}
-        onCancel={closeClassModal}
-        okButtonProps={classModal.mode === 'leave' ? { danger: true } : undefined}
-      >
-        {enrollmentLoading ? (
-          <p className="text-sm text-[var(--gs-text-muted)]">Đang tải dữ liệu lớp...</p>
-        ) : (
-          <>
-            <div className="mb-4">
-              <label className="mb-1 block text-sm font-medium text-[var(--gs-text)]">Hội viên</label>
-              <p className="text-sm text-[var(--gs-text)]">
-                {classModal.client?.fullName || classModal.client?.name}
-                {classModal.client?.memberCode ? ` (${classModal.client.memberCode})` : ''}
-              </p>
-            </div>
-
-            <div className="mb-4">
-              <label className="mb-1 block text-sm font-medium text-[var(--gs-text)]">Lớp hiện tại</label>
-              {enrollmentPreview?.currentEnrollment ? (
-                <p className="text-sm text-[var(--gs-text)]">
-                  [{enrollmentPreview.currentEnrollment.code}] {enrollmentPreview.currentEnrollment.name}
-                </p>
-              ) : (
-                <p className="text-sm text-[var(--gs-text-muted)] italic">Không có lớp active</p>
-              )}
-            </div>
-
-            {classModal.mode === 'transfer' && (
-              <div className="mb-4">
-                <label className="mb-2 block text-sm font-medium text-[var(--gs-text)]">
-                  Chọn lớp đích <span className="text-red-500">*</span>
-                </label>
-                <Select
-                  style={{ width: '100%' }}
-                  placeholder="Chọn lớp..."
-                  value={selectedTargetClass || undefined}
-                  onChange={(v) => setSelectedTargetClass(v)}
-                  options={(enrollmentPreview?.availableClasses || []).map((c) => ({
-                    value: c._id,
-                    label: `[${c.code}] ${c.name}${c.isCurrent ? ' (lớp hiện tại)' : c.isFull ? ' (đã đầy)' : ''} — ${c.current}/${c.max}`,
-                    disabled: c.isFull || c.isCurrent,
-                  }))}
-                />
-              </div>
-            )}
-
-            <div className="mb-2">
-              <label className="mb-1 block text-sm font-medium text-[var(--gs-text)]">
-                Lý do (tùy chọn)
-              </label>
-              <Input.TextArea
-                rows={3}
-                value={classActionReason}
-                onChange={(e) => setClassActionReason(e.target.value)}
-                placeholder="Ghi chú/lý do chuyển hoặc rời lớp..."
-              />
-            </div>
-
-            {classModal.mode === 'leave' && (
-              <p className="mt-3 text-xs text-amber-600">
-                Lưu ý: Rời lớp KHÔNG kết thúc phụ trách. PT vẫn tiếp tục hướng dẫn hội viên này; chỉ gán enrollment lớp sẽ bị đóng.
-              </p>
-            )}
-            {classModal.mode === 'transfer' && (
-              <p className="mt-3 text-xs text-[var(--gs-text-muted)]">
-                Việc chuyển lớp sẽ tự đóng enrollment ở lớp cũ và tạo enrollment active ở lớp mới. Sức chứa lớp mới sẽ được kiểm tra.
-              </p>
-            )}
-          </>
-        )}
       </Modal>
 
     </DashboardLayout>

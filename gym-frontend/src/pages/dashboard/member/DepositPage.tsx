@@ -5,7 +5,7 @@ import { loadStripe } from '@stripe/stripe-js'
 import { useSearchParams } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useWallet } from '../../../context/WalletProvider'
-import { createStripePaymentIntent, createVnpayDeposit, getDepositPayments, getStripeExchangeRate } from '../../../services/walletService'
+import { confirmStripeCardPayment, createStripePaymentIntent, createVnpayDeposit, getDepositPayments, getStripeExchangeRate } from '../../../services/walletService'
 import PolicyConsentCard from '../../../components/wallet/PolicyConsentCard'
 import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 import { PRESET_AMOUNTS } from '../../../types/member/wallet'
@@ -72,6 +72,14 @@ function normalizeStatus(status?: string) {
   return String(status || '').toUpperCase()
 }
 
+function formatMethod(method?: string) {
+  const m = String(method || '').toUpperCase()
+  if (m === 'VNPAY') return 'VNPay'
+  if (m === 'INTERNATIONAL_CARD') return 'Thẻ quốc tế'
+  if (m === 'MANUAL_QR') return 'Chuyển khoản'
+  return m || 'VNPay'
+}
+
 function StripeCardDepositForm({
   amount,
   amountUsd,
@@ -115,6 +123,12 @@ function StripeCardDepositForm({
         return
       }
 
+      if (result.paymentIntent?.status !== 'succeeded') {
+        message.error('Thanh toán chưa hoàn tất, vui lòng thử lại')
+        return
+      }
+
+      await confirmStripeCardPayment(result.paymentIntent.id)
       message.success('Thanh toán thành công')
       onPaid()
     } catch (error: any) {
@@ -735,7 +749,7 @@ export default function DepositPage() {
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-sm text-[var(--theme-muted)]">Phương thức</span>
                       <span className="text-sm font-semibold text-[var(--theme-text)]">
-                        {pendingPayment.method || (pendingPayment.type === 'vnpay' ? 'VNPAY' : 'MANUAL_QR')}
+                        {formatMethod(pendingPayment.method || (pendingPayment.type === 'vnpay' ? 'VNPAY' : 'MANUAL_QR'))}
                       </span>
                     </div>
                   </div>
@@ -819,10 +833,7 @@ export default function DepositPage() {
                   {
                     title: 'Phương thức',
                     key: 'method',
-                    render: (_: unknown, record: DepositPayment) => {
-                      const method = record.method || record.paymentMethod || 'VNPAY'
-                      return method === 'MANUAL_QR' ? 'VNPAY' : method
-                    },
+                    render: (_: unknown, record: DepositPayment) => formatMethod(record.method || record.paymentMethod),
                   },
                   { title: 'Trạng thái', dataIndex: 'status', key: 'status', render: renderStatus },
                 ]}

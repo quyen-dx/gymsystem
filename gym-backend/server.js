@@ -47,8 +47,7 @@ import trainingAssignmentRoutes from './src/routes/trainingAssignmentRoutes.js'
 import trainingClassRoutes from './src/routes/trainingClassRoutes.js'
 import floorZoneRoutes from './src/routes/floorZoneRoutes.js'
 import trainerScheduleRoutes from './src/routes/trainerScheduleRoutes.js'
-import trainerReplacementRoutes from './src/routes/trainerReplacementRoutes.js'
-import shiftSwapRoutes from './src/routes/shiftSwapRoutes.js'
+import shiftChangeRoutes from './src/routes/shiftChangeRoutes.js'
 
 import groupClassRoutes from "./src/routes/groupClassRoutes.js"
 import reportRoutes from "./src/routes/reportRoutes.js"
@@ -56,6 +55,7 @@ import notificationRoutes from "./src/routes/notificationRoutes.js"
 import aiRoutes from './src/routes/aiRoutes.js'
 import visionRoutes from './src/routes/visionRoutes.js'
 import { initSocketIO } from './src/services/socketService.js'
+import { runStartupTasks } from './src/config/startupTasks.js'
 
 const app = express()
 const allowedOrigins = [...new Set([
@@ -135,8 +135,7 @@ app.use('/api/training-assignments', trainingAssignmentRoutes)
 app.use('/api/training-classes', trainingClassRoutes)
 app.use('/api/floors-zones', floorZoneRoutes)
 app.use('/api/trainer-schedules', trainerScheduleRoutes)
-app.use('/api/trainer-replacements', trainerReplacementRoutes)
-app.use('/api/shift-swaps', shiftSwapRoutes)
+app.use('/api/shift-change-requests', shiftChangeRoutes)
 app.use('/api/health', healthRoutes)
 app.use("/api/group-classes", groupClassRoutes)
 app.use("/api/admin/reports", reportRoutes)
@@ -176,23 +175,14 @@ const PORT = process.env.PORT || 5000
 const httpServer = http.createServer(app)
 initSocketIO(httpServer)
 
-// Schedule daily jobs
-import cron from 'node-cron'
-import { runRefundReminderJob } from './src/jobs/refundReminderJob.js'
-import { runActivateRenewalCyclesJob } from './src/jobs/activateRenewalCyclesJob.js'
-cron.schedule('0 1 * * *', () => {
-  console.log('[Cron] Running refundReminderJob...')
-  runRefundReminderJob().catch(err => console.error('[Cron] refundReminderJob failed:', err))
-})
-console.log('[Cron] refundReminderJob scheduled daily at 08:00 VN time')
-cron.schedule('0 */6 * * *', () => {
-  console.log('[Cron] Running activateRenewalCyclesJob...')
-  runActivateRenewalCyclesJob().catch(err => console.error('[Cron] activateRenewalCyclesJob failed:', err))
-})
-console.log('[Cron] activateRenewalCyclesJob scheduled every 6 hours')
+// Membership được kích hoạt ngay khi thanh toán thành công nên không còn job
+// refundReminderJob (nhắc hoàn tiền khi chưa kích hoạt) hay activateRenewalCyclesJob
+// (kích hoạt kỳ gia hạn pending). Các kỳ gia hạn trong tương lai vẫn được bật tự động
+// theo thời gian qua rebuildMembershipTimeline khi kỳ trước hết hạn.
 
 connectDB()
-  .then(() => {
+  .then(async () => {
+    await runStartupTasks()
     httpServer.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`)
     })

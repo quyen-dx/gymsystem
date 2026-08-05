@@ -224,12 +224,18 @@ export default function PTWorkoutFormPage() {
                     exercises: s.exercises.map((e) => ({ name: e.name, note: `${e.sets}x${e.reps} - nghỉ ${e.restTime}s` })),
                   }))
                 : [emptyDay()]
+
+            const specId = (detail as any).specializationId || ''
+            // 1. Set chuyên môn trước
             form.setFieldsValue({
               workoutName: detail.workoutName || detail.name || '',
-              specializationId: (detail as any).specializationId || '',
-              goal: detail.goal || '',
+              specializationId: specId,
               days,
             })
+            // 2. Load mục tiêu theo chuyên môn
+            await loadGoalsForSpecialization(specId)
+            // 3. Set mục tiêu sau khi options đã sẵn sàng (tránh race condition)
+            form.setFieldValue('goal', detail.goal || '')
           }
         } catch {
           message.error('Không thể tải chi tiết giáo án')

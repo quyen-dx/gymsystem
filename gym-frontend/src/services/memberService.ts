@@ -11,6 +11,7 @@ export interface EnrollmentStatus {
   hasActiveEnrollment: boolean
   hasActiveSchedules: boolean
   hasPendingRequest: boolean
+  assignmentType?: 'group' | 'private' | null
   pendingRequest: { _id: string; specialization?: string; timeSlots: string[]; daysOfWeek: number[] } | null
   pt: { ptId: string; name: string } | null
   class: { classId: string; name: string; code: string; specialization: string; daysOfWeek: number[]; time: string } | null

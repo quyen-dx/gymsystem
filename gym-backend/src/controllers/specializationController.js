@@ -1,4 +1,5 @@
 import Specialization from '../models/Specialization.js'
+import { getGoalsBySpecialization as getGoalsBySpecConfig } from '../config/specializationGoals.js'
 
 export const getAll = async (req, res) => {
   try {
@@ -21,6 +22,15 @@ export const getById = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy chuyên môn' })
     }
     res.json({ specialization })
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+}
+
+export const getGoalsBySpecialization = async (req, res) => {
+  try {
+    const goals = getGoalsBySpecConfig(req.params.id)
+    res.json({ goals })
   } catch (error) {
     res.status(500).json({ message: error.message })
   }

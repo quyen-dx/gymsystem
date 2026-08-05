@@ -169,6 +169,19 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
               <Input placeholder="Nhập số điện thoại" size="large" />
             </Form.Item>
 
+            {!isEdit && (
+              <Form.Item
+                label="Mật khẩu"
+                name="password"
+                rules={[
+                  { required: true, message: 'Vui lòng nhập mật khẩu' },
+                  { min: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự' },
+                ]}
+              >
+                <Input.Password placeholder="Nhập mật khẩu" size="large" />
+              </Form.Item>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <Form.Item label="Giới tính" name="gender">
                 <Select
@@ -187,6 +200,21 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
                 <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" placeholder="DD/MM/YYYY" size="large" />
               </Form.Item>
             </div>
+
+            <Form.Item label="Avatar">
+              <Upload
+                accept="image/*"
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  setAvatarFile(file)
+                  return false
+                }}
+              >
+                <Button icon={<UploadOutlined />} size="large">
+                  {avatarFile ? avatarFile.name : 'Tải lên ảnh đại diện'}
+                </Button>
+              </Upload>
+            </Form.Item>
           </div>
 
           <div style={cardStyle} className="p-6 max-[640px]:p-4">
@@ -209,44 +237,6 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
               <InputNumber min={0} style={{ width: '100%' }} placeholder="Nhập số năm kinh nghiệm" size="large" />
             </Form.Item>
           </div>
-
-
-
-          <div style={cardStyle} className="p-6 max-[640px]:p-4">
-            <h2 style={sectionTitleStyle}>Avatar</h2>
-
-            <Form.Item label="Avatar">
-              <Upload
-                accept="image/*"
-                showUploadList={false}
-                beforeUpload={(file) => {
-                  setAvatarFile(file)
-                  return false
-                }}
-              >
-                <Button icon={<UploadOutlined />} size="large">
-                  {avatarFile ? avatarFile.name : 'Tải lên ảnh đại diện'}
-                </Button>
-              </Upload>
-            </Form.Item>
-          </div>
-
-          {!isEdit && (
-            <div style={cardStyle} className="p-6 max-[640px]:p-4">
-              <h2 style={sectionTitleStyle}>Mật khẩu</h2>
-
-              <Form.Item
-                label="Mật khẩu"
-                name="password"
-                rules={[
-                  { required: true, message: 'Vui lòng nhập mật khẩu' },
-                  { min: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự' },
-                ]}
-              >
-                <Input.Password placeholder="Nhập mật khẩu" size="large" />
-              </Form.Item>
-            </div>
-          )}
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
             <Button size="large" onClick={() => navigate('/admin/trainers')}>

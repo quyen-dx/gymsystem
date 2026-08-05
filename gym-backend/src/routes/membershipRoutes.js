@@ -23,7 +23,6 @@ import {
 } from '../controllers/membershipController.js'
 import {
   approveCancellationRequest,
-  cancelPendingMembership,
   createCancellationRequest,
   getMyCancellationRequest,
   listCancellationRequests,
@@ -72,7 +71,6 @@ router.patch('/registrations/:id/confirm', adminOrStaff, confirmMembershipRegist
 router.patch('/registrations/:id/cancel', adminOrStaff, cancelMembershipRegistration)
 router.get('/payments', adminOrStaff, getMembershipPayments)
 
-router.post('/cancel-pending', cancelPendingMembership)
 router.post('/cancel-request', createCancellationRequest)
 router.get('/my-cancel-request', getMyCancellationRequest)
 

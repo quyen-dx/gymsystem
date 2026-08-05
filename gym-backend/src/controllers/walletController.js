@@ -6,7 +6,8 @@ import Payment from '../models/Payment.js'
 import Transaction from '../models/Transaction.js'
 import User from '../models/User.js'
 import Wallet from '../models/Wallet.js'
-import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, transferWalletBalance } from '../services/walletService.js'
+import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, transferWalletBalance, IdempotencyConflictError } from '../services/walletService.js'
+import { finalizeWalletDeposit, notifyDepositSuccess } from '../services/walletDepositService.js'
 import { createVnpayPaymentUrl, verifyVnpayReturn } from '../services/vnpayService.js'
 import AppError from '../utils/appError.js'
 import { assertPolicyConsent } from '../utils/policyConsent.js'
@@ -259,76 +260,74 @@ export const simulateManualQrPayment = async (req, res, next) => {
     const session = await mongoose.startSession()
     try {
         const { txnRef } = req.params
-        session.startTransaction()
 
-        const payment = await Payment.findOne({
-            txnRef,
-            method: 'MANUAL_QR',
-            'metadata.purpose': 'WALLET_DEPOSIT',
-            'metadata.demoOnly': true,
-        }).session(session)
-
-        if (!payment) {
-            throw new AppError('Không tìm thấy giao dịch demo', 404)
-        }
-
-        if (payment.status === 'PAID') {
-            await session.commitTransaction()
-            return res.json({ success: true, data: { status: payment.status, txnRef: payment.txnRef, alreadyPaid: true } })
-        }
-
-        if (payment.status !== 'PENDING') {
-            throw new AppError('Giao dịch không còn ở trạng thái chờ', 400)
-        }
-
-        const depositCredit = calculateDepositCredit(payment.amount)
-        const { wallet, transaction } = await applyWalletTransaction({
-            userId: payment.userId,
-            amount: depositCredit.creditedAmount,
-            type: 'deposit',
-            provider: 'manual_qr_demo',
-            source: 'bank_demo',
-            description: 'Manual QR demo bank transfer',
-            referenceId: txnRef,
-            status: 'completed',
-            metadata: {
-                paymentId: payment._id,
+        const outcome = await session.withTransaction(async () => {
+            const payment = await Payment.findOne({
                 txnRef,
-                demoOnly: true,
+                method: 'MANUAL_QR',
+                'metadata.purpose': 'WALLET_DEPOSIT',
+                'metadata.demoOnly': true,
+            }).session(session)
+
+            if (!payment) {
+                throw new AppError('Không tìm thấy giao dịch demo', 404)
+            }
+
+            if (payment.status === 'PAID') {
+                return { status: 'PAID', txnRef: payment.txnRef, alreadyPaid: true }
+            }
+
+            if (payment.status !== 'PENDING') {
+                throw new AppError('Giao dịch không còn ở trạng thái chờ', 400)
+            }
+
+            const depositCredit = calculateDepositCredit(payment.amount)
+            const finalized = await finalizeWalletDeposit({
+                userId: payment.userId,
+                amountVnd: depositCredit.creditedAmount,
                 originalAmount: depositCredit.originalAmount,
                 bonusAmount: depositCredit.bonusAmount,
                 bonusRate: depositCredit.bonusRate,
-            },
-            idempotencyKey: txnRef,
-            session,
-        })
-
-        payment.status = 'PAID'
-        payment.paidAt = new Date()
-        payment.metadata = {
-            ...(payment.metadata || {}),
-            demoPaidAt: new Date(),
-            walletId: wallet._id,
-            walletTransactionId: transaction._id,
-            creditedAmount: depositCredit.creditedAmount,
-            bonusAmount: depositCredit.bonusAmount,
-            bonusRate: depositCredit.bonusRate,
-        }
-        await payment.save({ session })
-
-        await session.commitTransaction()
-        return res.json({
-            success: true,
-            data: {
+                paymentMethod: 'MANUAL_QR',
+                description: 'Nạp tiền vào ví qua mã QR chuyển khoản',
+                txnRef,
+                providerMetadata: {
+                    demoOnly: true,
+                    demoPaidAt: new Date(),
+                },
+                idempotencyKey: txnRef,
+                existingPayment: payment,
+                session,
+            })
+            return {
                 status: payment.status,
                 txnRef: payment.txnRef,
                 amount: payment.amount,
                 creditedAmount: depositCredit.creditedAmount,
-                walletBalance: wallet.balance,
+                walletBalance: finalized.wallet.balance,
+                alreadyPaid: finalized.alreadyPaid,
+                userId: payment.userId,
+                method: 'MANUAL_QR',
+            }
+        })
+
+        if (!outcome.alreadyPaid) {
+            notifyDepositSuccess({ userId: outcome.userId, amountVnd: outcome.creditedAmount, paymentMethod: outcome.method })
+        }
+        return res.json({
+            success: true,
+            data: {
+                status: outcome.status,
+                txnRef: outcome.txnRef,
+                amount: outcome.amount,
+                creditedAmount: outcome.creditedAmount,
+                walletBalance: outcome.walletBalance,
             },
         })
     } catch (error) {
-        await session.abortTransaction()
+        if (error instanceof IdempotencyConflictError || error?.errorLabels?.includes('TransientTransactionError')) {
+            return res.json({ success: true, data: { status: 'PAID', txnRef: req.params.txnRef, alreadyPaid: true } })
+        }
         next(error)
     } finally {
         session.endSession()
@@ -463,83 +462,72 @@ export const handleVnpayReturn = async (req, res, next) => {
 
         const session = await mongoose.startSession()
         try {
-            session.startTransaction()
+            const outcome = await session.withTransaction(async () => {
+                const payment = await Payment.findOne({ txnRef }).session(session)
+                if (!payment) return { status: 'failed' }
 
-            const payment = await Payment.findOne({ txnRef }).session(session)
-            if (!payment) {
-                await session.abortTransaction()
-                return redirectWithStatus('failed', txnRef)
-            }
+                if (payment.status === 'PAID') return { status: 'success', alreadyPaid: true }
 
-            if (payment.status === 'PAID') {
-                await session.commitTransaction()
-                return redirectWithStatus('success', txnRef)
-            }
+                if (payment.status !== 'PENDING') return { status: 'failed' }
 
-            if (payment.status !== 'PENDING') {
-                await session.commitTransaction()
-                return redirectWithStatus('failed', txnRef)
-            }
+                payment.metadata = {
+                    ...(payment.metadata || {}),
+                    vnpayReturn: req.query,
+                    verified: isValidSignature,
+                }
 
-            payment.metadata = {
-                ...(payment.metadata || {}),
-                vnpayReturn: req.query,
-                verified: isValidSignature,
-            }
+                if (!isPaid) {
+                    payment.status = 'FAILED'
+                    await payment.save({ session })
+                    return { status: 'failed' }
+                }
 
-            if (!isPaid) {
-                payment.status = 'FAILED'
-                await payment.save({ session })
-                await session.commitTransaction()
-                return redirectWithStatus('failed', txnRef)
-            }
-
-            const depositCredit = calculateDepositCredit(payment.amount)
-            const { wallet, transaction } = await applyWalletTransaction({
-                userId: payment.userId,
-                amount: depositCredit.creditedAmount,
-                type: 'deposit',
-                provider: 'vnpay',
-                source: 'online',
-                description: 'VNPAY wallet deposit',
-                referenceId: txnRef,
-                status: 'completed',
-                metadata: {
-                    paymentId: payment._id,
-                    txnRef,
-                    vnpTransactionNo: req.query.vnp_TransactionNo,
-                    bankCode: req.query.vnp_BankCode,
-                    bankTranNo: req.query.vnp_BankTranNo,
-                    payDate: req.query.vnp_PayDate,
+                const depositCredit = calculateDepositCredit(payment.amount)
+                const finalized = await finalizeWalletDeposit({
+                    userId: payment.userId,
+                    amountVnd: depositCredit.creditedAmount,
                     originalAmount: depositCredit.originalAmount,
                     bonusAmount: depositCredit.bonusAmount,
                     bonusRate: depositCredit.bonusRate,
-                },
-                idempotencyKey: txnRef,
-                session,
+                    paymentMethod: 'VNPAY',
+                    description: 'Nạp tiền vào ví qua VNPay',
+                    txnRef,
+                    providerRef: req.query.vnp_TransactionNo,
+                    providerRefKey: 'vnpTransactionNo',
+                    providerMetadata: {
+                        vnpayReturn: req.query,
+                        verified: true,
+                        vnpTransactionNo: req.query.vnp_TransactionNo,
+                        bankCode: req.query.vnp_BankCode,
+                        bankTranNo: req.query.vnp_BankTranNo,
+                        payDate: req.query.vnp_PayDate,
+                    },
+                    idempotencyKey: txnRef,
+                    existingPayment: payment,
+                    session,
+                })
+                return {
+                    status: 'success',
+                    alreadyPaid: finalized.alreadyPaid,
+                    userId: payment.userId,
+                    amount: depositCredit.creditedAmount,
+                    method: 'VNPAY',
+                }
             })
 
-            payment.status = 'PAID'
-            payment.paidAt = new Date()
-            payment.metadata = {
-                ...(payment.metadata || {}),
-                walletId: wallet._id,
-                walletTransactionId: transaction._id,
-                creditedAmount: depositCredit.creditedAmount,
-                bonusAmount: depositCredit.bonusAmount,
-                bonusRate: depositCredit.bonusRate,
+            if (outcome.status === 'success' && !outcome.alreadyPaid) {
+                notifyDepositSuccess({ userId: outcome.userId, amountVnd: outcome.amount, paymentMethod: outcome.method })
             }
-            await payment.save({ session })
-
-            await session.commitTransaction()
-            return redirectWithStatus('success', txnRef)
+            return redirectWithStatus(outcome.status, txnRef)
         } catch (error) {
-            await session.abortTransaction()
             throw error
         } finally {
             session.endSession()
         }
     } catch (error) {
+        if (error instanceof IdempotencyConflictError || error?.errorLabels?.includes('TransientTransactionError')) {
+            return redirectWithStatus('success', txnRef)
+        }
         next(error)
     }
 }
@@ -576,6 +564,7 @@ export const createStripePaymentIntent = async (req, res, next) => {
 
         return res.json({
             clientSecret: paymentIntent.client_secret,
+            paymentIntentId: paymentIntent.id,
             stripeAmount,
             stripeCurrency: 'usd',
             exchangeRate,
@@ -617,30 +606,43 @@ export const handleStripeWebhook = async (req, res, next) => {
             const paymentIntent = event.data.object
             const userId = paymentIntent.metadata?.userId
             const amount = Number(paymentIntent.metadata?.walletAmountVnd || 0)
+            const exchangeRate = Number(paymentIntent.metadata?.exchangeRate) || null
             const depositCredit = calculateDepositCredit(amount)
 
             if (userId && amount > 0) {
-                await applyWalletTransaction({
-                    userId,
-                    amount: depositCredit.creditedAmount,
-                    type: 'deposit',
-                    provider: 'stripe',
-                    source: 'card',
-                    description: 'Stripe card deposit',
-                    referenceId: paymentIntent.id,
-                    status: 'completed',
-                    metadata: {
-                        stripePaymentIntentId: paymentIntent.id,
-                        paymentMethod: paymentIntent.payment_method,
-                        stripeAmount: paymentIntent.amount_received || paymentIntent.amount,
-                        stripeCurrency: paymentIntent.currency,
-                        exchangeRate: paymentIntent.metadata?.exchangeRate,
-                        originalAmount: depositCredit.originalAmount,
-                        bonusAmount: depositCredit.bonusAmount,
-                        bonusRate: depositCredit.bonusRate,
-                    },
-                    idempotencyKey: paymentIntent.id,
-                })
+                const session = await mongoose.startSession()
+                try {
+                    const result = await session.withTransaction(async () => {
+                        return finalizeWalletDeposit({
+                            userId,
+                            amountVnd: depositCredit.creditedAmount,
+                            originalAmount: depositCredit.originalAmount,
+                            bonusAmount: depositCredit.bonusAmount,
+                            bonusRate: depositCredit.bonusRate,
+                            currency: 'VND',
+                            exchangeRate,
+                            paymentMethod: 'INTERNATIONAL_CARD',
+                            description: 'Nạp tiền vào ví qua thẻ quốc tế',
+                            txnRef: paymentIntent.id,
+                            providerRef: paymentIntent.id,
+                            providerRefKey: 'stripePaymentIntentId',
+                            providerMetadata: {
+                                stripePaymentIntentId: paymentIntent.id,
+                                stripePaymentMethod: paymentIntent.payment_method,
+                                stripeAmount: paymentIntent.amount_received || paymentIntent.amount,
+                                stripeCurrency: paymentIntent.currency,
+                                exchangeRate,
+                            },
+                            idempotencyKey: paymentIntent.id,
+                            session,
+                        })
+                    })
+                    if (!result.alreadyPaid) {
+                        notifyDepositSuccess({ userId, amountVnd: depositCredit.creditedAmount, paymentMethod: 'INTERNATIONAL_CARD' })
+                    }
+                } finally {
+                    session.endSession()
+                }
             }
         }
 
@@ -649,6 +651,105 @@ export const handleStripeWebhook = async (req, res, next) => {
         if (error.type === 'StripeSignatureVerificationError') {
             return res.status(400).json({ success: false, message: `Webhook Error: ${error.message}` })
         }
+        if (error instanceof IdempotencyConflictError || error?.errorLabels?.includes('TransientTransactionError')) {
+            return res.json({ received: true })
+        }
+        next(error)
+    }
+}
+
+export const confirmStripeCardPayment = async (req, res, next) => {
+    try {
+        if (!stripe) {
+            throw new AppError('Stripe chưa được cấu hình', 500)
+        }
+
+        const { paymentIntentId } = req.body
+        if (!paymentIntentId) {
+            throw new AppError('paymentIntentId là bắt buộc', 400)
+        }
+
+        // Xác thực kết quả thanh toán trực tiếp với Stripe (không tin client)
+        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
+        if (!paymentIntent) {
+            throw new AppError('Không tìm thấy thanh toán trên Stripe', 404)
+        }
+        if (String(paymentIntent.metadata?.userId || '') !== req.user._id.toString()) {
+            throw new AppError('Thanh toán không thuộc về tài khoản của bạn', 403)
+        }
+        if (paymentIntent.status !== 'succeeded') {
+            throw new AppError('Thanh toán chưa hoàn tất, vui lòng thử lại', 400)
+        }
+
+        const amount = Number(paymentIntent.metadata?.walletAmountVnd || 0)
+        if (!amount || amount <= 0) {
+            throw new AppError('Dữ liệu thanh toán không hợp lệ', 400)
+        }
+        const exchangeRate = Number(paymentIntent.metadata?.exchangeRate) || null
+        const depositCredit = calculateDepositCredit(amount)
+
+        const session = await mongoose.startSession()
+        try {
+            const result = await session.withTransaction(async () => {
+                return finalizeWalletDeposit({
+                    userId: req.user._id,
+                    amountVnd: depositCredit.creditedAmount,
+                    originalAmount: depositCredit.originalAmount,
+                    bonusAmount: depositCredit.bonusAmount,
+                    bonusRate: depositCredit.bonusRate,
+                    currency: 'VND',
+                    exchangeRate,
+                    paymentMethod: 'INTERNATIONAL_CARD',
+                    description: 'Nạp tiền vào ví qua thẻ quốc tế',
+                    txnRef: paymentIntent.id,
+                    providerRef: paymentIntent.id,
+                    providerRefKey: 'stripePaymentIntentId',
+                    providerMetadata: {
+                        stripePaymentIntentId: paymentIntent.id,
+                        stripePaymentMethod: paymentIntent.payment_method,
+                        stripeAmount: paymentIntent.amount_received || paymentIntent.amount,
+                        stripeCurrency: paymentIntent.currency,
+                        exchangeRate,
+                    },
+                    idempotencyKey: paymentIntent.id,
+                    session,
+                })
+            })
+            if (!result.alreadyPaid) {
+                notifyDepositSuccess({ userId: req.user._id, amountVnd: depositCredit.creditedAmount, paymentMethod: 'INTERNATIONAL_CARD' })
+            }
+            return res.json({
+                success: true,
+                data: {
+                    paymentId: result.payment?._id || null,
+                    transactionId: result.transaction?._id || null,
+                    walletBalance: result.wallet?.balance,
+                    creditedAmount: result.transaction?.amount || depositCredit.creditedAmount,
+                    alreadyPaid: result.alreadyPaid,
+                },
+            })
+        } catch (error) {
+            const isTransient = error?.errorLabels?.includes('TransientTransactionError')
+            if (error instanceof IdempotencyConflictError || isTransient) {
+                const existingTxn = await Transaction.findOne({ idempotencyKey: paymentIntentId }).lean()
+                let existingPayment = existingTxn?.paymentId ? await Payment.findById(existingTxn.paymentId).lean() : null
+                const wallet = await getOrCreateWallet(req.user._id)
+                return res.json({
+                    success: true,
+                    data: {
+                        paymentId: existingPayment?._id || null,
+                        transactionId: existingTxn?._id || null,
+                        walletBalance: wallet.balance,
+                        creditedAmount: existingTxn?.amount || amount,
+                        alreadyPaid: true,
+                    },
+                })
+            }
+            throw error
+        } finally {
+            session.endSession()
+        }
+    } catch (error) {
         next(error)
     }
 }

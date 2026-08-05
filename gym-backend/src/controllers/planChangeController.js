@@ -9,7 +9,7 @@ import Wallet from '../models/Wallet.js'
 import Transaction from '../models/Transaction.js'
 import { createNotification } from '../services/notificationService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
-import { handlePTDataOnPlanChange } from '../services/membershipService.js'
+import { cleanupMemberBenefitsOnPlanChange, resolvePlanFeatureCodes } from '../services/membershipService.js'
 
 function calcProratedValue(cycle, plan) {
   const now = new Date()
@@ -22,15 +22,202 @@ function calcProratedValue(cycle, plan) {
   return Math.round(plan.price * ratio)
 }
 
+const fail = (statusCode, message) => {
+  const err = new Error(message)
+  err.statusCode = statusCode
+  throw err
+}
+
+const getOrCreateWallet = async ({ memberId, session }) => {
+  let wallet = await Wallet.findOne({ userId: memberId }).session(session)
+  if (!wallet) {
+    [wallet] = await Wallet.create([{ userId: memberId, balance: 0 }], { session })
+  }
+  return wallet
+}
+
+/**
+ * Core thống nhất cho mọi luồng đổi gói (upgrade/downgrade/change_plan).
+ * - Tính phí theo chênh lệch giá full (khớp contract FE + available-plans).
+ * - Đồng bộ MembershipCycle.currentPlanId + Membership.planId.
+ * - Xử lý MembershipPeriod PENDING (hủy+hoàn nếu cancelRenewals, ngược lại trỏ sang gói mới).
+ * - Ghi PlanChangeHistory kèm cycleId + featureSnapshot.
+ * - Gọi cleanupMemberBenefitsOnPlanChange để dọn dữ liệu PT/class/waitlist/request không còn hợp lệ.
+ */
+const executePlanChangeCore = async ({ memberId, newPlanId, expectedDirection, cancelRenewals = false }) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+  let committed = false
+
+  try {
+    const cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+      .populate('currentPlanId').session(session)
+    if (!cycle) fail(404, 'Không tìm thấy gói tập đang hoạt động')
+
+    const membershipId = cycle.currentMembershipId
+
+    const newPlan = await Plan.findById(newPlanId).populate('featureIds').session(session)
+    if (!newPlan) fail(404, 'Không tìm thấy gói mới')
+
+    const oldPlan = cycle.currentPlanId
+
+    if (newPlan._id.toString() === oldPlan._id.toString()) {
+      fail(400, 'Gói mới phải khác gói hiện tại')
+    }
+    if (expectedDirection === 'upgrade' && newPlan.price <= oldPlan.price) {
+      fail(400, 'Gói mới phải có giá cao hơn gói hiện tại để nâng cấp')
+    }
+    if (expectedDirection === 'downgrade' && newPlan.price >= oldPlan.price) {
+      fail(400, 'Gói mới phải có giá thấp hơn gói hiện tại để hạ cấp')
+    }
+
+    const diff = newPlan.price - oldPlan.price
+    const changeType = diff > 0 ? 'upgrade' : 'downgrade'
+
+    const wallet = await getOrCreateWallet({ memberId, session })
+
+    // Kỳ gia hạn PENDING: hủy + hoàn tiền nếu cancelRenewals, ngược lại trỏ sang gói mới
+    const nowMs = Date.now()
+    const pendingPeriods = membershipId
+      ? await MembershipPeriod.find({ membershipId, status: 'PENDING' })
+          .sort({ startDate: 1 }).session(session).lean()
+      : []
+    const futurePending = pendingPeriods.filter(p => nowMs < new Date(p.startDate).getTime())
+
+    if (cancelRenewals) {
+      for (const p of futurePending) {
+        if ((p.price || 0) > 0) {
+          const balanceBefore = Number(wallet.balance || 0)
+          wallet.balance += p.price
+          await wallet.save({ session })
+
+          await Transaction.create([{
+            userId: memberId, walletId: wallet._id, type: 'REFUND_TO_WALLET', provider: 'wallet', source: 'plan_change',
+            description: `Hoàn tiền hủy gia hạn khi đổi gói (+${p.totalDays} ngày)`,
+            amount: p.price, balanceBefore, balanceAfter: wallet.balance,
+            referenceId: p._id.toString(), status: 'completed', completedAt: new Date(),
+            metadata: { periodId: p._id, membershipId, reason: 'cancelled_on_plan_change' },
+            idempotencyKey: `change_cancel_period_${p._id}`,
+          }], { session })
+        }
+        await MembershipPeriod.updateOne(
+          { _id: p._id },
+          { $set: { status: 'CANCELLED' } },
+        ).session(session)
+      }
+    } else if (pendingPeriods.length > 0) {
+      await MembershipPeriod.updateMany(
+        { membershipId, status: 'PENDING' },
+        { $set: { planId: newPlan._id } },
+      ).session(session)
+    }
+
+    let payment = null
+    let amountToPay = 0
+    let creditToWallet = 0
+
+    if (diff > 0) {
+      amountToPay = diff
+      if (wallet.balance < amountToPay) {
+        fail(400, `Số dư không đủ. Cần ${amountToPay.toLocaleString('vi-VN')}đ nhưng ví chỉ có ${wallet.balance.toLocaleString('vi-VN')}đ`)
+      }
+
+      const balanceBefore = wallet.balance
+      wallet.balance -= amountToPay
+      await wallet.save({ session })
+
+      const [p] = await Payment.create([{
+        userId: memberId, planId: newPlan._id, membershipId,
+        amount: amountToPay, currency: 'vnd', status: 'PAID', paymentMethod: 'WALLET', source: 'ONLINE', paidAt: new Date(),
+        metadata: { changeType, fromPlanId: oldPlan._id, walletBalanceBefore: balanceBefore, walletBalanceAfter: wallet.balance },
+      }], { session })
+      payment = p
+
+      await Transaction.create([{
+        userId: memberId, walletId: wallet._id, type: 'payment', provider: 'wallet', source: 'plan_change',
+        description: `Đổi gói: ${oldPlan.nameVi} → ${newPlan.nameVi}`, amount: -amountToPay,
+        balanceBefore, balanceAfter: wallet.balance, referenceId: p._id.toString(), status: 'completed', completedAt: new Date(),
+        metadata: { fromPlan: oldPlan.nameVi, toPlan: newPlan.nameVi },
+        idempotencyKey: `change_${membershipId}_${newPlan._id}`,
+      }], { session })
+    } else if (diff < 0) {
+      creditToWallet = Math.abs(diff)
+      if (creditToWallet > 0) {
+        const balanceBefore = wallet.balance
+        wallet.balance += creditToWallet
+        await wallet.save({ session })
+
+        await Transaction.create([{
+          userId: memberId, walletId: wallet._id, type: 'deposit', provider: 'wallet', source: 'plan_change',
+          description: `Đổi gói: ${oldPlan.nameVi} → ${newPlan.nameVi}. Hoàn ${creditToWallet.toLocaleString('vi-VN')}đ vào ví.`,
+          amount: creditToWallet, balanceBefore, balanceAfter: wallet.balance,
+          referenceId: membershipId.toString(), status: 'completed', completedAt: new Date(),
+          metadata: { fromPlan: oldPlan.nameVi, toPlan: newPlan.nameVi },
+          idempotencyKey: `change_credit_${membershipId}_${newPlan._id}`,
+        }], { session })
+      }
+    }
+
+    await MembershipCycle.updateOne(
+      { _id: cycle._id },
+      { $set: { currentPlanId: newPlan._id } },
+    ).session(session)
+
+    await Membership.updateOne(
+      { _id: membershipId },
+      { $set: { planId: newPlan._id } },
+    ).session(session)
+
+    const [oldCodes, newCodes] = await Promise.all([
+      resolvePlanFeatureCodes(oldPlan),
+      resolvePlanFeatureCodes(newPlan),
+    ])
+
+    await PlanChangeHistory.create([{
+      memberId, membershipId, cycleId: cycle._id,
+      fromPlanId: oldPlan._id, toPlanId: newPlan._id, changeType,
+      amount: amountToPay, walletCredit: creditToWallet,
+      paymentId: payment?._id || null,
+      featureSnapshot: { from: oldCodes, to: newCodes },
+    }], { session })
+
+    try {
+      await cleanupMemberBenefitsOnPlanChange({ memberId, oldPlan, newPlan, session })
+    } catch (ptErr) {
+      console.error(`[PLAN_CHANGE] Cleanup failed for member ${memberId}:`, ptErr)
+      fail(500, 'Không thể dọn dẹp dữ liệu gói tập. Giao dịch đã được hủy.')
+    }
+
+    await session.commitTransaction()
+    committed = true
+
+    const populated = await Membership.findById(membershipId)
+      .populate({ path: 'planId', populate: { path: 'featureIds', model: 'PlanFeature' } })
+
+    return {
+      changeType,
+      oldPlanName: oldPlan.nameVi,
+      newPlanName: newPlan.nameVi,
+      amountToPay,
+      creditToWallet,
+      payment,
+      membership: populated,
+    }
+  } catch (error) {
+    if (!committed && session.inTransaction()) {
+      await session.abortTransaction().catch(() => {})
+    }
+    throw error
+  } finally {
+    session.endSession()
+  }
+}
+
 export const getAvailablePlans = async (req, res) => {
   try {
     const memberId = req.user._id
-    let cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
+    const cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
       .populate('currentPlanId')
-    if (!cycle) {
-      cycle = await MembershipCycle.findOne({ memberId, status: 'pending_initial_activation' })
-        .populate('currentPlanId')
-    }
 
     if (!cycle) return res.status(404).json({ message: 'Không tìm thấy gói tập đang hoạt động' })
 
@@ -46,16 +233,19 @@ export const getAvailablePlans = async (req, res) => {
         diff: p.price - currentPrice,
       }))
 
-    const remainingDays = cycle.expiresAt
-      ? Math.max(0, Math.ceil((new Date(cycle.expiresAt) - new Date()) / (1000 * 60 * 60 * 24)))
-      : 0
-
     // Kiểm tra các kỳ gia hạn chưa sử dụng
     const allPeriods = cycle.currentMembershipId
       ? await MembershipPeriod.find({ membershipId: cycle.currentMembershipId })
           .sort({ startDate: 1 })
           .lean()
       : []
+
+    // Nguồn sự thật duy nhất: MembershipPeriod (ACTIVE).endDate, fallback cycle.expiresAt
+    const activePeriod = allPeriods.find((p) => p.status === 'ACTIVE')
+    const periodEndDate = activePeriod?.endDate || cycle.expiresAt
+    const remainingDays = periodEndDate
+      ? Math.max(0, Math.ceil((new Date(periodEndDate) - new Date()) / (1000 * 60 * 60 * 24)))
+      : 0
 
     const nowMs = Date.now()
     const pendingRenewals = allPeriods.filter(p => {
@@ -82,127 +272,25 @@ export const upgradePlan = async (req, res) => {
   const { newPlanId } = req.body
   const memberId = req.user._id
 
-  const session = await mongoose.startSession()
-  session.startTransaction()
-
   try {
-    const cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
-      .populate('currentPlanId').session(session)
-    if (!cycle) {
-      await session.abortTransaction()
-      return res.status(404).json({ message: 'Không tìm thấy gói tập đang hoạt động' })
-    }
-
-    const membershipId = cycle.currentMembershipId
-
-    const newPlan = await Plan.findById(newPlanId).session(session)
-    if (!newPlan) {
-      await session.abortTransaction()
-      return res.status(404).json({ message: 'Không tìm thấy gói mới' })
-    }
-
-    if (newPlan.price <= cycle.currentPlanId.price) {
-      await session.abortTransaction()
-      return res.status(400).json({ message: 'Gói mới phải có giá cao hơn gói hiện tại để nâng cấp' })
-    }
-
-    const oldPlan = cycle.currentPlanId
-    const remainingValue = calcProratedValue(cycle, oldPlan)
-    const amountToPay = Math.max(0, newPlan.price - remainingValue)
-
-    const wallet = await Wallet.findOne({ userId: memberId }).session(session)
-    if (!wallet || wallet.balance < amountToPay) {
-      await session.abortTransaction()
-      return res.status(400).json({ message: `Số dư không đủ. Cần ${amountToPay.toLocaleString('vi-VN')}đ nhưng ví chỉ có ${(wallet?.balance || 0).toLocaleString('vi-VN')}đ` })
-    }
-
-    const balanceBefore = wallet.balance
-    wallet.balance -= amountToPay
-    await wallet.save({ session })
-
-    const [payment] = await Payment.create([{
-      userId: memberId,
-      planId: newPlan._id,
-      membershipId,
-      amount: amountToPay,
-      currency: 'vnd',
-      status: 'PAID',
-      paymentMethod: 'WALLET',
-      source: 'ONLINE',
-      paidAt: new Date(),
-      metadata: {
-        changeType: 'upgrade',
-        fromPlanId: oldPlan._id,
-        proratedCredit: remainingValue,
-        walletBalanceBefore: balanceBefore,
-        walletBalanceAfter: wallet.balance,
-      },
-    }], { session })
-
-    await Transaction.create([{
-      userId: memberId,
-      walletId: wallet._id,
-      type: 'payment',
-      provider: 'wallet',
-      source: 'plan_upgrade',
-      description: `Nâng cấp gói: ${oldPlan.nameVi} → ${newPlan.nameVi}`,
-      amount: -amountToPay,
-      balanceBefore,
-      balanceAfter: wallet.balance,
-      referenceId: payment._id.toString(),
-      status: 'completed',
-      completedAt: new Date(),
-      metadata: { paymentId: payment._id, fromPlan: oldPlan.nameVi, toPlan: newPlan.nameVi, proratedCredit: remainingValue },
-      idempotencyKey: `upgrade_${membershipId}_${newPlan._id}`,
-    }], { session })
-
-    const oldPlanId = oldPlan._id
-    const oldPlanName = oldPlan.nameVi
-
-    await MembershipCycle.updateOne(
-      { _id: cycle._id },
-      { $set: { currentPlanId: newPlan._id } },
-    ).session(session)
-
-    await PlanChangeHistory.create([{
+    const result = await executePlanChangeCore({
       memberId,
-      membershipId,
-      fromPlanId: oldPlanId,
-      toPlanId: newPlan._id,
-      changeType: 'upgrade',
-      amount: amountToPay,
-      proratedCredit: remainingValue,
-      paymentId: payment._id,
-    }], { session })
-
-    try {
-      await handlePTDataOnPlanChange({ memberId, oldPlan, newPlan, session })
-    } catch (ptErr) {
-      console.error(`[PLAN_CHANGE] PT cleanup failed for member ${memberId}:`, ptErr)
-      await session.abortTransaction()
-      return res.status(500).json({ message: 'Không thể dọn dẹp dữ liệu PT. Giao dịch đã được hủy.' })
-    }
-
-    await session.commitTransaction()
+      newPlanId,
+      expectedDirection: 'upgrade',
+      cancelRenewals: req.body.cancelRenewals === true,
+    })
 
     createNotification({
-      receiverId: memberId,
-      receiverRole: 'member',
+      receiverId: memberId, receiverRole: 'member',
       notificationType: NOTIFICATION_TYPES.PAYMENT_SUCCESS,
       title: 'Nâng cấp gói tập thành công',
-      content: `Bạn đã nâng cấp từ gói "${oldPlanName}" lên "${newPlan.nameVi}". Thanh toán: ${amountToPay.toLocaleString('vi-VN')}đ.`,
-      redirectUrl: '/my-membership',
-      createdBy: 'System',
-      sendEmail: true,
+      content: `Bạn đã nâng cấp từ gói "${result.oldPlanName}" lên "${result.newPlanName}". Thanh toán: ${result.amountToPay.toLocaleString('vi-VN')}đ.`,
+      redirectUrl: '/my-membership', createdBy: 'System', sendEmail: true,
     }).catch(() => {})
 
-    const populated = await Membership.findById(membershipId).populate('planId')
-    res.json({ message: 'Nâng cấp gói tập thành công', membership: populated, payment })
+    res.json({ message: 'Nâng cấp gói tập thành công', membership: result.membership, payment: result.payment })
   } catch (error) {
-    await session.abortTransaction()
-    res.status(500).json({ message: error.message })
-  } finally {
-    session.endSession()
+    res.status(error.statusCode || 500).json({ message: error.message })
   }
 }
 
@@ -210,109 +298,25 @@ export const downgradePlan = async (req, res) => {
   const { newPlanId } = req.body
   const memberId = req.user._id
 
-  const session = await mongoose.startSession()
-  session.startTransaction()
-
   try {
-    const cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
-      .populate('currentPlanId').session(session)
-    if (!cycle) {
-      await session.abortTransaction()
-      return res.status(404).json({ message: 'Không tìm thấy gói tập đang hoạt động' })
-    }
-
-    const membershipId = cycle.currentMembershipId
-
-    const newPlan = await Plan.findById(newPlanId).session(session)
-    if (!newPlan) {
-      await session.abortTransaction()
-      return res.status(404).json({ message: 'Không tìm thấy gói mới' })
-    }
-
-    if (newPlan.price >= cycle.currentPlanId.price) {
-      await session.abortTransaction()
-      return res.status(400).json({ message: 'Gói mới phải có giá thấp hơn gói hiện tại để hạ cấp' })
-    }
-
-    const oldPlan = cycle.currentPlanId
-    const remainingValue = calcProratedValue(cycle, oldPlan)
-    const newPlanCost = Math.round(newPlan.price * (remainingValue / oldPlan.price))
-    const creditToWallet = remainingValue - newPlanCost
-
-    let wallet = await Wallet.findOne({ userId: memberId }).session(session)
-    if (!wallet) {
-      [wallet] = await Wallet.create([{ userId: memberId, balance: 0 }], { session })
-    }
-    const balanceBefore = wallet.balance
-    if (creditToWallet > 0) {
-      wallet.balance += creditToWallet
-      await wallet.save({ session })
-    }
-
-    if (creditToWallet > 0) {
-      await Transaction.create([{
-        userId: memberId,
-        walletId: wallet._id,
-        type: 'deposit',
-        provider: 'wallet',
-        source: 'plan_downgrade',
-        description: `Hạ cấp gói: ${oldPlan.nameVi} → ${newPlan.nameVi}. Hoàn ${creditToWallet.toLocaleString('vi-VN')}đ vào ví.`,
-        amount: creditToWallet,
-        balanceBefore,
-        balanceAfter: wallet.balance,
-        referenceId: membershipId.toString(),
-        status: 'completed',
-        completedAt: new Date(),
-        metadata: { fromPlan: oldPlan.nameVi, toPlan: newPlan.nameVi, remainingValue, newPlanCost },
-        idempotencyKey: `downgrade_${membershipId}_${newPlan._id}`,
-      }], { session })
-    }
-
-    const oldPlanId = oldPlan._id
-    const oldPlanName = oldPlan.nameVi
-
-    await MembershipCycle.updateOne(
-      { _id: cycle._id },
-      { $set: { currentPlanId: newPlan._id } },
-    ).session(session)
-
-    await PlanChangeHistory.create([{
+    const result = await executePlanChangeCore({
       memberId,
-      membershipId,
-      fromPlanId: oldPlanId,
-      toPlanId: newPlan._id,
-      changeType: 'downgrade',
-      walletCredit: creditToWallet,
-    }], { session })
-
-    try {
-      await handlePTDataOnPlanChange({ memberId, oldPlan, newPlan, session })
-    } catch (ptErr) {
-      console.error(`[PLAN_CHANGE] PT cleanup failed for member ${memberId}:`, ptErr)
-      await session.abortTransaction()
-      return res.status(500).json({ message: 'Không thể dọn dẹp dữ liệu PT. Giao dịch đã được hủy.' })
-    }
-
-    await session.commitTransaction()
+      newPlanId,
+      expectedDirection: 'downgrade',
+      cancelRenewals: req.body.cancelRenewals === true,
+    })
 
     createNotification({
-      receiverId: memberId,
-      receiverRole: 'member',
+      receiverId: memberId, receiverRole: 'member',
       notificationType: NOTIFICATION_TYPES.MEMBERSHIP_ACTIVATED,
       title: 'Hạ cấp gói tập thành công',
-      content: `Bạn đã hạ cấp từ gói "${oldPlanName}" xuống "${newPlan.nameVi}".${creditToWallet > 0 ? ` Đã hoàn ${creditToWallet.toLocaleString('vi-VN')}đ vào ví.` : ''}`,
-      redirectUrl: '/my-membership',
-      createdBy: 'System',
-      sendEmail: true,
+      content: `Bạn đã hạ cấp từ gói "${result.oldPlanName}" xuống "${result.newPlanName}".${result.creditToWallet > 0 ? ` Đã hoàn ${result.creditToWallet.toLocaleString('vi-VN')}đ vào ví.` : ''}`,
+      redirectUrl: '/my-membership', createdBy: 'System', sendEmail: true,
     }).catch(() => {})
 
-    const populated = await Membership.findById(membershipId).populate('planId')
-    res.json({ message: 'Hạ cấp gói tập thành công', membership: populated, creditToWallet })
+    res.json({ message: 'Hạ cấp gói tập thành công', membership: result.membership, creditToWallet: result.creditToWallet })
   } catch (error) {
-    await session.abortTransaction()
-    res.status(500).json({ message: error.message })
-  } finally {
-    session.endSession()
+    res.status(error.statusCode || 500).json({ message: error.message })
   }
 }
 
@@ -334,153 +338,18 @@ export const changePlan = async (req, res) => {
   const { newPlanId } = req.body
   const memberId = req.user._id
 
-  const session = await mongoose.startSession()
-  session.startTransaction()
-
   try {
-    let cycle = await MembershipCycle.findOne({ memberId, status: 'active' })
-      .populate('currentPlanId').session(session)
-    if (!cycle) {
-      cycle = await MembershipCycle.findOne({ memberId, status: 'pending_initial_activation' })
-        .populate('currentPlanId').session(session)
-    }
-    if (!cycle) {
-      await session.abortTransaction()
-      return res.status(404).json({ message: 'Không tìm thấy gói tập đang hoạt động' })
-    }
-
-    const membershipId = cycle.currentMembershipId
-
-    const newPlan = await Plan.findById(newPlanId).populate('featureIds').session(session)
-    if (!newPlan) {
-      await session.abortTransaction()
-      return res.status(404).json({ message: 'Không tìm thấy gói mới' })
-    }
-
-    if (newPlan._id.toString() === cycle.currentPlanId._id.toString()) {
-      await session.abortTransaction()
-      return res.status(400).json({ message: 'Gói mới phải khác gói hiện tại' })
-    }
-
-    const oldPlan = cycle.currentPlanId
-    const diff = newPlan.price - oldPlan.price
-    const changeType = diff > 0 ? 'upgrade' : 'downgrade'
-
-    let wallet = await Wallet.findOne({ userId: memberId }).session(session)
-    if (!wallet) {
-      [wallet] = await Wallet.create([{ userId: memberId, balance: 0 }], { session })
-    }
-
-    // Xử lý các kỳ gia hạn chưa sử dụng nếu người dùng yêu cầu hủy
-    const cancelRenewals = req.body.cancelRenewals === true
-    if (cancelRenewals && membershipId) {
-      const allPeriods = await MembershipPeriod.find({ membershipId }).sort({ startDate: 1 }).session(session).lean()
-      const nowMs = Date.now()
-      for (const p of allPeriods) {
-        const start = new Date(p.startDate).getTime()
-        if (p.status === 'PENDING' && nowMs < start && (p.price || 0) > 0) {
-          const balanceBefore = Number(wallet.balance || 0)
-          wallet.balance += p.price
-          await wallet.save({ session })
-
-          await Transaction.create([{
-            userId: memberId, walletId: wallet._id, type: 'REFUND_TO_WALLET', provider: 'wallet', source: 'plan_change',
-            description: `Hoàn tiền hủy gia hạn khi đổi gói (+${p.totalDays} ngày)`,
-            amount: p.price, balanceBefore, balanceAfter: wallet.balance,
-            referenceId: p._id.toString(), status: 'completed', completedAt: new Date(),
-            metadata: { periodId: p._id, membershipId, reason: 'cancelled_on_plan_change' },
-            idempotencyKey: `change_cancel_period_${p._id}`,
-          }], { session })
-
-          await MembershipPeriod.updateOne(
-            { _id: p._id },
-            { $set: { status: 'CANCELLED' } },
-          ).session(session)
-        }
-      }
-    }
-
-    let payment = null
-    let amountToPay = 0
-    let creditToWallet = 0
-
-    if (diff > 0) {
-      amountToPay = diff
-      if (wallet.balance < amountToPay) {
-        await session.abortTransaction()
-        return res.status(400).json({ message: `Số dư không đủ. Cần ${amountToPay.toLocaleString('vi-VN')}đ nhưng ví chỉ có ${wallet.balance.toLocaleString('vi-VN')}đ` })
-      }
-
-      const balanceBefore = wallet.balance
-      wallet.balance -= amountToPay
-      await wallet.save({ session })
-
-      const [p] = await Payment.create([{
-        userId: memberId, planId: newPlan._id, membershipId,
-        amount: amountToPay, currency: 'vnd', status: 'PAID', paymentMethod: 'WALLET', source: 'ONLINE', paidAt: new Date(),
-        metadata: { changeType, fromPlanId: oldPlan._id, walletBalanceBefore: balanceBefore, walletBalanceAfter: wallet.balance },
-      }], { session })
-      payment = p
-
-      await Transaction.create([{
-        userId: memberId, walletId: wallet._id, type: 'payment', provider: 'wallet', source: 'plan_change',
-        description: `Đổi gói: ${oldPlan.nameVi} → ${newPlan.nameVi}`, amount: -amountToPay,
-        balanceBefore, balanceAfter: wallet.balance, referenceId: p._id.toString(), status: 'completed', completedAt: new Date(),
-        metadata: { fromPlan: oldPlan.nameVi, toPlan: newPlan.nameVi },
-        idempotencyKey: `change_${membershipId}_${newPlan._id}`,
-      }], { session })
-    } else {
-      creditToWallet = Math.abs(diff)
-      if (creditToWallet > 0) {
-        const balanceBefore = wallet.balance
-        wallet.balance += creditToWallet
-        await wallet.save({ session })
-
-        await Transaction.create([{
-          userId: memberId, walletId: wallet._id, type: 'deposit', provider: 'wallet', source: 'plan_change',
-          description: `Đổi gói: ${oldPlan.nameVi} → ${newPlan.nameVi}. Hoàn ${creditToWallet.toLocaleString('vi-VN')}đ vào ví.`,
-          amount: creditToWallet, balanceBefore, balanceAfter: wallet.balance,
-          referenceId: membershipId.toString(), status: 'completed', completedAt: new Date(),
-          metadata: { fromPlan: oldPlan.nameVi, toPlan: newPlan.nameVi },
-          idempotencyKey: `change_credit_${membershipId}_${newPlan._id}`,
-        }], { session })
-      }
-    }
-
-    const oldPlanId = oldPlan._id
-    const oldPlanName = oldPlan.nameVi
-
-    await MembershipCycle.updateOne(
-      { _id: cycle._id },
-      { $set: { currentPlanId: newPlan._id } },
-    ).session(session)
-
-    // Cập nhật luôn Membership.planId để getMyMembership trả về đúng gói mới
-    await Membership.updateOne(
-      { _id: membershipId },
-      { $set: { planId: newPlan._id } },
-    ).session(session)
-
-    await PlanChangeHistory.create([{
-      memberId, membershipId, fromPlanId: oldPlanId, toPlanId: newPlan._id, changeType,
-      amount: amountToPay, walletCredit: creditToWallet,
-      paymentId: payment?._id || null,
-    }], { session })
-
-    try {
-      await handlePTDataOnPlanChange({ memberId, oldPlan, newPlan, session })
-    } catch (ptErr) {
-      console.error(`[PLAN_CHANGE] PT cleanup failed for member ${memberId}:`, ptErr)
-      await session.abortTransaction()
-      return res.status(500).json({ message: 'Không thể dọn dẹp dữ liệu PT. Giao dịch đã được hủy.' })
-    }
-
-    await session.commitTransaction()
+    const result = await executePlanChangeCore({
+      memberId,
+      newPlanId,
+      expectedDirection: null,
+      cancelRenewals: req.body.cancelRenewals === true,
+    })
 
     const notifTitle = 'Đổi gói tập thành công'
-    const notifContent = changeType === 'upgrade'
-      ? `Bạn đã đổi từ gói "${oldPlanName}" sang "${newPlan.nameVi}". Thanh toán: ${amountToPay.toLocaleString('vi-VN')}đ.`
-      : `Bạn đã đổi từ gói "${oldPlanName}" sang "${newPlan.nameVi}".${creditToWallet > 0 ? ` Đã hoàn ${creditToWallet.toLocaleString('vi-VN')}đ vào ví.` : ''}`
+    const notifContent = result.changeType === 'upgrade'
+      ? `Bạn đã đổi từ gói "${result.oldPlanName}" sang "${result.newPlanName}". Thanh toán: ${result.amountToPay.toLocaleString('vi-VN')}đ.`
+      : `Bạn đã đổi từ gói "${result.oldPlanName}" sang "${result.newPlanName}".${result.creditToWallet > 0 ? ` Đã hoàn ${result.creditToWallet.toLocaleString('vi-VN')}đ vào ví.` : ''}`
 
     createNotification({
       receiverId: memberId, receiverRole: 'member',
@@ -489,12 +358,14 @@ export const changePlan = async (req, res) => {
       redirectUrl: '/my-membership', createdBy: 'System', sendEmail: true,
     }).catch(() => {})
 
-    const populated = await Membership.findById(membershipId).populate({ path: 'planId', populate: { path: 'featureIds', model: 'PlanFeature' } })
-    res.json({ message: notifTitle, membership: populated, amountToPay, creditToWallet, payment })
+    res.json({
+      message: notifTitle,
+      membership: result.membership,
+      amountToPay: result.amountToPay,
+      creditToWallet: result.creditToWallet,
+      payment: result.payment,
+    })
   } catch (error) {
-    await session.abortTransaction()
-    res.status(500).json({ message: error.message })
-  } finally {
-    session.endSession()
+    res.status(error.statusCode || 500).json({ message: error.message })
   }
 }

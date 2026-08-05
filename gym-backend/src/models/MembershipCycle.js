@@ -47,8 +47,8 @@ const membershipCycleSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending_initial_activation', 'pending_renewal_activation', 'active', 'completed', 'cancelled', 'refunded'],
-    default: 'pending_initial_activation',
+    enum: ['active', 'completed', 'cancelled', 'refunded'],
+    default: 'active',
   },
   refundEligible: {
     type: Boolean,

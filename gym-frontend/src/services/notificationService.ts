@@ -15,10 +15,16 @@ export interface NotificationItem {
   relatedType?: string | null
   requestId?: string
   redirectUrl?: string | null
+  requiresAction?: boolean
+  actions?: string[]
+  actionStatus?: 'pending' | 'accepted' | 'rejected'
+  actionAt?: string | null
   createdBy?: string
   createdAt: string
   updatedAt?: string
 }
+
+export type Notification = NotificationItem
 
 export const notificationService = {
   getMyNotifications: () =>

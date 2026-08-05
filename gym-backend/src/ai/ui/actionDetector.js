@@ -86,15 +86,19 @@ export function detectActions(toolResult, llmText) {
 
   // From tool result: only high-confidence signals
   if (toolResult) {
+    const hasPlans = toolResult.plans && !toolResult.error
     const hasBalance = toolResult.balance !== undefined && !toolResult.error
     const hasMembership = toolResult.currentMembership || toolResult.statusType || toolResult.planName
     const hasBookings = toolResult.bookings && !toolResult.error
     const hasNotificationCount = toolResult.count !== undefined && !toolResult.error && !toolResult.bookings
+    const hasPT = toolResult.hasPT !== undefined
 
+    if (hasPlans) triggered.add('plans')
     if (hasBalance) triggered.add('deposit')
     if (hasMembership) triggered.add('membership')
     if (hasBookings) triggered.add('booking')
     if (hasNotificationCount) triggered.add('notifications')
+    if (hasPT) triggered.add('booking')
   }
 
   // From LLM text keywords

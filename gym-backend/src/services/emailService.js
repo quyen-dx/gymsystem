@@ -156,7 +156,7 @@ export const sendRenewalSuccessEmail = async ({ toEmail, userName, planName, end
         </p>
         <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 12px; margin: 20px 0;">
           ${periodIndex ? `<p style="margin: 0 0 4px; color: #166534;"><strong>Đợt ${periodIndex}:</strong> ${new Date(endDate).toLocaleDateString('vi-VN')}</p>` : `<p style="margin: 0 0 4px; color: #166534;"><strong>Ngày hết hạn:</strong> ${new Date(endDate).toLocaleDateString('vi-VN')}</p>`}
-          <p style="margin: 0; color: #166534;">Các kỳ tiếp theo sẽ tự động kích hoạt và gửi thông báo qua email.</p>
+          <p style="margin: 0; color: #166534;">Gói tập của bạn đang hoạt động, bạn có thể sử dụng ngay toàn bộ quyền lợi.</p>
         </div>
         <p style="color: #4b5563; line-height: 1.7; margin: 0;">Tiếp tục tập luyện và đạt được mục tiêu của bạn cùng ${siteName}!</p>
       </div>
@@ -216,7 +216,7 @@ export const sendPeriodCompletedEmail = async ({ toEmail, userName, planName, pe
           Chào <strong>${userName}</strong>,<br/><br/>
           Đợt <strong>${periodIndex}</strong> gói <strong>${planName}</strong> đã kết thúc vào ngày <strong>${new Date(endDate).toLocaleDateString('vi-VN')}</strong>.
         </p>
-        <p style="color: #4b5563; line-height: 1.7; margin: 0;">Nếu có kỳ gia hạn tiếp theo, hệ thống sẽ tự động kích hoạt và thông báo đến bạn.</p>
+        <p style="color: #4b5563; line-height: 1.7; margin: 0;">Nếu bạn đã gia hạn, thời hạn gói tập của bạn đã được kéo dài tương ứng và bạn có thể tiếp tục sử dụng dịch vụ.</p>
       </div>
     `,
   })
@@ -231,14 +231,14 @@ export const sendPeriodActivatedEmail = async ({ toEmail, userName, planName, pe
   const info = await transporter.sendMail({
     from: `"${siteName}" <${process.env.EMAIL_USER || 'no-reply@' + siteName.toLowerCase() + '.local'}>`,
     to: toEmail,
-    subject: `Đợt ${periodIndex} gói ${planName} đã được kích hoạt - ${siteName}`,
+    subject: `Đợt ${periodIndex} gói ${planName} đã bắt đầu - ${siteName}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px;">
         <p style="font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b7280; margin: 0 0 12px;">${siteName}</p>
-        <h1 style="font-size: 24px; margin: 0 0 12px; color: #111827;">Kỳ gia hạn mới đã được kích hoạt</h1>
+        <h1 style="font-size: 24px; margin: 0 0 12px; color: #111827;">Kỳ gia hạn mới đã bắt đầu</h1>
         <p style="color: #374151; line-height: 1.7; margin: 0 0 20px;">
           Chào <strong>${userName}</strong>,<br/><br/>
-          Đợt <strong>${periodIndex}</strong> gói <strong>${planName}</strong> đã được tự động kích hoạt.
+          Đợt <strong>${periodIndex}</strong> gói <strong>${planName}</strong> đã bắt đầu.
         </p>
         <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 12px; margin: 20px 0;">
           <p style="margin: 0 0 4px; color: #166534;"><strong>Ngày bắt đầu:</strong> ${new Date(startDate).toLocaleDateString('vi-VN')}</p>

@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Tag, Radio, message, Input, Spin, Tooltip, Avatar } from 'antd'
+import { useAuth } from '../../../hooks/useAuth'
+import { Button, Tag, Radio, message, Input, Spin, Tooltip, Avatar, Modal } from 'antd'
 import { CheckCircleFilled, FireOutlined, AimOutlined, ThunderboltOutlined, HeartOutlined, RiseOutlined, MedicineBoxOutlined, SafetyOutlined, QuestionCircleOutlined, EnvironmentOutlined, TeamOutlined, UserOutlined, ArrowLeftOutlined, CalendarOutlined, LockOutlined, PhoneOutlined, MailOutlined, SearchOutlined, CloseCircleFilled } from '@ant-design/icons'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import MembershipRequired from '../../../components/membership/MembershipRequired'
 import { membershipService } from '../../../services/membershipService'
 import { trainingRequestService, type TrainingRequest } from '../../../services/trainingRequestService'
+import YourRequestPanel from '../../../components/member/YourRequestPanel'
 import { memberService, type EnrollmentStatus } from '../../../services/memberService'
 import { socketService } from '../../../services/socketService'
 import { planFeatureService, type PlanFeature } from '../../../services/planFeatureService'
 import { trainerService } from '../../../services/trainerService'
+import { enrollmentService } from '../../../services/ptAssignmentService'
 import { authService } from '../../../services/authService'
 import type { PT } from '../../../types/admin/trainer'
 
@@ -87,6 +90,7 @@ function useMemberFeatureCodes(): { codes: string[]; loading: boolean; features:
 
 export default function BookingPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [membershipLoading, setMembershipLoading] = useState(true)
   const [canRequest, setCanRequest] = useState(false)
   const [planName, setPlanName] = useState<string | null>(null)
@@ -141,14 +145,67 @@ export default function BookingPage() {
     } catch { /* ignore */ }
   }
 
+  // Re-fetch enrollment whenever membership/canRequest changes (to catch external cancel/change)
+  useEffect(() => {
+    if (canRequest) {
+      fetchEnrollment().finally(() => setEnrollmentLoading(false))
+    } else {
+      setEnrollment(null)
+      setShowBookingOptions(false)
+    }
+  }, [canRequest])
+
+  // Re-check membership on window focus (catch external cancel/change from other tabs)
+  useEffect(() => {
+    const onFocus = () => {
+      membershipService.getMyMembership().then((res) => {
+        const m = res.data.membership
+        const statusOk = m?.status === 'active' || m?.status === 'pending_cancel'
+        const notExpired = statusOk ? Number(m?.remainingDays || 0) > 0 : true
+        const allowed = statusOk && notExpired
+        setCanRequest(allowed)
+        setPlanName(m?.planNameVi || m?.plan?.nameVi || null)
+      }).catch(() => setCanRequest(false))
+      if (canRequest) {
+        loadGroupRequests()
+        loadPt1on1Requests()
+      }
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [canRequest])
+
+  const [leavingTraining, setLeavingTraining] = useState(false)
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
+
+  const confirmLeaveCurrentTraining = () => {
+    setShowLeaveConfirm(true)
+  }
+
+  const leaveCurrentTraining = async () => {
+    setShowLeaveConfirm(false)
+    setLeavingTraining(true)
+    try {
+      await enrollmentService.leaveCurrentTraining({ reason: 'Hội viên muốn rời toàn bộ dịch vụ PT' })
+      setShowBookingOptions(false)
+      setBookingType(null)
+      await fetchEnrollment()
+      await Promise.all([loadGroupRequests(), loadPt1on1Requests()])
+      window.dispatchEvent(new CustomEvent('gympro:training-cleanup'))
+      message.success('Bạn đã rời dịch vụ PT thành công.')
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Không thể rời dịch vụ PT')
+    } finally {
+      setLeavingTraining(false)
+    }
+  }
+
   useEffect(() => {
     membershipService.getMyMembership().then((res) => {
       const m = res.data.membership
-      const cycle = res.data.cycle
       const statusOk = m?.status === 'active' || m?.status === 'pending_cancel'
-      const pendingOk = cycle?.status === 'pending_initial_activation'
       const notExpired = statusOk ? Number(m?.remainingDays || 0) > 0 : true
-      const allowed = (statusOk || pendingOk) && notExpired
+      const allowed = statusOk && notExpired
       setCanRequest(allowed)
       setPlanName(m?.planNameVi || m?.plan?.nameVi || null)
     }).catch(() => setCanRequest(false))
@@ -174,16 +231,40 @@ export default function BookingPage() {
     return () => { socketService.off('pt_end_request:status_changed', handler) }
   }, [])
 
+  // Realtime cho yêu cầu PT 1-1 / PT nhóm của hội viên (nhận event qua room cá nhân)
+  useEffect(() => {
+    if (!canRequest) return
+    socketService.connect()
+    const reload = () => { loadGroupRequests(); loadPt1on1Requests() }
+    const events = ['pt_request_created', 'pt_request_updated', 'pt_request_waiting_assignment', 'pt_request_assigned', 'pt_request_cancelled', 'pt_request_rejected']
+    for (const ev of events) socketService.on(ev, reload)
+    return () => {
+      for (const ev of events) socketService.off(ev, reload)
+    }
+  }, [canRequest])
+
+  const REQUEST_IN_PROGRESS_STATUSES = new Set([
+    'pending',
+    'processing',
+    'message_sent',
+    'waiting_member',
+    'waiting_assignment',
+    'waiting_reassign',
+  ])
+
+  const isRequestInProgress = (request: TrainingRequest) =>
+    REQUEST_IN_PROGRESS_STATUSES.has(request.status)
+
   const loadGroupRequests = async () => {
     if (!canRequest) return
-    const reqRes = await trainingRequestService.getMyRequests({ type: 'group' })
-    setRequests(reqRes.data.requests || [])
+    const reqRes = await trainingRequestService.getMyRequests({ type: 'group', activeOnly: true })
+    setRequests((reqRes.data.requests || []).filter(isRequestInProgress))
   }
 
   const loadPt1on1Requests = async () => {
     if (!canRequest) return
-    const reqRes = await trainingRequestService.getMyRequests({ type: 'pt1on1' })
-    setPt1on1Requests(reqRes.data.requests || [])
+    const reqRes = await trainingRequestService.getMyRequests({ type: 'pt1on1', activeOnly: true })
+    setPt1on1Requests((reqRes.data.requests || []).filter(isRequestInProgress))
   }
 
   useEffect(() => { if (canRequest) loadGroupRequests() }, [canRequest])
@@ -214,9 +295,9 @@ export default function BookingPage() {
         isNewToGym,
         healthNotes,
       })
-      setSubmitted(true)
+      setSubmitted(false)
       setSpecialization('GYM'); setGoals([]); setDesiredSessions(3); setTimeSlots([]); setDaysOfWeek([]); setIsNewToGym(false); setHealthNotes('')
-      loadGroupRequests()
+      await loadGroupRequests()
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Gửi yêu cầu thất bại')
     } finally {
@@ -240,9 +321,9 @@ export default function BookingPage() {
         preferredTrainerId: ptPreferredTrainer === 'specific' ? ptPreferredTrainerId : null,
         note: ptNote,
       })
-      setPtSubmitted(true)
+      setPtSubmitted(false)
       setPtSpecialization('GYM'); setPtGoals([]); setPtNote(''); setPtPreferredTrainer('none'); setPtPreferredTrainerId(null)
-      loadPt1on1Requests()
+      await loadPt1on1Requests()
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Gửi yêu cầu thất bại')
     } finally {
@@ -318,7 +399,14 @@ export default function BookingPage() {
   }, [])
 
   const statusTag = (s: string) => {
-    const map: Record<string, [string, string]> = { pending: ['orange', 'Chờ xử lý'], assigned: ['green', 'Đã phân công'], cancelled: ['red', 'Đã hủy'] }
+    const map: Record<string, [string, string]> = {
+      pending: ['orange', 'Chờ xử lý'],
+      message_sent: ['blue', 'Đang xem xét'],
+      waiting_assignment: ['purple', 'Chờ phân công lại'],
+      assigned: ['green', 'Đã phân công'],
+      declined_by_member: ['red', 'Đã từ chối đổi PT'],
+      cancelled: ['red', 'Đã hủy'],
+    }
     const [color, label] = map[s] || ['default', s]
     return <Tag color={color}>{label}</Tag>
   }
@@ -329,8 +417,19 @@ export default function BookingPage() {
   const pendingPt1on1Requests = pt1on1Requests.filter((r) => r.status === 'pending')
   const hasPendingPt1on1 = pendingPt1on1Requests.length > 0
 
+  const activeGroupRequest = requests.find(isRequestInProgress)
+  const activePt1on1Request = pt1on1Requests.find(isRequestInProgress)
+  const hasOpenRequest = !!activeGroupRequest || !!activePt1on1Request
+
   const canBookGroup = featuresLoading ? true : hasFeature('BOOK_PT_GROUP')
   const canBookPTPrivate = featuresLoading ? true : hasFeature('BOOK_PT_PRIVATE')
+
+  // Loại hình assignment chỉ quyết định nội dung trạng thái hiện tại.
+  // Thao tác rời luôn là leaveCurrentTraining(), không phụ thuộc loại hình.
+  const assignmentType = enrollment?.assignmentType
+    ?? (enrollment?.class ? 'group' : enrollment?.pt ? 'private' : null)
+  const isGroupEnrollment = assignmentType === 'group'
+  const isPrivateEnrollment = assignmentType === 'private'
 
   return (
     <MemberLayout>
@@ -345,7 +444,9 @@ export default function BookingPage() {
           <div className="max-w-2xl mx-auto pt-8 space-y-4">
             <div className="text-center mb-4">
               <div className="text-5xl mb-3">✅</div>
-              <h1 className="text-2xl font-bold text-[var(--gs-text)]">Bạn đã có PT phụ trách</h1>
+              <h1 className="text-2xl font-bold text-[var(--gs-text)]">
+                {isGroupEnrollment ? 'Bạn đã được xếp lớp' : isPrivateEnrollment ? 'Bạn đã có PT phụ trách' : 'Bạn đã đăng ký tập luyện'}
+              </h1>
             </div>
             <div className="rounded-2xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 space-y-3">
               {enrollment.pt && (
@@ -358,7 +459,7 @@ export default function BookingPage() {
                 <div className="flex items-start gap-2">
                   <span className="text-xs font-medium text-[var(--gs-text-muted)] w-20 shrink-0 pt-0.5">Lớp:</span>
                   <div>
-                    <span className="text-sm font-semibold text-[var(--gs-text)]">[{enrollment.class.code}] {enrollment.class.name}</span>
+                    <span className="text-sm font-semibold text-[var(--gs-text)]">{enrollment.class.name}</span>
                     <div className="mt-0.5 flex flex-wrap gap-1">
                       {enrollment.class.daysOfWeek?.map((d, i) => {
                         const dayLabel = DAYS.find(dd => dd.value === d)?.label || `D${d}`
@@ -373,23 +474,16 @@ export default function BookingPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-[var(--gs-text-muted)] w-20 shrink-0">Giáo án:</span>
                   <Tag color="blue" className="m-0 text-xs">{enrollment.workout.name}</Tag>
-                  {enrollment.workout.goal && <span className="text-xs text-[var(--gs-text-muted)]">({enrollment.workout.goal})</span>}
                 </div>
               )}
             </div>
-            <p className="text-sm text-center text-[var(--gs-text-muted)]">
-              Lịch tập của bạn đã được lên sẵn. Xem chi tiết tại mục "Lịch tập".
-            </p>
-            <Button type="primary" size="large" block icon={<CalendarOutlined />}
-              onClick={() => navigate('/workout')}>
-              Xem lịch tập của tôi
-            </Button>
-            <div className="text-center">
-              <button type="button" className="text-xs text-[var(--gs-text-muted)] underline hover:text-[var(--gs-text)]"
-                onClick={() => setShowBookingOptions(true)}>
-                Muốn đăng ký thêm dịch vụ khác?
-              </button>
+            <div className="flex gap-3">
+              <Button danger size="large" block loading={leavingTraining}
+                onClick={confirmLeaveCurrentTraining}>
+                Rời dịch vụ PT
+              </Button>
             </div>
+            
           </div>
         ) : bookingType === null ? (
           <div className="max-w-2xl mx-auto pt-8 space-y-2">
@@ -400,7 +494,7 @@ export default function BookingPage() {
                 </p>
               </div>
             )}
-            {enrollment?.hasPendingRequest && !enrollment.hasActiveEnrollment && (
+            {hasOpenRequest && !enrollment.hasActiveEnrollment && (
               <div className="rounded-xl border border-blue-300 bg-blue-50 p-3 text-center dark:border-blue-700 dark:bg-blue-900/20">
                 <p className="text-xs text-blue-800 dark:text-blue-200">
                   Bạn có 1 yêu cầu đang chờ xử lý. Vui lòng đợi admin duyệt hoặc hủy yêu cầu cũ trước khi gửi yêu cầu mới.
@@ -411,60 +505,83 @@ export default function BookingPage() {
               <h1 className="text-3xl font-bold text-[var(--gs-text)]">Đăng ký dịch vụ tập luyện</h1>
               <p className="text-sm text-[var(--gs-text-muted)] mt-2">Chọn hình thức tập luyện phù hợp với bạn</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Tooltip title={canBookGroup ? undefined : 'Gói tập của bạn không hỗ trợ tập nhóm'}>
-                <button type="button"
-                  onClick={() => canBookGroup && setBookingType('group')}
-                  disabled={!canBookGroup}
-                  className={`group relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left transition-all duration-200 ${
-                    canBookGroup
-                      ? 'hover:scale-[1.03] hover:border-[var(--theme-accent)] hover:shadow-lg cursor-pointer'
-                      : 'opacity-60 cursor-not-allowed'
-                  }`}>
-                  <div className="text-5xl mb-4 text-[var(--theme-accent)]"><TeamOutlined /></div>
-                  <h3 className="text-xl font-bold text-[var(--gs-text)] mb-2">Đăng ký tập luyện nhóm</h3>
-                  <p className="text-sm text-[var(--gs-text-muted)] leading-relaxed">
-                    Tập luyện theo nhóm, huấn luyện viên hỗ trợ giáo án cá nhân hóa, tiết kiệm chi phí.
-                  </p>
-                  {!canBookGroup && (
-                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/5">
-                      <LockOutlined className="text-2xl text-[var(--gs-text-muted)]" />
-                    </div>
-                  )}
-                </button>
-              </Tooltip>
-              <Tooltip title={canBookPTPrivate ? undefined : 'Gói tập của bạn không hỗ trợ PT riêng 1-1'}>
-                <button type="button"
-                  onClick={() => canBookPTPrivate && setBookingType('pt1on1')}
-                  disabled={!canBookPTPrivate}
-                  className={`group relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left transition-all duration-200 ${
-                    canBookPTPrivate
-                      ? 'hover:scale-[1.03] hover:border-[var(--theme-accent)] hover:shadow-lg cursor-pointer'
-                      : 'opacity-60 cursor-not-allowed'
-                  }`}>
-                  {!canBookPTPrivate && (
-                    <div className="absolute -top-2.5 right-4 z-10">
-                      <span className="inline-block rounded-full bg-gradient-to-r from-orange-400 to-pink-500 px-3 py-1 text-[11px] font-bold text-white uppercase tracking-wide shadow-md">
-                        {featuresLoading ? 'Sắp ra mắt' : 'Không khả dụng'}
-                      </span>
-                    </div>
-                  )}
-                  {!canBookPTPrivate && (
-                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/5 z-0">
-                      <LockOutlined className="text-2xl text-[var(--gs-text-muted)]" />
-                    </div>
-                  )}
-                  <div className="text-5xl mb-4 text-[var(--gs-text)]"><UserOutlined /></div>
-                  <h3 className="text-xl font-bold text-[var(--gs-text)] mb-2">Đăng ký PT riêng 1-1</h3>
-                  <p className="text-sm text-[var(--gs-text-muted)] leading-relaxed">
-                    1 kèm 1 với huấn luyện viên cá nhân, cam kết đầu ra, thiết lập giáo án chuẩn xác 100% cho riêng bạn.
-                  </p>
-                </button>
-              </Tooltip>
+            {activeGroupRequest && (
+              <YourRequestPanel request={activeGroupRequest} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} />
+            )}
+            {activePt1on1Request && (
+              <YourRequestPanel request={activePt1on1Request} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} />
+            )}
+            {(!activeGroupRequest || !activePt1on1Request) && (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              {!activeGroupRequest && (
+                <Tooltip title={canBookGroup ? undefined : 'Gói tập của bạn không hỗ trợ tập nhóm'}>
+                  <button type="button"
+                    onClick={() => canBookGroup && setBookingType('group')}
+                    disabled={!canBookGroup}
+                    className={`group relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left transition-all duration-200 ${
+                      canBookGroup
+                        ? 'hover:scale-[1.03] hover:border-[var(--theme-accent)] hover:shadow-lg cursor-pointer'
+                        : 'opacity-60 cursor-not-allowed'
+                    }`}>
+                    <div className="text-5xl mb-4 text-[var(--theme-accent)]"><TeamOutlined /></div>
+                    <h3 className="text-xl font-bold text-[var(--gs-text)] mb-2">Đăng ký tập luyện nhóm</h3>
+                    <p className="text-sm text-[var(--gs-text-muted)] leading-relaxed">
+                      Tập luyện theo nhóm, huấn luyện viên hỗ trợ giáo án cá nhân hóa, tiết kiệm chi phí.
+                    </p>
+                    {!canBookGroup && (
+                      <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/5">
+                        <LockOutlined className="text-2xl text-[var(--gs-text-muted)]" />
+                      </div>
+                    )}
+                  </button>
+                </Tooltip>
+              )}
+              {!activePt1on1Request && (
+                <Tooltip title={canBookPTPrivate ? undefined : 'Gói tập của bạn không hỗ trợ PT riêng 1-1'}>
+                  <button type="button"
+                    onClick={() => canBookPTPrivate && setBookingType('pt1on1')}
+                    disabled={!canBookPTPrivate}
+                    className={`group relative rounded-2xl border-2 border-[var(--theme-border)] bg-[var(--gs-card)] p-8 text-left transition-all duration-200 ${
+                      canBookPTPrivate
+                        ? 'hover:scale-[1.03] hover:border-[var(--theme-accent)] hover:shadow-lg cursor-pointer'
+                        : 'opacity-60 cursor-not-allowed'
+                    }`}>
+                    {!canBookPTPrivate && (
+                      <div className="absolute -top-2.5 right-4 z-10">
+                        <span className="inline-block rounded-full bg-gradient-to-r from-orange-400 to-pink-500 px-3 py-1 text-[11px] font-bold text-white uppercase tracking-wide shadow-md">
+                          {featuresLoading ? 'Sắp ra mắt' : 'Không khả dụng'}
+                        </span>
+                      </div>
+                    )}
+                    {!canBookPTPrivate && (
+                      <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/5 z-0">
+                        <LockOutlined className="text-2xl text-[var(--gs-text-muted)]" />
+                      </div>
+                    )}
+                    <div className="text-5xl mb-4 text-[var(--gs-text)]"><UserOutlined /></div>
+                    <h3 className="text-xl font-bold text-[var(--gs-text)] mb-2">Đăng ký PT riêng 1-1</h3>
+                    <p className="text-sm text-[var(--gs-text-muted)] leading-relaxed">
+                      1 kèm 1 với huấn luyện viên cá nhân, cam kết đầu ra, thiết lập giáo án chuẩn xác 100% cho riêng bạn.
+                    </p>
+                  </button>
+                </Tooltip>
+              )}
             </div>
+            )}
           </div>
         ) : bookingType === 'group' ? (
           <>
+            {activeGroupRequest && (
+              <>
+                <YourRequestPanel request={activeGroupRequest} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} />
+                <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setBookingType(null)}
+                  className="text-[var(--gs-text-muted)] hover:text-[var(--gs-text)] !px-1">
+                  Quay lại lựa chọn dịch vụ
+                </Button>
+              </>
+            )}
+            {!activeGroupRequest && (
+            <>
             <div className="flex items-center gap-3">
               <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setBookingType(null)}
                 className="text-[var(--gs-text-muted)] hover:text-[var(--gs-text)] !px-1" />
@@ -645,9 +762,22 @@ export default function BookingPage() {
               </div>
             </>
             )}
+            </>
+            )}
           </>
         ) : (
           <>
+            {activePt1on1Request && (
+              <>
+                <YourRequestPanel request={activePt1on1Request} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} />
+                <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setBookingType(null)}
+                  className="text-[var(--gs-text-muted)] hover:text-[var(--gs-text)] !px-1">
+                  Quay lại lựa chọn dịch vụ
+                </Button>
+              </>
+            )}
+            {!activePt1on1Request && (
+            <>
             <div className="flex items-center gap-3">
               <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setBookingType(null)}
                 className="text-[var(--gs-text-muted)] hover:text-[var(--gs-text)] !px-1" />
@@ -806,7 +936,7 @@ export default function BookingPage() {
                               value={ptSearchQuery}
                               onChange={(e) => handlePtSearchChange(e.target.value)}
                               onFocus={() => ptSearchQuery.trim() && setPtSearchOpen(true)}
-                              placeholder="Nhập tên PT..."
+                              placeholder="Số điện thoại hoặc email của PT"
                               prefix={<SearchOutlined style={{ color: 'var(--gs-text-muted)' }} />}
                               suffix={
                                 ptPreferredTrainerId && ptSearchQuery ? (
@@ -888,9 +1018,39 @@ export default function BookingPage() {
                 </div>
               </>
             )}
+            </>
+            )}
           </>
         )}
       </div>
+
+      <Modal
+        title="Xác nhận rời dịch vụ PT"
+        open={showLeaveConfirm}
+        onCancel={() => setShowLeaveConfirm(false)}
+        onOk={leaveCurrentTraining}
+        okText="Xác nhận rời dịch vụ"
+        cancelText="Hủy"
+        okButtonProps={{ danger: true, loading: leavingTraining }}
+        width={520}
+      >
+        <p className="text-sm text-[var(--gs-text)]">Bạn sắp rời dịch vụ PT.</p>
+        <p className="mt-3 text-sm text-[var(--gs-text-muted)]">
+          Sau khi xác nhận, hệ thống sẽ:
+        </p>
+        <ul className="mt-2 space-y-1.5 text-sm text-[var(--gs-text-muted)] list-disc pl-5">
+          <li>Chấm dứt PT phụ trách hiện tại.</li>
+          <li>Tự động rời tất cả lớp PT đang tham gia.</li>
+          <li>Hủy các lịch PT 1-1 chưa diễn ra.</li>
+          <li>Xóa các booking/PT assignment liên quan.</li>
+        </ul>
+        <p className="mt-3 text-sm text-[var(--gs-text-muted)]">
+          Sau này bạn có thể đăng ký PT khác bất cứ lúc nào.
+        </p>
+        <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+          Nếu tiếp tục, thao tác này sẽ có hiệu lực ngay.
+        </p>
+      </Modal>
     </MemberLayout>
   )
 }

@@ -14,6 +14,27 @@ const transactionSchema = new mongoose.Schema(
             required: true,
             index: true,
         },
+        paymentId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Payment',
+            default: null,
+            index: true,
+        },
+        currency: {
+            type: String,
+            trim: true,
+            default: 'VND',
+        },
+        exchangeRate: {
+            type: Number,
+            default: null,
+        },
+        paymentMethod: {
+            type: String,
+            trim: true,
+            uppercase: true,
+            default: null,
+        },
         type: {
             type: String,
             enum: ['deposit', 'payment', 'transfer', 'refund', 'payout', 'REFUND_TO_WALLET'],
@@ -70,6 +91,13 @@ const transactionSchema = new mongoose.Schema(
         },
     },
     { timestamps: true },
+)
+
+// Chống double-credit khi 2 request/process cùng finalize 1 giao dịch (vd. webhook Stripe + confirm endpoint)
+// Chỉ index các doc có idempotencyKey là string (bỏ qua null/undefined) để không đụng các txn không có key.
+transactionSchema.index(
+    { userId: 1, idempotencyKey: 1 },
+    { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } },
 )
 
 export default mongoose.model('Transaction', transactionSchema)

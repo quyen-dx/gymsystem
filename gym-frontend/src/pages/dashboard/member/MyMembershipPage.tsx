@@ -1,4 +1,4 @@
-import { ArrowUpOutlined, CalendarOutlined, CheckCircleFilled, CloseCircleOutlined, DownOutlined, ExclamationCircleFilled, ExclamationCircleOutlined, HistoryOutlined, InfoCircleOutlined, MailOutlined, SwapOutlined, WalletOutlined } from '@ant-design/icons'
+import { ArrowUpOutlined, CheckCircleFilled, CloseCircleOutlined, DownOutlined, ExclamationCircleFilled, ExclamationCircleOutlined, HistoryOutlined, InfoCircleOutlined, MailOutlined, SwapOutlined, WalletOutlined } from '@ant-design/icons'
 import { Button, Card, Descriptions, Empty, List, Modal, Radio, Spin, Table, Tabs, Tag, Tooltip, message } from 'antd'
 import dayjs from 'dayjs'
 import { useEffect, useMemo, useState } from 'react'
@@ -8,7 +8,7 @@ import PolicyConsentCard from '../../../components/wallet/PolicyConsentCard'
 import api from '../../../services/api'
 import { useWallet } from '../../../context/WalletProvider'
 import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
-import { membershipService, type CancellationRequest, type MembershipPeriod, type MembershipRenewal, type MyMembership, type PendingCancelRequest } from '../../../services/membershipService'
+import { membershipService, type CancellationRequest, type MembershipPeriod, type MembershipRenewal, type MyMembership, type MyMembershipCycle, type PendingCancelRequest, type RefundInfo } from '../../../services/membershipService'
 import type { PlanFeature } from '../../../services/planFeatureService'
 import MembershipBenefits from '../../../components/membership/MembershipBenefits'
 
@@ -28,14 +28,18 @@ export default function MyMembershipPage() {
   const { wallet, refreshWallet } = useWallet()
   const statusMeta: Record<string, { color: string; label: string }> = {
     active: { color: 'success', label: 'Đang hoạt động' },
-    expiring_soon: { color: 'warning', label: 'Sắp hết hạn' },
+    expiring_soon: { color: 'success', label: 'Đang hoạt động' },
+    expires_today: { color: 'success', label: 'Đang hoạt động' },
     expired: { color: 'error', label: 'Đã hết hạn' },
+    cancelled: { color: 'default', label: 'Đã hủy' },
+    refunded: { color: 'default', label: 'Đã hoàn tiền' },
     cancel_requested: { color: 'warning', label: 'Đang chờ phê duyệt hủy' },
   }
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [membership, setMembership] = useState<MyMembership | null>(null)
-  const [cycle, setCycle] = useState<{ purchasedAt: string | null; activatedAt: string | null; expiresAt: string | null; refundEligible: boolean | null; refundExpiredAt: string | null } | null>(null)
+  const [cycle, setCycle] = useState<MyMembershipCycle | null>(null)
+  const [refundInfo, setRefundInfo] = useState<RefundInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [pendingCancel, setPendingCancel] = useState<CancellationRequest | null>(null)
   const [, setLastCancelRequest] = useState<CancellationRequest | null>(null)
@@ -62,7 +66,6 @@ export default function MyMembershipPage() {
     planName: string
   } | null>(null)
 
-  const [pendingCancelModal, setPendingCancelModal] = useState<{ open: boolean; loading: boolean; result: { message: string; refundAmount: number } | null }>({ open: false, loading: false, result: null })
   const [changeModalOpen, setChangeModalOpen] = useState(false)
   const [availablePlans, setAvailablePlans] = useState<any>(null)
   const [plansLoading, setPlansLoading] = useState(false)
@@ -103,6 +106,7 @@ export default function MyMembershipPage() {
         setCanRenew(membershipRes.data.canRenew)
         setRenewalThresholdDays(membershipRes.data.renewalThresholdDays ?? 7)
         setPendingCancelRequest(membershipRes.data.pendingCancelRequest || null)
+        setRefundInfo(membershipRes.data.refundInfo || null)
         setRenewals(renewalsRes.data.renewals || [])
         setPeriods(periodsRes.data.periods || [])
 
@@ -176,19 +180,6 @@ export default function MyMembershipPage() {
     } catch (error: any) {
       message.error(error?.response?.data?.message || 'Hủy thất bại')
       setBatchCancelModal((prev) => ({ ...prev, loading: false }))
-    }
-  }
-
-  const handleCancelPending = async () => {
-    setPendingCancelModal((prev) => ({ ...prev, loading: true }))
-    try {
-      const res = await membershipService.cancelPendingMembership()
-      setPendingCancelModal({ open: true, loading: false, result: { message: res.data.message, refundAmount: res.data.refundAmount } })
-      loadData()
-      refreshWallet()
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Hủy gói thất bại')
-      setPendingCancelModal({ open: false, loading: false, result: null })
     }
   }
 
@@ -330,87 +321,6 @@ export default function MyMembershipPage() {
           </Card>
         )}
 
-        {/* Pending initial activation: đã đăng ký, chờ check-in lần đầu */}
-        {membership && cycle?.status === 'pending_initial_activation' && (
-          <Card>
-            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="m-0 text-2xl font-semibold text-[var(--gs-text)]">{planName}</h2>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-0.5 text-xs font-semibold text-amber-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                    Chờ kích hoạt
-                  </span>
-                </div>
-              </div>
-              <div className="flex gap-2 flex-wrap items-center">
-                <Button icon={<SwapOutlined />} onClick={() => { setSelectedPlan(null); fetchAvailablePlans(); setChangeModalOpen(true) }}>
-                  Đổi gói tập
-                </Button>
-                <div className="h-6 w-px bg-[var(--gs-border)]" />
-                <Button
-                  danger
-                  icon={<CloseCircleOutlined />}
-                  onClick={() => setPendingCancelModal({ open: true, loading: false, result: null })}
-                >
-                  Hủy gói
-                </Button>
-              </div>
-            </div>
-
-            <div className="mb-5 rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-4">
-              <div className="flex gap-2">
-                <InfoCircleOutlined className="mt-0.5 text-[var(--gs-warning)]" />
-                <div className="text-sm text-[var(--gs-text)] whitespace-pre-line">
-                  Gói tập đã được đăng ký thành công.{'\n'}Vui lòng Check-in lần đầu để kích hoạt.
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px rounded-xl border border-[var(--gs-border)] overflow-hidden bg-[var(--gs-border)]">
-              <InfoCell label="Gói tập" value={planName} />
-              <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
-              <InfoCell label="Ngày đăng ký" value={formatDate(cycle?.purchasedAt || membership?.createdAt)} />
-              <InfoCell label="Thời lượng gói" value={`${cycle?.durationDays || 0} ngày`} wide />
-            </div>
-
-            <MembershipBenefits features={memberPlanFeatures} />
-          </Card>
-        )}
-
-        {/* Pending renewal activation: đã gia hạn, chờ cycle cũ kết thúc */}
-        {membership && cycle?.status === 'pending_renewal_activation' && (
-          <Card>
-            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="m-0 text-2xl font-semibold text-[var(--gs-text)]">{planName}</h2>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-500/15 px-3 py-0.5 text-xs font-semibold text-purple-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
-                    Chờ gia hạn
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-5 rounded-xl border border-[var(--gs-info-border)] bg-[var(--gs-info-bg)] p-4">
-              <div className="flex gap-2">
-                <InfoCircleOutlined className="mt-0.5 text-[var(--gs-info)]" />
-                <div className="text-sm text-[var(--gs-text)] whitespace-pre-line">
-                  Sẽ tự động kích hoạt khi chu kỳ hiện tại kết thúc.
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px rounded-xl border border-[var(--gs-border)] overflow-hidden bg-[var(--gs-border)]">
-              <InfoCell label="Gói tập" value={planName} />
-              <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
-              <InfoCell label="Ngày đăng ký" value={formatDate(cycle?.purchasedAt || membership?.createdAt)} />
-              <InfoCell label="Thời hạn" value={`${formatDate(cycle?.startDate)} → ${formatDate(cycle?.expiresAt)}`} wide />
-            </div>
-          </Card>
-        )}
-
         {/* Case 2: Có membership đang hoạt động / chờ xử lý */}
         {membership && isPendingCancel ? (
           <Card>
@@ -419,7 +329,6 @@ export default function MyMembershipPage() {
                 <h2 className="m-0 text-2xl font-semibold">{planName}</h2>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Tag icon={<ExclamationCircleOutlined />} color="warning">Đang chờ hủy</Tag>
-                  <Tag icon={<CalendarOutlined />}>{`${membership.remainingDays} ngày còn lại`}</Tag>
                 </div>
               </div>
             </div>
@@ -495,7 +404,6 @@ export default function MyMembershipPage() {
               <InfoCell label="Gói tập" value={planName} />
               <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
               <InfoCell label="Thời hạn" value={`${formatDate(membership.startDate)} → ${formatDate(membership.endDate)}`} wide />
-              <InfoCell label="Số ngày còn lại" value={`${membership.remainingDays} ngày`} />
             </div>
 
             <MembershipBenefits features={memberPlanFeatures} />
@@ -507,7 +415,6 @@ export default function MyMembershipPage() {
                 <h2 className="m-0 text-2xl font-semibold">{planName}</h2>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Tag icon={<ExclamationCircleOutlined />} color="warning">Đang chờ phê duyệt hủy</Tag>
-                  <Tag icon={<CalendarOutlined />}>{`${membership.remainingDays} ngày còn lại`}</Tag>
                 </div>
               </div>
             </div>
@@ -543,7 +450,6 @@ export default function MyMembershipPage() {
               <InfoCell label="Gói tập" value={planName} />
               <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
               <InfoCell label="Thời hạn" value={`${formatDate(membership.startDate)} → ${formatDate(membership.endDate)}`} wide />
-              <InfoCell label="Số ngày còn lại" value={`${membership.remainingDays} ngày`} />
             </div>
 
             <MembershipBenefits features={memberPlanFeatures} />
@@ -556,32 +462,20 @@ export default function MyMembershipPage() {
                 <h1 className="m-0 text-3xl font-bold text-[var(--gs-text)]">{planName}</h1>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-semibold ${
-                    !cycle?.activatedAt && membership?.status !== 'cancelled'
-                      ? 'bg-amber-500/15 text-amber-600'
-                      : membership.displayStatus === 'expiring_soon'
-                        ? 'bg-amber-500/15 text-amber-600'
-                        : membership.displayStatus === 'expired'
-                          ? 'bg-red-500/15 text-red-600'
-                          : 'bg-green-500/15 text-green-600'
+                    membership.displayStatus === 'expired'
+                      ? 'bg-red-500/15 text-red-600'
+                      : membership.displayStatus === 'cancelled' || membership.displayStatus === 'refunded'
+                        ? 'bg-gray-500/15 text-gray-500'
+                        : 'bg-green-500/15 text-green-600'
                   }`}>
                     <span className={`h-1.5 w-1.5 rounded-full ${
-                      !cycle?.activatedAt && membership?.status !== 'cancelled'
-                        ? 'bg-amber-500'
-                        : membership.displayStatus === 'expiring_soon'
-                          ? 'bg-amber-500'
-                          : membership.displayStatus === 'expired'
-                            ? 'bg-red-500'
-                            : 'bg-green-500'
+                      membership.displayStatus === 'expired'
+                        ? 'bg-red-500'
+                        : membership.displayStatus === 'cancelled' || membership.displayStatus === 'refunded'
+                          ? 'bg-gray-500'
+                          : 'bg-green-500'
                     }`} />
-                    {!cycle?.activatedAt && membership?.status !== 'cancelled' && membership?.status !== 'expired'
-                      ? 'Chờ kích hoạt'
-                      : (statusMeta[membership.displayStatus] || statusMeta.active).label}
-                  </span>
-                  <span className="text-sm text-[var(--gs-text-muted)]">
-                    <CalendarOutlined className="mr-1" />
-                    {membership.remainingDays > 0
-                      ? `${membership.remainingDays} ngày còn lại`
-                      : 'Đã hết hạn'}
+                    {(statusMeta[membership.displayStatus] || statusMeta.active).label}
                   </span>
                 </div>
               </div>
@@ -647,25 +541,24 @@ export default function MyMembershipPage() {
               <InfoCell label="Gói tập" value={planName} />
               <InfoCell label="Giá" value={formatMoney(membership.price || membership.plan?.price)} />
               <InfoCell label="Ngày đăng ký" value={formatDate(cycle?.purchasedAt || membership?.createdAt)} />
-              <InfoCell label="Ngày kích hoạt" value={cycle?.activatedAt ? formatDate(cycle.activatedAt) : 'Chưa kích hoạt'} />
-              <InfoCell label="Thời hạn sử dụng" value={cycle?.activatedAt ? `${formatDate(cycle.activatedAt)} → ${formatDate(cycle.expiresAt)}` : 'Chưa bắt đầu (sẽ tính từ lần check-in đầu)'} wide />
-              <InfoCell label="Quyền hoàn tiền" value={(() => {
-                if (!cycle) return '—'
-                if (cycle.activatedAt) return '🔒 Đã hết hiệu lực do gói tập đã được kích hoạt.'
-                if (cycle.refundEligible && (cycle.purchasedAt || membership?.createdAt)) {
-                  const purchasedAt = cycle.purchasedAt || membership?.createdAt
-                  const daysSince = Math.floor((Date.now() - new Date(purchasedAt).getTime()) / 86400000)
-                  const remaining = 7 - daysSince
-                  if (remaining <= 0) return '🔒 Đã hết hiệu lực do đã quá 07 ngày kể từ ngày đăng ký.'
-                  if (remaining === 1) return '🟢 Hôm nay là ngày cuối để yêu cầu hoàn tiền (nếu chưa kích hoạt gói tập).'
-                  return `🟢 Còn ${remaining} ngày để yêu cầu hoàn tiền (nếu chưa kích hoạt gói tập).`
-                }
-                if (!cycle.refundEligible) {
-                  if (cycle.refundExpiredAt) return '🔒 Đã hết hiệu lực do đã quá 07 ngày kể từ ngày đăng ký.'
-                  return '🔒 Đã hết hiệu lực.'
-                }
-                return '🔒 Đã hết hiệu lực.'
-              })()} wide />
+              <InfoCell label="Ngày bắt đầu" value={cycle?.startDate ? formatDate(cycle.startDate) : formatDate(cycle?.purchasedAt || membership?.createdAt)} />
+              <InfoCell label="Ngày hết hạn" value={formatDate(cycle?.expiresAt || undefined)} wide />
+              <div className="col-span-1 sm:col-span-2 lg:col-span-3 flex flex-col gap-0.5 bg-[var(--gs-card)] px-4 py-3.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-[var(--gs-text-soft)]">Quyền hoàn tiền</span>
+                <span className={`text-sm font-semibold ${refundInfo?.eligible ? 'text-[var(--gs-success)]' : 'text-[var(--gs-text-muted)]'}`}>
+                  {refundInfo?.eligible ? '🟢 Có thể hoàn tiền' : '🔒 Không áp dụng'}
+                </span>
+                <span className="text-xs leading-relaxed text-[var(--gs-text-muted)]">
+                  {refundInfo
+                    ? refundInfo.reason
+                    : 'Không thể xác định điều kiện hoàn tiền.'}
+                </span>
+                {refundInfo?.eligible && (
+                  <span className="text-xs text-[var(--gs-text-soft)]">
+                    Hạn hoàn tiền: {formatDate(refundInfo.refundDeadline || undefined)}
+                  </span>
+                )}
+              </div>
             </div>
 
             <MembershipBenefits features={memberPlanFeatures} />
@@ -674,7 +567,7 @@ export default function MyMembershipPage() {
         ) : null}
 
         {/* Periods tabs (only for active membership) */}
-        {membership && cycle?.status !== 'pending_initial_activation' && !isPendingCancel && !isCancelRequested && periods.length > 0 && (
+        {membership && !isPendingCancel && !isCancelRequested && periods.length > 0 && (
           <Card className="mt-6" styles={{ body: { padding: '20px 24px' } }}>
             <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">Lịch sử gói</h3>
 
@@ -732,7 +625,7 @@ export default function MyMembershipPage() {
                                   {isRejected ? (
                                     <Tag icon={<ExclamationCircleOutlined />} color="orange">Yêu cầu bị từ chối</Tag>
                                   ) : (
-                                    <Tag color="blue">Đang chờ kích hoạt</Tag>
+                                    <Tag color="blue">Chờ kích hoạt</Tag>
                                   )}
                                 </div>
                                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--gs-text-soft)]">
@@ -1065,11 +958,7 @@ export default function MyMembershipPage() {
               <Card size="small" className="mb-4 bg-[var(--gs-bg-subtle)]">
                 <Descriptions column={2} size="small">
                   <Descriptions.Item label="Gói hiện tại">{availablePlans.currentPlan?.nameVi}</Descriptions.Item>
-                  {availablePlans.cycleStatus === 'pending_initial_activation' ? (
-                    <Descriptions.Item label="Trạng thái">Chờ kích hoạt</Descriptions.Item>
-                  ) : (
-                    <Descriptions.Item label="Còn lại">{availablePlans.remainingDays} ngày</Descriptions.Item>
-                  )}
+                  <Descriptions.Item label="Trạng thái">{(statusMeta[availablePlans.cycleStatus] || statusMeta.active).label}</Descriptions.Item>
                 </Descriptions>
               </Card>
               {availablePlans.plans?.length === 0 ? (
@@ -1278,60 +1167,6 @@ export default function MyMembershipPage() {
             </p>
           </div>
         </div>
-      </Modal>
-
-      {/* Pending Cancel Confirmation Modal */}
-      <Modal
-        title="Hủy gói"
-        open={pendingCancelModal.open}
-        onCancel={() => setPendingCancelModal({ open: false, loading: false, result: null })}
-        footer={pendingCancelModal.result ? (
-          <Button type="primary" onClick={() => setPendingCancelModal({ open: false, loading: false, result: null })}>Đóng</Button>
-        ) : (
-          <div className="flex justify-end gap-2">
-            <Button onClick={() => setPendingCancelModal({ open: false, loading: false, result: null })}>Quay lại</Button>
-            <Button danger type="primary" loading={pendingCancelModal.loading} onClick={handleCancelPending}>
-              Xác nhận hủy
-            </Button>
-          </div>
-        )}
-        width={480}
-        centered
-      >
-        {pendingCancelModal.result ? (
-          <div className="py-4">
-            <div className="flex items-start gap-3">
-              <CheckCircleFilled className="mt-0.5 text-lg text-[var(--gs-success)]" />
-              <div>
-                <p className="m-0 text-sm font-semibold text-[var(--gs-text)]">
-                  {pendingCancelModal.result.refundAmount > 0
-                    ? `Đã hoàn ${formatMoney(pendingCancelModal.result.refundAmount)} vào ví.`
-                    : 'Đã hủy gói tập.'}
-                </p>
-                <p className="mt-2 text-xs leading-relaxed text-[var(--gs-text-muted)]">{pendingCancelModal.result.message}</p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="py-4">
-            <p className="m-0 text-sm text-[var(--gs-text)]">
-              Bạn đang hủy gói <strong>{planName}</strong> chưa được kích hoạt.
-            </p>
-            <div className="mt-4 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-[var(--gs-text-soft)]">Tổng tiền hoàn dự kiến</span>
-                <span className={`text-base font-bold ${planPrice > 0 && cycle?.refundEligible ? 'text-[var(--gs-success)]' : 'text-[var(--gs-text-muted)]'}`}>
-                  {cycle?.refundEligible ? formatMoney(planPrice) : '0đ'}
-                </span>
-              </div>
-              <p className="mt-2 text-xs leading-relaxed text-[var(--gs-text-muted)]">
-                {cycle?.refundEligible
-                  ? 'Số tiền sẽ được hoàn về Ví GymPro ngay sau khi xác nhận.'
-                  : 'Gói đã quá 7 ngày kể từ ngày đăng ký. Theo chính sách hoàn tiền, bạn sẽ không được hoàn tiền.'}
-              </p>
-            </div>
-          </div>
-        )}
       </Modal>
 
     </MemberLayout>

@@ -162,7 +162,6 @@ const workoutSchema = new mongoose.Schema(
     memberId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      index: true,
     },
 
     // PT (tác giả tạo giáo án)
@@ -170,7 +169,6 @@ const workoutSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
-      index: true,
     },
 
     // Các tuần (cho giáo án đã gán)

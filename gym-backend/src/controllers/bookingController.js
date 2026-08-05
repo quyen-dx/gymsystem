@@ -7,7 +7,6 @@ import { applyWalletTransaction } from '../services/walletService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import { checkMemberFeature } from '../utils/featureCheck.js'
-import { markBenefitUsed } from '../services/membershipCycleService.js'
 
 const activeStatus = ['pending', 'awaiting_payment', 'confirmed']
 
@@ -25,20 +24,13 @@ const makeSlotId = (ptId, date, slot) => {
 const hasActiveMembershipForDate = async (memberId, date) => {
   const bookingDate = normalizeDate(date)
 
-  // Active cycle: cần expiresAt >= ngày đặt và trạng thái active
+  // Active cycle (kích hoạt ngay sau thanh toán): cần expiresAt >= ngày đặt
   const activeCycle = await MembershipCycle.findOne({
     memberId,
     status: 'active',
     expiresAt: { $gte: bookingDate },
   }).lean()
   if (activeCycle) return true
-
-  // Pending activation cycle: chưa kích hoạt nhưng đã có quyền lợi PT
-  const pendingCycle = await MembershipCycle.findOne({
-    memberId,
-    status: 'pending_initial_activation',
-  }).lean()
-  if (pendingCycle) return true
 
   return false
 }
@@ -199,10 +191,6 @@ export const createBooking = async (req, res) => {
 
       const createdBooking = booking[0]
 
-      // === MembershipCycle benefit tracking (FIX: added await) ===
-      const benefitType = finalTrainingType === 'one_to_one' ? 'pt_1on1' : 'pt_group'
-      await markBenefitUsed(req.user._id, benefitType, { session })
-
       await session.commitTransaction()
 
       await createNotification({
@@ -308,9 +296,6 @@ export const createRecurringBooking = async (req, res) => {
             status: 'pending',
           }], { session })
 
-          // FIX: added await for markBenefitUsed
-          await markBenefitUsed(req.user._id, 'pt_1on1', { session })
-
           createdBookings.push(booking)
         } catch (createErr) {
           if (createErr.code === 11000) {
@@ -413,9 +398,6 @@ export const scheduleWeeklyBooking = async (req, res) => {
             note,
             status: 'pending',
           }], { session })
-
-          // FIX: added await for markBenefitUsed
-          await markBenefitUsed(req.user._id, 'pt_1on1', { session })
 
           results.push(booking)
         } catch (createErr) {

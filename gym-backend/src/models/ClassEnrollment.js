@@ -23,7 +23,10 @@ const classEnrollmentSchema = new mongoose.Schema({
   leftAt: { type: Date, default: null },
   sourceReason: {
     type: String,
-    enum: ['assigned_by_pt', 'ended_by_pt', 'ended_by_admin', 'member_request', 'auto_migrated', 'transfer_class'],
+    enum: [
+      'assigned_by_pt', 'ended_by_pt', 'ended_by_admin', 'member_request', 'auto_migrated', 'transfer_class',
+      'member_cancelled_plan', 'package_downgraded', 'package_switched_to_1on1', 'membership_cancelled',
+    ],
     default: 'assigned_by_pt',
   },
   note: { type: String, default: '' },

@@ -9,7 +9,7 @@ const trainingClassSchema = new mongoose.Schema({
   pendingTrainerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   floorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Floor', default: null },
   zoneId: { type: mongoose.Schema.Types.ObjectId, ref: 'Zone', default: null },
-  daysOfWeek: { type: [Number], default: [] },
+  daysOfWeek: { type: [{ type: Number, min: 0, max: 6 }], default: [] },
   startTime: { type: String, default: null }, // HH:mm
   endTime: { type: String, default: null },   // HH:mm
   status: {

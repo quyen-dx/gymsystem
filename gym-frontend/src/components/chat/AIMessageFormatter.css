@@ -1,0 +1,255 @@
+/* ==========================================
+   AI Message Formatter — ChatGPT-style typography
+   ========================================== */
+
+.aimf-root {
+  font-size: 15px;
+  line-height: 1.625;
+  color: var(--theme-text, var(--gs-text));
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.aimf-root * {
+  max-width: 100%;
+}
+
+/* ---- Headings ---- */
+
+.aimf-root h1,
+.aimf-root h2,
+.aimf-root h3,
+.aimf-root h4,
+.aimf-root h5,
+.aimf-root h6 {
+  margin: 16px 0 8px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--theme-text, var(--gs-text));
+}
+
+.aimf-root h1:first-child,
+.aimf-root h2:first-child,
+.aimf-root h3:first-child,
+.aimf-root h4:first-child {
+  margin-top: 0;
+}
+
+.aimf-root h1 { font-size: 1.375em; }
+.aimf-root h2 { font-size: 1.2em; }
+.aimf-root h3 { font-size: 1.1em; }
+.aimf-root h4 { font-size: 1em; }
+
+/* ---- Paragraphs ---- */
+
+.aimf-root p {
+  margin: 0 0 0.75em;
+  line-height: 1.625;
+}
+
+.aimf-root p:last-child {
+  margin-bottom: 0;
+}
+
+/* ---- Lists ---- */
+
+.aimf-root ul,
+.aimf-root ol {
+  margin: 0.25em 0 0.75em;
+  padding-left: 1.5em;
+}
+
+.aimf-root ul {
+  list-style-type: disc;
+}
+
+.aimf-root ol {
+  list-style-type: decimal;
+}
+
+.aimf-root ul ul,
+.aimf-root ol ul {
+  list-style-type: circle;
+}
+
+.aimf-root ul ul ul,
+.aimf-root ol ul ul {
+  list-style-type: square;
+}
+
+.aimf-root li {
+  margin-bottom: 0.25em;
+  line-height: 1.55;
+  padding-left: 0.25em;
+}
+
+.aimf-root li > p {
+  margin: 0;
+}
+
+/* ---- Bold / Italic ---- */
+
+.aimf-root strong {
+  font-weight: 600;
+}
+
+.aimf-root em {
+  font-style: italic;
+}
+
+/* ---- Links ---- */
+
+.aimf-root a {
+  color: var(--theme-accent, var(--gs-accent));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.aimf-root a:hover {
+  text-decoration: none;
+}
+
+/* ---- Blockquote ---- */
+
+.aimf-root blockquote {
+  margin: 0.75em 0;
+  padding: 0.5em 1em;
+  border-left: 3px solid var(--theme-border, var(--gs-border));
+  color: var(--theme-text-soft, var(--gs-text-soft));
+}
+
+.aimf-root blockquote p {
+  margin: 0 0 0.5em;
+}
+
+.aimf-root blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* ---- Inline code ---- */
+
+.aimf-root code {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.875em;
+  background: rgba(127, 127, 127, 0.12);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+/* ---- Code blocks ---- */
+
+.aimf-root pre {
+  margin: 0.75em 0;
+  padding: 0.75em 1em;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--theme-border, var(--gs-border));
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.aimf-root pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8125em;
+  line-height: 1.55;
+  color: var(--theme-text, var(--gs-text));
+  border-radius: 0;
+}
+
+/* ---- Horizontal rule ---- */
+
+.aimf-root hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid var(--theme-border, var(--gs-border));
+  opacity: 0.5;
+}
+
+/* ---- Tables ---- */
+
+.aimf-root table {
+  width: 100%;
+  margin: 0.75em 0;
+  border-collapse: collapse;
+  font-size: 0.9375em;
+  overflow-x: auto;
+  display: block;
+}
+
+.aimf-root thead {
+  border-bottom: 2px solid var(--theme-border, var(--gs-border));
+}
+
+.aimf-root th,
+.aimf-root td {
+  padding: 0.5em 0.75em;
+  border: 1px solid var(--theme-border, var(--gs-border));
+  text-align: left;
+}
+
+.aimf-root th {
+  font-weight: 600;
+  background: rgba(127, 127, 127, 0.08);
+}
+
+/* ---- Images ---- */
+
+.aimf-root img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 0.5em 0;
+}
+
+/* ---- Quick Action Chips ---- */
+
+.aimf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.aimf-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid var(--theme-accent, var(--gs-accent));
+  color: var(--theme-accent, var(--gs-accent));
+  background: transparent;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+
+.aimf-chip:hover {
+  background: var(--theme-accent, var(--gs-accent));
+  color: #fff;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 768px) {
+  .aimf-root {
+    font-size: 14px;
+  }
+  .aimf-root pre {
+    padding: 0.625em 0.75em;
+  }
+}
+
+@media (max-width: 480px) {
+  .aimf-root {
+    font-size: 13.5px;
+  }
+  .aimf-chip {
+    font-size: 12px;
+    padding: 5px 12px;
+  }
+}

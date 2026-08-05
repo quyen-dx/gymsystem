@@ -155,7 +155,7 @@ export const approvePartnershipRequest = async (req, res, next) => {
     if (user) {
       createNotification({
         receiverId: user._id,
-        receiverRole: user.role || 'member',
+        receiverRole: 'member',
         notificationType: NOTIFICATION_TYPES.PARTNERSHIP_REQUEST,
         title: 'Yêu cầu hợp tác đã được duyệt',
         content: 'Yêu cầu hợp tác của bạn đã được Admin duyệt.',
@@ -189,7 +189,7 @@ export const rejectPartnershipRequest = async (req, res, next) => {
     if (partnerUser) {
       createNotification({
         receiverId: partnerUser._id,
-        receiverRole: partnerUser.role || 'member',
+        receiverRole: 'member',
         notificationType: NOTIFICATION_TYPES.PARTNERSHIP_REQUEST,
         title: 'Yêu cầu hợp tác bị từ chối',
         content: 'Yêu cầu hợp tác của bạn đã bị từ chối.',

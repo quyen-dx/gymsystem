@@ -90,18 +90,10 @@ export default function CancelMembershipPage() {
               <Descriptions.Item label="Ngày đăng ký">{formatDate(mainPackage.purchasedAt)}</Descriptions.Item>
             )}
             <Descriptions.Item label="Trạng thái">
-              {mainPackage.activatedAt ? (
-                <Tag color="success">Đã kích hoạt</Tag>
-              ) : (
-                <Tag color="warning">Chờ kích hoạt</Tag>
-              )}
+              <Tag color="success">Đang hoạt động</Tag>
             </Descriptions.Item>
             <Descriptions.Item label="Thời lượng">{period?.totalDays || membership.durationDays || 0} ngày</Descriptions.Item>
-            {mainPackage.activatedAt ? (
-              <Descriptions.Item label="Ngày kích hoạt">{formatDate(mainPackage.activatedAt)}</Descriptions.Item>
-            ) : (
-              <Descriptions.Item label="Ngày kích hoạt"><Tag color="warning">Chưa kích hoạt</Tag></Descriptions.Item>
-            )}
+            <Descriptions.Item label="Ngày bắt đầu">{formatDate(mainPackage.registeredAt || mainPackage.activatedAt || mainPackage.purchasedAt || undefined)}</Descriptions.Item>
             {period?.endDate ? (
               <Descriptions.Item label="Ngày hết hạn">{formatDate(period.endDate)}</Descriptions.Item>
             ) : (
@@ -121,9 +113,12 @@ export default function CancelMembershipPage() {
               )}
               <div className="flex-1">
                 <p className="m-0 text-sm font-semibold text-[var(--gs-text)]">
-                  {mainPackage.refundEligible ? 'Đủ điều kiện hoàn tiền' : 'Không hoàn tiền'}
+                  {mainPackage.refundEligible ? '🟢 Có thể hoàn tiền' : '🔒 Không áp dụng'}
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-[var(--gs-text-muted)]">{mainPackage.reason}</p>
+                {mainPackage.refundEligible && mainPackage.refundDeadline && (
+                  <p className="mt-1 text-xs text-[var(--gs-text-soft)]">Hạn hoàn tiền: {formatDate(mainPackage.refundDeadline)}</p>
+                )}
               </div>
               <div className="text-right shrink-0">
                 <div className="text-xs text-[var(--gs-text-muted)]">Hoàn</div>
@@ -190,9 +185,9 @@ export default function CancelMembershipPage() {
         <Card className="mb-6" styles={{ body: { padding: '20px 24px' } }}>
           <h3 className="mb-4 text-base font-semibold text-[var(--gs-text)]">Chính sách hoàn tiền</h3>
           <div className="space-y-2 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4 text-sm leading-relaxed text-[var(--gs-text)]">
-            <p>• Quyền hoàn tiền được tính theo TOÀN BỘ CHU KỲ SỬ DỤNG, không tính riêng theo từng lần đổi gói.</p>
-            <p>• Nếu bạn đã sử dụng bất kỳ quyền lợi nào (check-in, đặt lịch PT...) tại bất kỳ thời điểm nào trong chu kỳ, toàn bộ chu kỳ sẽ KHÔNG đủ điều kiện hoàn tiền.</p>
-            <p>• Hoàn tiền chỉ áp dụng trong vòng 07 ngày kể từ ngày đăng ký gói ĐẦU TIÊN của chu kỳ, và chỉ khi chưa kích hoạt gói.</p>
+            <p>• Hoàn tiền chỉ áp dụng khi còn trong vòng 7 ngày kể từ ngày đăng ký VÀ chưa sử dụng bất kỳ quyền lợi nào của gói.</p>
+            <p>• Được xem là đã sử dụng quyền lợi khi xảy ra ít nhất một trong các trường hợp: check-in ít nhất 1 lần, đặt lịch PT, tham gia lớp học, hoặc sử dụng bất kỳ tính năng nào yêu cầu quyền của gói.</p>
+            <p>• Nếu đã quá 7 ngày kể từ ngày đăng ký HOẶC đã sử dụng quyền lợi của gói, gói tập sẽ không được hoàn tiền.</p>
             <p>• Việc đổi gói không làm reset điều kiện hoàn tiền.</p>
           </div>
         </Card>

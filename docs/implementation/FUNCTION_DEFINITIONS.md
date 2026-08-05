@@ -665,14 +665,14 @@ async function databaseQuery(args, userId, role) {
   "source": "vector",
   "results": [
     {
-      "content": "Chính sách hoàn tiền: Bạn có thể yêu cầu hoàn tiền trong vòng 7 ngày kể từ ngày đăng ký...",
+      "content": "Chính sách hoàn tiền: Bạn được hoàn tiền trong vòng 7 ngày kể từ ngày đăng ký, với điều kiện chưa sử dụng bất kỳ quyền lợi nào của gói (check-in, đặt lịch PT, tham gia lớp học, sử dụng tính năng yêu cầu quyền của gói)...",
       "sourceType": "policy",
       "title": "Chính sách hoàn tiền",
       "score": 0.94,
       "sourceId": "policy-refund-001"
     },
     {
-      "content": "Đối với gói Gold, phí hoàn tiền là 10% giá trị gói còn lại...",
+      "content": "Đối với gói Gold, hoàn tiền chỉ áp dụng khi còn trong 7 ngày kể từ ngày đăng ký và chưa sử dụng quyền lợi nào của gói...",
       "sourceType": "business_rules",
       "title": "Quy tắc hoàn tiền",
       "score": 0.87,

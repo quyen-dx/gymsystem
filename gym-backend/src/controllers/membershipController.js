@@ -302,7 +302,7 @@ export const getPendingPTPlacements = async (req, res) => {
         const enrollment = await ClassEnrollment.findOne({ memberId, status: 'active' }).lean()
         if (!enrollment) {
           pending.push({
-            memberId: m.memberId,
+            memberId,
             planName: plan.nameVi,
             missingType: 'group_class',
             label: 'Chờ xếp lớp PT nhóm',
@@ -314,7 +314,7 @@ export const getPendingPTPlacements = async (req, res) => {
         const assignment = await PTAssignment.findOne({ memberId, status: 'active' }).lean()
         if (!assignment) {
           pending.push({
-            memberId: m.memberId,
+            memberId,
             planName: plan.nameVi,
             missingType: 'private_pt',
             label: 'Chờ xếp PT 1-1',

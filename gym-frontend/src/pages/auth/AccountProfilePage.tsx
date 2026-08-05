@@ -6,7 +6,6 @@ import {
   DeleteOutlined,
   EditOutlined,
   EnvironmentOutlined,
-  HeartOutlined,
   InfoCircleOutlined,
   LockOutlined,
   LogoutOutlined,
@@ -28,6 +27,8 @@ import { generateTheme, PRESET_ACCENT_COLORS, resolveEffectiveTheme, useTheme } 
 import { useAuth } from '../../hooks/useAuth'
 import { createAddress, deleteAddress, getAddresses, setDefaultAddress, updateAddress } from '../../services/addressService'
 import { authService } from '../../services/authService'
+import { membershipService } from '../../services/membershipService'
+import { ptAssignmentService } from '../../services/ptAssignmentService'
 import { getUserDisplayName, getUserInitialName } from '../../utils/userDisplay'
 
 const profileFormClass =
@@ -98,7 +99,7 @@ const sectionIconStyle = {
   flexShrink: 0,
 } as CSSProperties
 
-type ProfileTabKey = 'account' | 'personal' | 'contact' | 'health' | 'verification' | 'gym' | 'address' | 'password' | 'appearance'
+type ProfileTabKey = 'account' | 'personal' | 'contact' | 'verification' | 'gym' | 'address' | 'password' | 'appearance'
 type PersonalSubTab = 'basic' | 'contact' | 'emergency' | 'verification'
 
 type ProfileTabItem = {
@@ -354,6 +355,40 @@ function ProfileContent() {
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
+  const [gymPlanName, setGymPlanName] = useState<string | null>(null)
+  const [gymPtName, setGymPtName] = useState<string | null>(null)
+
+  const loadGymInfo = () => {
+    if (user?.role !== 'member') return
+    Promise.allSettled([
+      membershipService.getMyMembership(),
+      ptAssignmentService.getMyAssignment(),
+    ]).then(([membershipRes, ptRes]) => {
+      if (membershipRes.status === 'fulfilled') {
+        const m = membershipRes.value.data.membership
+        setGymPlanName(m ? m.planNameVi || m.plan?.nameVi || null : null)
+      }
+      if (ptRes.status === 'fulfilled') {
+        const pt = ptRes.value.data.assignment?.ptId
+        setGymPtName(typeof pt === 'object' && pt ? getUserDisplayName(pt) : null)
+      }
+    })
+  }
+
+  useEffect(() => {
+    if (user?.role !== 'member') return
+    loadGymInfo()
+  }, [user?._id, user?.role])
+
+  // Refresh hồ sơ (gói tập + PT phụ trách) khi hội viên rời dịch vụ PT từ /booking.
+  useEffect(() => {
+    if (user?.role !== 'member') return
+    const handler = () => loadGymInfo()
+    window.addEventListener('gympro:training-cleanup', handler)
+    return () => window.removeEventListener('gympro:training-cleanup', handler)
+  }, [user?._id, user?.role])
+
+
   useEffect(() => {
     if (mobileMenuOpen) window.dispatchEvent(new CustomEvent('gympro:overlay-open'))
   }, [mobileMenuOpen])
@@ -549,11 +584,6 @@ function ProfileContent() {
       emergencyPhone: user.emergencyContact?.phone || '',
       emergencyRelationship: user.emergencyContact?.relationship || '',
       emergencyContactCountry: user.emergencyContact?.country || '',
-      height: user.healthInfo?.height || '',
-      weight: user.healthInfo?.weight || '',
-      goals: user.healthInfo?.goals || [],
-      activityLevel: user.healthInfo?.activityLevel || '',
-      healthNotes: user.healthInfo?.notes || '',
       identityType: user.identityType || user.identityVerification?.documentType || '',
       identityNumber: user.identityNumber || user.identityVerification?.documentNumber || '',
       identityCountry: user.identityCountry || '',
@@ -622,11 +652,6 @@ function ProfileContent() {
       payload.emergencyPhone = values.emergencyPhone || ''
       payload.emergencyRelationship = values.emergencyRelationship || ''
       payload.emergencyContactCountry = values.emergencyContactCountry || ''
-      payload.height = values.height || ''
-      payload.weight = values.weight || ''
-      payload.goals = values.goals || []
-      payload.activityLevel = values.activityLevel || ''
-      payload.healthNotes = values.healthNotes || ''
       payload.documentType = values.documentType || ''
       payload.documentNumber = values.documentNumber || ''
       payload.identityType = values.identityType || ''
@@ -897,7 +922,6 @@ function ProfileContent() {
   const tabs: ProfileTabItem[] = [
     { key: 'account', label: 'Tài khoản & Bảo mật', icon: <SafetyCertificateOutlined /> },
     { key: 'personal', label: 'Thông tin cá nhân', icon: <UserOutlined /> },
-    { key: 'health', label: 'Sức khỏe', icon: <HeartOutlined /> },
     { key: 'gym', label: 'Hồ sơ Gym', icon: <TrophyOutlined /> },
     { key: 'appearance', label: 'Giao diện', icon: <BgColorsOutlined /> },
   ]
@@ -1028,7 +1052,7 @@ function ProfileContent() {
               )
             })()}
 
-            {(['account', 'personal', 'health'] as ProfileTabKey[]).includes(activeTab) && (
+            {(['account', 'personal'] as ProfileTabKey[]).includes(activeTab) && (
               <div>
                 <Form layout="vertical" form={form} onFinish={handleSave} onValuesChange={() => setFormDirty(true)} className={profileFormClass}>
                   {activeTab === 'account' && (
@@ -1436,43 +1460,6 @@ function ProfileContent() {
                 </div>
                 )}
 
-                {/* Health Information */}
-                {activeTab === 'health' && (
-                <div style={responsiveSectionCardStyle}>
-                  {renderSectionHeader(<HeartOutlined />, 'Sức khỏe', 'Thông tin sức khỏe và thể hình')}
-                  <div className={profileFormClass}>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-[768px]:grid-cols-1">
-                      <Form.Item label={'Chiều cao (cm)'} name="height">
-                        <Input type="number" placeholder={'Nhập chiều cao'} style={profileInputStyle} />
-                      </Form.Item>
-                      <Form.Item label={'Cân nặng (kg)'} name="weight">
-                        <Input type="number" placeholder={'Nhập cân nặng'} style={profileInputStyle} />
-                      </Form.Item>
-                    </div>
-                    <Form.Item label={'Mục tiêu tập luyện'} name="goals">
-                      <Select mode="multiple" placeholder={'Mục tiêu tập luyện'} style={profileInputStyle}>
-                        <Select.Option value="fat_loss">{'Giảm mỡ'}</Select.Option>
-                        <Select.Option value="muscle_gain">{'Tăng cơ'}</Select.Option>
-                        <Select.Option value="weight_gain">{'Tăng cân'}</Select.Option>
-                        <Select.Option value="maintain">{'Duy trì'}</Select.Option>
-                      </Select>
-                    </Form.Item>
-                    <Form.Item label={'Mức độ tập luyện'} name="activityLevel">
-                      <Select placeholder={'Mức độ tập luyện'} style={profileInputStyle}>
-                        <Select.Option value="beginner">{'Mới bắt đầu'}</Select.Option>
-                        <Select.Option value="intermediate">{'Trung bình'}</Select.Option>
-                        <Select.Option value="advanced">{'Nâng cao'}</Select.Option>
-                      </Select>
-                    </Form.Item>
-                    <Form.Item label={'Ghi chú sức khỏe'} name="healthNotes">
-                      <Input.TextArea rows={3} placeholder={'Nhập ghi chú sức khỏe (nếu có)'} style={profileInputStyle} />
-                    </Form.Item>
-                  </div>
-                </div>
-                )}
-
-
-
                 </Form>
               </div>
             )}
@@ -1549,19 +1536,11 @@ function ProfileContent() {
                     </div>
                     <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
                       <span className="text-[var(--theme-muted)]">{'Gói tập hiện tại'}</span>
-                      <span className="font-medium text-[var(--theme-text)]">-</span>
-                    </div>
-                    <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
-                      <span className="text-[var(--theme-muted)]">{'Huấn luyện viên'}</span>
-                      <span className="font-medium text-[var(--theme-text)]">-</span>
-                    </div>
-                    <div className="flex justify-between border-b border-[var(--theme-border)] pb-2">
-                      <span className="text-[var(--theme-muted)]">{'Tổng số buổi'}</span>
-                      <span className="font-medium text-[var(--theme-text)]">-</span>
+                      <span className="font-medium text-[var(--theme-text)]">{gymPlanName || '-'}</span>
                     </div>
                     <div className="flex justify-between pb-2">
-                      <span className="text-[var(--theme-muted)]">{'Điểm tích lũy'}</span>
-                      <span className="font-medium text-[var(--theme-text)]">-</span>
+                      <span className="text-[var(--theme-muted)]">{'Huấn luyện viên phụ trách'}</span>
+                      <span className="font-medium text-[var(--theme-text)]">{gymPtName || '-'}</span>
                     </div>
                   </div>
                 </div>

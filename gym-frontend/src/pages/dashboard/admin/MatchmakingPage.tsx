@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Button, Card, Select, Tag, Progress, Space, message, Spin, Empty } from 'antd'
+import { Button, Card, Select, Tag, Progress, message, Spin, Empty, Tooltip } from 'antd'
 import { ArrowLeftOutlined, TeamOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { trainingRequestService, type TrainingRequest } from '../../../services/trainingRequestService'
@@ -56,7 +56,12 @@ export default function MatchmakingPage() {
         ])
         const req = reqRes.data.request
         setRequest(req)
-        if (req?.specialization) setFilterSpecialization(req.specialization)
+        const acceptedProposal = req?.acceptedProposal || req?.selectedProposal || req?.approvedProposal
+          || (req?.proposalAccepted ? (req?.currentProposal || req?.proposal) : null)
+        if (acceptedProposal?.specialization || req?.specialization) {
+          setFilterSpecialization(acceptedProposal?.specialization || req.specialization)
+        }
+        if (acceptedProposal?.trainerId) setFilterPtId(String(acceptedProposal.trainerId))
         setClasses(clRes.data.classes || [])
         setTrainers(ptRes.data?.pts || [])
       } catch {
@@ -69,10 +74,51 @@ export default function MatchmakingPage() {
   }, [requestId])
 
   const member = request?.memberId as any
-  const requestSlots = (request?.timeSlots || []).map((s) => s.replace(/\s/g, ''))
-  const requestDays = request?.daysOfWeek || []
+  const acceptedProposal = request?.acceptedProposal || request?.selectedProposal || request?.approvedProposal
+    || (request?.proposalAccepted ? (request?.currentProposal || request?.proposal) : null)
+  const effectiveRequest = request && acceptedProposal ? {
+    ...request,
+    specialization: acceptedProposal.specialization || request.specialization,
+    goals: acceptedProposal.goals?.length ? acceptedProposal.goals : request.goals,
+    timeSlots: acceptedProposal.timeSlots?.length
+      ? acceptedProposal.timeSlots
+      : acceptedProposal.startTime && acceptedProposal.endTime
+        ? [`${acceptedProposal.startTime.slice(0, 5)}-${acceptedProposal.endTime.slice(0, 5)}`]
+        : request.timeSlots,
+    daysOfWeek: acceptedProposal.daysOfWeek?.length ? acceptedProposal.daysOfWeek : request.daysOfWeek,
+  } : request
+  const proposalPtId = acceptedProposal?.trainerId ? String(acceptedProposal.trainerId) : ''
+  const proposalZoneId = acceptedProposal?.zoneId ? String(acceptedProposal.zoneId) : ''
+  const requestSlots = (effectiveRequest?.timeSlots || []).map((s) => s.replace(/\s/g, ''))
+
+  const matchesEffectiveRequest = (c: TrainingClass) => {
+    const spec = (c.specialization || '').toLowerCase()
+    const reqSpec = (effectiveRequest?.specialization || '').toLowerCase()
+    if (reqSpec && spec !== reqSpec) return false
+    const classSlot = c.startTime && c.endTime ? `${c.startTime.slice(0, 5)}-${c.endTime.slice(0, 5)}` : ''
+    if (requestSlots.length > 0 && (!classSlot || !requestSlots.includes(classSlot))) return false
+    const reqDays = effectiveRequest?.daysOfWeek || []
+    const classDays = c.daysOfWeek || []
+    if (reqDays.length > 0 && !classDays.some((d) => reqDays.includes(d))) return false
+    if (proposalPtId) {
+      const pt = c.ptId as any
+      const ptId = pt?._id || pt
+      if (String(ptId) !== proposalPtId) return false
+    }
+    if (proposalZoneId) {
+      const zone = c.zoneId as any
+      const zoneId = zone?._id || zone
+      if (String(zoneId) !== proposalZoneId) return false
+    }
+    if (acceptedProposal) {
+      const zone = c.zoneId as any
+      if (zone?.maxCapacity && (c.currentActiveCount ?? 0) >= zone.maxCapacity) return false
+    }
+    return true
+  }
 
   const filteredClasses = classes.filter((c) => {
+    if (acceptedProposal && !matchesEffectiveRequest(c)) return false
     if (filterSpecialization) {
       const spec = (c.specialization || '').toLowerCase()
       const filter = filterSpecialization.toLowerCase()
@@ -87,6 +133,16 @@ export default function MatchmakingPage() {
       const ptId = pt?._id || pt
       if (String(ptId) !== filterPtId) return false
     }
+    if (proposalPtId) {
+      const pt = c.ptId as any
+      const ptId = pt?._id || pt
+      if (String(ptId) !== proposalPtId) return false
+    }
+    if (proposalZoneId) {
+      const zone = c.zoneId as any
+      const zoneId = zone?._id || zone
+      if (String(zoneId) !== proposalZoneId) return false
+    }
     return true
   })
 
@@ -96,17 +152,18 @@ export default function MatchmakingPage() {
     try {
       await trainingRequestService.assignToClass(requestId, classId)
       message.success('Đã xếp lớp thành công')
-      const [reqRes, clRes] = await Promise.all([
-        trainingRequestService.getById(requestId),
-        trainingClassService.getAll({ page: 1, limit: 100 }),
-      ])
-      setRequest(reqRes.data.request)
-      setClasses(clRes.data.classes || [])
+      navigate('/admin/members')
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Xếp lớp thất bại')
     } finally {
       setAssigningId(null)
     }
+  }
+
+  // Lớp chỉ được phân công trực tiếp khi khớp 100% (chuyên môn + lịch + giờ).
+  // Không khớp → bắt buộc dùng "Gửi đề xuất" để hội viên xác nhận.
+  const isPerfectMatch = (c: TrainingClass) => {
+    return matchesEffectiveRequest(c)
   }
 
   if (!requestId) {
@@ -153,14 +210,30 @@ export default function MatchmakingPage() {
 
                   <div>
                     <div className="text-xs text-[var(--gs-text-muted)] mb-1 uppercase tracking-wider">Chuyên môn</div>
-                    <Tag className="text-sm font-semibold px-3 py-1" color="blue">{request.specialization || '—'}</Tag>
+                    <Tag className="text-sm font-semibold px-3 py-1" color="blue">{effectiveRequest?.specialization || '—'}</Tag>
                   </div>
+
+                  {acceptedProposal?.trainerName && (
+                    <div>
+                      <div className="text-xs text-[var(--gs-text-muted)] mb-1 uppercase tracking-wider">PT</div>
+                      <span className="text-sm text-[var(--gs-text)]">{acceptedProposal.trainerName}</span>
+                    </div>
+                  )}
+
+                  {(acceptedProposal?.zoneName || acceptedProposal?.floorName) && (
+                    <div>
+                      <div className="text-xs text-[var(--gs-text-muted)] mb-1 uppercase tracking-wider">Địa điểm</div>
+                      <span className="text-sm text-[var(--gs-text)]">
+                        {[acceptedProposal.floorName, acceptedProposal.zoneName].filter(Boolean).join(' - ')}
+                      </span>
+                    </div>
+                  )}
 
                   <div>
                     <div className="text-xs text-[var(--gs-text-muted)] mb-1 uppercase tracking-wider">Khung giờ mong muốn</div>
                     <div className="flex flex-wrap gap-1">
-                      {(request.timeSlots || []).length > 0
-                        ? request.timeSlots.map((s) => <Tag key={s} className="text-sm">{s}</Tag>)
+                      {(effectiveRequest?.timeSlots || []).length > 0
+                        ? effectiveRequest?.timeSlots.map((s) => <Tag key={s} className="text-sm">{s}</Tag>)
                         : <span className="text-sm text-[var(--gs-text-muted)]">Linh hoạt</span>}
                     </div>
                   </div>
@@ -170,22 +243,22 @@ export default function MatchmakingPage() {
                     <span className="text-sm font-medium text-[var(--gs-text)]">{request.desiredSessions} buổi</span>
                   </div>
 
-                  {request.daysOfWeek?.length > 0 && (
+                  {effectiveRequest?.daysOfWeek?.length > 0 && (
                     <div>
                       <div className="text-xs text-[var(--gs-text-muted)] mb-1 uppercase tracking-wider">Ngày mong muốn</div>
                       <div className="flex flex-wrap gap-1">
-                        {request.daysOfWeek.map((d) => (
+                        {effectiveRequest.daysOfWeek.map((d) => (
                           <Tag key={d} className="text-sm">{DAY_LABELS[d] || d}</Tag>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {request.goals?.length > 0 && (
+                  {effectiveRequest?.goals?.length > 0 && (
                     <div>
                       <div className="text-xs text-[var(--gs-text-muted)] mb-1 uppercase tracking-wider">Mục tiêu</div>
                       <div className="flex flex-wrap gap-1">
-                        {request.goals.map((g) => <Tag key={g} color="purple" className="text-sm">{g}</Tag>)}
+                        {effectiveRequest.goals.map((g) => <Tag key={g} color="purple" className="text-sm">{g}</Tag>)}
                       </div>
                     </div>
                   )}
@@ -199,8 +272,8 @@ export default function MatchmakingPage() {
 
                   <div>
                     <div className="text-xs text-[var(--gs-text-muted)] mb-1 uppercase tracking-wider">Trạng thái</div>
-                    <Tag color={request.status === 'pending' ? 'orange' : request.status === 'assigned' ? 'green' : 'red'}>
-                      {request.status === 'pending' ? 'Chờ xếp lớp' : request.status === 'assigned' ? 'Đã xếp lớp' : 'Đã hủy'}
+                    <Tag color={request.status === 'assigned' ? 'green' : 'orange'}>
+                      {request.status === 'waiting_assignment' ? 'Chờ phân công' : request.status === 'pending' ? 'Chờ xếp lớp' : request.status === 'assigned' ? 'Đã xếp lớp' : request.status}
                     </Tag>
                   </div>
                 </div>
@@ -210,22 +283,19 @@ export default function MatchmakingPage() {
             {/* Class Matcher Panel */}
             <div className="lg:col-span-2">
               <Card title={<span className="text-base font-semibold">Danh sách lớp tập phù hợp</span>}
-                className="rounded-2xl shadow-sm border-[var(--gs-border)]"
-                extra={request.status !== 'pending' && (
-                  <Tag color="green" className="text-sm">Yêu cầu đã được xử lý</Tag>
-                )}>
+                className="rounded-2xl shadow-sm border-[var(--gs-border)]">
 
                 {/* Filters */}
                 <div className="flex flex-wrap gap-3 mb-6 pb-4 border-b border-[var(--gs-border)]">
                   <Select value={filterSpecialization} onChange={setFilterSpecialization}
                     style={{ minWidth: 140 }} options={[
                     { value: '', label: 'Tất cả chuyên môn' },
-                    ...(request?.specialization ? [{ value: request.specialization, label: request.specialization }] : []),
+                    ...(effectiveRequest?.specialization ? [{ value: effectiveRequest.specialization, label: effectiveRequest.specialization }] : []),
                   ]} />
                   <Select value={filterTimeGroup} onChange={setFilterTimeGroup}
                     style={{ minWidth: 180 }}
                     options={TIME_SLOT_GROUPS.map((g) => ({ value: g.value, label: g.label }))} />
-                  <Select value={filterPtId} onChange={setFilterPtId}
+                  <Select value={filterPtId || undefined} onChange={setFilterPtId}
                     style={{ minWidth: 180 }} allowClear
                     placeholder="Lọc theo PT"
                     options={trainers.map((t: any) => ({
@@ -263,12 +333,13 @@ export default function MatchmakingPage() {
                       })()
 
                       return (
-                        <div key={c._id} className={`rounded-xl border p-4 transition-all hover:shadow-md ${matchesRequest ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]' : 'border-[var(--gs-border)] bg-[var(--gs-card)]'}`}>
+                        <div key={c._id} className={`rounded-xl border p-4 transition-all hover:shadow-md ${isPerfectMatch(c) ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]' : 'border-[var(--gs-border)] bg-[var(--gs-card)]'}`}>
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-2">
-                                <span className="text-sm font-bold text-[var(--gs-text)]">[{c.code || ''}] {c.name}</span>
-                                {matchesRequest && <Tag color="green" className="m-0 text-xs leading-none px-1 py-0.5">Phù hợp</Tag>}
+                                <span className="text-sm font-bold text-[var(--gs-text)]">{c.name}</span>
+                                {isPerfectMatch(c) && <Tag color="green" className="m-0 text-xs leading-none px-1 py-0.5">Khớp 100%</Tag>}
+                                {!isPerfectMatch(c) && matchesRequest && <Tag color="orange" className="m-0 text-xs leading-none px-1 py-0.5">Lệch lịch</Tag>}
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-[var(--gs-text)]">
                                 <div className="flex items-center gap-1.5">
@@ -295,12 +366,20 @@ export default function MatchmakingPage() {
                                 </span>
                               </div>
                             </div>
-                            <Button type="primary" size="middle"
-                              disabled={isFull || request.status !== 'pending'} loading={assigningId === c._id}
-                              onClick={() => handleAssign(c._id)}
-                              className="shrink-0">
-                              Xếp vào lớp này
-                            </Button>
+                            {isPerfectMatch(c) ? (
+                              <Button type="primary" size="middle"
+                                disabled={isFull || !['pending', 'waiting_assignment', 'waiting_reassign'].includes(request.status)} loading={assigningId === c._id}
+                                onClick={() => handleAssign(c._id)}
+                                className="shrink-0">
+                                Xếp vào lớp này
+                              </Button>
+                            ) : (
+                              <Tooltip title="Lớp chưa khớp 100% với yêu cầu hội viên. Hãy quay lại và dùng nút 'Gửi đề xuất' để hội viên xác nhận.">
+                                <Button size="middle" disabled className="shrink-0">
+                                  Chưa khớp
+                                </Button>
+                              </Tooltip>
+                            )}
                           </div>
                         </div>
                       )

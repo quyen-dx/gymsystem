@@ -41,21 +41,28 @@ export default function MemberDashboard() {
   const firstName = getUserFirstName(user, 'Bạn')
 
   useEffect(() => {
-    Promise.allSettled([
-      systemExperienceService.getCmsPage('home'),
-    ])
-      .then(([landingRes]) => {
-        if (landingRes.status === 'fulfilled' && landingRes.value.data?.landing) {
-          setLanding(normalizeLandingData(landingRes.value.data.landing))
-        } else {
+    const loadLanding = () => {
+      setLoading(true)
+      Promise.allSettled([
+        systemExperienceService.getCmsPage('home'),
+      ])
+        .then(([landingRes]) => {
+          if (landingRes.status === 'fulfilled' && landingRes.value.data?.landing) {
+            setLanding(normalizeLandingData(landingRes.value.data.landing))
+          } else {
+            setLanding({})
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to load landing data:', err)
           setLanding({})
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to load landing data:', err)
-        setLanding({})
-      })
-      .finally(() => setLoading(false))
+        })
+        .finally(() => setLoading(false))
+    }
+
+    loadLanding()
+    window.addEventListener('gympro:training-cleanup', loadLanding)
+    return () => window.removeEventListener('gympro:training-cleanup', loadLanding)
   }, [])
 
   return (

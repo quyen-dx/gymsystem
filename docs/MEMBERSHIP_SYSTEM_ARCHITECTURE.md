@@ -1,7 +1,7 @@
 # Membership System Architecture
 
-> **Design Mode** — Tài liệu này mô tả kiến trúc mục tiêu, chưa phải trạng thái hiện tại của code.
-> Mọi thay đổi về model, controller, frontend sẽ được thực hiện theo tài liệu này sau khi được chốt.
+> **Implemented** — Tài liệu này mô tả kiến trúc **hiện tại** của hệ thống.
+> Kể từ refactor, **gói tập được kích hoạt NGAY khi thanh toán thành công**, không còn trạng thái "chờ kích hoạt", không cần check-in để kích hoạt, và không còn cron job kích hoạt kỳ gia hạn.
 
 ---
 
@@ -11,9 +11,10 @@
 
 | Model | Vai trò |
 |-------|---------|
-| **Membership** | **Container** — xác định hội viên đang sở hữu gì. Chỉ lưu memberId, planId, payment và trạng thái tổng quát (active / expired / cancelled). **Không lưu thời gian.** |
-| **MembershipCycle** | **Nguồn sự thật duy nhất** — quyết định gói đang ở trạng thái nào, thời gian nào, có được hoàn tiền không, đã kích hoạt chưa. Một Membership có thể có nhiều Cycle (khi gia hạn tạo cycle mới). |
-| **CancellationRequest** | Lưu yêu cầu hủy của hội viên. Khi staff duyệt, ảnh hưởng đến MembershipCycle (set status = refunded/cancelled). |
+| **Membership** | **Container** — xác định hội viên đang sở hữu gì. Chỉ lưu memberId, planId, payment và trạng thái tổng quát (`active` / `expired` / `cancelled`). **Không lưu thời gian.** |
+| **MembershipCycle** | **Nguồn sự thật duy nhất** — quyết định gói đang ở trạng thái nào, thời gian nào. **Luôn tạo với `status='active'` ngay khi thanh toán.** Một Membership có thể có nhiều Cycle (khi hết hạn rồi đăng ký lại). |
+| **MembershipPeriod** | **Legacy** — vẫn được tạo song song để theo dõi từng chu kỳ (period) của gói, phục vụ hiển thị và tính hoàn tiền cho các kỳ gia hạn chưa bắt đầu. |
+| **MembershipCancellationRequest** | Lưu yêu cầu hủy của hội viên. Khi staff duyệt, ảnh hưởng đến MembershipCycle (set status = refunded/cancelled) và các MembershipPeriod PENDING. |
 | **PlanChangeHistory** | Ghi log mỗi lần hội viên thay đổi gói (mua mới, gia hạn, nâng cấp, hạ cấp, hủy). Chỉ đọc, không ảnh hưởng đến logic. |
 
 ### Quan hệ giữa các model
@@ -23,24 +24,27 @@ Member (User)
   │
   ├── 1 ── N ──► Membership          (một member có thể có nhiều membership theo thời gian)
   │                │
-  │                ├── 1 ── N ──► MembershipCycle    (một membership = nhiều cycle khi gia hạn)
+  │                ├── 1 ── N ──► MembershipCycle    (nhiều cycle khi đăng ký lại sau khi hết hạn)
+  │                │
+  │                ├── 1 ── N ──► MembershipPeriod   (legacy — nhiều period khi gia hạn)
   │                │
   │                ├── 1 ── N ──► PlanChangeHistory  (log thay đổi)
   │                │
-  │                └── 1 ── N ──► CancellationRequest (yêu cầu hủy)
+  │                └── 1 ── N ──► MembershipCancellationRequest (yêu cầu hủy)
   │
   ├── 1 ── N ──► Payment            (thanh toán)
   │
-  └── 1 ── N ──► MembershipPeriod   (sẽ được thay thế bởi cycle — legacy)
+  └── 1 ── N ──► MembershipRenewal  (log mỗi lần gia hạn)
 ```
 
 ### Nguyên tắc thiết kế
 
 1. **Một Membership = một lần đăng ký.** Nếu member hết hạn rồi đăng ký lại, tạo Membership mới.
-2. **Một Membership có thể có nhiều MembershipCycle.** Cycle đầu là lần mua đầu, cycle sau là gia hạn.
-3. **MembershipCycle quyết định tất cả:** thời gian bắt đầu, thời gian kết thúc, trạng thái kích hoạt, quyền hoàn tiền.
-4. **Membership không lưu startDate, endDate, activatedAt.** Các thông tin này chỉ có ở Cycle.
-5. **Mỗi cycle có thể bị hủy độc lập.** Hủy cycle gia hạn không ảnh hưởng cycle gốc.
+2. **Gói kích hoạt ngay sau thanh toán.** Cycle được tạo với `status='active'`, `activatedAt=startDate=thời điểm thanh toán`.
+3. **Check-in KHÔNG kích hoạt gói.** Check-in chỉ ghi nhận lượt vào và kiểm tra cycle đang `active` còn hạn.
+4. **Gia hạn kéo dài cycle hiện tại.** Không tạo cycle mới, không có trạng thái pending.
+5. **Membership không lưu startDate, endDate, activatedAt.** Các thông tin này chỉ có ở Cycle.
+6. **Hoàn tiền theo Business Rule:** chỉ hoàn 100% khi còn trong vòng 7 ngày kể từ ngày đăng ký VÀ chưa sử dụng bất kỳ quyền lợi nào của gói (check-in, đặt lịch PT, tham gia lớp học, dùng tính năng yêu cầu quyền của gói). Gói chính được tính theo rule này; các kỳ gia hạn chưa bắt đầu vẫn được hoàn.
 
 ---
 
@@ -50,10 +54,11 @@ Member (User)
 erDiagram
     User ||--o{ Membership : "sở hữu"
     Membership ||--o{ MembershipCycle : "có"
+    Membership ||--o{ MembershipPeriod : "legacy"
     Membership ||--o{ PlanChangeHistory : "log"
-    Membership ||--o{ CancellationRequest : "yêu cầu hủy"
+    Membership ||--o{ MembershipCancellationRequest : "yêu cầu hủy"
     Membership ||--o{ Payment : "thanh toán"
-    MembershipCycle ||--o{ CancellationRequest : "tham chiếu"
+    MembershipCycle ||--o{ MembershipCancellationRequest : "tham chiếu"
 
     User {
         ObjectId _id PK
@@ -78,30 +83,47 @@ erDiagram
         ObjectId memberId FK
         ObjectId currentMembershipId FK
         ObjectId currentPlanId FK
-        ObjectId previousCycleId FK "null nếu là cycle đầu"
-        string status "pending_initial_activation | pending_renewal_activation | active | completed | cancelled | refunded"
+        string status "active | completed | cancelled | refunded"
         date purchasedAt
-        date activatedAt "null nếu chưa kích hoạt"
-        date startDate "null nếu chưa kích hoạt"
-        date expiresAt "null nếu chưa kích hoạt"
+        date activatedAt "set tại thời điểm thanh toán"
+        date startDate "set tại thời điểm thanh toán"
+        date expiresAt "set tại thời điểm thanh toán"
+        date endDate "alias của expiresAt"
         int durationDays
-        boolean refundEligible
-        date refundExpiredAt
+        boolean refundEligible "tính theo Business Rule (7 ngày + chưa dùng quyền lợi)"
+        date refundExpiredAt "registeredAt + 7 ngày (dự phòng)"
         date firstBenefitUsedAt
         string firstBenefitType "checkin | pt_group | pt_1on1 | body_scan | other"
-        int[] refundReminderSent "ngày đã gửi reminder"
     }
 
-    CancellationRequest {
+    MembershipPeriod {
+        ObjectId _id PK
+        ObjectId membershipId FK
+        ObjectId planId FK
+        ObjectId paymentId FK
+        date startDate
+        date endDate
+        int totalDays
+        number price
+        string status "PENDING | ACTIVE | COMPLETED | CANCELLED | REFUNDED | CANCEL_REQUESTED | REJECTED"
+        date activatedAt
+        string refundStatus "refunded | none"
+    }
+
+    MembershipCancellationRequest {
         ObjectId _id PK
         ObjectId memberId FK
-        ObjectId membershipId FK "nullable — cycle-based"
+        ObjectId membershipId FK "nullable"
         ObjectId membershipCycleId FK
         ObjectId planId FK
         string status "pending | approved | rejected"
         boolean refundEligible
         number estimatedRefundAmount
         number finalRefundAmount
+        string policyCode "REFUND_100 | REFUND_50 | NO_REFUND"
+        string refundMethod "WALLET | NONE"
+        string refundStatus "PENDING | COMPLETED | NOT_APPLICABLE"
+        array renewalRefunds "chi tiết hoàn tiền từng kỳ gia hạn"
         date createdAt
     }
 
@@ -127,8 +149,8 @@ erDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> active : Mua gói (tạo membership)
-    active --> expired : Hết hạn (tất cả cycles hết)
-    active --> cancelled : Hủy (có thể còn cycles)
+    active --> expired : Hết hạn (cycle chính completed)
+    active --> cancelled : Hủy (khi cycle bị hủy)
     expired --> [*]
     cancelled --> [*]
 ```
@@ -137,51 +159,29 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> pending_initial_activation : Mua lần đầu
-    [*] --> pending_renewal_activation : Gia hạn (khi active cycle đang chạy)
-
-    pending_initial_activation --> active : Check-in lần đầu
-    pending_initial_activation --> refunded : Staff duyệt hủy + hoàn tiền
-    pending_initial_activation --> cancelled : Staff duyệt hủy (không hoàn)
-
-    pending_renewal_activation --> active : Khi cycle trước hết hạn (cron)
-    pending_renewal_activation --> refunded : Staff duyệt hủy (hoàn 100%)
-    pending_renewal_activation --> cancelled : Staff duyệt hủy (không hoàn)
+    [*] --> active : Mua mới (kích hoạt ngay sau thanh toán)
 
     active --> completed : Hết hạn tự nhiên
-    active --> cancelled : Staff duyệt hủy (không hoàn)
+    active --> cancelled : Staff duyệt hủy (không đủ điều kiện hoàn tiền)
+    active --> refunded : Staff duyệt hủy + hoàn tiền (theo Business Rule)
 
     completed --> [*]
     refunded --> [*]
     cancelled --> [*]
 
-    note right of pending_initial_activation
-        purchasedAt = now
-        activatedAt = null
-        startDate = null
-        expiresAt = null
-        refundEligible = true
-        durationDays = plan.durationDays
-    end note
-
     note right of active
+        purchasedAt = now
         activatedAt = now
         startDate = now
         expiresAt = now + durationDays
-        refundEligible = false
-    end note
-
-    note right of pending_renewal_activation
-        purchasedAt = now
-        activatedAt = null
-        startDate = null
-        expiresAt = null
-        refundEligible = true
-        previousCycleId = cycle_cu._id
+        refundEligible: tính theo Business Rule (7 ngày + chưa dùng quyền lợi)
     end note
 ```
 
-### CancellationRequest
+> Không còn trạng thái `pending_initial_activation` / `pending_renewal_activation`.
+> Gia hạn **không** tạo cycle mới — chỉ `$inc durationDays` và kéo dài `expiresAt` của cycle active.
+
+### MembershipCancellationRequest
 
 ```mermaid
 stateDiagram-v2
@@ -206,11 +206,12 @@ sequenceDiagram
     participant Pay as Payment
     participant M as Membership
     participant MC as MembershipCycle
+    participant MP as MembershipPeriod
     participant PCH as PlanChangeHistory
 
     Member->>FE: Chọn gói, bấm Đăng ký
     FE->>BE: POST /memberships/subscribe { planId }
-    
+
     BE->>Pay: Tạo Payment (PAID)
     Pay-->>BE: payment._id
 
@@ -218,20 +219,21 @@ sequenceDiagram
     Note over M: status='active', planId, memberId
     M-->>BE: membership._id
 
-    BE->>MC: Tạo MembershipCycle
-    Note over MC: status='pending_initial_activation'
-    Note over MC: purchasedAt=now, durationDays
-    Note over MC: activatedAt=null, startDate=null, expiresAt=null
-    Note over MC: refundEligible=true
+    BE->>MC: Tạo MembershipCycle — KÍCH HOẠT NGAY
+    Note over MC: status='active'
+    Note over MC: purchasedAt=now, activatedAt=now, startDate=now
+    Note over MC: expiresAt=now+durationDays
+    Note over MC: refundEligible=false, refundExpiredAt=now+7d
     MC-->>BE: cycle._id
 
+    BE->>MP: Tạo MembershipPeriod đầu tiên (ACTIVE) — legacy
     BE->>PCH: Tạo PlanChangeHistory (purchase)
 
     BE-->>FE: { membership, cycle, payment }
-    FE-->>Member: Hiển thị "Chờ kích hoạt"
+    FE-->>Member: Hiển thị gói "Đang hoạt động"
 ```
 
-### B. Check-in lần đầu
+### B. Check-in
 
 ```mermaid
 sequenceDiagram
@@ -244,22 +246,17 @@ sequenceDiagram
     Member->>FE: Check-in tại quầy / QR
     FE->>BE: POST /checkin
 
-    BE->>CheckIn: Tạo check-in record
-    CheckIn-->>BE: ok
-
-    BE->>MC: activateCycle(memberId)
-    Note over MC: Tìm cycle.status='pending_initial_activation'
-    Note over MC: Set activatedAt=now
-    Note over MC: Set startDate=now
-    Note over MC: Set expiresAt=now+durationDays
-    Note over MC: Set refundEligible=false
-    MC-->>BE: cycle updated
-
-    BE->>MC: Set firstBenefitUsedAt=now, firstBenefitType='checkin'
-
-    BE-->>FE: { message: "Check-in thành công" }
-    FE-->>Member: Hiển thị "Gói đã kích hoạt"
+    BE->>MC: Tìm cycle { status='active', expiresAt >= now }
+    alt Không có cycle active
+        BE-->>FE: Từ chối check-in (gói không hoạt động/hết hạn)
+    else Có cycle active
+        BE->>CheckIn: Tạo check-in record
+        CheckIn-->>BE: ok
+        BE-->>FE: { message: "Check-in thành công" }
+    end
 ```
+
+> Check-in **không** kích hoạt gói, **không** thay đổi cycle. Cycle đã active từ lúc thanh toán.
 
 ### C. Gia hạn (khi đang active)
 
@@ -269,32 +266,30 @@ sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
     participant M as Membership
-    participant MC_Old as Cycle (active)
-    participant MC_New as Cycle (mới)
+    participant MC as Cycle (active)
+    participant MP as MembershipPeriod
     participant PCH as PlanChangeHistory
 
     Member->>FE: Bấm Gia hạn
     FE->>BE: POST /memberships/my/renew-plan
 
-    BE->>M: Kiểm tra membership active
-    M-->>BE: ok
+    BE->>MC: Kiểm tra cycle active + còn hạn (assertRenewalAllowed)
+    MC-->>BE: ok
 
-    BE->>MC_Old: Giữ nguyên (không extend)
-    MC_Old-->>BE: cycle active hiện tại
+    BE->>MC: Kéo dài cycle hiện tại NGAY
+    Note over MC: $inc durationDays += effectiveDays
+    Note over MC: expiresAt = ngày cuối kỳ gia hạn cuối cùng
 
-    BE->>MC_New: Tạo cycle mới
-    Note over MC_New: status='pending_renewal_activation'
-    Note over MC_New: purchasedAt=now, durationDays=new_days
-    Note over MC_New: activatedAt=null, startDate=null, expiresAt=null
-    Note over MC_New: refundEligible=true
-    Note over MC_New: previousCycleId=MC_Old._id
-    MC_New-->>BE: cycle._id
-
+    BE->>MP: Tạo các MembershipPeriod PENDING (mỗi period = 1 chu kỳ chuẩn)
+    Note over MP: Kích hoạt theo thời gian qua rebuildMembershipTimeline
     BE->>PCH: Tạo PlanChangeHistory (renew)
 
-    BE-->>FE: { cycles: [old, new] }
-    FE-->>Member: Hiển thị "Sẽ tự kích hoạt khi gói hiện tại hết"
+    BE-->>FE: { cycle (extended), periods }
+    FE-->>Member: Hiển thị hạn dùng mới
 ```
+
+> Không tạo cycle pending. Kỳ gia hạn tương lai nằm dưới dạng `MembershipPeriod.status='PENDING'`
+> và được bật tự động khi kỳ trước hết hạn (qua `rebuildMembershipTimeline`) — **không có cron job riêng**.
 
 ### D. Đổi gói (khi đang active)
 
@@ -309,9 +304,6 @@ sequenceDiagram
 
     Member->>FE: Chọn gói mới, bấm Đổi
     FE->>BE: POST /memberships/change-plan { newPlanId }
-
-    BE->>M: Kiểm tra membership hiện tại
-    M-->>BE: membership
 
     BE->>MC: Cập nhật currentPlanId = newPlanId
     Note over MC: Giữ nguyên startDate/expiresAt
@@ -336,17 +328,19 @@ sequenceDiagram
     participant Member as Hội viên
     participant FE as Frontend
     participant BE as Backend
-    participant CR as CancellationRequest
+    participant CR as MembershipCancellationRequest
     participant MC as MembershipCycle
+    participant MP as MembershipPeriod
     participant Wallet as Wallet
     participant Staff as Staff
 
     Member->>FE: Điền lý do, gửi yêu cầu hủy
     FE->>BE: POST /memberships/cancel-request { reason }
-    
-    BE->>MC: Đọc cycle.active
-    Note over BE: Kiểm tra refundEligible dựa trên status
-    BE->>CR: Tạo CancellationRequest (pending)
+
+    BE->>MC: Đọc cycle.status='active'
+    Note over BE: Gói chính → tính computeRefundEligibility (7 ngày + chưa dùng quyền lợi)
+    Note over BE: Các MembershipPeriod PENDING chưa bắt đầu → hoàn 100%
+    BE->>CR: Tạo CancellationRequest (pending) + snapshot refund
 
     BE-->>FE: { cancellationRequest }
     FE-->>Member: "Đã gửi yêu cầu, chờ staff duyệt"
@@ -357,44 +351,19 @@ sequenceDiagram
     BE->>CR: Tìm CancellationRequest
     CR-->>BE: cancellationRequest
 
-    BE->>MC: Cập nhật cycle
-    alt cycle.status === 'pending_initial_activation'
-        Note over MC: set status='refunded'
-        BE->>Wallet: Hoàn 100% (nếu trong 7 ngày)
-    else cycle.status === 'pending_renewal_activation'
-        Note over MC: set status='refunded'
-        BE->>Wallet: Hoàn 100%
-    else cycle.status === 'active'
-        Note over MC: set status='cancelled'
-        Note over Wallet: Không hoàn tiền
+    alt refundAmount > 0
+        Note over MC: cycle.status='refunded'
+        BE->>MP: Period PENDING chưa bắt đầu → hoàn tiền vào ví, set CANCELLED + refundStatus='refunded'
+        BE->>Wallet: Cộng tiền hoàn
+    else refundAmount == 0
+        Note over MC: cycle.status='cancelled'
+        BE->>MP: Period PENDING → CANCELLED (không hoàn)
     end
 
-    BE->>CR: set status='approved'
+    BE->>CR: set status='approved', finalRefundAmount
     BE-->>FE: { message: "Đã duyệt hủy" }
     FE-->>Staff: Toast thành công
     FE-->>Member: Gói đã hủy (qua socket/refresh)
-```
-
-### F. Tự động kích hoạt cycle gia hạn (Cron)
-
-```mermaid
-sequenceDiagram
-    participant Cron as Cron Job (hàng ngày)
-    participant MC as MembershipCycle
-
-    Cron->>MC: Tìm status='pending_renewal_activation'
-    Note over Cron: Với previousCycleId.expiresAt < now
-    MC-->>Cron: Danh sách cycles cần activate
-
-    loop Mỗi cycle
-        Cron->>MC: Set activatedAt=now
-        Cron->>MC: Set startDate=now
-        Cron->>MC: Set expiresAt=now+durationDays
-        Cron->>MC: Set refundEligible=false
-        Cron->>MC: Set status='active'
-
-        Cron->>MC: Set previousCycle.status='completed'
-    end
 ```
 
 ---
@@ -405,46 +374,48 @@ Bảng dưới đây xác định **MỘT nơi duy nhất** cho mỗi thông tin
 
 ### MembershipCycle — SỞ HỮU
 
-| Thông tin | Model sở hữu | Controller được phép sửa |
-|-----------|-------------|-------------------------|
-| `startDate` | **MembershipCycle** | `membershipCycleService.activateCycle`, cron auto-activate |
-| `expiresAt` (endDate) | **MembershipCycle** | `membershipCycleService.activateCycle`, cron auto-activate |
-| `activatedAt` | **MembershipCycle** | `membershipCycleService.activateCycle`, cron auto-activate |
-| `refundEligible` | **MembershipCycle** | `membershipCycleService.activateCycle` (set false), `refundReminderJob` (set false), `cancellationController.createCancellationRequest` (check) |
-| `refundExpiredAt` | **MembershipCycle** | `refundReminderJob` |
-| `purchasedAt` | **MembershipCycle** | `membershipService.subscribeWithWallet`, `membershipService.createActivatedMembership` |
-| `durationDays` | **MembershipCycle** | `membershipService.subscribeWithWallet`, `membershipService.createActivatedMembership`, `membershipCycleService.activateCycle` |
-| `status` | **MembershipCycle** | `membershipService` (khi tạo), `membershipCycleService.activateCycle`, `cancellationController` (khi duyệt), cron auto-activate |
-| `firstBenefitUsedAt` | **MembershipCycle** | `membershipCycleService.activateCycle`, `membershipCycleService.markBenefitUsed` |
-| `firstBenefitType` | **MembershipCycle** | `membershipCycleService.activateCycle`, `membershipCycleService.markBenefitUsed` |
-| `currentMembershipId` | **MembershipCycle** | `membershipService` |
-| `currentPlanId` | **MembershipCycle** | `membershipService`, `planChangeController` |
-| `previousCycleId` | **MembershipCycle** | `membershipService` (khi tạo cycle gia hạn) |
-| `refundReminderSent` | **MembershipCycle** | `refundReminderJob` |
+| Thông tin | Model sở hữu | Nơi được phép sửa |
+|-----------|-------------|-------------------|
+| `startDate` | **MembershipCycle** | `membershipService.subscribeWithWallet` (khi tạo), `memberController` (khi staff tạo) |
+| `expiresAt` / `endDate` | **MembershipCycle** | `membershipService.subscribeWithWallet` (tạo / gia hạn), `memberController` (khi staff tạo) |
+| `activatedAt` | **MembershipCycle** | `membershipService.subscribeWithWallet`, `memberController` (set = thời điểm thanh toán) |
+| `purchasedAt` | **MembershipCycle** | `membershipService.subscribeWithWallet`, `memberController` |
+| `durationDays` | **MembershipCycle** | `membershipService.subscribeWithWallet` (tạo / gia hạn `$inc`) |
+| `status` | **MembershipCycle** | `membershipService.subscribeWithWallet` (tạo `active`), `cancellationController` (khi duyệt → refunded/cancelled), `refundRequestService` |
+| `currentMembershipId` | **MembershipCycle** | `membershipService`, `memberController` |
+| `currentPlanId` | **MembershipCycle** | `membershipService`, `planChangeController`, `memberController` |
+| `refundEligible` | **MembershipCycle** | `membershipService.computeRefundEligibility` (tính theo Business Rule), `cancellationController` (check) |
 
 ### Membership — CHỈ CONTAINER
 
 | Thông tin | Model sở hữu | Controller được phép sửa |
-|-----------|-------------|-------------------------|
+|-----------|-------------|---------------------------|
 | `memberId` | **Membership** | `membershipService` (khi tạo) |
 | `planId` | **Membership** | `membershipService`, `planChangeController` |
 | `paymentId` | **Membership** | `membershipService`, `memberController` |
 | `source` | **Membership** | `membershipService`, `memberController` |
-| `status` | **Membership** | `membershipService` (khi tạo), `membershipService.lazyActivatePendingPeriods` (khi tất cả cycles completed → expired) |
+| `status` | **Membership** | `membershipService` (khi tạo), `membershipService.rebuildMembershipTimeline` |
 | `createdAt` | **Membership** | Tự động (mongoose timestamp) |
 
-> ⚠️ **Membership KHÔNG lưu:** `startDate`, `endDate`, `activatedAt`, `cancelledAt`, `cancelReason`, `cancelHandledBy`, `cancelHandledAt`
->
+> ⚠️ **Membership KHÔNG lưu:** `startDate`, `endDate`, `activatedAt`, `cancelledAt`, `cancelReason`.
 > Các thông tin này chỉ có ở MembershipCycle.
 
-### CancellationRequest
+### MembershipPeriod — LEGACY (hoàn tiền kỳ gia hạn)
 
 | Thông tin | Model sở hữu | Controller được phép sửa |
-|-----------|-------------|-------------------------|
-| `status` | **CancellationRequest** | `cancellationController` (set approved/rejected) |
-| `refundEligible` | **CancellationRequest** | `cancellationController.createCancellationRequest` (snapshot) |
-| `estimatedRefundAmount` | **CancellationRequest** | `cancellationController.createCancellationRequest` |
-| `finalRefundAmount` | **CancellationRequest** | `cancellationController.approveCancellationRequest` |
+|-----------|-------------|---------------------------|
+| `status` | **MembershipPeriod** | `membershipService` (tạo), `membershipService.rebuildMembershipTimeline`, `cancellationController` (khi duyệt hủy) |
+| `refundStatus` / `refundAmount` / `refundAt` / `refundMethod` | **MembershipPeriod** | `cancellationController` (khi duyệt hủy) |
+
+### MembershipCancellationRequest
+
+| Thông tin | Model sở hữu | Controller được phép sửa |
+|-----------|-------------|---------------------------|
+| `status` | **MembershipCancellationRequest** | `cancellationController` (set approved/rejected) |
+| `refundEligible` | **MembershipCancellationRequest** | `cancellationController.createCancellationRequest` (snapshot) |
+| `estimatedRefundAmount` | **MembershipCancellationRequest** | `cancellationController.createCancellationRequest` |
+| `finalRefundAmount` | **MembershipCancellationRequest** | `cancellationController.approveCancellationRequest` |
+| `renewalRefunds` | **MembershipCancellationRequest** | `cancellationController.createCancellationRequest` |
 
 ---
 
@@ -454,29 +425,36 @@ Bảng dưới đây xác định **MỘT nơi duy nhất** cho mỗi thông tin
 
 | Controller/Service | Đọc model nào | Ghi model nào | Ghi chú |
 |---|---|---|---|
-| **membershipService** | Membership ✅, MembershipCycle ✅, Plan ✅, Payment ✅, Wallet ✅, Transaction ✅ | Membership ✅, MembershipCycle ✅, Payment ✅, PlanChangeHistory ✅, Wallet ✅, Transaction ✅ | Lõi — xử lý mua, gia hạn, kích hoạt |
-| **membershipCycleService** | MembershipCycle ✅ | MembershipCycle ✅ | activateCycle, markBenefitUsed |
-| **cancellationController** | Membership ✅, MembershipCycle ✅, CancellationRequest ✅ | Membership ✅ (cần chuyển sang chỉ ghi Cycle), MembershipCycle ✅, CancellationRequest ✅, Wallet ✅, Transaction ✅, PTAssignment ✅, ClassEnrollment ✅ | Hủy gói |
-| **refundRequestService** | MembershipPeriod ✅, Membership ✅, RefundRequest ✅, MembershipCycle ✅ (chỉ đọc) | MembershipPeriod ✅, Membership ✅, RefundRequest ✅, Wallet ✅, Transaction ✅ | Period-based — sẽ thay thế bằng cycle-based |
-| **planChangeController** | Membership ✅, MembershipCycle ✅, Plan ✅ | Membership ✅, MembershipCycle ✅, PlanChangeHistory ✅ | Đổi gói |
-| **dailyQRCodeController** | MembershipCycle ✅ | MembershipCycle ✅, CheckIn ✅ | activateCycle khi check-in |
-| **checkInController** | Membership ✅ | CheckIn ✅ | Staff check-in (cần chuyển sang dùng Cycle) |
-| **bookingController** | Membership ✅ | ❌ | Kiểm tra active membership (cần chuyển sang Cycle) |
+| **membershipService** | Membership ✅, MembershipCycle ✅, MembershipPeriod ✅, Plan ✅, Payment ✅, Wallet ✅, Transaction ✅ | Membership ✅, MembershipCycle ✅, MembershipPeriod ✅, Payment ✅, PlanChangeHistory ✅, Wallet ✅, Transaction ✅, MembershipRenewal ✅ | Lõi — mua (kích hoạt ngay), gia hạn (kéo dài cycle), getMyMembership, rebuildMembershipTimeline |
+| **membershipController** | MembershipCycle ✅, MembershipPeriod ✅ | ❌ | GET periods, GET cycles (admin) |
+| **cancellationController** | Membership ✅, MembershipCycle ✅, MembershipPeriod ✅, MembershipCancellationRequest ✅ | MembershipCycle ✅, MembershipPeriod ✅, MembershipCancellationRequest ✅, Wallet ✅, Transaction ✅, PTAssignment ✅, ClassEnrollment ✅ | Hủy gói + hoàn tiền kỳ gia hạn |
+| **refundRequestService** | MembershipPeriod ✅, Membership ✅, RefundRequest ✅, MembershipCycle ✅ | MembershipPeriod ✅, Membership ✅, RefundRequest ✅, MembershipCycle ✅, Wallet ✅, Transaction ✅ | Period-based (legacy) |
+| **planChangeController** | Membership ✅, MembershipCycle ✅, Plan ✅ | Membership ✅, MembershipCycle ✅, PlanChangeHistory ✅ | Đổi gói (không extend thời gian) |
+| **dailyQRCodeController** | MembershipCycle ✅ | MembershipCycle ✅ (đọc active), CheckIn ✅ | Kiểm tra cycle active khi check-in QR |
+| **checkInController** | MembershipCycle ✅, Membership ✅ | CheckIn ✅ | Staff check-in — kiểm tra cycle active |
+| **bookingController** | MembershipCycle ✅ | ❌ | Kiểm tra cycle active + expiresAt >= ngày đặt |
 | **planController** | Membership ✅ (countDocuments) | ❌ | Thống kê |
-| **memberController** | Membership ✅ | Membership ✅ | Staff tạo member, membership |
+| **memberController** | Membership ✅, MembershipCycle ✅ | Membership ✅, MembershipCycle ✅ | Staff tạo member / membership → tạo cycle active ngay |
 | **authController** | Membership ✅ | ❌ | Kiểm tra membership khi login |
-| **featureCheck** | Membership ✅ | ❌ | Kiểm tra plan features |
-| **membershipReminderScheduler** | Membership ✅ | Membership ✅ (remindersSent) | Nhắc hết hạn |
-| **refundReminderJob** | MembershipCycle ✅ | MembershipCycle ✅ | Hết quyền hoàn tiền sau 7 ngày |
+| **featureCheck** | MembershipCycle ✅, Membership ✅ | ❌ | Kiểm tra plan features |
+| **ptAssignmentService / trainingRequestService** | MembershipCycle ✅ | ❌ | Lấy plan từ cycle active |
+| **config/startupTasks** | MembershipCycle ✅ | MembershipCycle ✅ (housekeeping khi khởi động) | Thay thế cron job kích hoạt cũ |
+
+> ❌ **Đã xoá:** `membershipCycleService.js`, `jobs/activateRenewalCyclesJob.js`, `jobs/refundReminderJob.js`.
+> Không còn cron kích hoạt kỳ gia hạn.
 
 ### Frontend Pages / Components
 
 | Page | Đọc model nào | Ghi chú |
 |------|-------------|---------|
-| **MyMembershipPage** | Membership (status, plan) ✅, MembershipCycle (status, activatedAt, expiresAt, refundEligible, purchasedAt) ✅ | Cần chuyển sang dùng Cycle làm nguồn chính |
-| **CancelMembershipPage** | CancelInfo (bao gồm cycle data) ✅ | Đã cycle-based |
-| **StaffPaymentsPage** | RefundRequest + CancellationRequest (merged) ✅ | Cần update status labels |
-| **WorkoutPage** | Membership (status) ✅ | Cần chuyển sang Cycle |
+| **MyMembershipPage** | MembershipCycle (status, startDate, expiresAt, durationDays) ✅ | Hiển thị theo `displayStatus`; không còn trạng thái chờ kích hoạt |
+| **CancelMembershipPage** | CancelInfo (bao gồm cycle data + renewal refund) ✅ | Hiển thị "Quyền hoàn tiền" theo Business Rule (7 ngày + chưa dùng quyền lợi); kỳ gia hạn chưa bắt đầu được hoàn |
+| **StaffPaymentsPage** | CancellationRequest + RefundRequest (merged) ✅ | Nhãn trạng thái đã bỏ "Chờ kích hoạt" |
+| **StaffPlanCounterPage** | Plan ✅ | Nút "Đăng ký gói" thay vì "Kích hoạt gói" |
+| **StaffCheckinPage** | MembershipCycle ✅ | Hiển thị "Hạn dùng" + trạng thái active/expired |
+| **PTClientsPage** | MembershipCycle ✅ | `membershipStatus: 'active' \| 'expired' \| null` |
+| **BookingPage / WorkoutPage** | MembershipCycle ✅ | Chỉ cho dùng khi cycle active còn hạn |
+| **AdminMembersPage** | MembershipCycle ✅ | Nhãn "Đang hoạt động" / "Đã hết hạn" |
 
 ---
 
@@ -486,70 +464,76 @@ Bảng dưới đây xác định **MỘT nơi duy nhất** cho mỗi thông tin
 
 | Rule | Mô tả |
 |------|-------|
-| **R1** | Khi thanh toán thành công, tạo Membership (status='active') và MembershipCycle (status='pending_initial_activation'). |
-| **R2** | Cycle mới có `purchasedAt=now`, `durationDays=plan.durationDays`, `activatedAt=null`, `startDate=null`, `expiresAt=null`. |
-| **R3** | Cycle mới có `refundEligible=true` (từ ngày mua đến hết 7 ngày sau). |
-| **R4** | Membership KHÔNG set `startDate`/`endDate`. Thời gian chỉ tính từ Cycle. |
+| **R1** | Khi thanh toán thành công, tạo Membership (`status='active'`) và MembershipCycle với **`status='active'` NGAY**. |
+| **R2** | Cycle mới: `purchasedAt=now`, `activatedAt=now`, `startDate=now`, `expiresAt=now+durationDays`, `refundEligible=false`, `refundExpiredAt=now+7 ngày`, `previousCycleId=null`. |
+| **R3** | Hoàn tiền gói chính theo **Business Rule**: đủ điều kiện khi còn trong **7 ngày kể từ ngày đăng ký** VÀ **chưa sử dụng bất kỳ quyền lợi nào** của gói. Được tính lại mỗi lần xem qua `computeRefundEligibility`. |
+| **R4** | Membership container KHÔNG lưu startDate/endDate/activatedAt. |
+| **R5** | Nếu member đã có cycle `active`, không cho đăng ký gói mới (bắt buộc gia hạn). |
 
-### 7.2. Kích hoạt
-
-| Rule | Mô tả |
-|------|-------|
-| **R5** | Chỉ check-in lần đầu mới kích hoạt cycle. Các benefit khác (PT, body scan) cũng có thể kích hoạt. |
-| **R6** | Khi kích hoạt: `activatedAt=now`, `startDate=now`, `expiresAt=now+durationDays`, `refundEligible=false`, `status='active'`. |
-| **R7** | Nếu cycle đã `active` rồi (activatedAt != null), các check-in sau không ảnh hưởng. |
-
-### 7.3. Hoàn tiền
+### 7.2. Check-in / Sử dụng
 
 | Rule | Mô tả |
 |------|-------|
-| **R8** | Cycle `pending_initial_activation` có thể hoàn 100% nếu `purchasedAt` trong vòng 7 ngày. |
-| **R9** | Cycle `pending_renewal_activation` luôn có thể hoàn 100% (chưa kích hoạt, chưa dùng). |
-| **R10** | Cycle `active` KHÔNG được hoàn tiền (đã kích hoạt). |
-| **R11** | Sau 7 ngày kể từ `purchasedAt` mà chưa kích hoạt, `refundEligible` tự động set `false` (bởi cron job). |
-| **R12** | Quyền hoàn tiền được snapshot tại thời điểm tạo CancellationRequest, không thay đổi sau đó. |
+| **R6** | Check-in **KHÔNG** kích hoạt gói. Chỉ kiểm tra cycle `status='active'` và `expiresAt >= now`. |
+| **R7** | Các benefit khác (PT, body scan, đặt lịch) cũng không kích hoạt gì — chỉ cần cycle active. |
 
-### 7.4. Gia hạn
+### 7.3. Gia hạn
 
 | Rule | Mô tả |
 |------|-------|
-| **R13** | Khi gia hạn, tạo MembershipCycle MỚI với `status='pending_renewal_activation'`, `previousCycleId=cycle_cũ._id`. |
-| **R14** | Cycle cũ KHÔNG bị thay đổi. Không extend durationDays, không extend endDate. |
-| **R15** | Cycle gia hạn tự động kích hoạt khi cycle trước hết hạn (cron job chạy hàng ngày). |
-| **R16** | Gia hạn KHÔNG cần check-in. Khi cycle cũ `completed`, cycle mới tự `active`. |
-| **R17** | Hội viên có thể hủy cycle `pending_renewal_activation` để được hoàn 100%. |
+| **R8** | Gia hạn yêu cầu có cycle active đang còn hạn (`assertRenewalAllowed`). |
+| **R9** | Gia hạn **kéo dài cycle hiện tại ngay lập tức**: `$inc durationDays += effectiveDays`, `expiresAt = ngày cuối kỳ gia hạn cuối cùng`. **Không tạo cycle mới.** |
+| **R10** | Tạo các `MembershipPeriod.status='PENDING'` cho từng kỳ tương lai (legacy). Các kỳ này được bật thành `ACTIVE` theo thời gian qua `rebuildMembershipTimeline` khi kỳ trước hết hạn — **không có cron job riêng**. |
+| **R11** | Tạo `MembershipRenewal` (log) và `PlanChangeHistory` (renew). |
+
+### 7.4. Hoàn tiền
+
+| Rule | Mô tả |
+|------|-------|
+| **R12** | Hoàn tiền gói chính: đủ điều kiện khi còn trong **7 ngày** kể từ ngày đăng ký (`registeredAt = purchasedAt || startDate || createdAt`) VÀ **chưa sử dụng bất kỳ quyền lợi nào** (check-in ≥ 1, đặt lịch PT, tham gia lớp học, hoặc dùng tính năng yêu cầu quyền của gói). Hoàn **100%** planPrice. |
+| **R13** | Kỳ gia hạn (`MembershipPeriod.status='PENDING'`) **chưa bắt đầu** (`now < startDate`) → hoàn 100% giá period khi hủy. |
+| **R14** | Kỳ gia hạn **đã bắt đầu** → không hoàn. |
+| **R15** | Quyền hoàn tiền + `estimatedRefundAmount` được snapshot tại thời điểm tạo CancellationRequest, không thay đổi sau đó. |
+| **R16** | `estimatedRefundAmount = (gói chính nếu đủ điều kiện) + tổng tiền các kỳ gia hạn chưa bắt đầu`. `refundEligible = estimatedRefundAmount > 0`. |
+
+### 7.4.1. Tính điều kiện hoàn tiền gói chính (`computeRefundEligibility`)
+
+| Kết quả | Điều kiện | Phản hồi cho hội viên |
+|---------|-----------|----------------------|
+| `eligible = true` | `within7Days = true` VÀ `hasUsedBenefit = false` | 🟢 Có thể hoàn tiền — hoàn 100% |
+| `eligible = false` | `hasUsedBenefit = true` hoặc `within7Days = false` | 🔒 Không áp dụng — đã sử dụng quyền lợi của gói hoặc đã quá 7 ngày kể từ ngày đăng ký |
+
+Trả về: `{ eligible, hasUsedBenefit, within7Days, registeredAt, refundDeadline, remainingDays, reason }`.
 
 ### 7.5. Đổi gói
 
 | Rule | Mô tả |
 |------|-------|
-| **R18** | Khi đổi gói, chỉ cập nhật `currentPlanId` trên cycle hiện tại. |
-| **R19** | Thời gian startDate/expiresAt không thay đổi. |
-| **R20** | Nếu gói mới giá cao hơn: thu phần chênh lệch. Nếu thấp hơn: hoàn chênh lệch vào ví. |
+| **R17** | Khi đổi gói, chỉ cập nhật `currentPlanId` trên cycle hiện tại. |
+| **R18** | Thời gian startDate/expiresAt không thay đổi. |
+| **R19** | Nếu gói mới giá cao hơn: thu phần chênh lệch. Nếu thấp hơn: hoàn chênh lệch vào ví. |
 
 ### 7.6. Hủy gói
 
 | Rule | Mô tả |
 |------|-------|
-| **R21** | Hội viên có thể yêu cầu hủy bất kỳ cycle nào (pending_initial, pending_renewal, active). |
-| **R22** | Mỗi cycle có một CancellationRequest riêng. |
-| **R23** | Staff duyệt = cycle bị ảnh hưởng. Các cycle khác (nếu có) không bị ảnh hưởng. |
-| **R24** | Khi duyệt: set `cycle.status='refunded'` (nếu có hoàn) hoặc `'cancelled'` (nếu không). |
-| **R25** | Nếu `pending_initial_activation`: hoàn 100% nếu trong 7 ngày. |
-| **R26** | Nếu `pending_renewal_activation`: hoàn 100% (chưa kích hoạt). |
-| **R27** | Nếu `active`: KHÔNG hoàn (đã kích hoạt). |
+| **R20** | Hội viên gửi yêu cầu hủy cycle đang `active`. Mỗi cycle có một CancellationRequest riêng. |
+| **R21** | Staff duyệt: `cycle.status='refunded'` nếu `refundAmount > 0`, ngược lại `'cancelled'`. |
+| **R22** | Các `MembershipPeriod` PENDING chưa bắt đầu → `CANCELLED` + hoàn tiền vào ví (`refundStatus='refunded'`). |
+| **R23** | Các `MembershipPeriod` PENDING đã bắt đầu → `CANCELLED` (không hoàn, `refundStatus='none'`). |
+| **R24** | Staff từ chối → cycle/period giữ nguyên. |
 
 ### 7.7. Hiển thị Frontend
 
 | Rule | Mô tả |
 |------|-------|
-| **R28** | MyMembershipPage render dựa trên `cycle.status`, không dựa trên `membership.status`. |
-| **R29** | Nếu cycle `pending_initial_activation`: hiển thị "Chờ kích hoạt — hãy check-in lần đầu". |
-| **R30** | Nếu cycle `pending_renewal_activation`: hiển thị "Sẽ tự động kích hoạt khi gói hiện tại hết". |
-| **R31** | Nếu cycle `active`: hiển thị thông tin gói đang dùng (startDate → expiresAt). |
-| **R32** | Nếu cycle `completed`: hiển thị "Gói đã hết hạn". |
-| **R33** | Nếu cycle `cancelled`: hiển thị "Gói đã hủy" — empty state, không render card. |
-| **R34** | Nếu cycle `refunded`: hiển thị "Đã hoàn tiền" — empty state, kèm thông tin hoàn. |
+| **R25** | `displayStatus` được tính từ cycle: `active` \| `expiring_soon` \| `expires_today` \| `expired` \| `cancelled` \| `refunded`. |
+| **R26** | `active`/`expiring_soon`/`expires_today` → badge "Đang hoạt động". |
+| **R27** | `expired` → badge "Đã hết hạn". |
+| **R28** | `cancelled` → badge "Đã hủy". |
+| **R29** | `refunded` → badge "Đã hoàn tiền". |
+| **R30** | Info: "Ngày bắt đầu" = startDate, "Ngày hết hạn" = expiresAt, "Số ngày còn lại" = remainingDays. |
+| **R31** | Gia hạn sắp tới (kỳ PENDING chưa bắt đầu) → nhãn "Sắp bắt đầu", không còn "Chờ kích hoạt". |
 
 ---
 
@@ -557,192 +541,83 @@ Bảng dưới đây xác định **MỘT nơi duy nhất** cho mỗi thông tin
 
 | # | Tình huống | Xử lý |
 |---|-----------|--------|
-| **EC1** | Mua gói → chưa check-in → quá 7 ngày | Cycle vẫn `pending_initial_activation`. `refundEligible=false` (cron set). Vẫn chờ check-in để active. Sau khi active, time bắt đầu từ lúc check-in. |
-| **EC2** | Gia hạn → cycle mới `pending_renewal_activation` → cycle cũ chưa hết nhưng member hủy | Hủy cycle mới (refunded). Cycle cũ không ảnh hưởng. |
+| **EC1** | Mua gói → quá 7 ngày | Cycle vẫn `active` (đã kích hoạt ngay). Không ảnh hưởng gì tới thời gian. |
+| **EC2** | Gia hạn khi gói đang chạy | Kéo dài `durationDays` + `expiresAt` của cycle hiện tại. Tạo period PENDING. |
 | **EC3** | Đổi gói → rồi hủy | Hủy cycle hiện tại. PlanChangeHistory ghi log đổi gói rồi log hủy. |
-| **EC4** | Hủy `pending_initial_activation` → quá 7 ngày | Không hoàn tiền (refundEligible=false). Cycle set cancelled. |
+| **EC4** | Hủy gói chính | Tính `computeRefundEligibility`: hoàn 100% nếu còn trong 7 ngày từ ngày đăng ký VÀ chưa dùng quyền lợi nào; ngược lại không hoàn. Các period gia hạn PENDING chưa bắt đầu vẫn được hoàn. |
 | **EC5** | Staff từ chối yêu cầu hủy | Cycle giữ nguyên trạng thái. Membership giữ nguyên. |
 | **EC6** | Thanh toán lỗi (mua gói) | Không tạo Membership, không tạo Cycle. Payment status = FAILED. |
-| **EC7** | Thanh toán lỗi (gia hạn) | Không tạo Cycle mới. Payment status = FAILED. Cycle cũ vẫn active. |
-| **EC8** | Check-in trùng (cùng ngày) | Chỉ lần đầu activate cycle. Các lần sau chỉ tạo check-in record, không ảnh hưởng cycle. |
-| **EC9** | Gia hạn nhiều lần (3+ cycles pending) | Mỗi lần tạo cycle `pending_renewal_activation` với `previousCycleId` trỏ về cycle trước đó. Cron kích hoạt lần lượt. |
-| **EC10** | Gia hạn khi chưa kích hoạt (cycle đang `pending_initial_activation`) | Extend durationDays trên cycle hiện tại. Không tạo cycle mới. |
-| **EC11** | Member có 2 Memberships (hết hạn rồi mua lại) | Mỗi Membership độc lập. Chỉ active membership được dùng. Cycles của membership cũ đều completed. |
-| **EC12** | Staff tạo membership (offline) | Giống flow mua mới: tạo Membership + Cycle `pending_initial_activation`. Staff check-in = activate. |
+| **EC7** | Thanh toán lỗi (gia hạn) | Không extend cycle, không tạo period. Payment status = FAILED. Cycle cũ vẫn active. |
+| **EC8** | Check-in khi gói hết hạn | Không có cycle active → từ chối check-in. |
+| **EC9** | Gia hạn nhiều lần | Mỗi lần tạo thêm period PENDING và kéo dài expiresAt thêm tương ứng. Không tạo cycle mới. |
+| **EC10** | Gia hạn khi cycle active đã hết hạn (còn period PENDING) | Period PENDING được bật thành ACTIVE qua `rebuildMembershipTimeline`; member có thể gia hạn tiếp từ đó. |
+| **EC11** | Member có 2 Memberships (hết hạn rồi mua lại) | Mỗi Membership độc lập. Chỉ cycle active được dùng. Cycles cũ đều completed. |
+| **EC12** | Staff tạo membership (offline) | Tạo Membership + Cycle `status='active'` ngay (startDate/activatedAt = thời điểm staff tạo). Không cần check-in để kích hoạt. |
 
 ---
 
-## 9. File Impact
+## 9. File Impact (trạng thái hiện tại)
 
-Danh sách tất cả file sẽ phải sửa (dự kiến).
+### Model
+| File | Ghi chú |
+|------|---------|
+| `gym-backend/src/models/MembershipCycle.js` | Enum status: `['active', 'completed', 'cancelled', 'refunded']`. Bỏ mọi trạng thái pending. |
+| `gym-backend/src/models/Membership.js` | Enum status: `['active', 'expired', 'cancelled']`. |
+| `gym-backend/src/models/MembershipPeriod.js` | Legacy — giữ để theo dõi period + hoàn tiền gia hạn. |
+| `gym-backend/src/models/MembershipCancellationRequest.js` | Lưu renewalRefunds, refundMethod, refundStatus, policyCode. |
 
-### Phase 1 — Model
-| File | Sửa |
-|------|-----|
-| `gym-backend/src/models/MembershipCycle.js` | Thêm enum: `pending_initial_activation`, `pending_renewal_activation`, `refunded`; bỏ `pending` |
-| `gym-backend/src/models/Membership.js` | Bỏ enum: `pending_cancel`, `cancel_requested`, `refunded`; bỏ fields: `cancelledAt`, `cancelReason`, `cancelHandledBy`, `cancelHandledAt` |
-| `gym-backend/src/models/MembershipPeriod.js` | Không sửa (legacy, vẫn dùng cho tính năng period-based cũ) |
+### Backend Services (lõi)
+| File | Ghi chú |
+|------|---------|
+| `gym-backend/src/services/membershipService.js` | Mua mới: tạo cycle `active` ngay. Gia hạn: `$inc durationDays` + extend `expiresAt` (không tạo cycle mới). `getMyMembership`: `pendingCycles=[]` + `refundInfo`. `getCancelInfo`: `mainRefund` tính qua `computeRefundEligibility` (7 ngày + chưa dùng quyền lợi) + hoàn period PENDING chưa bắt đầu. `rebuildMembershipTimeline`: bật period theo thời gian. |
+| `gym-backend/src/config/startupTasks.js` | Housekeeping khi khởi động (thay cho cron kích hoạt cũ). |
+| `gym-backend/src/services/refundRequestService.js` | Ghi cycle.status khi period bị hoàn/hủy. |
+| `gym-backend/src/services/ptAssignmentService.js` | `membershipStatus: 'active' \| 'expired' \| null`. |
+| `gym-backend/src/services/trainingRequestService.js` | Lấy plan từ cycle active. |
 
-### Phase 2 — Backend Services (lõi)
-| File | Sửa |
-|------|-----|
-| `gym-backend/src/services/membershipService.js` | subscribeWithWallet: tạo cycle `pending_initial_activation`, gia hạn tạo cycle riêng `pending_renewal_activation`. getMyMembership: dùng cycle làm nguồn chính. getCancelInfo: dùng cycle.status. |
-| `gym-backend/src/services/membershipCycleService.js` | activateCycle: tìm `pending_initial_activation`. Thêm `activatePendingRenewalCycles()`. |
-| `gym-backend/src/services/refundRequestService.js` | approveRefundRequest: ghi cycle.status. |
-
-### Phase 3 — Backend Controllers
-| File | Sửa |
-|------|-----|
-| `gym-backend/src/controllers/cancellationController.js` | create: check cycle.status. approve: set cycle.status='refunded' hoặc 'cancelled'. Bỏ set membership.status. |
-| `gym-backend/src/controllers/dailyQRCodeController.js` | activateCycle đã đúng, chỉ cần update query trong service. |
-| `gym-backend/src/controllers/checkInController.js` | Chuyển từ check Membership.status sang check MembershipCycle.status. |
-| `gym-backend/src/controllers/bookingController.js` | Chuyển từ check Membership.status sang check MembershipCycle.status. |
+### Backend Controllers
+| File | Ghi chú |
+|------|---------|
+| `gym-backend/src/controllers/cancellationController.js` | Tạo yêu cầu hủy (gói chính tính `computeRefundEligibility`, snapshot hoàn period PENDING). Duyệt: cycle → refunded/cancelled, hoàn tiền period chưa bắt đầu. |
+| `gym-backend/src/controllers/dailyQRCodeController.js` | Kiểm tra cycle active khi check-in QR. |
+| `gym-backend/src/controllers/checkInController.js` | Kiểm tra cycle active (không kích hoạt). |
+| `gym-backend/src/controllers/bookingController.js` | Kiểm tra cycle active + expiresAt >= ngày đặt. |
 | `gym-backend/src/controllers/planChangeController.js` | Cập nhật currentPlanId trên Cycle. |
-| `gym-backend/src/controllers/memberController.js` | Khi staff tạo membership: tạo Cycle `pending_initial_activation`. |
-| `gym-backend/src/controllers/membershipController.js` | Không cần sửa nhiều (đã gọi service functions). |
+| `gym-backend/src/controllers/memberController.js` | Staff tạo membership → tạo cycle `active` ngay. |
+| `gym-backend/src/utils/featureCheck.js` | Dùng cycle active. |
 
-### Phase 4 — Jobs + Sockets
-| File | Sửa |
-|------|-----|
-| `gym-backend/src/jobs/refundReminderJob.js` | Tìm cycle `pending_initial_activation` hoặc `pending_renewal_activation`. |
-| `gym-backend/src/jobs/lazyActivatePendingRenewalJobs.js` | **File mới**: cron kích hoạt cycle `pending_renewal_activation` khi cycle trước hết. |
-| `gym-backend/src/services/socketService.js` | `emitRefundRequestUpdate`: đếm cả CancellationRequest. Thêm emit cho approve/reject cancellation. |
+### Jobs
+| File | Ghi chú |
+|------|---------|
+| `gym-backend/src/jobs/activateRenewalCyclesJob.js` | **Đã xoá** — không còn pending cycle. |
+| `gym-backend/src/jobs/refundReminderJob.js` | **Đã xoá** — hoàn tiền theo Business Rule được tính khi xem/xử lý yêu cầu, không cần job nhắc. |
 
-### Phase 5 — Frontend Services
-| File | Sửa |
-|------|-----|
-| `gym-frontend/src/services/membershipService.ts` | Cập nhật type definitions. |
-
-### Phase 6 — Frontend Pages
-| File | Sửa |
-|------|-----|
-| `gym-frontend/src/pages/dashboard/member/MyMembershipPage.tsx` | Render dựa trên cycle.status. Thêm case: pending_initial_activation, pending_renewal_activation, refunded. |
-| `gym-frontend/src/pages/dashboard/member/CancelMembershipPage.tsx` | Cập nhật hiển thị refund info dựa trên cycle. |
-| `gym-frontend/src/pages/dashboard/staff/StaffPaymentsPage.tsx` | Cập nhật status labels. |
-| `gym-frontend/src/pages/dashboard/member/WorkoutPage.tsx` | Check cycle.status thay vì membership.status. |
-
-### Phase 7 — Migration
-| File | Mô tả |
-|------|-------|
-| `gym-backend/scripts/migrateCycleStatuses.js` | **File mới**: chuyển dữ liệu cycle cũ sang status mới. |
-| `gym-backend/scripts/verifyCountFix.js` | Cập nhật nếu cần. |
+### Frontend
+| File | Ghi chú |
+|------|---------|
+| `gym-frontend/src/services/membershipService.ts` | `displayStatus` = active/expiring_soon/expires_today/expired/cancelled/refunded. Bỏ `cancelPendingMembership`. |
+| `gym-frontend/src/pages/dashboard/member/MyMembershipPage.tsx` | Bỏ card "Chờ kích hoạt"/"Sẽ tự kích hoạt". Badge theo displayStatus. Info: Ngày bắt đầu/Ngày hết hạn. |
+| `gym-frontend/src/pages/dashboard/member/CancelMembershipPage.tsx` | Hiển thị "Quyền hoàn tiền" theo Business Rule (7 ngày + chưa dùng quyền lợi); nhãn "Ngày bắt đầu" = registeredAt. |
+| `gym-frontend/src/pages/dashboard/staff/StaffPaymentsPage.tsx` | Bỏ "Chờ kích hoạt". Giải thích hoàn tiền theo Business Rule (7 ngày + chưa dùng quyền lợi). |
+| `gym-frontend/src/pages/dashboard/staff/StaffPlanCounterPage.tsx` | Nút "Đăng ký gói". |
+| `gym-frontend/src/pages/dashboard/staff/StaffCheckinPage.tsx` | "Hạn dùng" + badge active/expired. |
+| `gym-frontend/src/pages/dashboard/pt/PTClientsPage.tsx` | `membershipStatus` active/expired. |
+| `gym-frontend/src/pages/dashboard/member/BookingPage.tsx`, `WorkoutPage.tsx` | Bỏ quyền truy cập tạm cho pending. |
+| `gym-frontend/src/pages/dashboard/admin/AdminMembersPage.tsx` | Nhãn active/expired. |
 
 ---
 
-## 10. Migration Plan
+## 10. Migration (đã chạy)
 
-### Phase 1: Chuẩn bị (Dry-run)
+Script `gym-backend/scripts/migrateCycleStatuses.js` đã chuyển dữ liệu cũ sang mô hình mới:
 
-**Mục tiêu:** Kiểm tra dữ liệu hiện tại, không sửa gì.
+1. `pending_initial_activation` → `active` (kích hoạt ngay, thời hạn tính từ thời điểm mua).
+2. `pending_renewal_activation` → gộp vào cycle active trước đó (extend `durationDays` + `expiresAt`), hoặc tạo cycle active nếu không có cycle trước.
 
-```
-1. Viết script đếm:
-   - Cycle.status='active', activatedAt=null → pending_initial_activation
-   - Cycle.status='pending' → pending_renewal_activation
-   - Cycle.status='active', activatedAt!=null → giữ active
-   - Membership.status='pending_cancel' → active (chuyển xuống cycle)
-   - Membership.status='cancel_requested' → active
-   - Membership.status='refunded' → cancelled
-
-2. Kiểm tra số lượng:
-   - Tổng cycles
-   - Tổng memberships
-   - Có conflict nào không?
-```
-
-### Phase 2: Model
-
-**Mục tiêu:** Sửa schema, chạy migration.
-
-```
-1. Sửa MembershipCycle.js: thêm enum values
-2. Sửa Membership.js: bỏ enum values thừa
-3. Chạy migration script: chuyển dữ liệu cũ
-4. Kiểm tra: compile không lỗi
-```
-
-### Phase 3: Backend Core
-
-**Mục tiêu:** Sửa membershipService và membershipCycleService.
-
-```
-1. membershipCycleService:
-   - activateCycle: tìm pending_initial_activation
-   - Thêm activatePendingRenewalCycles()
-   - getActiveCycle: tìm status='active'
-
-2. membershipService:
-   - subscribeWithWallet: tạo cycle pending_initial_activation
-   - Gia hạn: tạo cycle pending_renewal_activation riêng
-   - getMyMembership: dùng cycle làm nguồn
-   - getCancelInfo: dùng cycle.status
-
-3. cancellationController:
-   - createCancellationRequest: check cycle.status
-   - approveCancellationRequest: set cycle.status, bỏ set membership.status
-```
-
-### Phase 4: Backend Controllers khác
-
-**Mục tiêu:** Cập nhật các controller phụ.
-
-```
-1. bookingController: check cycle.status
-2. checkInController: check cycle.status (staff check-in)
-3. planChangeController: update cycle (không extend)
-4. memberController: tạo cycle pending_initial_activation
-5. refundReminderJob: tìm đúng status
-6. Thêm cron: lazyActivatePendingRenewalCycles
-```
-
-### Phase 5: Socket
-
-**Mục tiêu:** Cập nhật socket events.
-
-```
-1. emitRefundRequestUpdate: đếm cả CancellationRequest
-2. Thêm emit trong approve/reject cancellation
-3. (Tùy chọn) emit cho activate cycle, renew cycle
-```
-
-### Phase 6: Frontend
-
-**Mục tiêu:** Cập nhật giao diện.
-
-```
-1. MyMembershipPage:
-   - Render dựa trên cycle.status
-   - Thêm case pending_initial_activation
-   - Thêm case pending_renewal_activation
-   - Thêm case refunded
-
-2. CancelMembershipPage: cập nhật display
-
-3. StaffPaymentsPage: cập nhật status labels
-
-4. WorkoutPage: check cycle.status
-```
-
-### Phase 7: Test
-
-**Mục tiêu:** Kiểm tra toàn bộ luồng.
-
-```
-1. Test mua mới → pending_initial_activation → check-in → active
-2. Test check-in lần đầu → activatedAt=now, expiresAt=now+durationDays
-3. Test gia hạn → pending_renewal_activation → cron → active
-4. Test hủy pending_initial_activation (trong 7 ngày) → refunded + hoàn 100%
-5. Test hủy pending_initial_activation (quá 7 ngày) → cancelled (không hoàn)
-6. Test hủy pending_renewal_activation → refunded + hoàn 100%
-7. Test hủy active → cancelled (không hoàn)
-8. Test quá 7 ngày chưa check-in → refundEligible=false
-9. Test đổi gói → currentPlanId thay đổi, expiresAt giữ nguyên
-10. Test gia hạn khi chưa kích hoạt → extend durationDays
-11. Test nhiều cycle pending → kích hoạt tuần tự
-12. Test frontend: render đúng cho mọi trạng thái
-```
+Chạy dạng dry-run / commit với `node --env-file=.env scripts/migrateCycleStatuses.js`.
 
 ---
 
 > **Tài liệu này là nguồn duy nhất cho toàn bộ refactor Membership.**
 > Mọi AI / developer sau này đều phải đọc tài liệu này trước khi sửa bất kỳ dòng code nào liên quan đến Membership, MembershipCycle, Cancellation, Refund.
+> **Nguyên tắc bất biến: gói tập được kích hoạt ngay sau khi thanh toán thành công; không còn trạng thái chờ kích hoạt.**

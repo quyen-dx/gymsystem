@@ -30825,7 +30825,7 @@
       "title": "Chính sách hoàn tiền",
       "category": "membership",
       "source": "membership/refund-policy.md",
-      "content": "# Chính sách hoàn tiền\n\n## Điều kiện hoàn tiền\n- Hội viên được hoàn tiền trong vòng 7 ngày kể từ ngày đăng ký gói tập, với điều kiện chưa sử dụng dịch vụ (chưa check-in lần nào).\n- Sau 7 ngày hoặc đã sử dụng dịch vụ, gói tập không được hoàn tiền.\n\n## Mức hoàn tiền\n- Hoàn lại 100% số tiền đã thanh toán nếu đủ điều kiện.\n- Phí giao dịch (nếu có) sẽ được khấu trừ.\n- Thời gian xử lý hoàn tiền: 5-7 ngày làm việc.\n\n## Quy trình yêu cầu hoàn tiền\n1. Đến quầy lễ tân GymPro hoặc gửi yêu cầu qua email.",
+      "content": "# Chính sách hoàn tiền\n\n## Điều kiện hoàn tiền\nHội viên được hoàn tiền khi ĐỒNG THỜI đạt đủ các điều kiện sau:\n1. Còn trong vòng 7 ngày kể từ ngày đăng ký gói tập.\n2. Chưa sử dụng bất kỳ quyền lợi nào của gói.\n\n## Được xem là đã sử dụng quyền lợi khi xảy ra ít nhất một trong các trường hợp\n- Check-in ít nhất 1 lần.\n- Đặt lịch PT.\n- Tham gia lớp học.\n- Sử dụng bất kỳ tính năng nào yêu cầu quyền của gói.\n\n## Gói không được hoàn tiền khi\n- Đã quá 7 ngày kể từ ngày đăng ký gói tập.\n- Hoặc đã sử dụng bất kỳ quyền lợi nào của gói (check-in, đặt lịch PT, tham gia lớp học, sử dụng tính năng yêu cầu quyền của gói).\n\n## Mức hoàn tiền\n- Hoàn lại 100% số tiền đã thanh toán nếu đủ điều kiện.\n- Phí giao dịch (nếu có) sẽ được khấu trừ.\n- Thời gian xử lý hoàn tiền: 5-7 ngày làm việc.\n\n## Quy trình yêu cầu hoàn tiền\n1. Đến quầy lễ tân GymPro hoặc gửi yêu cầu qua email.",
       "updatedAt": "2026-07-22T11:39:30.418Z",
       "embedding": [
         -0.013249454,

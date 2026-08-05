@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { message } from 'antd'
 import { sendChatMessage, sendVisionImage, streamChatMessage } from '../../services/api'
 import { useAuth } from '../../hooks/useAuth'
+import AIMessageFormatter from './AIMessageFormatter'
+import { useQuickActions } from './useQuickActions'
 
 interface ActionButton {
   label: string
@@ -33,7 +35,6 @@ type StoredMessage = {
 type PersistedState = {
   messages: StoredMessage[]
   inputValue: string
-  isOpen: boolean
 }
 
 function getStorageKey(userId: string) {
@@ -46,11 +47,11 @@ function loadState(key: string): PersistedState | null {
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (!parsed || !Array.isArray(parsed.messages)) return null
-    return parsed as PersistedState
+    return { messages: parsed.messages as StoredMessage[], inputValue: parsed.inputValue ?? '' }
   } catch { return null }
 }
 
-function saveState(key: string, state: PersistedState) {
+function saveState(key: string, state: { messages: ChatMessage[]; inputValue: string }) {
   try {
     const mini = state.messages.slice(-50).map(m => ({
       id: m.id, role: m.role, content: m.content,
@@ -61,7 +62,6 @@ function saveState(key: string, state: PersistedState) {
     localStorage.setItem(key, JSON.stringify({
       messages: mini,
       inputValue: state.inputValue,
-      isOpen: state.isOpen,
     }))
   } catch { /* quota exceeded */ }
 }
@@ -194,13 +194,13 @@ export default function AiChatWidget({ drawerOpen = false }: { drawerOpen?: bool
   const userId = user?._id
   const storageKey = userId ? getStorageKey(userId) : null
 
-  // Restore persisted state
+  // Restore persisted chat data only (not open state)
   const restored = useMemo(() => {
     if (!storageKey) return null
     return loadState(storageKey)
   }, [storageKey])
 
-  const [isOpen, setIsOpen] = useState(restored?.isOpen ?? false)
+  const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>(restored?.messages ?? [])
   const [inputValue, setInputValue] = useState(restored?.inputValue ?? '')
   const [isLoading, setIsLoading] = useState(false)
@@ -225,6 +225,27 @@ export default function AiChatWidget({ drawerOpen = false }: { drawerOpen?: bool
   const messagesRef = useRef<ChatMessage[]>(messages)
 
   useEffect(() => { messagesRef.current = messages }, [messages])
+
+  // Context-aware quick actions
+  const lastUserMsg = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') return messages[i].content
+    }
+    return ''
+  }, [messages])
+  const lastAssistantContent = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant') return messages[i].content
+    }
+    return ''
+  }, [messages])
+
+  const contextActions = useQuickActions(lastUserMsg, lastAssistantContent)
+
+  const handleNavigateAndClose = useCallback((route: string) => {
+    navigate(route)
+    setIsOpen(false)
+  }, [navigate])
 
   // Revoke all blob URLs on unmount
   useEffect(() => {
@@ -252,16 +273,16 @@ export default function AiChatWidget({ drawerOpen = false }: { drawerOpen?: bool
     }
   }, [userId])
 
-  // Persist: messages, inputValue, isOpen
+  // Persist: messages + inputValue only (NOT isOpen)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
   useEffect(() => {
     if (!storageKey) return
     clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
-      saveState(storageKey, { messages, inputValue, isOpen })
+      saveState(storageKey, { messages, inputValue })
     }, 300)
     return () => clearTimeout(saveTimerRef.current)
-  }, [messages, inputValue, isOpen, storageKey])
+  }, [messages, inputValue, storageKey])
 
   // Typing animation
   useEffect(() => {
@@ -447,12 +468,16 @@ export default function AiChatWidget({ drawerOpen = false }: { drawerOpen?: bool
     }, abortController.signal)
 
     if (!streamed) {
-      try {
-        const data = await sendChatMessage(text)
-        setMessages(prev => prev.map(m => m.id === botId ? { ...m, content: data.reply || 'Đã xảy ra lỗi.', cards: data.cards as unknown[] | undefined, suggestions: data.suggestions, links: data.deeplinks?.map(path => ({ label: 'Xem chi tiết', path })), actions: data.actions } : m))
-        startTyping(botId)
-      } catch {
-        setMessages(prev => prev.map(m => m.id === botId ? { ...m, content: streamError || 'Đã xảy ra lỗi, vui lòng thử lại sau.' } : m))
+      if (abortController.signal.aborted) {
+        setMessages(prev => prev.map(m => m.id === botId ? { ...m, content: m.content || 'Đã dừng tạo phản hồi.' } : m))
+      } else {
+        try {
+          const data = await sendChatMessage(text)
+          setMessages(prev => prev.map(m => m.id === botId ? { ...m, content: data.reply || 'Đã xảy ra lỗi.', cards: data.cards as unknown[] | undefined, suggestions: data.suggestions, links: data.deeplinks?.map(path => ({ label: 'Xem chi tiết', path })), actions: data.actions } : m))
+          startTyping(botId)
+        } catch {
+          setMessages(prev => prev.map(m => m.id === botId ? { ...m, content: streamError || 'Đã xảy ra lỗi, vui lòng thử lại sau.' } : m))
+        }
       }
       setIsLoading(false); abortRef.current = null
     }
@@ -462,7 +487,13 @@ export default function AiChatWidget({ drawerOpen = false }: { drawerOpen?: bool
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
 
-  const handleStop = () => { abortRef.current?.abort(); abortRef.current = null; setIsLoading(false) }
+  const handleStop = () => {
+    if (abortRef.current) {
+      abortRef.current.abort()
+      abortRef.current = null
+      setIsLoading(false)
+    }
+  }
 
   // Styles
   const isSent = useMemo(() => (inputValue.trim() || selectedImage) && !isLoading && !isImageLoading, [inputValue, selectedImage, isLoading, isImageLoading])
@@ -607,7 +638,19 @@ export default function AiChatWidget({ drawerOpen = false }: { drawerOpen?: bool
                         />
                       </div>
                     )}
-                    {showText && display}
+                    {showText && (
+                      <AIMessageFormatter
+                        content={display}
+                        externalActions={
+                          msg.role === 'assistant' && (progress === undefined || progress >= msg.content.length)
+                            ? contextActions.map(a => ({
+                                label: a.label,
+                                onClick: () => handleNavigateAndClose(a.route),
+                              }))
+                            : undefined
+                        }
+                      />
+                    )}
                     {msg.role === 'assistant' && progress !== undefined && progress < msg.content.length && <span style={{ display:'inline-block', width:2, height:14, background:'var(--theme-text)', marginLeft:2, animation:'blink 0.7s infinite' }} />}
                   </div>
                   {/* Copy action below completed assistant messages */}
@@ -617,51 +660,6 @@ export default function AiChatWidget({ drawerOpen = false }: { drawerOpen?: bool
                       onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-muted)'; e.currentTarget.style.textDecoration = 'none' }}>
                       Sao chép
                     </button>
-                  )}
-                  {/* Action buttons below completed assistant messages */}
-                  {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (progress === undefined || progress >= msg.content.length) && (
-                    <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8, maxWidth:'82%' }}>
-                      {msg.actions.map((action, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => navigate(action.route)}
-                          style={{
-                            display:'inline-flex', alignItems:'center',
-                            padding:'7px 14px', borderRadius:20, fontSize:13, fontWeight:600,
-                            cursor:'pointer', border:'1.5px solid',
-                            transition:'all 0.15s',
-                            ...(action.variant === 'primary' ? {
-                              background: 'var(--theme-accent, #7c3aed)',
-                              color: '#fff',
-                              borderColor: 'var(--theme-accent, #7c3aed)',
-                            } : {
-                              background: 'transparent',
-                              color: 'var(--theme-accent, #7c3aed)',
-                              borderColor: 'var(--theme-accent, #7c3aed)',
-                            }),
-                          }}
-                          onMouseEnter={e => {
-                            if (action.variant === 'primary') {
-                              e.currentTarget.style.opacity = '0.85'
-                            } else {
-                              e.currentTarget.style.background = 'var(--theme-accent, #7c3aed)'
-                              e.currentTarget.style.color = '#fff'
-                            }
-                          }}
-                          onMouseLeave={e => {
-                            if (action.variant === 'primary') {
-                              e.currentTarget.style.opacity = '1'
-                            } else {
-                              e.currentTarget.style.background = 'transparent'
-                              e.currentTarget.style.color = 'var(--theme-accent, #7c3aed)'
-                            }
-                          }}
-                        >
-                          {action.label}
-                        </button>
-                      ))}
-                    </div>
                   )}
                 </div>
               )

@@ -7,6 +7,7 @@ import Plan from '../models/Plan.js'
 import UserActivity from '../models/UserActivity.js'
 import PTAssignment from '../models/PTAssignment.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
+import ClassEnrollment from '../models/ClassEnrollment.js'
 import TrainingClass from '../models/TrainingClass.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import TrainingRequest from '../models/TrainingRequest.js'
@@ -18,13 +19,8 @@ import AppError from '../utils/appError.js'
 import sendError from '../utils/sendError.js'
 import { isValidEmail, isValidPhone, normalizePhone } from '../utils/identifier.js'
 import { normalizeUserMemberIdentity } from '../utils/memberIdentity.js'
-
-const calculateRemainingDays = (endDate) => {
-  const now = new Date()
-  const end = new Date(endDate)
-  end.setHours(23, 59, 59, 999)
-  return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
-}
+import { calculateRemainingDays } from '../utils/dateUtils.js'
+import { getActivePeriodEndDate } from '../utils/membershipDays.js'
 
 const PLAN_OFFLINE_PAYMENT_TYPE = 'PLAN_PURCHASE_OFFLINE'
 const BANK_INFO = {
@@ -125,9 +121,13 @@ export const getMembers = async (req, res) => {
           .sort({ createdAt: -1 })
           .lean()
 
+        const periodEndDate = activeCycle
+          ? await getActivePeriodEndDate({ membershipId: activeCycle.currentMembershipId, cycle: activeCycle })
+          : null
+
         let remainingDays = 0
-        if (activeCycle) {
-          remainingDays = calculateRemainingDays(activeCycle.expiresAt)
+        if (periodEndDate) {
+          remainingDays = calculateRemainingDays(periodEndDate)
         }
 
         const checkinCount = await UserActivity.countDocuments({
@@ -135,7 +135,7 @@ export const getMembers = async (req, res) => {
           type: 'checkin',
         })
 
-        const membershipExpired = Boolean(activeCycle && (!activeCycle.expiresAt || new Date(activeCycle.expiresAt) < new Date()))
+        const membershipExpired = Boolean(activeCycle && (!periodEndDate || new Date(periodEndDate) < new Date()))
         const hasActivePlan = Boolean(activeCycle && !membershipExpired && remainingDays > 0)
         let matchFilter = false
         if (planId && activeCycle) {
@@ -148,9 +148,30 @@ export const getMembers = async (req, res) => {
 
         if (remainingDaysMin && remainingDays < Number(remainingDaysMin)) matchFilter = false
         if (remainingDaysMax && remainingDays > Number(remainingDaysMax)) matchFilter = false
-        if (remainingDaysFilter === 'under7' && (!activeCycle || membershipExpired || remainingDays >= 7)) matchFilter = false
-        if (remainingDaysFilter === 'under15' && (!activeCycle || membershipExpired || remainingDays >= 15)) matchFilter = false
-        if (remainingDaysFilter === 'under30' && (!activeCycle || membershipExpired || remainingDays >= 30)) matchFilter = false
+        if (remainingDaysFilter) {
+          const matchesRemainingRange = (() => {
+            switch (String(remainingDaysFilter)) {
+              case '0-7':
+                return remainingDays >= 0 && remainingDays <= 7
+              case '8-30':
+                return remainingDays >= 8 && remainingDays <= 30
+              case '31-90':
+                return remainingDays >= 31 && remainingDays <= 90
+              case '90+':
+                return remainingDays > 90
+              // Backward compatibility for old clients; still use actual remainingDays.
+              case 'under7':
+                return remainingDays >= 0 && remainingDays <= 7
+              case 'under15':
+                return remainingDays >= 0 && remainingDays <= 14
+              case 'under30':
+                return remainingDays >= 0 && remainingDays <= 29
+              default:
+                return true
+            }
+          })()
+          if (!matchesRemainingRange) matchFilter = false
+        }
         if (membershipStatus === 'no_plan' && activeCycle) matchFilter = false
         if (membershipStatus === 'active' && !hasActivePlan) matchFilter = false
         if (membershipStatus === 'expiring' && (!hasActivePlan || remainingDays > 7)) matchFilter = false
@@ -167,7 +188,7 @@ export const getMembers = async (req, res) => {
             planId: activeCycle.currentPlanId,
             status: 'active',
             startDate: activeCycle.startDate,
-            endDate: activeCycle.expiresAt,
+            endDate: periodEndDate,
             remainingDays,
           } : null,
           membershipHistory,
@@ -252,14 +273,17 @@ export const getExpiringMembers = async (req, res) => {
       .sort({ expiresAt: 1 })
       .lean()
 
-    const members = cycles.map((c) => ({
-      ...c.memberId,
-      membership: {
-        plan: c.currentPlanId,
-        startDate: c.startDate,
-        endDate: c.expiresAt,
-        remainingDays: calculateRemainingDays(c.expiresAt),
-      },
+    const members = await Promise.all(cycles.map(async (c) => {
+      const periodEndDate = await getActivePeriodEndDate({ membershipId: c.currentMembershipId, cycle: c })
+      return {
+        ...c.memberId,
+        membership: {
+          plan: c.currentPlanId,
+          startDate: c.startDate,
+          endDate: periodEndDate,
+          remainingDays: periodEndDate ? calculateRemainingDays(periodEndDate) : 0,
+        },
+      }
     }))
 
     res.json({ members })
@@ -286,9 +310,11 @@ export const getMemberById = async (req, res) => {
         .lean(),
     ])
 
-    const remainingDays = activeCycle
-      ? calculateRemainingDays(activeCycle.expiresAt)
-      : 0
+    const periodEndDate = activeCycle
+      ? await getActivePeriodEndDate({ membershipId: activeCycle.currentMembershipId, cycle: activeCycle })
+      : null
+
+    const remainingDays = periodEndDate ? calculateRemainingDays(periodEndDate) : 0
 
     const activeMembership = activeCycle ? {
       _id: activeCycle.currentMembershipId,
@@ -296,7 +322,7 @@ export const getMemberById = async (req, res) => {
       planId: activeCycle.currentPlanId,
       status: 'active',
       startDate: activeCycle.startDate,
-      endDate: activeCycle.expiresAt,
+      endDate: periodEndDate,
       remainingDays,
     } : null
 
@@ -586,7 +612,7 @@ export const registerPlanForMember = async (req, res) => {
 
     const payment = await getPlanPurchasePayment({ paymentId, memberId: member._id, planId: plan._id })
     if (!payment) throw new AppError('Không tìm thấy payment mua gói phù hợp', 404)
-    if (payment.status !== 'PAID') throw new AppError('Payment chưa PAID, không thể kích hoạt gói', 400)
+    if (payment.status !== 'PAID') throw new AppError('Payment chưa PAID, không thể đăng ký gói', 400)
     if (Number(payment.amount) < Number(plan.price || 0)) {
       throw new AppError('Số tiền payment không đủ giá gói', 400)
     }
@@ -1171,8 +1197,11 @@ export const searchMembers = async (req, res) => {
       }
     }
 
-    const result = members.map((member) => {
+    const result = await Promise.all(members.map(async (member) => {
       const cycle = cycleByMemberId[String(member._id)] || null
+      const periodEndDate = cycle
+        ? await getActivePeriodEndDate({ membershipId: cycle.currentMembershipId, cycle })
+        : null
       return {
         _id: member._id,
         name: member.fullName || member.name,
@@ -1186,12 +1215,12 @@ export const searchMembers = async (req, res) => {
           ? {
               planName: cycle.currentPlanId?.nameVi || cycle.currentPlanId?.nameEn || '',
               startDate: cycle.startDate,
-              endDate: cycle.expiresAt,
-              remainingDays: calculateRemainingDays(cycle.expiresAt),
+              endDate: periodEndDate,
+              remainingDays: periodEndDate ? calculateRemainingDays(periodEndDate) : 0,
             }
           : null,
       }
-    })
+    }))
 
     res.json({ members: result })
   } catch (error) {
@@ -1321,13 +1350,31 @@ export const getMyEnrollmentStatus = async (req, res) => {
   try {
     const memberId = req.user._id
 
-    const [assignment, trainingAssignment, pendingRequest, activeSchedules] = await Promise.all([
+    // Chỉ trả về enrollment data nếu member có membership đang active
+    const activeCycle = await MembershipCycle.findOne({ memberId, status: 'active' }).lean()
+    if (!activeCycle) {
+      return res.json({
+        hasActiveEnrollment: false,
+        assignmentType: null,
+        hasActiveSchedules: false,
+        hasPendingRequest: false,
+        pendingRequest: null,
+        pt: null,
+        class: null,
+        workout: null,
+      })
+    }
+
+    const [assignment, trainingAssignment, classEnrollment, pendingRequest, activeSchedules] = await Promise.all([
       PTAssignment.findOne({ memberId, status: 'active' })
         .populate('ptId', 'name fullName email')
         .populate('workoutId', 'name goal')
         .lean(),
       TrainingAssignment.findOne({ memberId, status: 'active' })
         .populate('classId')
+        .lean(),
+      ClassEnrollment.findOne({ memberId, status: 'active' })
+        .populate('classId', 'name code specialization daysOfWeek startTime endTime')
         .lean(),
       TrainingRequest.findOne({ memberId, status: 'pending' })
         .select('_id specialization timeSlots daysOfWeek')
@@ -1336,10 +1383,13 @@ export const getMyEnrollmentStatus = async (req, res) => {
     ])
 
     let classInfo = null
-    if (trainingAssignment?.classId) {
-      const cls = typeof trainingAssignment.classId === 'object'
-        ? trainingAssignment.classId
-        : await TrainingClass.findById(trainingAssignment.classId)
+    // Nguồn lớp hợp lệ: TrainingAssignment (legacy) HOẶC ClassEnrollment (hiện tại).
+    // Ưu tiên TrainingAssignment, fallback ClassEnrollment để không bỏ sót hội viên nhóm.
+    const classSource = trainingAssignment?.classId || classEnrollment?.classId
+    if (classSource) {
+      const cls = typeof classSource === 'object'
+        ? classSource
+        : await TrainingClass.findById(classSource)
             .select('name code specialization daysOfWeek startTime endTime')
             .lean()
       if (cls) {
@@ -1362,10 +1412,18 @@ export const getMyEnrollmentStatus = async (req, res) => {
       ? { name: assignment.workoutId.name, goal: assignment.workoutId.goal }
       : null
 
-    const hasActiveEnrollment = !!(assignment || trainingAssignment)
+    // Loại hình tập luyện là nguồn quyết định nút thao tác:
+    // - Đang trong lớp nhóm (dù có PTAssignment do PT lớp tạo ra) → 'group' → chỉ hiển thị "Rời lớp"
+    // - Chỉ có PT riêng (không trong lớp) → 'private' → chỉ hiển thị "Rời PT"
+    let assignmentType = null
+    if (classInfo) assignmentType = 'group'
+    else if (ptInfo) assignmentType = 'private'
+
+    const hasActiveEnrollment = !!(assignment || trainingAssignment || classEnrollment)
 
     res.json({
       hasActiveEnrollment,
+      assignmentType,
       hasActiveSchedules: activeSchedules > 0,
       hasPendingRequest: !!pendingRequest,
       pendingRequest: pendingRequest

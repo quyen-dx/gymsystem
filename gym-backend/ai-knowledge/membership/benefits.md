@@ -1,4 +1,13 @@
-# Quyền lợi từng gói tập
+# Quyền lợi từng gói tập (THAM KHẢO — KHÔNG PHẢI NGUỒN SỰ THẬT)
+
+⚠️ **QUAN TRỌNG:** Tài liệu này chỉ là kiến thức tham khảo tĩnh.
+**Database luôn là nguồn sự thật (source of truth).**
+AI phải dùng `databaseQuery` intent `list_plans` / `plan_detail` để lấy dữ liệu gói tập thực tế.
+KHÔNG dùng thông tin trong file này để trả lời người dùng.
+
+---
+
+Nội dung bên dưới có thể đã lỗi thời. Chỉ dùng khi database không khả dụng (fallback).
 
 ## Gói Tháng
 - Giá: 500.000 VNĐ/tháng

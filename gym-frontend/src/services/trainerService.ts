@@ -1,6 +1,7 @@
 import api from './api'
 import type { PT, PTBooking, PTDaySchedule } from '../types/admin/trainer'
 import type { TrainingClass } from './trainingGroupService'
+import type { ScheduleReplacement } from './shiftChangeService'
 
 export interface WeekAttendeeMember {
   _id: string
@@ -41,7 +42,7 @@ export const trainerService = {
     api.get<{ classes: TrainingClass[] }>('/pts/my-classes'),
 
   getPTMyWeekAttendees: (weekStart: string) =>
-    api.get<{ attendees: WeekAttendee[] }>('/pts/my-week-attendees', { params: { weekStart } }),
+    api.get<{ attendees: WeekAttendee[]; replacements?: ScheduleReplacement[] }>('/pts/my-week-attendees', { params: { weekStart } }),
 
   createPT: (data: FormData | Record<string, unknown>) =>
     api.post('/pts', data, data instanceof FormData

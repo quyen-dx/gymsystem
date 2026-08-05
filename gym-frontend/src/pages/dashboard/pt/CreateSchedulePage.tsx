@@ -19,6 +19,7 @@ import {
   Tooltip,
 } from 'antd'
 import dayjs from 'dayjs'
+import 'dayjs/locale/vi'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
@@ -29,8 +30,14 @@ import { ptAssignmentService, type SuggestedSlot } from '../../../services/ptAss
 import { scheduleService } from '../../../services/scheduleService'
 import { workoutService, type TemplateDay, type TemplateDayExercise, type WorkoutPlan } from '../../../services/workoutService'
 
-const DAY_LABEL_MAP = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
 const DAY_SHORT = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
+
+dayjs.locale('vi')
+
+const formatDayLabel = (dayOfWeek: number) => {
+  const shortLabel = dayjs().day(dayOfWeek).format('dd')
+  return shortLabel === 'CN' ? 'Chủ nhật' : `Thứ ${shortLabel.slice(1)}`
+}
 
 const BUFFER_HOURS = 12
 
@@ -99,21 +106,54 @@ export default function CreateSchedulePage() {
     if (!memberId) return
     setPageLoading(true)
     try {
-      const [memberRes, tmplRes, slotsRes, prefsRes] = await Promise.all([
+      const [memberRes, tmplRes, slotsRes, prefsRes, assignmentsRes] = await Promise.all([
         memberService.getMemberById(memberId),
         workoutService.getTemplates(),
         ptAssignmentService.getSuggestedSlots(),
         ptAssignmentService.getMemberPreferences(memberId),
+        ptAssignmentService.getPTClients(),
       ])
+      const assignments = assignmentsRes.data?.assignments || []
+      const assignment = assignments.find((item) => assignmentId
+        ? String(item._id) === String(assignmentId)
+        : String(typeof item.memberId === 'object' ? item.memberId._id : item.memberId) === String(memberId))
+      const currentSchedule = assignment?.currentSchedule || assignment?.schedule
+      const acceptedProposal = assignment?.acceptedProposal
+      const matchedClass = assignment?.matchedClass || assignment?.classId
+      const classData = matchedClass && typeof matchedClass === 'object' ? matchedClass : null
+      const effectiveTimeSlots = currentSchedule?.timeSlots?.length
+        ? currentSchedule.timeSlots
+        : currentSchedule?.startTime && currentSchedule?.endTime
+          ? [`${currentSchedule.startTime.slice(0, 5)}-${currentSchedule.endTime.slice(0, 5)}`]
+          : acceptedProposal?.timeSlots?.length
+            ? acceptedProposal.timeSlots
+            : acceptedProposal?.startTime && acceptedProposal?.endTime
+              ? [`${acceptedProposal.startTime.slice(0, 5)}-${acceptedProposal.endTime.slice(0, 5)}`]
+              : classData?.startTime && classData?.endTime
+                ? [`${classData.startTime.slice(0, 5)}-${classData.endTime.slice(0, 5)}`]
+                : prefsRes.data?.timeSlots || []
+      const effectiveDays = currentSchedule?.daysOfWeek?.length
+        ? currentSchedule.daysOfWeek
+        : acceptedProposal?.daysOfWeek?.length
+          ? acceptedProposal.daysOfWeek
+          : classData?.daysOfWeek?.length
+            ? classData.daysOfWeek
+            : prefsRes.data?.daysOfWeek || []
+      const effectiveSpecialization = currentSchedule?.specialization
+        || acceptedProposal?.specialization
+        || classData?.specialization
+        || prefsRes.data?.specialization
+        || ''
+      const effectiveGoals = acceptedProposal?.goals?.length ? acceptedProposal.goals : prefsRes.data?.goals || []
       const memberData = memberRes.data?.member
       setClientInfo(memberData ? { fullName: memberData.fullName || memberData.name, preferredTime: memberData.preferredTime } : null)
       setTemplates(Array.isArray(tmplRes.data) ? tmplRes.data : [])
       setAllAvailableSlots(slotsRes.data.slots || [])
-      setPreferredTimeSlots(prefsRes.data?.timeSlots || [])
-      setPreferredDaysOfWeek(prefsRes.data?.daysOfWeek || [])
+      setPreferredTimeSlots(effectiveTimeSlots)
+      setPreferredDaysOfWeek(effectiveDays)
       const pd = prefsRes.data
       if (pd && (pd.goals?.length > 0 || pd.desiredSessions > 0 || pd.healthNotes || pd.isNewToGym || pd.note || pd.specialization)) {
-        setMemberPrefs({ goals: pd.goals || [], desiredSessions: pd.desiredSessions || 0, healthNotes: pd.healthNotes || '', isNewToGym: pd.isNewToGym || false, note: pd.note || '', specialization: pd.specialization || '' })
+        setMemberPrefs({ goals: effectiveGoals, desiredSessions: pd.desiredSessions || 0, healthNotes: pd.healthNotes || '', isNewToGym: pd.isNewToGym || false, note: pd.note || '', specialization: effectiveSpecialization })
       }
     } catch {
       message.error('Không thể tải dữ liệu')
@@ -340,7 +380,7 @@ export default function CreateSchedulePage() {
                   {preferredDaysOfWeek.length > 0 ? (
                     <div className="cs-info-row flex items-start gap-2">
                       <span className="cs-label text-xs font-medium text-[var(--gs-text-muted)] w-28 shrink-0 pt-0.5">Ngày mong muốn:</span>
-                      <div className="flex flex-wrap gap-1">{preferredDaysOfWeek.map((d, i) => <Tag key={i} color="blue" className="m-0 text-xs">{DAY_LABEL_MAP[d]}</Tag>)}</div>
+                      <div className="flex flex-wrap gap-1">{preferredDaysOfWeek.map((d, i) => <Tag key={i} color="blue" className="m-0 text-xs">{formatDayLabel(d)}</Tag>)}</div>
                     </div>
                   ) : (
                     <div className="cs-info-row flex items-start gap-2">
@@ -448,7 +488,7 @@ export default function CreateSchedulePage() {
                       style={{ width: 180 }} placeholder="Chọn ngày bắt đầu" disabledDate={(d) => d.isBefore(dayjs(), 'day')} />
                     {startDate && (
                       <p className="mt-1 text-[11px] text-[var(--gs-text-muted)]">
-                        Buổi tập đầu tiên: {DAY_LABEL_MAP[startDate.day()]}, {startDate.format('DD/MM/YYYY')}
+                        Buổi tập đầu tiên: {formatDayLabel(startDate.day())}, {startDate.format('DD/MM/YYYY')}
                         <span className="ml-1 text-[var(--gs-text-soft)]">— cách hiện tại ít nhất {BUFFER_HOURS} giờ</span>
                       </p>
                     )}
@@ -509,7 +549,7 @@ export default function CreateSchedulePage() {
                       <ClockCircleOutlined style={{ color: '#22C55E' }} />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-[var(--gs-text)]">{slot.dayLabel}</span>
+                          <span className="font-medium text-[var(--gs-text)]">{formatDayLabel(slot.dayOfWeek)}</span>
                           {usedByDayOrder ? <Tag className="m-0 text-[10px] leading-none" color="blue" style={{ fontSize: 10, lineHeight: '16px' }}>Buổi {usedByDayOrder}</Tag> : <span className="text-[10px] text-green-500">Khớp</span>}
                         </div>
                         <div className="text-green-400">{slot.startTime} - {slot.endTime}</div>
@@ -524,7 +564,7 @@ export default function CreateSchedulePage() {
                   <Tooltip key={`${slot.dayOfWeek}-${slot.time}`} title="Không nằm trong khung giờ mong muốn của hội viên">
                     <span className="flex cursor-not-allowed items-center gap-2 rounded-lg border-2 border-[var(--gs-border)] px-3 py-2 text-left text-xs opacity-40 grayscale">
                       <ClockCircleOutlined style={{ color: 'var(--gs-text-muted)' }} />
-                      <div className="flex-1"><span className="font-medium text-[var(--gs-text)]">{slot.dayLabel}</span><span className="ml-2 text-[10px] text-[var(--gs-text-muted)]">Không khớp</span><div className="text-green-400">{slot.startTime} - {slot.endTime}</div><div className="text-[var(--gs-text-muted)]">[{slot.classCode}] {slot.className}</div></div>
+                      <div className="flex-1"><span className="font-medium text-[var(--gs-text)]">{formatDayLabel(slot.dayOfWeek)}</span><span className="ml-2 text-[10px] text-[var(--gs-text-muted)]">Không khớp</span><div className="text-green-400">{slot.startTime} - {slot.endTime}</div><div className="text-[var(--gs-text-muted)]">[{slot.classCode}] {slot.className}</div></div>
                       <Tag className="m-0 text-[10px] leading-none" style={{ fontSize: 10, lineHeight: '16px' }}>{slot.count}/{slot.maxCapacity || 5}</Tag>
                     </span>
                   </Tooltip>
@@ -575,7 +615,7 @@ export default function CreateSchedulePage() {
                             </div>
                             {day.time && day.date && (
                               <div className="mt-1 space-y-0.5">
-                                <div className="flex items-center gap-2 text-xs text-green-400"><CheckCircleFilled />{DAY_LABEL_MAP[day.date.day()]}, {day.date.format('DD/MM/YYYY')}<span className="text-[var(--gs-text-muted)]">{day.time.format('HH:mm')}{day.endTime ? ` - ${day.endTime}` : ''}</span></div>
+                                <div className="flex items-center gap-2 text-xs text-green-400"><CheckCircleFilled />{formatDayLabel(day.date.day())}, {day.date.format('DD/MM/YYYY')}<span className="text-[var(--gs-text-muted)]">{day.time.format('HH:mm')}{day.endTime ? ` - ${day.endTime}` : ''}</span></div>
                                 {day.className && <div className="text-xs text-[var(--gs-text-muted)]">📍 {day.className}{day.classCode ? ` (${day.classCode})` : ''}</div>}
                               </div>
                             )}

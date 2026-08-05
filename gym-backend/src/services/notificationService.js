@@ -77,6 +77,9 @@ export async function createNotification({
   redirectUrl = null,
   createdBy = 'System',
   sendEmail = null,
+  requiresAction = false,
+  actions = [],
+  priority = 'normal',
 }) {
   const category = getCategory(notificationType)
 
@@ -103,6 +106,9 @@ export async function createNotification({
     relatedType,
     requestId: relatedType === 'PTAssignmentEndRequest' ? relatedId : null,
     redirectUrl,
+    requiresAction,
+    actions,
+    priority,
     createdBy,
   })
 
@@ -135,7 +141,11 @@ export async function createNotification({
 }
 
 export async function markAsRead(id) {
-  return Notification.findByIdAndUpdate(id, { isRead: true, readAt: new Date() }, { new: true })
+  return Notification.findByIdAndUpdate(
+    id,
+    { isRead: true, readAt: new Date(), requiresAction: false },
+    { new: true },
+  )
 }
 
 export async function markAsUnread(id) {
@@ -146,34 +156,43 @@ export async function softDelete(id) {
   return Notification.findByIdAndUpdate(id, { deletedAt: new Date() }, { new: true })
 }
 
+// Các role thuộc nhóm "staff" (quản trị hệ thống) mới được nhận broadcast admin/staff.
+// Member/PT/Seller KHÔNG được nhận các notification dành cho admin/staff.
+const STAFF_ROLES = ['admin', 'staff', 'super_admin']
+
+const isStaffRole = (role) => STAFF_ROLES.includes(role)
+
 export async function getNotificationsForUser(userId, role) {
+  const staff = isStaffRole(role)
   const filter = {
     deletedAt: null,
     $or: [
       { receiverId: userId },
       { receiverId: null, receiverRole: role },
-      { receiverId: null, receiverRole: { $in: ['admin', 'staff', 'super_admin'] } },
+      ...(staff ? [{ receiverId: null, receiverRole: { $in: STAFF_ROLES } }] : []),
     ],
   }
   return Notification.find(filter).sort({ createdAt: -1 }).lean()
 }
 
 export async function countUnread(userId, role) {
+  const staff = isStaffRole(role)
   const filter = {
     isRead: false,
     deletedAt: null,
     $or: [
       { receiverId: userId },
       { receiverId: null, receiverRole: role },
-      { receiverId: null, receiverRole: { $in: ['admin', 'staff', 'super_admin'] } },
+      ...(staff ? [{ receiverId: null, receiverRole: { $in: STAFF_ROLES } }] : []),
     ],
   }
   return Notification.countDocuments(filter)
 }
 
 export async function markAllAsRead(userId) {
+  // Action Notification (requiresAction=true) KHÔNG được đánh dấu đã đọc khi mark-all-read
   return Notification.updateMany(
-    { receiverId: userId, isRead: false, deletedAt: null },
+    { receiverId: userId, isRead: false, deletedAt: null, requiresAction: { $ne: true } },
     { isRead: true, readAt: new Date() },
   )
 }

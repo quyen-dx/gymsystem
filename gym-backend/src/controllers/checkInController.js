@@ -4,7 +4,6 @@ import CheckIn from '../models/CheckIn.js'
 import MembershipCycle from '../models/MembershipCycle.js'
 import User from '../models/User.js'
 import Plan from '../models/Plan.js'
-import { activateCycle } from '../services/membershipCycleService.js'
 import { recordUserActivity } from '../services/userActivityService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
@@ -75,11 +74,8 @@ const buildVietnamDateRange = ({ mode = 'today', date }) => {
 
 const getActiveMembership = (memberId) => MembershipCycle.findOne({
   memberId,
-  status: { $in: ['active', 'pending_initial_activation'] },
-  $or: [
-    { status: 'pending_initial_activation' },
-    { status: 'active', expiresAt: { $gte: new Date() } },
-  ],
+  status: 'active',
+  expiresAt: { $gte: new Date() },
 })
   .populate('currentPlanId', 'nameVi nameEn durationDays price color')
   .sort({ createdAt: -1 })
@@ -276,10 +272,9 @@ export const searchMemberForCheckin = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean()
 
+    // Cycle active là nguồn sự thật duy nhất (kích hoạt ngay sau thanh toán)
     const activeCycle = cycles.find(c => c.status === 'active' && c.expiresAt >= new Date())
-    const pendingCycle = cycles.find(c => c.status === 'pending_initial_activation')
-    const latestExpired = cycles.find(c => c.status === 'expired' || c.expiresAt < new Date())
-    const latestCycle = activeCycle || pendingCycle || latestExpired || null
+    const latestCycle = activeCycle || cycles[0] || null
 
     let membershipStatus = null
     let membershipInfo = null
@@ -292,16 +287,6 @@ export const searchMemberForCheckin = async (req, res) => {
         endDate: activeCycle.expiresAt,
         price: activeCycle.price,
         status: 'active',
-      }
-    } else if (pendingCycle) {
-      membershipStatus = 'pending_initial_activation'
-      membershipInfo = {
-        planName: pendingCycle.currentPlanId?.nameVi || pendingCycle.currentPlanId?.nameEn || '',
-        planColor: pendingCycle.currentPlanId?.color || '',
-        startDate: pendingCycle.startDate,
-        endDate: pendingCycle.expiresAt,
-        price: pendingCycle.price,
-        status: 'pending_initial_activation',
       }
     } else if (latestCycle) {
       membershipStatus = 'expired'
@@ -380,17 +365,6 @@ export const staffVerifyCheckin = async (req, res) => {
     if (recentCheckin) {
       await mongoSession.abortTransaction()
       throw new AppError('Hội viên này đã check-in thành công trước đó!', 429, 'ALREADY_CHECKED_IN')
-    }
-
-    // If cycle is pending_initial_activation, activate before completing check-in
-    if (activeMembership.status === 'pending_initial_activation') {
-      const activated = await activateCycle(member._id, { session: mongoSession })
-      if (!activated) {
-        await mongoSession.abortTransaction()
-        throw new AppError('Không thể kích hoạt gói tập. Vui lòng thử lại.', 500)
-      }
-      // Use activated cycle info for the response
-      activeMembership.status = 'active'
     }
 
     const streakDay = (await calculateStreak(member._id)) + 1

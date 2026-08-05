@@ -298,9 +298,7 @@ export default function StaffCheckinPage() {
                         </Text>
                       </div>
                       <div className="flex justify-between">
-                        <Text className="text-[var(--gs-text-muted)]">
-                          {searchedMember.membership.status === 'pending_initial_activation' ? 'Ngày mua:' : 'Hạn dùng:'}
-                        </Text>
+                        <Text className="text-[var(--gs-text-muted)]">Hạn dùng:</Text>
                         <Text className="text-[var(--gs-text)]">
                           {new Date(searchedMember.membership.endDate).toLocaleDateString('vi-VN')}
                         </Text>
@@ -317,10 +315,8 @@ export default function StaffCheckinPage() {
                         <Text className="text-[var(--gs-text-muted)]">Trạng thái:</Text>
                         {searchedMember.membership.status === 'active' ? (
                           <Tag color="success">Đang hoạt động</Tag>
-                        ) : searchedMember.membership.status === 'pending_initial_activation' ? (
-                          <Tag color="warning">Chờ kích hoạt</Tag>
                         ) : (
-                          <Tag color="error">Đã hết hạn</Tag>
+                          <Tag color="red">Đã hết hạn</Tag>
                         )}
                       </div>
                     </>

@@ -94,6 +94,7 @@ export default function MemberLayout({
     }
     fetchNotifCount()
     const interval = setInterval(fetchNotifCount, 30000)
+    window.addEventListener('gympro:training-cleanup', fetchNotifCount)
 
     // Socket: lang nghe notification moi
     socketService.connect()
@@ -104,6 +105,7 @@ export default function MemberLayout({
 
     return () => {
       clearInterval(interval)
+      window.removeEventListener('gympro:training-cleanup', fetchNotifCount)
       socketService.off('notification:new', handler)
     }
   }, [])

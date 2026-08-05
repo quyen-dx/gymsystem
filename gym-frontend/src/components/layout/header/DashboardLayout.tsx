@@ -25,16 +25,16 @@ import {
 } from 'antd'
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { usePtRequests } from '../../../context/PtRequestProvider'
 import { useSystemSettings } from '../../../context/SystemSettingsContext'
 import { useAuth } from '../../../hooks/useAuth'
 import { membershipService } from '../../../services/membershipService'
 import { notificationService } from '../../../services/notificationService'
 import { getPendingPartnershipRequestCount } from '../../../services/partnershipRequestService'
-import { shiftSwapService } from '../../../services/shiftSwapService'
+import { shiftChangeService } from '../../../services/shiftChangeService'
 import { ptAssignmentEndService } from '../../../services/ptAssignmentEndService'
 import { workoutService } from '../../../services/workoutService'
 import { socketService } from '../../../services/socketService'
-import { trainingRequestService } from '../../../services/trainingRequestService'
 import NotificationBell from '../../notifications/NotificationBell'
 import { getUserDisplayName, getUserInitialName } from '../../../utils/userDisplay'
 
@@ -56,12 +56,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navigate = useNavigate()
   const [pendingCount, setPendingCount] = useState(0)
   const [pendingRefundCount, setPendingRefundCount] = useState(0)
-  const [pendingTrainingCount, setPendingTrainingCount] = useState(0)
-  const [pendingSwapCount, setPendingSwapCount] = useState(0)
+  const [pendingShiftChangeCount, setPendingShiftChangeCount] = useState(0)
   const [pendingEndRequestCount, setPendingEndRequestCount] = useState(0)
   const [pendingWorkoutReportCount, setPendingWorkoutReportCount] = useState(0)
   const [pendingNotificationCount, setPendingNotificationCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  const { badgeCount: pt1on1BadgeCount, groupBadgeCount } = usePtRequests()
+  const membersPendingTotal = pt1on1BadgeCount + groupBadgeCount
 
   useEffect(() => {
     if (sidebarOpen) window.dispatchEvent(new CustomEvent('gympro:overlay-open'))
@@ -80,9 +82,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (user?.role === 'super_admin' || user?.role === 'admin') {
         getPendingPartnershipRequestCount()
           .then((res) => setPendingCount(res.data.count || 0))
-          .catch(() => { })
-        trainingRequestService.getAllRequests({ status: 'pending', page: 1 })
-          .then((res) => setPendingTrainingCount(res.data.pagination?.total || 0))
           .catch(() => { })
       }
       if (user?.role === 'staff' || user?.role === 'super_admin' || user?.role === 'admin') {
@@ -104,26 +103,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       socketService.off('refund_request_update', handler)
     }
   }, [])
-
-  // Shift swap: socket + initial count
-  useEffect(() => {
-    if (!['admin', 'super_admin'].includes(user?.role || '')) return
-
-    shiftSwapService.getAll({ status: 'cho_duyet', limit: 1 })
-      .then((res) => setPendingSwapCount(res.data.total || 0))
-      .catch(() => { })
-
-    const countHandler = (data: { pendingCount: number }) => setPendingSwapCount(data.pendingCount)
-    const newHandler = (_data: { requestingPtName: string; targetDate: string }) => {
-      // TODO: show toast notification
-    }
-    socketService.on('shift_swap:count_updated', countHandler)
-    socketService.on('shift_swap:new_request', newHandler)
-    return () => {
-      socketService.off('shift_swap:count_updated', countHandler)
-      socketService.off('shift_swap:new_request', newHandler)
-    }
-  }, [user?.role])
 
   // PT end request count: fetch + socket
   useEffect(() => {
@@ -149,6 +128,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const handler = (data: { pendingCount: number }) => setPendingWorkoutReportCount(data.pendingCount)
     socketService.on('workout_report:count_updated', handler)
     return () => { socketService.off('workout_report:count_updated', handler) }
+  }, [user?.role])
+
+  // Shift change count: dùng chung nguồn realtime với badge nút "Yêu cầu thay ca"
+  useEffect(() => {
+    if (!['admin', 'super_admin'].includes(user?.role || '')) return
+
+    const refreshCount = () => {
+      Promise.all([
+        shiftChangeService.getAll({ status: 'pending', limit: 1 }),
+        shiftChangeService.getAll({ status: 'waiting_assignment', limit: 1 }),
+      ])
+        .then(([a, b]) => setPendingShiftChangeCount((a.data.total || 0) + (b.data.total || 0)))
+        .catch(() => { })
+    }
+    refreshCount()
+    const countHandler = (data: { pendingCount: number }) => setPendingShiftChangeCount(data.pendingCount)
+    const refreshHandler = () => refreshCount()
+    socketService.on('shift_change:count_updated', countHandler)
+    socketService.on('shift_change:new_request', refreshHandler)
+    socketService.on('shift_change:updated', refreshHandler)
+    return () => {
+      socketService.off('shift_change:count_updated', countHandler)
+      socketService.off('shift_change:new_request', refreshHandler)
+      socketService.off('shift_change:updated', refreshHandler)
+    }
   }, [user?.role])
 
   // Notifications: fetch unread count + realtime via socket
@@ -237,9 +241,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         icon: <TeamOutlined />,
       },
 
-      { key: '/admin/members', label: badgeLabel('Hội viên', pendingTrainingCount), icon: <TeamOutlined /> },
+      { key: '/admin/members', label: badgeLabel('Hội viên', membersPendingTotal), icon: <TeamOutlined /> },
       ...(isEnabled('pt.moduleEnabled') ? [
-        { key: '/admin/trainers', label: badgeLabel('Huấn luyện viên (PT)', pendingSwapCount + pendingEndRequestCount + pendingWorkoutReportCount), icon: <UserOutlined /> },
+        { key: '/admin/trainers', label: badgeLabel('Huấn luyện viên (PT)', pendingEndRequestCount + pendingWorkoutReportCount + pendingShiftChangeCount), icon: <UserOutlined /> },
       ] : []),
       { key: '/admin/floors-zones', label: 'Tầng & Khu vực', icon: <DashboardOutlined /> },
       ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: 'Báo cáo', icon: <BarChartOutlined /> }] : []),

@@ -79,7 +79,7 @@ export async function process(message, user) {
       } else if (name === 'webQuery') {
         result = await webQuery(args?.query)
       } else {
-        result = await databaseQuery(args?.intent, user)
+        result = await databaseQuery(args?.intent, user, args)
       }
 
       const frPart = await makeFunctionResponsePart(id, name, result);

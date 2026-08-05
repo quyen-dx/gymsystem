@@ -82,6 +82,4 @@ faqSchema.statics.migrateLegacy = async function () {
 
 const Faq = mongoose.model('Faq', faqSchema)
 
-Faq.migrateLegacy().catch((err) => console.error('FAQ migration error:', err))
-
 export default Faq

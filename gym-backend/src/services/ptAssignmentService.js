@@ -101,12 +101,14 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
     const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
     if (!excludeMemberIds.includes(mid)) {
       a._fromClass = true
+      a.type = 'GROUP'
       memberMap.set(mid, a)
     }
   }
   for (const a of privateAssignments) {
     const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
     if (!memberMap.has(mid) && !excludeMemberIds.includes(mid)) {
+      a.type = 'PT_1_1'
       memberMap.set(mid, a)
     }
   }
@@ -129,12 +131,21 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
         .lean(),
       MembershipCycle.find({
         memberId: { $in: allMemberIds },
-        status: { $in: ['active', 'pending_initial_activation'] },
-      }).select('memberId status').sort({ createdAt: -1 }).lean(),
+        status: 'active',
+      }).select('memberId status startDate expiresAt').sort({ createdAt: -1 }).lean(),
       TrainingRequest.aggregate([
         { $match: { memberId: { $in: allMemberIds.map(id => new mongoose.Types.ObjectId(id)) }, status: 'assigned' } },
         { $sort: { createdAt: -1 } },
-        { $group: { _id: '$memberId', specialization: { $first: '$specialization' }, goals: { $first: '$goals' } } },
+        {
+          $group: {
+            _id: '$memberId',
+            specialization: { $first: '$specialization' },
+            goals: { $first: '$goals' },
+            note: { $first: '$note' },
+            contactPhone: { $first: '$contactPhone' },
+            contactEmail: { $first: '$contactEmail' },
+          },
+        },
       ]),
     ])
 
@@ -150,22 +161,34 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
     for (const c of cycles) {
       const mid = String(c.memberId)
       if (!cycleMap.has(mid)) {
-        cycleMap.set(mid, c.status)
+        cycleMap.set(mid, c)
       }
     }
 
     const trainingRequestMap = new Map()
     for (const tr of trainingRequests) {
-      trainingRequestMap.set(String(tr._id), { specialization: tr.specialization, goals: tr.goals })
+      trainingRequestMap.set(String(tr._id), {
+        specialization: tr.specialization,
+        goals: tr.goals,
+        note: tr.note,
+        contactPhone: tr.contactPhone,
+        contactEmail: tr.contactEmail,
+      })
     }
 
     for (const a of withCounts) {
       const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
       a.classEnrollment = enrollmentMap.get(mid) || null
-      a.membershipStatus = cycleMap.get(mid) || null
+      const cycle = cycleMap.get(mid)
+      a.membershipStatus = cycle?.status || null
+      a.membershipStartAt = cycle?.startDate || null
+      a.membershipExpiresAt = cycle?.expiresAt || null
       const tr = trainingRequestMap.get(mid)
       a.specialization = tr?.specialization || ''
       a.goals = tr?.goals || []
+      a.requestNote = tr?.note || ''
+      a.requestContactPhone = tr?.contactPhone || ''
+      a.requestContactEmail = tr?.contactEmail || ''
     }
   }
 
@@ -184,7 +207,7 @@ const attachScheduleCounts = async (assignments) => {
     .map(a => typeof a.memberId === 'object' ? a.memberId._id : a.memberId)
     .filter(Boolean)
 
-  const [scheduleCounts, paDocs, latestSchedules] = await Promise.all([
+  const [scheduleCounts, paDocs, latestSchedules, sessionCounts] = await Promise.all([
     WorkoutSchedule.aggregate([
       { $match: { memberId: { $in: memberIds }, status: 'active' } },
       { $group: { _id: '$memberId', count: { $sum: 1 } } },
@@ -198,9 +221,21 @@ const attachScheduleCounts = async (assignments) => {
       { $sort: { createdAt: -1 } },
       { $group: { _id: '$memberId', templateId: { $first: '$templateId' } } },
     ]),
+    WorkoutSchedule.aggregate([
+      { $match: { memberId: { $in: memberIds }, status: 'active' } },
+      { $unwind: '$sessions' },
+      {
+        $group: {
+          _id: '$memberId',
+          totalSessions: { $sum: 1 },
+          attendedSessions: { $sum: { $cond: [{ $eq: ['$sessions.status', 'completed'] }, 1, 0] } },
+        },
+      },
+    ]),
   ])
 
   const scheduleMap = new Map(scheduleCounts.map(c => [String(c._id), c.count]))
+  const sessionMap = new Map(sessionCounts.map(s => [String(s._id), s]))
 
   // Best-effort workout from PTAssignment
   const paMap = new Map()
@@ -225,6 +260,8 @@ const attachScheduleCounts = async (assignments) => {
   for (const a of assignments) {
     const mid = typeof a.memberId === 'object' ? String(a.memberId._id) : String(a.memberId)
     a.scheduleCount = scheduleMap.get(mid) || 0
+    a.totalSessions = sessionMap.get(mid)?.totalSessions || 0
+    a.attendedSessions = sessionMap.get(mid)?.attendedSessions || 0
 
     // If no active schedules, no current workout — skip fill
     if (a.scheduleCount === 0) {
@@ -277,6 +314,7 @@ export const findPendingApprovals = async ({ ptId }) => {
   const results = []
   for (const item of items) {
     const entry = { ...item }
+    entry.type = entry.classId ? 'GROUP' : 'PT_1_1'
     if (entry.assignmentId && entry.assignmentId.workoutId) {
       const w = await Workout.findById(entry.assignmentId.workoutId).select('name goal').lean()
       if (w) entry.workoutData = { name: w.name, goal: w.goal }
@@ -344,6 +382,7 @@ export const findHistoryByPt = async ({ ptId, page = 1, limit = 20, type, fromDa
 
     const workoutEndItems = workoutEnds.map(a => ({
       _type: 'workout_end',
+      type: 'PT_1_1',
       _id: a._id,
       memberId: a.memberId,
       ptId: a.ptId,
@@ -355,6 +394,7 @@ export const findHistoryByPt = async ({ ptId, page = 1, limit = 20, type, fromDa
 
     const assignmentEndItems = assignmentEnds.map(r => ({
       _type: 'assignment_end',
+      type: r.classId ? 'GROUP' : 'PT_1_1',
       _id: r._id,
       memberId: r.memberId,
       ptId: r.ptId,
@@ -428,7 +468,7 @@ export const createAssignment = async ({ memberId, ptId, membershipId, session }
   //    here defensively to recover from legacy dup data.
   const existingSamePair = await PTAssignment.findOne({
     memberId, ptId, status: 'active',
-  }).session(session || null).lean()
+  }).session(session || null)
 
   if (existingSamePair) {
     // Defensive: cancel any OTHER active assignment for same (memberId, ptId) pair (legacy dups)
@@ -515,7 +555,7 @@ export const getSuggestedSlots = async ({ ptId }) => {
   const classes = assignments.map(a => a.classId).filter(Boolean)
   const uniqueClasses = Array.from(new Map(classes.map(c => [String(c._id), c])).values())
 
-  const DAY_LABELS = ['Ch? nh?t', 'Th? hai', 'Th? ba', 'Th? tu', 'Th? nam', 'Th? s�u', 'Th? b?y']
+  const DAY_LABELS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
 
   // Count active members per class
   const classIds = uniqueClasses.map(c => c._id)
@@ -749,6 +789,22 @@ export const declineClassAssignment = async ({ classId, trainerId }) => {
   trainingClass.pendingTrainerId = null
   trainingClass.status = 'waiting_pt'
   await trainingClass.save()
+
+  // A group PT declined responsibility for this class. Keep the same
+  // rejection history on each member request so a later reassignment cannot
+  // silently select this PT again.
+  const memberIds = await ClassEnrollment.find({ classId, status: 'active' }).distinct('memberId')
+  if (memberIds.length > 0) {
+    await TrainingRequest.updateMany(
+      {
+        memberId: { $in: memberIds },
+        type: 'group',
+        assignedClassId: classId,
+        status: { $in: ['assigned', 'class_assigned', 'active'] },
+      },
+      { $addToSet: { rejectedPtIds: trainerId } },
+    )
+  }
 
   return trainingClass
 }

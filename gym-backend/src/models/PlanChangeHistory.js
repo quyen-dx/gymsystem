@@ -72,6 +72,12 @@ const planChangeHistorySchema = new mongoose.Schema({
     ref: 'Payment',
     default: null,
   },
+  // Feature codes snapshot (old vs new plan) để audit quyền lợi bị thu hồi/cấp
+  featureSnapshot: {
+    from: { type: [String], default: [] },
+    to: { type: [String], default: [] },
+    _id: false,
+  },
   note: {
     type: String,
     default: '',

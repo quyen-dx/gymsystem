@@ -9,6 +9,7 @@ export const createManualQrDeposit = (data: { amount: number }) => api.post('/wa
 export const getManualQrDepositInfo = (txnRef: string) => api.get(`/wallet/manual-qr-info/${encodeURIComponent(txnRef)}`)
 export const simulateManualQrPayment = (txnRef: string) => api.post(`/wallet/manual-qr-demo-pay/${encodeURIComponent(txnRef)}`)
 export const createStripePaymentIntent = (data: { amount?: number; amountUsd?: number }) => api.post('/wallet/create-payment-intent', data)
+export const confirmStripeCardPayment = (paymentIntentId: string) => api.post('/wallet/payments/card/confirm', { paymentIntentId })
 export const getStripeExchangeRate = () => api.get('/wallet/stripe-exchange-rate')
 export const fakeDeposit = (data: { userId: string; amount: number }) => api.post('/wallet/fake-deposit', data)
 export const transferWallet = (data: { fromUserId: string; toUserId: string; amount: number }) => api.post('/wallet/transfer', data)

@@ -77,6 +77,12 @@ export const socketService = {
       socket.off(event, handler)
     }
   },
+
+  emit: (event: string, ...args: any[]) => {
+    if (socket?.connected) {
+      socket.emit(event, ...args)
+    }
+  },
 }
 
 export const useRefundRequestSocket = (onUpdate: (count: number) => void) => {

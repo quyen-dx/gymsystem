@@ -6,7 +6,6 @@ import CheckIn from '../models/CheckIn.js'
 import MembershipCycle from '../models/MembershipCycle.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
-import { activateCycle, markBenefitUsed } from '../services/membershipCycleService.js'
 
 function startOfDay(date) {
   const d = new Date(date)
@@ -253,6 +252,16 @@ export const submitDailyQRCheckin = async (req, res) => {
       return res.status(400).json({ message: 'Mã QR đã hết hạn.' })
     }
 
+    // Kiểm tra gói tập đang hoạt động (cycle active, kích hoạt ngay sau thanh toán)
+    const activeCycle = await MembershipCycle.findOne({
+      memberId,
+      status: 'active',
+      expiresAt: { $gte: now },
+    }).lean()
+    if (!activeCycle) {
+      return res.status(403).json({ message: 'Gói tập đã hết hạn hoặc không còn hiệu lực. Vui lòng gia hạn.' })
+    }
+
     if (!isFreeWorkout) {
       // === SCHEDULED SESSION CHECK-IN ===
 
@@ -311,19 +320,6 @@ export const submitDailyQRCheckin = async (req, res) => {
         })
       }
 
-      // 4. Validate & activate membership before completing check-in
-      try {
-        const activated = await activateCycle(memberId)
-        if (!activated) {
-          const activeCycle = await MembershipCycle.findOne({ memberId, status: 'active' }).lean()
-          if (!activeCycle) {
-            return res.status(400).json({ message: 'Không có gói tập hợp lệ.' })
-          }
-        }
-      } catch (activationErr) {
-        return res.status(500).json({ message: activationErr.message })
-      }
-
       // 5. Create check-in record
       const checkin = await CheckIn.create({
         memberId,
@@ -372,19 +368,6 @@ export const submitDailyQRCheckin = async (req, res) => {
           message: `Bạn đã check-in "Tập tự do" hôm nay lúc ${checkinTime}.`,
           alreadyCheckedIn: true,
         })
-      }
-
-      // Validate & activate membership before completing free workout check-in
-      try {
-        const activated = await activateCycle(memberId)
-        if (!activated) {
-          const activeCycle = await MembershipCycle.findOne({ memberId, status: 'active' }).lean()
-          if (!activeCycle) {
-            return res.status(400).json({ message: 'Không có gói tập hợp lệ.' })
-          }
-        }
-      } catch (activationErr) {
-        return res.status(500).json({ message: activationErr.message })
       }
 
       const checkin = await CheckIn.create({

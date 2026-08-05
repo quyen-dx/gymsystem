@@ -82,6 +82,4 @@ policySchema.statics.migrateLegacy = async function () {
 
 const Policy = mongoose.model('Policy', policySchema)
 
-Policy.migrateLegacy().catch((err) => console.error('Policy migration error:', err))
-
 export default Policy

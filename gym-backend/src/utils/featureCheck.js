@@ -7,18 +7,11 @@ import PlanFeature from '../models/PlanFeature.js'
  * Returns { allowed: boolean, feature: object|null, plan: object|null, reason: string }
  */
 export async function checkMemberFeature(memberId, featureCode) {
-  let cycle = await MembershipCycle.findOne({
+  const cycle = await MembershipCycle.findOne({
     memberId,
     status: 'active',
     expiresAt: { $gte: new Date() },
   }).populate('currentPlanId').lean()
-
-  if (!cycle) {
-    cycle = await MembershipCycle.findOne({
-      memberId,
-      status: 'pending_initial_activation',
-    }).populate('currentPlanId').lean()
-  }
 
   if (!cycle) {
     return { allowed: false, feature: null, plan: null, reason: 'Không tìm thấy gói tập đang hoạt động' }
@@ -47,7 +40,7 @@ export async function checkMemberFeature(memberId, featureCode) {
  * Get all features for a member's active plan
  */
 export async function getMemberFeatures(memberId) {
-  let cycle = await MembershipCycle.findOne({
+  const cycle = await MembershipCycle.findOne({
     memberId,
     status: 'active',
     expiresAt: { $gte: new Date() },
@@ -55,16 +48,6 @@ export async function getMemberFeatures(memberId) {
     path: 'currentPlanId',
     populate: { path: 'featureIds', model: 'PlanFeature' }
   }).lean()
-
-  if (!cycle) {
-    cycle = await MembershipCycle.findOne({
-      memberId,
-      status: 'pending_initial_activation',
-    }).populate({
-      path: 'currentPlanId',
-      populate: { path: 'featureIds', model: 'PlanFeature' }
-    }).lean()
-  }
 
   if (!cycle || !cycle.currentPlanId) return []
 

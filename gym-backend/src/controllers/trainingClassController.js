@@ -5,17 +5,19 @@ import { createNotification } from '../services/notificationService.js'
 export const createClass = async (req, res) => {
   try {
     const cls = await trainingClassService.createClass(req.body)
-    createNotification({
-      receiverId: cls.ptId,
-      receiverRole: 'pt',
-      notificationType: NOTIFICATION_TYPES.CLASS_ASSIGNED,
-      title: 'Bạn được phân công lớp tập mới',
-      content: `Admin đã phân công bạn vào lớp "${cls.name}".`,
-      relatedId: cls._id,
-      relatedType: 'TrainingClass',
-      redirectUrl: '/pt/classes',
-      createdBy: 'Admin',
-    }).catch(err => console.error('Notify class assigned failed:', err.message))
+    if (cls.ptId) {
+      createNotification({
+        receiverId: cls.ptId,
+        receiverRole: 'pt',
+        notificationType: NOTIFICATION_TYPES.CLASS_ASSIGNED,
+        title: 'Bạn được phân công lớp tập mới',
+        content: `Admin đã phân công bạn vào lớp "${cls.name}".`,
+        relatedId: cls._id,
+        relatedType: 'TrainingClass',
+        redirectUrl: '/pt/classes',
+        createdBy: 'Admin',
+      }).catch(err => console.error('Notify class assigned failed:', err.message))
+    }
     res.status(201).json({ message: 'Đã tạo lớp tập', class: cls })
   } catch (error) {
     res.status(500).json({ message: error.message })

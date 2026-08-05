@@ -48,7 +48,7 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
   }, [plans, isRenew, currentPlanId])
 
   const selectedPlan = useMemo(() => availablePlans.find((plan) => plan._id === selectedPlanId) || null, [availablePlans, selectedPlanId])
-  const finalButtonLabel = isRenew ? 'Gia hạn gói' : 'Kích hoạt gói'
+  const finalButtonLabel = isRenew ? 'Gia hạn gói' : 'Đăng ký gói'
 
   const newEndDate = useMemo(() => {
     if (!selectedPlan) return null
@@ -138,7 +138,7 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
     const currentPayment = await ensurePayment()
     if (!currentPayment) return
     if (currentPayment.status !== 'PAID') {
-      message.warning('Payment chưa PAID, chưa thể kích hoạt gói')
+      message.warning('Payment chưa PAID, chưa thể đăng ký gói')
       return
     }
     if (!selectedPlan) return
@@ -150,7 +150,7 @@ export default function StaffPlanCounterPage({ mode }: { mode: 'register' | 'ren
         message.success('Gia hạn gói thành công')
       } else {
         await memberService.registerPlan(memberId, selectedPlan._id, currentPayment.paymentId)
-        message.success('Kích hoạt gói thành công')
+        message.success('Đăng ký gói thành công')
       }
       navigate('/staff/members')
     } catch (err: any) {

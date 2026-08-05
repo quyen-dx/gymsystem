@@ -3,6 +3,21 @@ import Transaction from '../models/Transaction.js'
 import Wallet from '../models/Wallet.js'
 import AppError from '../utils/appError.js'
 
+/**
+ * Xảy ra khi 2 tiến trình đồng thời cùng finalize cùng một idempotencyKey
+ * (vd. webhook Stripe và confirm endpoint cùng xử lý 1 PaymentIntent).
+ * Caller nên abort transaction (để rollback $inc wallet) rồi trả về trạng thái alreadyPaid.
+ */
+export class IdempotencyConflictError extends AppError {
+    constructor(userId, idempotencyKey) {
+        super('Duplicate idempotency key detected, transaction already processed', 409)
+        this.userId = userId
+        this.idempotencyKey = idempotencyKey
+        this.code = 11000
+        this.isIdempotencyConflict = true
+    }
+}
+
 export const getOrCreateWallet = async (userId, session = null) => {
     const existing = await Wallet.findOne({ userId }).session(session)
     if (existing) return existing
@@ -24,6 +39,10 @@ export const applyWalletTransaction = async ({
     status = 'completed',
     metadata = {},
     idempotencyKey,
+    paymentId = null,
+    currency = 'VND',
+    exchangeRate = null,
+    paymentMethod = null,
     session = null,
 }) => {
     const transactionAmount = typeof amount === 'string' ? Number(amount) : amount
@@ -37,7 +56,11 @@ export const applyWalletTransaction = async ({
     if (idempotencyKey) {
         const existingTransaction = await Transaction.findOne({ userId, idempotencyKey }).session(session)
         if (existingTransaction) {
-            return { wallet: await getOrCreateWallet(userId, session), transaction: existingTransaction }
+            return {
+                wallet: await getOrCreateWallet(userId, session),
+                transaction: existingTransaction,
+                idempotent: true,
+            }
         }
     }
 
@@ -83,28 +106,43 @@ export const applyWalletTransaction = async ({
         balanceAfter = wallet.balance
     }
 
-    const transaction = await Transaction.create(
-        [
-            {
-                userId,
-                walletId: wallet._id,
-                type,
-                provider,
-                source,
-                description,
-                amount: transactionAmount,
-                balanceBefore,
-                balanceAfter,
-                referenceId,
-                status,
-                metadata,
-                idempotencyKey,
-            },
-        ],
-        { session },
-    )
+    let transaction
+    try {
+        ;[transaction] = await Transaction.create(
+            [
+                {
+                    userId,
+                    walletId: wallet._id,
+                    type,
+                    provider,
+                    source,
+                    description,
+                    amount: transactionAmount,
+                    balanceBefore,
+                    balanceAfter,
+                    referenceId,
+                    status,
+                    paymentId,
+                    currency,
+                    exchangeRate,
+                    paymentMethod,
+                    metadata,
+                    idempotencyKey,
+                },
+            ],
+            { session },
+        )
+    } catch (error) {
+        // Unique index (userId, idempotencyKey): một tiến trình khác đã tạo txn cho key này
+        // (webhook Stripe vs confirm endpoint race). $inc wallet nằm trong cùng session →
+        // caller abort để rollback, không được credit 2 lần.
+        if (error?.code === 11000 && idempotencyKey) {
+            throw new IdempotencyConflictError(userId, idempotencyKey)
+        }
+        throw error
+    }
 
-    return { wallet, transaction: transaction[0] }
+    return { wallet, transaction, idempotent: false }
 }
 
 export const getWalletTransactions = async (userId, query = {}) => {

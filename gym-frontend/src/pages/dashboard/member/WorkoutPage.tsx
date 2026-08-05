@@ -44,7 +44,7 @@ const MobileCard = ({ row, onDetail }: { row: ScheduleRow; onDetail: (r: Schedul
         </div>
         <div className="flex items-start gap-2">
           <span className="w-20 shrink-0">PT</span>
-          <span className="text-[var(--gs-text)]">{row.ptName}{row.isSwapOverride && <Tag className="ml-1 text-[10px]" color="orange">Đổi ca</Tag>}</span>
+          <span className="text-[var(--gs-text)]">{row.ptName}</span>
         </div>
         <div className="flex items-start gap-2">
           <span className="w-20 shrink-0">Buổi tập</span>
@@ -55,6 +55,8 @@ const MobileCard = ({ row, onDetail }: { row: ScheduleRow; onDetail: (r: Schedul
     </div>
   )
 }
+
+const NoSessions = () => <p className="text-sm text-[var(--gs-text-muted)]">Không có buổi tập nào</p>
 
 const TIME_FILTERS = [
   { value: 'today', label: 'Hôm nay' },
@@ -76,7 +78,6 @@ interface ScheduleRow {
   endTime: string
   location: string
   ptName: string
-  isSwapOverride: boolean
   title: string
   status: 'pending' | 'completed' | 'skipped'
   scheduleId: string
@@ -98,7 +99,7 @@ export default function WorkoutPage() {
   const [planName, setPlanName] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [schedules, setSchedules] = useState<WorkoutSchedule[]>([])
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('today')
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('7days')
   const [detailSession, setDetailSession] = useState<ScheduleSession | null>(null)
   const [detailPtName, setDetailPtName] = useState<string>('')
 
@@ -108,11 +109,9 @@ export default function WorkoutPage() {
       try {
         const res = await membershipService.getMyMembership()
         const membership = res.data.membership
-        const cycle = res.data.cycle
         const statusOk = membership?.status === 'active' || membership?.status === 'pending_cancel'
-        const pendingOk = cycle?.status === 'pending_initial_activation'
         const notExpired = statusOk ? Number(membership?.remainingDays || 0) > 0 : true
-        const allowed = (statusOk || pendingOk) && notExpired
+        const allowed = statusOk && notExpired
         setCanView(allowed)
         if (membership) {
           const name = membership.planNameVi || membership.plan?.nameVi || null
@@ -142,16 +141,21 @@ export default function WorkoutPage() {
     if (user?._id && canView) loadSchedules()
   }, [user?._id, canView, loadSchedules])
 
+  useEffect(() => {
+    const refreshAfterTrainingCleanup = () => { loadSchedules() }
+    window.addEventListener('gympro:training-cleanup', refreshAfterTrainingCleanup)
+    return () => window.removeEventListener('gympro:training-cleanup', refreshAfterTrainingCleanup)
+  }, [loadSchedules])
+
   const now = dayjs().startOf('day')
 
-  const rows: ScheduleRow[] = useMemo(() => {
+  const allRows: ScheduleRow[] = useMemo(() => {
     const result: ScheduleRow[] = []
 
     for (const s of schedules) {
       if (s.status !== 'active') continue
       for (const session of s.sessions || []) {
         const d = dayjs(session.date)
-        const overridePt = (session as any)._overridePtId
         result.push({
           key: `${s._id}-${session.dayOrder}`,
           stt: 0,
@@ -159,11 +163,8 @@ export default function WorkoutPage() {
           dayLabel: DAY_LABELS[d.day()],
           time: session.time || '—',
           endTime: session.endTime || '—',
-          location: session._overrideLocation || session.location || session.className || '—',
-          ptName: (session as any)._isSwapOverride && overridePt
-            ? getUserDisplayName(overridePt, 'PT thay thế')
-            : ptDisplayName(s),
-          isSwapOverride: !!(session as any)._isSwapOverride,
+          location: session.location || session.className || '—',
+          ptName: ptDisplayName(s),
           title: session.title || session.muscleGroup || 'Buổi tập',
           status: session.status,
           scheduleId: s._id,
@@ -173,28 +174,44 @@ export default function WorkoutPage() {
       }
     }
 
-    const filtered = result.filter((r) => r.date.isAfter(now.subtract(1, 'day')))
+    result.sort((a, b) => a.date.unix() - b.date.unix())
 
-    filtered.sort((a, b) => a.date.unix() - b.date.unix())
+    return result.map((r, idx) => ({ ...r, stt: idx + 1 }))
+  }, [schedules])
 
-    return filtered.map((r, idx) => ({ ...r, stt: idx + 1 }))
-  }, [schedules, now])
+  const futureRows = useMemo(() => allRows.filter((r) => !r.date.isBefore(now)), [allRows, now])
 
   const filteredRows = useMemo(() => {
     switch (timeFilter) {
       case 'today':
-        return rows.filter((r) => r.date.isSame(now, 'day'))
+        return futureRows.filter((r) => r.date.isSame(now, 'day'))
       case '7days':
-        return rows.filter((r) => r.date.isBefore(now.add(7, 'day')))
+        return futureRows.filter((r) => r.date.isBefore(now.add(7, 'day')))
       case '30days':
-        return rows.filter((r) => r.date.isBefore(now.add(30, 'day')))
+        return futureRows.filter((r) => r.date.isBefore(now.add(30, 'day')))
       case 'all':
       default:
-        return rows
+        return futureRows
     }
-  }, [rows, timeFilter, now])
+  }, [futureRows, timeFilter, now])
 
-  const noSessionToday = timeFilter === 'today' && filteredRows.length === 0 && rows.length > 0
+  const nearestWindow = useMemo(() => {
+    if (futureRows.length > 0) {
+      const from = futureRows[0].date
+      return { from, to: from.add(6, 'day') }
+    }
+    const past = allRows.filter((r) => r.date.isBefore(now))
+    if (past.length === 0) return null
+    const last = past[past.length - 1].date
+    return { from: last.subtract(6, 'day'), to: last }
+  }, [allRows, futureRows, now])
+
+  const isShowingNearest = timeFilter === '7days' && filteredRows.length === 0 && nearestWindow !== null
+
+  const displayRows = useMemo(() => {
+    if (!isShowingNearest || !nearestWindow) return filteredRows
+    return allRows.filter((r) => !r.date.isBefore(nearestWindow.from) && !r.date.isAfter(nearestWindow.to))
+  }, [isShowingNearest, nearestWindow, allRows, filteredRows])
 
   const openDetail = (row: ScheduleRow) => {
     setDetailSession(row.session)
@@ -218,7 +235,6 @@ export default function WorkoutPage() {
       render: (_, r) => (
         <span className="text-[var(--gs-text)]">
           {r.ptName}
-          {r.isSwapOverride && <Tag className="ml-1 text-[10px] leading-none" color="orange" style={{ fontSize: 10, lineHeight: '16px' }}>Đổi ca</Tag>}
         </span>
       ),
     },
@@ -251,54 +267,41 @@ export default function WorkoutPage() {
 
             {loading ? (
               <div className="flex min-h-[300px] items-center justify-center"><Spin size="large" /></div>
-            ) : rows.length === 0 ? (
+            ) : allRows.length === 0 ? (
               <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-dashed border-[var(--gs-border)] bg-[var(--gs-card)] p-8">
                 <Empty description="Bạn chưa có lịch tập. Hãy liên hệ PT để được tạo lịch nhé!" />
               </div>
             ) : (
               <>
+              {isShowingNearest && (
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--gs-border)] bg-[var(--gs-card-soft)] px-3 py-1 text-sm text-[var(--gs-text-muted)]">
+                  Đang hiển thị lịch gần nhất.
+                </div>
+              )}
               <div className="workout-table-desktop rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)]">
                 <Table
-                  dataSource={filteredRows}
+                  dataSource={displayRows}
                   columns={columns}
                   pagination={false}
                   rowKey="key"
                   size="middle"
                   locale={{
-                    emptyText: noSessionToday ? (
-                      <div className="py-6 text-center">
-                        <p className="text-sm text-[var(--gs-text-muted)]">
-                          Hôm nay bạn không có lịch tập.
-                        </p>
-                        {rows.length > 0 && (
-                          <Button
-                            type="link"
-                            size="small"
-                            className="mt-1"
-                            onClick={() => setTimeFilter('7days')}
-                          >
-                            Xem buổi gần nhất →
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      'Không có buổi tập nào'
-                    ),
+                    emptyText: <NoSessions />,
                   }}
                   scroll={{ x: 700 }}
                 />
                   <div className="border-t border-[var(--gs-border)] px-4 py-2.5 text-sm text-[var(--gs-text-muted)]">
-                    Đang xem 1-{filteredRows.length} / {rows.length} buổi
+                    Đang xem 1-{displayRows.length} / {allRows.length} buổi
                   </div>
                 </div>
               <div className="workout-cards-mobile space-y-3">
-                {filteredRows.length > 0 ? (
-                  filteredRows.map((row) => (
+                {displayRows.length > 0 ? (
+                  displayRows.map((row) => (
                     <MobileCard key={row.key} row={row} onDetail={openDetail} />
                   ))
                 ) : (
                   <div className="rounded-xl border border-dashed border-[var(--gs-border)] bg-[var(--gs-card)] p-8 text-center">
-                    <p className="text-sm text-[var(--gs-text-muted)]">Không có buổi tập nào</p>
+                    <NoSessions />
                   </div>
                 )}
               </div>

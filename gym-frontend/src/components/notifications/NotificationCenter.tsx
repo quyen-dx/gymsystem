@@ -11,26 +11,33 @@ import {
   GiftOutlined,
   InfoCircleOutlined,
   ReloadOutlined,
+  RightOutlined,
   RollbackOutlined,
   SearchOutlined,
   SettingOutlined,
+  WarningOutlined,
 } from '@ant-design/icons'
 import {
   Button,
   Dropdown,
-  Empty,
   Input,
+  message,
+  Modal,
   Select,
   Spin,
+  Tag,
 } from 'antd'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/vi'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { notificationService, type NotificationItem } from '../../services/notificationService'
 import { socketService } from '../../services/socketService'
 import { ptClassService } from '../../services/ptAssignmentService'
+import { shiftChangeService } from '../../services/shiftChangeService'
 import { trainingClassService } from '../../services/trainingGroupService'
+import { trainingRequestService } from '../../services/trainingRequestService'
 
 dayjs.extend(relativeTime)
 dayjs.locale('vi')
@@ -57,6 +64,11 @@ function classify(item: NotificationItem): { key: string; label: string; icon: R
   return { key: 'SYSTEM', label: 'Hệ thống', icon: <SettingOutlined /> }
 }
 
+// Action Notification: có nút thao tác / bắt buộc người dùng phản hồi
+function isActionNotification(item: NotificationItem): boolean {
+  return !!item.requiresAction || (Array.isArray(item.actions) && item.actions.length > 0)
+}
+
 function formatTimeFull(dateStr: string) {
   const d = dayjs(dateStr)
   const now = dayjs()
@@ -77,10 +89,19 @@ type FilterStatus = 'all' | 'unread' | 'read'
 type SortMode = 'newest' | 'oldest'
 
 interface Props {
-  role: 'admin' | 'pt' | 'member'
+  role: 'admin' | 'super_admin' | 'pt' | 'member' | 'staff'
 }
 
-export default function NotificationCenter({ role: _role }: Props) {
+const STAFF_ROLES = ['super_admin', 'admin', 'staff']
+
+export default function NotificationCenter({ role }: Props) {
+  const navigate = useNavigate()
+  const isStaffRole = STAFF_ROLES.includes(role)
+  const safeRedirect = (item: NotificationItem): string | null => {
+    if (!item.redirectUrl) return null
+    if (!isStaffRole && item.redirectUrl.startsWith('/admin')) return null
+    return item.redirectUrl
+  }
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
@@ -89,6 +110,11 @@ export default function NotificationCenter({ role: _role }: Props) {
   const [sortMode, setSortMode] = useState<SortMode>('newest')
   const [showMobileFilters, setShowMobileFilters] = useState(false)
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
+  const [rejectModal, setRejectModal] = useState<{ open: boolean; item: NotificationItem | null }>({ open: false, item: null })
+  const [rejectReason, setRejectReason] = useState('')
+  const [shiftRejectModal, setShiftRejectModal] = useState<{ open: boolean; item: NotificationItem | null }>({ open: false, item: null })
+  const [shiftRejectReason, setShiftRejectReason] = useState('')
+  const [ptRequestStatuses, setPtRequestStatuses] = useState<Record<string, string>>({})
   const [classDetails, setClassDetails] = useState<Record<string, { name: string; status: string; daysOfWeek: number[]; startTime: string; endTime: string; floorName: string; zoneName: string; maxCapacity: number; currentCount: number }>>({})
 
   const load = useCallback(async () => {
@@ -114,11 +140,25 @@ export default function NotificationCenter({ role: _role }: Props) {
     return () => { socketService.off('notification:new', handler) }
   }, [])
 
+  // Đồng bộ realtime khi notification action được xử lý (mọi tab đều đổi ngay)
+  useEffect(() => {
+    socketService.connect()
+    const updatedHandler = (updated: NotificationItem) => {
+      setNotifications((prev) => prev.map((n) => (n._id === updated._id ? { ...n, ...updated } : n)))
+    }
+    socketService.on('notification:updated', updatedHandler)
+    return () => { socketService.off('notification:updated', updatedHandler) }
+  }, [])
+
   const handleMarkRead = async (id: string) => {
+    // Optimistic update — UI updates immediately
+    setNotifications((prev) => prev.map((n) => (n._id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n)))
     try {
       await notificationService.markAsRead(id)
-      setNotifications((prev) => prev.map((n) => (n._id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n)))
-    } catch { /* ignore */ }
+    } catch {
+      // Rollback on failure
+      setNotifications((prev) => prev.map((n) => (n._id === id ? { ...n, isRead: false, readAt: null } : n)))
+    }
   }
 
   const handleMarkUnread = async (id: string) => {
@@ -138,7 +178,9 @@ export default function NotificationCenter({ role: _role }: Props) {
   const handleMarkAllRead = async () => {
     try {
       await notificationService.markAllAsRead()
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true, readAt: new Date().toISOString() })))
+      setNotifications((prev) => prev.map((n) => (
+        isActionNotification(n) ? n : { ...n, isRead: true, readAt: new Date().toISOString() }
+      )))
     } catch { /* ignore */ }
   }
 
@@ -160,6 +202,13 @@ export default function NotificationCenter({ role: _role }: Props) {
     if (sortMode === 'newest') items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     else if (sortMode === 'oldest') items.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 
+    // Action Notification (chưa phản hồi) luôn nằm trên đầu danh sách
+    items.sort((a, b) => {
+      const aPending = isActionNotification(a) && !a.isRead ? 0 : 1
+      const bPending = isActionNotification(b) && !b.isRead ? 0 : 1
+      return aPending - bPending
+    })
+
     return items
   }, [notifications, filterStatus, filterCategory, search, sortMode])
 
@@ -176,7 +225,18 @@ export default function NotificationCenter({ role: _role }: Props) {
     return counts
   }, [notifications])
 
-  // Fetch class details for PT_CLASS_REQUEST notifications
+  // Fetch request status for PT_REASSIGN_REQUEST notifications (đã phản hồi chưa)
+  useEffect(() => {
+    const reassignNotes = notifications.filter(n => n.notificationType === 'PT_REASSIGN_REQUEST' && n.receiverRole === 'member' && n.relatedId)
+    for (const n of reassignNotes) {
+      if (ptRequestStatuses[n._id]) continue
+      trainingRequestService.getById(n.relatedId!).then((res) => {
+        const s = res.data?.request?.status
+        if (!s) return
+        setPtRequestStatuses(prev => ({ ...prev, [n._id]: s }))
+      }).catch(() => {})
+    }
+  }, [notifications])
   useEffect(() => {
     const ptRequests = notifications.filter(n => n.notificationType === 'PT_CLASS_REQUEST' && n.relatedId)
     for (const n of ptRequests) {
@@ -229,10 +289,54 @@ export default function NotificationCenter({ role: _role }: Props) {
     setProcessingIds(prev => { const next = new Set(prev); next.delete(item._id); return next })
   }
 
+  const handleRespondPtReassign = async (item: NotificationItem, action: 'accept' | 'reject') => {
+    if (!item.relatedId) return
+    setProcessingIds(prev => new Set(prev).add(item._id))
+    try {
+      await trainingRequestService.respond(item.relatedId, action)
+      await notificationService.markAsRead(item._id)
+      const actionStatus = action === 'accept' ? 'accepted' : 'rejected'
+      setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true, readAt: new Date().toISOString(), actionStatus, actionAt: new Date().toISOString() } : n))
+    } catch { /* ignore */ }
+    setProcessingIds(prev => { const next = new Set(prev); next.delete(item._id); return next })
+  }
+
+  // PT phản hồi việc được phân công hội viên PT 1-1 (MEMBER_ASSIGNED)
+  const handleRespondPtAssign = async (item: NotificationItem, action: 'accept' | 'reject', reason?: string) => {
+    if (!item.relatedId) return
+    setProcessingIds(prev => new Set(prev).add(item._id))
+    try {
+      await trainingRequestService.respondPtAssignment(item.relatedId, action, reason)
+      const actionStatus = action === 'accept' ? 'accepted' : 'rejected'
+      const content = action === 'accept'
+        ? 'Bạn đã chấp nhận hội viên này.'
+        : `Bạn đã từ chối nhận hội viên.${reason ? ` Lý do: ${reason}` : ''}`
+      setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true, readAt: new Date().toISOString(), actionStatus, actionAt: new Date().toISOString(), requiresAction: false, content } : n))
+    } catch { /* ignore */ }
+    setProcessingIds(prev => { const next = new Set(prev); next.delete(item._id); return next })
+  }
+
+  // PT B phản hồi đề nghị nhận thay ca (SHIFT_CHANGE_ASSIGNED) — từ chối bắt buộc nhập lý do
+  const handleRespondShiftChange = async (item: NotificationItem, action: 'accept' | 'reject', reason?: string) => {
+    if (!item.relatedId) return
+    setProcessingIds(prev => new Set(prev).add(item._id))
+    try {
+      await shiftChangeService.respond({ itemId: item.relatedId, action, reason: reason || undefined, notificationId: item._id })
+      const actionStatus = action === 'accept' ? 'accepted' : 'rejected'
+      setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true, readAt: new Date().toISOString(), actionStatus, actionAt: new Date().toISOString(), requiresAction: false } : n))
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      message.error(msg || 'Phản hồi thất bại')
+    }
+    setProcessingIds(prev => { const next = new Set(prev); next.delete(item._id); return next })
+  }
+
   // ──── RENDER CARD ────
   const renderCard = (item: NotificationItem) => {
     const cat = classify(item)
     const isUnread = !item.isRead
+    const isAction = isActionNotification(item)
+    const pendingAction = isAction && isUnread
 
     // Custom card for PT_CLASS_REQUEST
     if (item.notificationType === 'PT_CLASS_REQUEST') {
@@ -244,9 +348,20 @@ export default function NotificationCenter({ role: _role }: Props) {
       const daysStr = detail?.daysOfWeek.map(d => DAY_LABELS[d]).filter(Boolean).join(', ') || ''
 
       return (
-        <div key={item._id} className="group relative flex gap-3.5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 transition-all">
+        <div key={item._id} className="group relative flex gap-3.5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 transition-all cursor-pointer"
+          style={action === 'pending' ? { borderColor: 'var(--gs-danger)', boxShadow: '0 0 0 1px var(--gs-danger)' } : undefined}
+          onClick={() => {
+            if (!item.isRead) handleMarkRead(item._id)
+          }}>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-[var(--gs-text)]">Bạn được mời phụ trách lớp</h3>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {action === 'pending' && (
+                <Tag color="error" className="m-0 !text-[10px] !leading-none !px-1.5 !py-0.5" icon={<WarningOutlined />}>
+                  Cần phản hồi
+                </Tag>
+              )}
+              <h3 className="text-sm font-semibold text-[var(--gs-text)]">Bạn được mời phụ trách lớp</h3>
+            </div>
             {detail ? (
               <div className="mt-3 space-y-1.5 text-xs text-[var(--gs-text-muted)]">
                 <p><strong className="text-[var(--gs-text)]">{detail.name}</strong></p>
@@ -279,10 +394,192 @@ export default function NotificationCenter({ role: _role }: Props) {
       )
     }
 
+    // Custom card for member proposal response (đề xuất lớp/PT từ Admin)
+    if (item.notificationType === 'PT_REASSIGN_REQUEST' && item.receiverRole === 'member') {
+      const requestStatus = ptRequestStatuses[item._id]
+      // Ưu tiên trạng thái action lưu trên notification (bền vững khi refresh).
+      // Fallback cho dữ liệu cũ: dựa vào trạng thái request.
+      const actionStatus = item.actionStatus
+      // Request 'assigned' cũng nghĩa là hội viên đã đồng ý trước đó (legacy notification chưa có actionStatus)
+      const isAccepted = actionStatus === 'accepted' || (!actionStatus && (requestStatus === 'waiting_assignment' || requestStatus === 'assigned'))
+      const isCountered = actionStatus === 'countered' || (!actionStatus && requestStatus === 'pending')
+      const isRejected = actionStatus === 'rejected' || (!actionStatus && requestStatus === 'declined_by_member')
+      const isDone = isAccepted || isCountered || isRejected
+      const isLoading = processingIds.has(item._id)
+      return (
+        <div key={item._id} className="group relative flex gap-3.5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 transition-all cursor-pointer"
+          style={!isDone ? { borderColor: 'var(--gs-danger)', boxShadow: '0 0 0 1px var(--gs-danger)' } : undefined}
+          onClick={() => { if (!item.isRead) handleMarkRead(item._id) }}>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {!isDone && (
+                <Tag color="error" className="m-0 !text-[10px] !leading-none !px-1.5 !py-0.5" icon={<WarningOutlined />}>
+                  Cần phản hồi
+                </Tag>
+              )}
+              <h3 className="text-sm font-semibold text-[var(--gs-text)]">{item.title || 'Đề xuất từ Admin'}</h3>
+            </div>
+            <p className="mt-2 whitespace-pre-line text-xs text-[var(--gs-text-muted)]">{item.content}</p>
+            <div className="mt-4 flex gap-2">
+              {isLoading ? (
+                <span className="text-xs text-[var(--gs-text-muted)] self-center">Đang xử lý...</span>
+              ) : isDone ? (
+                <span className={`self-center text-xs font-semibold ${isAccepted ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                  {isAccepted ? '✓ Bạn đã đồng ý' : isRejected ? '✕ Bạn đã từ chối' : 'Bạn đã phản hồi'}
+                </span>
+              ) : (
+                <>
+                  <Button size="small" danger onClick={(e) => { e.stopPropagation(); handleRespondPtReassign(item, 'reject') }}>
+                    Từ chối
+                  </Button>
+                  <Button size="small" type="primary" onClick={(e) => { e.stopPropagation(); handleRespondPtReassign(item, 'accept') }}>
+                    Đồng ý
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+          <span className="text-[11px] text-[var(--gs-text-muted)] shrink-0 self-start">{formatTimeFull(item.createdAt)}</span>
+        </div>
+      )
+    }
+
+    // Custom card for PT — được phân công hội viên PT 1-1 (Chấp nhận / Từ chối).
+    // Chỉ render khi là action notification mới (requiresAction) hoặc đã có actionStatus (đã xử lý).
+    if (item.notificationType === 'MEMBER_ASSIGNED' && item.receiverRole === 'pt' && (item.requiresAction || item.actionStatus)) {
+      const actionStatus = item.actionStatus
+      const isAccepted = actionStatus === 'accepted'
+      const isRejected = actionStatus === 'rejected'
+      const isDone = isAccepted || isRejected
+      const isLoading = processingIds.has(item._id)
+      return (
+        <div key={item._id} className="group relative flex gap-3.5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 transition-all cursor-pointer"
+          style={!isDone ? { borderColor: 'var(--gs-danger)', boxShadow: '0 0 0 1px var(--gs-danger)' } : undefined}
+          onClick={() => { if (!item.isRead) handleMarkRead(item._id) }}>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {!isDone && (
+                <Tag color="error" className="m-0 !text-[10px] !leading-none !px-1.5 !py-0.5" icon={<WarningOutlined />}>
+                  Cần phản hồi
+                </Tag>
+              )}
+              <h3 className="text-sm font-semibold text-[var(--gs-text)]">{item.title || 'Bạn vừa được phân công hội viên mới'}</h3>
+            </div>
+            <p className="mt-2 whitespace-pre-line text-xs text-[var(--gs-text-muted)]">{item.content}</p>
+            <div className="mt-4 flex gap-2">
+              {isLoading ? (
+                <span className="text-xs text-[var(--gs-text-muted)] self-center">Đang xử lý...</span>
+              ) : isDone ? (
+                <span className={`self-center text-xs font-semibold ${isAccepted ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                  {isAccepted ? '✓ Bạn đã chấp nhận hội viên này.' : '✕ Bạn đã từ chối'}
+                </span>
+              ) : (
+                <>
+                  <Button size="small" danger onClick={(e) => { e.stopPropagation(); setRejectReason(''); setRejectModal({ open: true, item }) }}>
+                    Từ chối
+                  </Button>
+                  <Button size="small" type="primary" onClick={(e) => { e.stopPropagation(); handleRespondPtAssign(item, 'accept') }}>
+                    Chấp nhận
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+          <span className="text-[11px] text-[var(--gs-text-muted)] shrink-0 self-start">{formatTimeFull(item.createdAt)}</span>
+        </div>
+      )
+    }
+
+    // Custom card — PT được đề nghị nhận thay ca (Chấp nhận / Từ chối kèm lý do)
+    if (item.notificationType === 'SHIFT_CHANGE_ASSIGNED' && item.receiverRole === 'pt') {
+      const actionStatus = item.actionStatus
+      const isAccepted = actionStatus === 'accepted'
+      const isRejected = actionStatus === 'rejected'
+      const isDone = isAccepted || isRejected
+      const isLoading = processingIds.has(item._id)
+      return (
+        <div key={item._id} className="group relative flex gap-3.5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 transition-all cursor-pointer"
+          style={!isDone ? { borderColor: 'var(--gs-danger)', boxShadow: '0 0 0 1px var(--gs-danger)' } : undefined}
+          onClick={() => { if (!item.isRead) handleMarkRead(item._id) }}>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {!isDone && (
+                <Tag color="error" className="m-0 !text-[10px] !leading-none !px-1.5 !py-0.5" icon={<WarningOutlined />}>
+                  Cần phản hồi
+                </Tag>
+              )}
+              <h3 className="text-sm font-semibold text-[var(--gs-text)]">{item.title || 'Bạn được đề nghị nhận thay ca'}</h3>
+            </div>
+            <p className="mt-2 whitespace-pre-line text-xs text-[var(--gs-text-muted)]">{item.content}</p>
+            <div className="mt-4 flex gap-2">
+              {isLoading ? (
+                <span className="text-xs text-[var(--gs-text-muted)] self-center">Đang xử lý...</span>
+              ) : isDone ? (
+                <span className={`self-center text-xs font-semibold ${isAccepted ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                  {isAccepted ? '✓ Bạn đã chấp nhận nhận thay ca' : '✕ Bạn đã từ chối'}
+                </span>
+              ) : (
+                <>
+                  <Button size="small" danger onClick={(e) => { e.stopPropagation(); setShiftRejectReason(''); setShiftRejectModal({ open: true, item }) }}>
+                    Từ chối
+                  </Button>
+                  <Button size="small" type="primary" onClick={(e) => { e.stopPropagation(); handleRespondShiftChange(item, 'accept') }}>
+                    Chấp nhận
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+          <span className="text-[11px] text-[var(--gs-text-muted)] shrink-0 self-start">{formatTimeFull(item.createdAt)}</span>
+        </div>
+      )
+    }
+
+    // Custom card for admin ACTION_REQUIRED (có yêu cầu PT cần phân công) — chỉ dành cho admin/staff
+    if (item.notificationType === 'ACTION_REQUIRED' && isStaffRole) {
+      const isDone = !!item.isRead
+      return (
+        <div key={item._id} className="group relative flex gap-3.5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 transition-all cursor-pointer"
+          style={!isDone ? { borderColor: 'var(--gs-danger)', boxShadow: '0 0 0 1px var(--gs-danger)' } : undefined}
+          onClick={() => { if (!item.isRead) handleMarkRead(item._id) }}>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {!isDone && (
+                <Tag color="error" className="m-0 !text-[10px] !leading-none !px-1.5 !py-0.5" icon={<WarningOutlined />}>
+                  Cần phản hồi
+                </Tag>
+              )}
+              <h3 className="text-sm font-semibold text-[var(--gs-text)]">{item.title || 'Có yêu cầu PT cần phân công'}</h3>
+            </div>
+            <p className="mt-2 whitespace-pre-line text-xs text-[var(--gs-text-muted)]">{item.content}</p>
+            <div className="mt-4 flex gap-2">
+              {isDone ? (
+                <span className="text-xs text-[var(--gs-text-muted)] self-center">Đã xử lý</span>
+              ) : (
+                <Button size="small" type="primary" onClick={(e) => {
+                  e.stopPropagation()
+                  if (!item.isRead) handleMarkRead(item._id)
+                  // Nút "Đi đến yêu cầu" chỉ dành cho admin/staff; role khác (member/pt) không điều hướng sang /admin/*
+                  const base = isStaffRole ? (item.redirectUrl || '/admin/members?pt1on1=1&pt1on1Status=waiting_assignment') : safeRedirect(item)
+                  if (base) navigate(`${base}${base.includes('?') ? '&' : '?'}ts=${Date.now()}`)
+                }}>
+                  Đi đến yêu cầu
+                </Button>
+              )}
+            </div>
+          </div>
+          <span className="text-[11px] text-[var(--gs-text-muted)] shrink-0 self-start">{formatTimeFull(item.createdAt)}</span>
+        </div>
+      )
+    }
+
     const menuItems = [
-      ...(!item.isRead
-        ? [{ key: 'read', icon: <CheckOutlined />, label: 'Đánh dấu đã đọc', onClick: () => handleMarkRead(item._id) }]
-        : [{ key: 'unread', icon: <ReloadOutlined />, label: 'Đánh dấu chưa đọc', onClick: () => handleMarkUnread(item._id) }]),
+      ...(!item.isRead && !isAction
+        ? [{ key: 'unread', icon: <RollbackOutlined />, label: 'Đánh dấu chưa đọc', onClick: () => handleMarkUnread(item._id), disabled: true }]
+        : []),
+      ...(item.isRead && !isAction
+        ? [{ key: 'unread', icon: <ReloadOutlined />, label: 'Đánh dấu chưa đọc', onClick: () => handleMarkUnread(item._id) }]
+        : []),
       { key: 'delete', icon: <DeleteOutlined />, label: 'Xóa thông báo', danger: true, onClick: () => handleDelete(item._id) },
     ]
 
@@ -297,7 +594,10 @@ export default function NotificationCenter({ role: _role }: Props) {
           }
           ${isUnread ? 'hover:border-l-[var(--theme-accent)] hover:bg-[var(--gs-card)]/90' : ''}
         `}
-        onClick={() => { if (isUnread) handleMarkRead(item._id) }}
+        style={pendingAction ? { borderColor: 'var(--gs-danger)', boxShadow: '0 0 0 1px var(--gs-danger)' } : undefined}
+        onClick={() => {
+          if (isUnread) handleMarkRead(item._id)
+        }}
       >
         {/* Unread dot */}
         {isUnread && (
@@ -307,19 +607,27 @@ export default function NotificationCenter({ role: _role }: Props) {
         {/* Icon */}
         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-300 max-sm:h-11 max-sm:w-11
           ${isUnread ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]' : 'bg-[var(--gs-border)]/40 text-[var(--gs-text-muted)] opacity-70'}
+          ${pendingAction ? '!bg-[var(--gs-danger)]/10 !text-[var(--gs-danger)]' : ''}
         `}>
-          {cat.icon}
+          {pendingAction || item.notificationType === 'PT_SERVICE_LEFT' ? <WarningOutlined /> : cat.icon}
         </div>
 
         {/* Content */}
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <h3 className={`leading-snug transition-colors duration-300 max-sm:text-[15px]
-                ${isUnread ? 'text-sm font-semibold text-[var(--gs-text)]' : 'text-sm font-normal text-[var(--gs-text)]/55'}
-              `}>
-                {item.title}
-              </h3>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {pendingAction && (
+                  <Tag color="error" className="m-0 !text-[10px] !leading-none !px-1.5 !py-0.5" icon={<WarningOutlined />}>
+                    Cần phản hồi
+                  </Tag>
+                )}
+                <h3 className={`leading-snug transition-colors duration-300 max-sm:text-[15px]
+                  ${isUnread ? 'text-sm font-semibold text-[var(--gs-text)]' : 'text-sm font-normal text-[var(--gs-text)]/55'}
+                `}>
+                  {item.title}
+                </h3>
+              </div>
               <p className={`mt-1 whitespace-pre-wrap leading-relaxed line-clamp-2 transition-colors duration-300 max-sm:text-[14px]
                 ${isUnread ? 'text-xs text-[var(--gs-text-muted)]' : 'text-xs text-[var(--gs-text-muted)]/50'}
               `}>
@@ -327,17 +635,6 @@ export default function NotificationCenter({ role: _role }: Props) {
               </p>
             </div>
 
-            {/* Hover action button — only on unread */}
-            {isUnread && (
-              <button
-                type="button"
-                className="hidden group-hover:inline-flex shrink-0 items-center gap-1 rounded-lg bg-[var(--theme-accent)]/10 px-2.5 py-1.5 text-[11px] font-medium text-[var(--theme-accent)] transition-all hover:bg-[var(--theme-accent)]/20
-                  max-sm:px-3 max-sm:py-2 max-sm:text-xs"
-                onClick={(e) => { e.stopPropagation(); handleMarkRead(item._id) }}
-              >
-                <CheckOutlined style={{ fontSize: 11 }} /> Đánh dấu đã đọc
-              </button>
-            )}
           </div>
 
           {/* Footer row: category + time + unread badge + menu */}
@@ -359,16 +656,30 @@ export default function NotificationCenter({ role: _role }: Props) {
               </span>
             )}
 
-            <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
-              <Button
-                type="text"
-                size="small"
-                icon={<EllipsisOutlined style={{ fontSize: 16 }} />}
-                className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => e.stopPropagation()}
-                style={{ color: 'var(--gs-text-muted)' }}
-              />
-            </Dropdown>
+            <span className="ml-auto flex items-center gap-1">
+              {safeRedirect(item) && (
+                <button
+                  type="button"
+                  className="flex items-center gap-1 rounded-lg border border-[var(--theme-accent)]/30 px-2.5 py-1 text-[11px] font-medium text-[var(--theme-accent)] transition-all hover:bg-[var(--theme-accent)]/10 max-sm:px-3 max-sm:py-1.5 max-sm:text-xs"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    navigate(safeRedirect(item)!)
+                  }}
+                >
+                  Đến trang <RightOutlined style={{ fontSize: 10 }} />
+                </button>
+              )}
+              <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EllipsisOutlined style={{ fontSize: 16 }} />}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ color: 'var(--gs-text-muted)' }}
+                />
+              </Dropdown>
+            </span>
           </div>
         </div>
       </div>
@@ -609,6 +920,57 @@ export default function NotificationCenter({ role: _role }: Props) {
           </div>
         )}
       </div>
+
+      {/* PT từ chối nhận hội viên — nhập lý do */}
+      <Modal
+        title="Từ chối nhận hội viên"
+        open={rejectModal.open}
+        onCancel={() => setRejectModal({ open: false, item: null })}
+        onOk={() => {
+          if (!rejectModal.item) return
+          handleRespondPtAssign(rejectModal.item, 'reject', rejectReason.trim())
+          setRejectModal({ open: false, item: null })
+        }}
+        okText="Gửi từ chối"
+        cancelText="Hủy"
+        okButtonProps={{ danger: true, disabled: rejectReason.trim().length === 0 }}
+        width={480}
+      >
+        <p className="mb-3 text-sm text-[var(--gs-text-muted)]">Vui lòng nhập lý do từ chối phụ trách hội viên này. Admin sẽ chọn PT khác phù hợp hơn.</p>
+        <Input.TextArea
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          rows={3}
+          maxLength={300}
+          placeholder="Nhập lý do từ chối..."
+        />
+      </Modal>
+
+      {/* PT từ chối nhận thay ca — nhập lý do bắt buộc */}
+      <Modal
+        title="Từ chối nhận thay ca"
+        open={shiftRejectModal.open}
+        onCancel={() => setShiftRejectModal({ open: false, item: null })}
+        onOk={() => {
+          if (!shiftRejectModal.item) return
+          handleRespondShiftChange(shiftRejectModal.item, 'reject', shiftRejectReason.trim())
+          setShiftRejectModal({ open: false, item: null })
+        }}
+        okText="Gửi từ chối"
+        cancelText="Hủy"
+        okButtonProps={{ danger: true, disabled: shiftRejectReason.trim().length === 0 }}
+        width={480}
+      >
+        <p className="mb-3 text-sm text-[var(--gs-text-muted)]">Vui lòng nhập lý do từ chối. Admin sẽ chọn PT thay thế khác cho ca này.</p>
+        <Input.TextArea
+          value={shiftRejectReason}
+          onChange={(e) => setShiftRejectReason(e.target.value)}
+          rows={3}
+          maxLength={300}
+          placeholder="Nhập lý do từ chối (bắt buộc)..."
+        />
+      </Modal>
+
     </div>
   )
 }

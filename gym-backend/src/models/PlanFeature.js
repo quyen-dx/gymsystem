@@ -8,7 +8,6 @@ const planFeatureSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
 }, { timestamps: true })
 
-planFeatureSchema.index({ code: 1 }, { unique: true })
 planFeatureSchema.index({ isActive: 1 })
 
 const PlanFeature = mongoose.model('PlanFeature', planFeatureSchema)

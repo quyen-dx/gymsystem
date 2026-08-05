@@ -7,6 +7,10 @@ import { socketService } from '../../services/socketService'
 
 const { Text, Paragraph } = Typography
 
+function isActionNotification(item: Notification) {
+  return !!item.requiresAction || (Array.isArray(item.actions) && item.actions.length > 0)
+}
+
 function formatTime(dateStr: string) {
   const d = new Date(dateStr)
   const now = new Date()
@@ -75,6 +79,14 @@ export default function NotificationBell() {
     }
   }
 
+  const handleMarkAllRead = () => {
+    // Action Notification không bị đánh dấu đọc khi "Đọc tất cả"
+    setNotifications((prev) => prev.map((n) => (
+      isActionNotification(n) ? n : { ...n, isRead: true }
+    )))
+    notificationService.markAllAsRead().catch(() => {})
+  }
+
   const handleSeeAll = () => {
     setOpen(false)
     const pathname = window.location.pathname
@@ -108,8 +120,7 @@ export default function NotificationBell() {
                 size="small"
                 onClick={(e) => {
                   e.stopPropagation()
-                  setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
-                  notificationService.markAllAsRead().catch(() => {})
+                  handleMarkAllRead()
                 }}
               >
                 Đọc tất cả
@@ -131,13 +142,18 @@ export default function NotificationBell() {
                       background: item.isRead ? 'transparent' : 'var(--gs-active-bg)',
                       borderBottom: '1px solid var(--gs-border)',
                     }}
-                    onClick={() => handleMarkRead(item._id)}
+                    onClick={() => { if (!isActionNotification(item)) handleMarkRead(item._id) }}
                   >
                     <div style={{ width: '100%' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <Text strong style={{ fontSize: 13, color: item.isRead ? 'var(--gs-text-muted)' : 'var(--gs-text)' }}>
-                          {item.title}
-                        </Text>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                          {isActionNotification(item) && !item.isRead && (
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--gs-danger)', flexShrink: 0 }} />
+                          )}
+                          <Text strong style={{ fontSize: 13, color: item.isRead ? 'var(--gs-text-muted)' : 'var(--gs-text)' }}>
+                            {item.title}
+                          </Text>
+                        </div>
                         <Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap', marginLeft: 8 }}>
                           {formatTime(item.createdAt)}
                         </Text>

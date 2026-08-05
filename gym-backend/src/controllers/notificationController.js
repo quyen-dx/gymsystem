@@ -11,7 +11,7 @@ import {
 
 export const sendNotification = async (req, res) => {
   try {
-    const { title, content, userId, receiverId, receiverRole, notificationType, category, relatedId, relatedType, redirectUrl } = req.body
+    const { title, content, userId, receiverId, receiverRole, notificationType, category, relatedId, relatedType, redirectUrl, requiresAction, actions } = req.body
     const doc = await createNotification({
       receiverId: userId || receiverId,
       receiverRole: receiverRole || req.user?.role || null,
@@ -21,6 +21,8 @@ export const sendNotification = async (req, res) => {
       relatedId,
       relatedType,
       redirectUrl,
+      requiresAction,
+      actions,
       createdBy: 'Admin',
       sendEmail: false,
     })

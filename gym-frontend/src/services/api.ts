@@ -80,6 +80,12 @@ const scheduleTokenRefresh = () => {
 
 export const startRefreshScheduler = scheduleTokenRefresh
 
+/** Returns headers for raw fetch calls that need auth (SSE, streaming) */
+function authHeaders(): Record<string, string> {
+  const token = getAuthToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 api.interceptors.request.use((config) => {
   const token = getAuthToken()
   if (token) {
@@ -190,13 +196,23 @@ export async function streamChatMessage(
   try {
     const res = await fetch(`${API_URL}/ai/chat/stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+      },
       credentials: 'include',
       body: JSON.stringify({ message }),
       signal,
     })
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) {
+      if (signal?.aborted) return null
+      const statusText = res.status === 401 ? 'Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.'
+        : res.status >= 500 ? 'Hệ thống đang gặp sự cố, vui lòng thử lại sau.'
+        : 'Không thể kết nối đến trợ lý GymPro.'
+      callbacks.onError(statusText)
+      return null
+    }
 
     const reader = res.body?.getReader()
     if (!reader) throw new Error('No response body')
@@ -237,7 +253,7 @@ export async function streamChatMessage(
     return { reply }
   } catch (err: any) {
     if (err.name === 'AbortError') return null
-    callbacks.onError(err.message || 'Stream error')
+    callbacks.onError('Không thể kết nối đến trợ lý GymPro.')
     return null
   }
 }

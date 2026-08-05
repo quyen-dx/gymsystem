@@ -10,6 +10,7 @@ import { PlanRecommendCard } from './PlanRecommendCard'
 import { WorkoutAnalyzeCard, WorkoutPlanCard } from './WorkoutAnalyzeCard'
 import { AICardRenderer } from './AICardRenderer'
 import type { RichResponseCard } from './AICardRenderer'
+import AIMessageFormatter from './AIMessageFormatter'
 
 interface Props {
   message: ChatMessage
@@ -362,7 +363,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
   if (planPayload?.type === 'plan_detail') {
     return (
       <div className="ai-assistant-content ai-text-content">
-        {displayText && renderText(displayText)}
+        {displayText && <AIMessageFormatter content={displayText} />}
         <PlanDetailCard plan={planPayload.plan as PlanPayloadPlan} lang={lang} />
       </div>
     )
@@ -371,7 +372,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
   if (planPayload?.type === 'plan_compare_two') {
     return (
       <div className="ai-assistant-content ai-text-content">
-        {displayText && renderText(displayText)}
+        {displayText && <AIMessageFormatter content={displayText} />}
         <CompareTwoPlansCard plans={(planPayload.plans || []) as PlanPayloadPlan[]} conclusion={planPayload.conclusion} lang={lang} />
       </div>
     )
@@ -380,7 +381,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
   if (planPayload?.type === 'plan_compare_all') {
     return (
       <div className="ai-assistant-content ai-text-content">
-        {displayText && renderText(displayText)}
+        {displayText && <AIMessageFormatter content={displayText} />}
         <PlanCompareTable plans={(planPayload.plans || []) as PlanPayloadPlan[]} lang={lang} />
       </div>
     )
@@ -391,7 +392,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
     const alternatives = (planPayload.alternatives || []) as PlanPayloadPlan[]
     return (
       <div className="ai-assistant-content ai-text-content">
-        {displayText && renderText(displayText)}
+        {displayText && <AIMessageFormatter content={displayText} />}
         {recommended && <PlanRecommendCard recommendedPlan={recommended} reason={planPayload.reason} conclusion={planPayload.conclusion || message.conclusion} alternatives={alternatives} lang={lang} />}
       </div>
     )
@@ -403,7 +404,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
       : (message.plans || [])
     return (
       <div className="ai-assistant-content ai-text-content">
-        {displayText && renderText(displayText)}
+        {displayText && <AIMessageFormatter content={displayText} />}
         <PlanCompactList plans={plans} lang={lang} />
       </div>
     )
@@ -413,7 +414,7 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
     const payload = planPayload?.type === 'smart_recommend' ? planPayload : message as any
     return (
       <div className="ai-assistant-content ai-text-content">
-        {displayText && renderText(displayText)}
+        {displayText && <AIMessageFormatter content={displayText} />}
         <ComboRecommendCard data={payload as any} lang={lang} />
       </div>
     )
@@ -424,15 +425,15 @@ export function AssistantMessageBubble({ message, content, loadingMessage }: Pro
     const isPlan = payload.type === 'workout_plan'
     return (
       <div className="ai-assistant-content ai-text-content">
-        {displayText && renderText(displayText)}
+        {displayText && <AIMessageFormatter content={displayText} />}
         {isPlan ? <WorkoutPlanCard data={payload.plan || payload} lang={lang} /> : <WorkoutAnalyzeCard data={payload.analysis || payload} lang={lang} />}
       </div>
     )
   }
 
   return (
-    <div className="ai-assistant-content ai-text-content" style={{ whiteSpace: 'pre-line', lineHeight: 1.7 }}>
-      {displayText && renderText(displayText)}
+    <div className="ai-assistant-content ai-text-content">
+      {displayText && <AIMessageFormatter content={displayText} />}
       {renderGenericCards()}
       <AICardRenderer cards={(message.cards || []) as RichResponseCard[]} />
       {renderSourceList()}

@@ -15,6 +15,7 @@ import {
   getMemberEnrollmentPreview,
   transferMemberClass,
   leaveMemberClass,
+  leaveCurrentTraining,
   requestClassAssignment,
   acceptClassAssignment,
   declineClassAssignment,
@@ -49,5 +50,6 @@ router.post('/bulk-release', authorize('admin', 'super_admin'), bulkReleasePt)
 router.get('/enrollment/preview', authorize('pt', 'admin', 'super_admin', 'member'), getMemberEnrollmentPreview)
 router.post('/enrollment/transfer', authorize('pt', 'admin', 'super_admin'), transferMemberClass)
 router.post('/enrollment/leave', authorize('pt', 'admin', 'super_admin', 'member'), leaveMemberClass)
+router.post('/enrollment/leave-current-training', authorize('member'), leaveCurrentTraining)
 
 export default router

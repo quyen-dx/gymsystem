@@ -4,6 +4,10 @@ import * as ctrl from '../controllers/specializationController.js'
 
 const router = express.Router()
 router.use(protect)
+
+// Mục tiêu theo chuyên môn — PT/admin đều cần (dùng trong form tạo/sửa giáo án)
+router.get('/:id/goals', authorize('pt', 'admin', 'super_admin'), ctrl.getGoalsBySpecialization)
+
 router.use(authorize('admin', 'super_admin'))
 
 router.get('/', ctrl.getAll)

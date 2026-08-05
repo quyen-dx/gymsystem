@@ -162,7 +162,7 @@ export default function StaffPaymentsPage() {
       title: 'Phương thức', width: 140,
       render: (_: any, r: any) => {
         const m = r.paymentMethod || r.method || '-'
-        const labels: Record<string, string> = { CASH: 'Tiền mặt', BANK_TRANSFER: 'Chuyển khoản', POS: 'Quẹt thẻ', WALLET: 'Ví', STRIPE: 'Stripe', MANUAL: 'Thủ công', REFUND: 'Hoàn tiền' }
+        const labels: Record<string, string> = { CASH: 'Tiền mặt', BANK_TRANSFER: 'Chuyển khoản', POS: 'Quẹt thẻ', WALLET: 'Ví', STRIPE: 'Stripe', MANUAL: 'Thủ công', REFUND: 'Hoàn tiền', VNPAY: 'VNPay', INTERNATIONAL_CARD: 'Thẻ quốc tế', MANUAL_QR: 'Chuyển khoản QR' }
         return labels[m] || m
       },
     },
@@ -243,8 +243,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
     {
       title: 'Kích hoạt', key: 'activationStatus', width: 120,
       render: (_: any, rr: any) => {
-        if (rr.activationStatus === 'pending') return <Tag color="warning">🟡 Chờ kích hoạt</Tag>
-        if (rr.activationStatus === 'activated') return <Tag color="success">🟢 Đã kích hoạt</Tag>
+        if (rr.activationStatus === 'activated') return <Tag color="success">🟢 Đã hoạt động</Tag>
         return <Tag color="default">—</Tag>
       },
     },
@@ -331,7 +330,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
       title: 'Người xử lý', dataIndex: 'reviewedBy', key: 'reviewedBy', width: 130,
       render: (user: any) => {
         if (!user) return <span className="text-[var(--gs-text-muted)]">—</span>
-        return user?.name || user?.fullName || '—'
+        return user?.fullName || user?.name || user?.email || '—'
       },
     },
     {
@@ -631,14 +630,11 @@ const renderBenefitsTag = (rr: RefundRequest) => {
               const plan = detailRR.planId || {}
               const cycle = detailRR.cycle || {}
               const { mainRefund, pendingTotal, total, hasPending, pendingCount } = getRefundBreakdown(detailRR)
-              const isActivated = !!cycle.activatedAt
               const renewalPrice = pendingCount > 0 ? pendingTotal / pendingCount : 0
 
-              const explainText = isActivated
-                ? 'Gói chính đã được kích hoạt nên không được hoàn.'
-                : mainRefund > 0
-                  ? 'Gói chính chưa kích hoạt nên được hoàn toàn bộ.'
-                  : ''
+              const explainText = mainRefund > 0
+                ? 'Hoàn 100% gói chính vì hội viên còn trong 7 ngày kể từ ngày đăng ký và chưa sử dụng quyền lợi nào của gói.'
+                : 'Gói chính không được hoàn vì hội viên đã sử dụng quyền lợi của gói hoặc đã quá 7 ngày kể từ ngày đăng ký.'
 
               return (
                 <div className="space-y-5">
@@ -663,7 +659,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
                       <div className="divide-y divide-[var(--gs-border)]">
                         <Row label="Tên gói" value={plan.nameVi || '-'} bold />
                         <Row label="Giá" value={formatMoney(plan.price || 0)} />
-                        <Row label="Trạng thái" value={<Tag color={isActivated ? 'success' : 'warning'} className="m-0">{isActivated ? 'Đã kích hoạt' : 'Chưa kích hoạt'}</Tag>} />
+                        <Row label="Trạng thái" value={<Tag color="success" className="m-0">Đang hoạt động</Tag>} />
                       </div>
                       <div className="flex items-center justify-between px-4 py-3 bg-[var(--gs-card)] border-t border-[var(--gs-border)]">
                         <span className="font-medium text-[var(--gs-text)]">Hoàn tiền</span>
@@ -688,7 +684,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
                           <Row label="Tên gói" value={plan.nameVi || '-'} bold />
                           <Row label="Giá mỗi gói" value={formatMoney(renewalPrice)} />
                           <Row label="Số lượng" value={<span className="font-semibold">{pendingCount} gói</span>} />
-                          <Row label="Trạng thái" value={<Tag color="warning" className="m-0">Chờ kích hoạt</Tag>} />
+                          <Row label="Trạng thái" value={<Tag color="success" className="m-0">Đang hoạt động</Tag>} />
                         </div>
                         <div className="flex items-center justify-between px-4 py-3 bg-[var(--gs-card)] border-t border-[var(--gs-border)]">
                           <span className="font-medium text-[var(--gs-text)]">Hoàn tiền</span>
@@ -777,7 +773,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
                     )}
                     {approvingRR.pendingPeriodsCount && approvingRR.pendingPeriodsCount > 0 && (
                       <div className="flex justify-between text-sm mt-1">
-                        <span className="text-[var(--gs-text-soft)]">Gia hạn ({approvingRR.pendingPeriodsCount} kỳ chưa kích hoạt)</span>
+                        <span className="text-[var(--gs-text-soft)]">Gia hạn ({approvingRR.pendingPeriodsCount} kỳ chưa bắt đầu)</span>
                         <span className="font-medium text-[var(--gs-success)]">{formatMoney(approvingRR.pendingPeriodsTotal!)}</span>
                       </div>
                     )}

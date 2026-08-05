@@ -29,7 +29,7 @@ function buildContents(message, user, memoryContext = '', contextPrompt = '') {
 async function executeTool(name, args, user) {
   if (name === 'vectorQuery') return { result: await vectorQuery(args?.query), args }
   if (name === 'webQuery') return { result: await webQuery(args?.query), args }
-  return { result: await databaseQuery(args?.intent, user), args }
+  return { result: await databaseQuery(args?.intent, user, args), args }
 }
 
 function extractText(chunk) {

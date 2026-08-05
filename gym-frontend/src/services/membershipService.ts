@@ -115,9 +115,19 @@ export interface MyMembership {
   endDate: string
   remainingDays: number
   status: 'active' | 'pending_cancel' | 'expired' | 'cancelled' | 'refunded' | 'cancel_requested'
-  displayStatus: 'active' | 'expiring_soon' | 'expired' | 'cancel_requested'
+  displayStatus: 'active' | 'expiring_soon' | 'expires_today' | 'expired' | 'cancelled' | 'refunded'
   createdAt?: string
   cancelledAt?: string
+}
+
+export interface MyMembershipCycle {
+  purchasedAt: string | null
+  activatedAt: string | null
+  expiresAt: string | null
+  refundEligible: boolean | null
+  refundExpiredAt: string | null
+  status: 'active'
+  startDate: string | null
 }
 
 export interface CancelPeriodDetail {
@@ -145,15 +155,30 @@ export interface CancelRenewalItem {
   refundAmount: number
 }
 
+export interface RefundInfo {
+  eligible: boolean
+  hasUsedBenefit: boolean
+  within7Days: boolean
+  registeredAt: string | null
+  refundDeadline: string | null
+  remainingDays: number
+  reason: string
+}
+
 export interface CancelMainPackage {
   planName: string
   price: number
   status: string
   activatedAt: string | null
   purchasedAt: string | null
+  registeredAt: string | null
   refundEligible: boolean
   refundAmount: number
   reason: string
+  hasUsedBenefit: boolean
+  within7Days: boolean
+  refundDeadline: string | null
+  remainingDays: number
 }
 
 export interface CancelInfo {
@@ -173,7 +198,12 @@ export interface CancelInfo {
     estimatedRefundAmount: number
     reason: string
     purchasedAt: string | null
+    registeredAt: string | null
     activatedAt: string | null
+    hasUsedBenefit: boolean
+    within7Days: boolean
+    refundDeadline: string | null
+    remainingDays: number
   }
   pendingPeriods: Array<{
     _id: string
@@ -247,7 +277,7 @@ export const membershipService = {
   getPlans: (params?: Record<string, any>) => api.get<{ plans: MembershipPlan[] }>('/plans', { params: { limit: 100, ...params } }),
   registerPlan: (planId: string) => api.post('/memberships', { planId }),
   subscribePlan: (planId: string) => api.post('/memberships/subscribe', { planId }),
-  getMyMembership: () => api.get<{ membership: MyMembership | null; canRenew: boolean; renewalThresholdDays: number; pendingCancelRequest: PendingCancelRequest | null; cycle: { purchasedAt: string | null; activatedAt: string | null; expiresAt: string | null; refundEligible: boolean | null; refundExpiredAt: string | null } | null }>('/memberships/my'),
+  getMyMembership: () => api.get<{ membership: MyMembership | null; canRenew: boolean; renewalThresholdDays: number; pendingCancelRequest: PendingCancelRequest | null; cycle: MyMembershipCycle | null; refundInfo: RefundInfo | null }>('/memberships/my'),
   getMyRenewals: () => api.get<{ renewals: MembershipRenewal[] }>('/memberships/my/renewals'),
   getMyPeriods: () => api.get<{ periods: MembershipPeriod[] }>('/memberships/my/periods'),
   cancelRenewal: (renewalId: string) =>
@@ -287,8 +317,6 @@ export const membershipService = {
   rejectRefundRequest: (id: string, data: { reason: string }) =>
     api.post<{ message: string; refundRequest: RefundRequest }>(`/memberships/staff/refund-requests/${id}/reject`, data),
 
-  cancelPendingMembership: () =>
-    api.post<{ message: string; refundAmount: number; refundEligible: boolean }>('/memberships/cancel-pending'),
   createCancelRequest: (data: { reason: string; policyAccepted?: boolean; refundMethod?: 'WALLET' | 'NONE' }) =>
     api.post<{ message: string; cancellationRequest: CancellationRequest }>('/memberships/cancel-request', data),
   getMyCancelRequests: () =>

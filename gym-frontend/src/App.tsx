@@ -1,8 +1,10 @@
 import { App as AntdApp, Button, ConfigProvider, theme } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import FeatureDisabled from './components/system/FeatureDisabled'
 import { getAuthToken, startRefreshScheduler } from './services/api'
+import { socketService } from './services/socketService'
+import { PtRequestProvider } from './context/PtRequestProvider'
 import { SystemSettingsProvider, useSystemSettings } from './context/SystemSettingsContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { useAuth } from './hooks/useAuth'
@@ -58,7 +60,7 @@ import WorkoutPage from './pages/dashboard/member/WorkoutPage'
 import AdminTrainingClassesPage from './pages/dashboard/admin/TrainingClassesPage'
 import AdminFloorsZonesPage from './pages/dashboard/admin/FloorsZonesPage'
 import AdminTrainerSchedulesPage from './pages/dashboard/admin/AdminTrainerSchedulesPage'
-import AdminReplacementRequestsPage from './pages/dashboard/admin/AdminReplacementRequestsPage'
+import AdminShiftChangeRequestsPage from './pages/dashboard/admin/AdminShiftChangeRequestsPage'
 import PTClientsPage from './pages/dashboard/pt/PTClientsPage'
 import CreateSchedulePage from './pages/dashboard/pt/CreateSchedulePage'
 import PTWorkoutProgressPage from './pages/dashboard/pt/PTWorkoutProgressPage'
@@ -146,6 +148,113 @@ function MaintenanceRoute() {
 
   if (!loading && (user?.role === 'super_admin' || user?.role === 'admin')) return <Navigate to="/admin/system-settings" replace />
   return <MaintenancePage />
+}
+
+// Real-time Yêu cầu PT 1-1: hiện toast + điều hướng tới màn hình xử lý.
+// Chỉ hiện toast khi admin/staff KHÔNG đang ở màn hình Quản lý thành viên
+// (màn hình đó tự cập nhật qua store realtime nên tránh toast trùng lặp).
+function RealtimeAssignmentListener() {
+  const { notification } = AntdApp.useApp()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { user } = useAuth()
+  const isStaff = !!user && ['super_admin', 'admin', 'staff'].includes(user.role)
+
+  useEffect(() => {
+    socketService.connect()
+    // Chỉ admin/staff mới được điều hướng vào màn hình xử lý PT của admin.
+    const goToAdmin = (status: string) => navigate(`/admin/members?pt1on1=1&pt1on1Status=${status}&ts=${Date.now()}`)
+    // Hội viên chỉ mở trang member tương ứng (Booking / Yêu cầu của bạn).
+    const goToBooking = () => navigate('/booking')
+
+    const handler = (event: string) => (data?: { memberName?: string }) => {
+      if (location.pathname.startsWith('/admin/members')) return
+      const memberName = data?.memberName || '—'
+      const toasts: Record<string, () => void> = isStaff
+        ? {
+            pt_request_created: () => {
+              notification.warning({
+                message: '🔔 Có yêu cầu PT 1-1 mới',
+                description: `Hội viên ${memberName} vừa gửi yêu cầu PT 1-1. [Đi đến yêu cầu]`,
+                placement: 'bottomRight', duration: 8,
+                onClick: () => goToAdmin('pending'),
+              })
+            },
+            pt_request_waiting_assignment: () => {
+              notification.warning({
+                message: '🔔 Có yêu cầu PT cần phân công',
+                description: `Hội viên ${memberName} đã đồng ý đổi PT. [Đi đến yêu cầu]`,
+                placement: 'bottomRight', duration: 8,
+                onClick: () => goToAdmin('waiting_assignment'),
+              })
+            },
+            pt_request_rejected: () => {
+              notification.info({
+                message: 'Hội viên từ chối đổi PT',
+                description: `Hội viên ${memberName} đã từ chối đổi PT. [Đi đến yêu cầu]`,
+                placement: 'bottomRight', duration: 6,
+                onClick: () => goToAdmin('declined_by_member'),
+              })
+            },
+            pt_request_assigned: () => {
+              notification.success({
+                message: 'Đã phân công PT',
+                description: `Hội viên ${memberName} đã được phân công PT. [Xem chi tiết]`,
+                placement: 'bottomRight', duration: 6,
+                onClick: () => goToAdmin('assigned'),
+              })
+            },
+            pt_request_cancelled: () => {
+              notification.info({
+                message: 'Yêu cầu PT đã bị hủy',
+                description: `Hội viên ${memberName} đã hủy yêu cầu PT 1-1. [Xem chi tiết]`,
+                placement: 'bottomRight', duration: 6,
+                onClick: () => goToAdmin('cancelled'),
+              })
+            },
+          }
+        : {
+            // Hội viên: toast thông tin, click chỉ mở trang member (/booking) — tuyệt đối không sang /admin/*
+            pt_request_assigned: () => {
+              notification.success({
+                message: 'Đã phân công PT',
+                description: 'PT của bạn đã được phân công. Xem chi tiết trong "Yêu cầu của bạn".',
+                placement: 'bottomRight', duration: 6,
+                onClick: () => goToBooking(),
+              })
+            },
+            pt_request_waiting_assignment: () => {
+              notification.info({
+                message: 'Yêu cầu đang chờ phân công',
+                description: 'Yêu cầu của bạn đã chuyển sang trạng thái chờ phân công PT.',
+                placement: 'bottomRight', duration: 6,
+                onClick: () => goToBooking(),
+              })
+            },
+            pt_request_cancelled: () => {
+              notification.info({
+                message: 'Yêu cầu PT đã bị hủy',
+                description: 'Yêu cầu của bạn đã bị hủy. Bạn có thể đăng ký lại bất cứ lúc nào.',
+                placement: 'bottomRight', duration: 6,
+                onClick: () => goToBooking(),
+              })
+            },
+          }
+      toasts[event]?.()
+    }
+
+    const events = ['pt_request_created', 'pt_request_waiting_assignment', 'pt_request_rejected', 'pt_request_assigned', 'pt_request_cancelled']
+    const handlers = events.map((event) => {
+      const h = handler(event)
+      socketService.on(event, h)
+      return [event, h] as const
+    })
+    return () => {
+      for (const [event, h] of handlers) socketService.off(event, h)
+    }
+  }, [location.pathname, notification, navigate, isStaff])
+
+  return null
 }
 
 
@@ -267,6 +376,8 @@ function AppWithTheme() {
   return (
     <ConfigProvider theme={antdTheme}>
       <AntdApp>
+        <RealtimeAssignmentListener />
+        <PtRequestProvider>
         <Routes>
 
         {/* AUTH */}
@@ -312,7 +423,7 @@ function AppWithTheme() {
         <Route path="/admin/training-classes" element={<PrivateRoute><AdminTrainingClassesPage /></PrivateRoute>} />
         <Route path="/admin/floors-zones" element={<PrivateRoute><AdminFloorsZonesPage /></PrivateRoute>} />
         <Route path="/admin/trainer-schedules" element={<PrivateRoute feature="pt.scheduleEnabled"><AdminTrainerSchedulesPage /></PrivateRoute>} />
-        <Route path="/admin/replacement-requests" element={<PrivateRoute feature="pt.scheduleEnabled"><AdminReplacementRequestsPage /></PrivateRoute>} />
+        <Route path="/admin/shift-change-requests" element={<PrivateRoute feature="pt.scheduleEnabled"><AdminShiftChangeRequestsPage /></PrivateRoute>} />
         <Route path="/admin/policies/create" element={<PrivateRoute><PolicyCreatePage /></PrivateRoute>} />
         <Route path="/admin/policies/:policyId/edit" element={<PrivateRoute><PolicyCreatePage /></PrivateRoute>} />
         <Route path="/admin/policies" element={<PrivateRoute><PolicyManagerPage /></PrivateRoute>} />
@@ -384,6 +495,7 @@ function AppWithTheme() {
         <Route path="/help" element={<PrivateRoute><HelpCenterPage /></PrivateRoute>} />
         <Route path="/policies" element={<PrivateRoute><PolicyPage /></PrivateRoute>} />
         </Routes>
+        </PtRequestProvider>
       </AntdApp>
     </ConfigProvider>
   )

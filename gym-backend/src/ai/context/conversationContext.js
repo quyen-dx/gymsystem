@@ -122,8 +122,12 @@ export function inferContextFromResponse(toolName, args, result, responseText, r
         wallet_balance: 'Ví của người dùng',
         membership_status: 'Gói tập của người dùng',
         membership_expiry: 'Gói tập của người dùng',
+        membership_summary: 'Tổng quan gói tập của người dùng',
         upcoming_booking: 'Lịch PT của người dùng',
         unread_notifications: 'Thông báo của người dùng',
+        list_plans: 'Danh sách gói tập GymPro',
+        plan_detail: 'Chi tiết gói tập GymPro',
+        my_pt: 'PT của người dùng',
       }
       return subjectMap[args?.intent] || 'Dữ liệu người dùng'
     }

@@ -4,7 +4,6 @@ import PTAssignment from '../models/PTAssignment.js'
 import TrainingClass from '../models/TrainingClass.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
 import Workout from '../models/Workout.js'
-import { applyOverridesToSchedules } from '../services/shiftSwapService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 
@@ -163,7 +162,6 @@ export const getMySchedules = async (req, res) => {
       .sort({ createdAt: -1 })
 
     schedules = await enrichSessions(schedules)
-    schedules = await applyOverridesToSchedules(schedules)
     for (const s of schedules) {
       if (s.sessions?.length) {
         s.sessions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -190,7 +188,6 @@ export const getMemberSchedules = async (req, res) => {
       .sort({ createdAt: -1 })
 
     schedules = await enrichSessions(schedules)
-    schedules = await applyOverridesToSchedules(schedules)
 
     for (const s of schedules) {
       if (s.sessions?.length) {

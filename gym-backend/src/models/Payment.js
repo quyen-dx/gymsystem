@@ -8,6 +8,22 @@ const paymentSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    walletId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Wallet',
+      default: null,
+      index: true,
+    },
+    transactionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Transaction',
+      default: null,
+      index: true,
+    },
+    exchangeRate: {
+      type: Number,
+      default: null,
+    },
     membershipId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Membership',
@@ -79,6 +95,10 @@ const paymentSchema = new mongoose.Schema(
       default: 'ONLINE',
     },
     paidAt: {
+      type: Date,
+      default: null,
+    },
+    completedAt: {
       type: Date,
       default: null,
     },

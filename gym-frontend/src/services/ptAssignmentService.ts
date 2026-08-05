@@ -63,7 +63,30 @@ export interface PTAssignment {
   ptId: string | PTAssignmentPT
   membershipId?: string
   workoutId?: string | PTAssignedWorkout
-  classId?: string | { _id: string; name?: string; code?: string }
+  classId?: string | { _id: string; name?: string; code?: string; daysOfWeek?: number[]; startTime?: string; endTime?: string; specialization?: string }
+  currentSchedule?: {
+    timeSlots?: string[]
+    daysOfWeek?: number[]
+    startTime?: string
+    endTime?: string
+    classId?: string
+    className?: string
+    classCode?: string
+    specialization?: string
+  } | null
+  schedule?: PTAssignment['currentSchedule']
+  acceptedProposal?: {
+    timeSlots?: string[]
+    daysOfWeek?: number[]
+    startTime?: string
+    endTime?: string
+    classId?: string
+    className?: string
+    classCode?: string
+    specialization?: string
+    goals?: string[]
+  } | null
+  matchedClass?: PTAssignment['classId']
   classEnrollment?: { _id: string; code: string; name: string } | null
   specialization?: string
   goals?: string[]
@@ -73,14 +96,23 @@ export interface PTAssignment {
   cancelledAt?: string
   cancelReason?: string
   scheduleCount?: number
+  totalSessions?: number
+  attendedSessions?: number
   _fromClass?: boolean
-  membershipStatus?: 'active' | 'pending_initial_activation' | null
+  type?: 'GROUP' | 'PT_1_1'
+  membershipStatus?: 'active' | 'expired' | null
+  membershipStartAt?: string | null
+  membershipExpiresAt?: string | null
+  requestNote?: string
+  requestContactPhone?: string
+  requestContactEmail?: string
   createdAt?: string
   updatedAt?: string
 }
 
 export interface HistoryEntry {
   _type: 'workout_end' | 'assignment_end'
+  type?: 'GROUP' | 'PT_1_1'
   _id: string
   memberId: string | PTAssignmentMember
   ptId: string | PTAssignmentPT
@@ -100,6 +132,7 @@ export interface HistoryEntry {
 
 export interface PendingApproval {
   _id: string
+  type?: 'GROUP' | 'PT_1_1'
   memberId: string | PTAssignmentMember
   ptId: string | PTAssignmentPT
   assignmentId?: string | { _id: string; workoutId?: string }
@@ -235,6 +268,11 @@ export interface LeaveClassResponse {
   modifiedCount: number
 }
 
+export interface LeaveCurrentTrainingResponse {
+  message: string
+  result: Record<string, number>
+}
+
 const enrollmentService = {
   getPreview: (memberId: string) =>
     api.get<EnrollmentPreviewResponse>('/pt-assignments/enrollment/preview', { params: { memberId } }),
@@ -244,6 +282,8 @@ const enrollmentService = {
 
   leaveClass: (data: { memberId: string; reason?: string }) =>
     api.post<LeaveClassResponse>('/pt-assignments/enrollment/leave', data),
+  leaveCurrentTraining: (data?: { reason?: string }) =>
+    api.post<LeaveCurrentTrainingResponse>('/pt-assignments/enrollment/leave-current-training', data || {}),
 }
 
 // ============================================================

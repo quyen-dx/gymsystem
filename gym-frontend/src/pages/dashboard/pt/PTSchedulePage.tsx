@@ -3,8 +3,10 @@ import { Button, Checkbox, DatePicker, Empty, Input, List, Tag, message, Modal }
 import { CheckCircleFilled, ClockCircleOutlined, LeftOutlined, RightOutlined, SwapOutlined, UserOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
+import { useAuth } from '../../../hooks/useAuth'
 import { trainerService, type WeekAttendee, type WeekAttendeeMember } from '../../../services/trainerService'
-import { shiftSwapService } from '../../../services/shiftSwapService'
+import { shiftChangeService, type ScheduleReplacement, type ShiftChangeRequest } from '../../../services/shiftChangeService'
+import { socketService } from '../../../services/socketService'
 import { useTheme } from '../../../context/ThemeProvider'
 import type { TrainingClass } from '../../../services/trainingGroupService'
 
@@ -19,8 +21,26 @@ function getZoneName(z: string | { _id: string; name: string } | undefined): str
 
 const DAY_LABEL_MAP_VN = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
 
+// Thứ Hai của tuần chứa d — không phụ thuộc locale dayjs (vi locale có weekStart=1)
+const startOfVnWeek = (d: dayjs.Dayjs) => d.subtract((d.day() + 6) % 7, 'day').startOf('day')
+
+// Trạng thái yêu cầu thay ca đang "mở" → khóa đúng ca đã gửi
+const ACTIVE_REQUEST_STATUSES = ['pending', 'waiting_assignment', 'assigned', 'accepted']
+
+interface ModalClassOption {
+  key: string
+  classId: string
+  name: string
+  startTime: string
+  endTime: string
+  floorName: string
+  zoneName: string
+  isReplacement: boolean
+}
+
 export default function PTSchedulePage() {
   const { dark } = useTheme()
+  const { user } = useAuth()
   const [classes, setClasses] = useState<TrainingClass[]>([])
   const [swapModalOpen, setSwapModalOpen] = useState(false)
   const [swapDate, setSwapDate] = useState<dayjs.Dayjs | null>(null)
@@ -28,19 +48,20 @@ export default function PTSchedulePage() {
   const [swapSubmitting, setSwapSubmitting] = useState(false)
   const [selectedClassIds, setSelectedClassIds] = useState<Set<string>>(new Set())
 
-  const DAYS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
-
   // Week picker: default to Monday of current week
-  const [weekStart, setWeekStart] = useState(() => dayjs().startOf('week').add(1, 'day')) // Monday
+  const [weekStart, setWeekStart] = useState(() => startOfVnWeek(dayjs()))
   const [attendees, setAttendees] = useState<WeekAttendee[]>([])
+  const [replacements, setReplacements] = useState<ScheduleReplacement[]>([])
+  const [myRequests, setMyRequests] = useState<ShiftChangeRequest[]>([])
+  const [modalReplacements, setModalReplacements] = useState<ScheduleReplacement[]>([])
   const [memberModal, setMemberModal] = useState<{ open: boolean; title: string; members: WeekAttendeeMember[] }>({ open: false, title: '', members: [] })
 
   const goPrevWeek = () => setWeekStart(prev => prev.subtract(7, 'day'))
   const goNextWeek = () => setWeekStart(prev => prev.add(7, 'day'))
-  const goCurrentWeek = () => setWeekStart(dayjs().startOf('week').add(1, 'day'))
+  const goCurrentWeek = () => setWeekStart(startOfVnWeek(dayjs()))
 
   const weekLabel = `${weekStart.format('DD/MM')} - ${weekStart.add(6, 'day').format('DD/MM/YYYY')}`
-  const isCurrentWeek = weekStart.isSame(dayjs().startOf('week').add(1, 'day'), 'day')
+  const isCurrentWeek = weekStart.isSame(startOfVnWeek(dayjs()), 'day')
 
   const loadClasses = async () => {
     try {
@@ -59,12 +80,56 @@ export default function PTSchedulePage() {
     try {
       const res = await trainerService.getPTMyWeekAttendees(weekStart.format('YYYY-MM-DD'))
       setAttendees(res.data?.attendees || [])
+      setReplacements(res.data?.replacements || [])
     } catch {
       // silent
     }
   }, [weekStart])
 
   useEffect(() => { loadAttendees() }, [loadAttendees])
+
+  // Realtime: cập nhật lịch ngay khi có thay ca liên quan (admin gán / PT chấp nhận)
+  useEffect(() => {
+    socketService.connect()
+    const handler = () => { loadAttendees() }
+    socketService.on('shift_change:my_updated', handler)
+    return () => { socketService.off('shift_change:my_updated', handler) }
+  }, [loadAttendees])
+
+  // Yêu cầu thay ca của PT để khóa đúng ca đã gửi (PT + Class + Date)
+  const loadMyRequests = useCallback(async () => {
+    try {
+      const res = await shiftChangeService.getMyRequests()
+      setMyRequests(res.data?.requests || [])
+    } catch {
+      // silent
+    }
+  }, [])
+
+  useEffect(() => { loadMyRequests() }, [loadMyRequests])
+
+  // Ca đã có yêu cầu thay ca đang mở → khóa: key = "YYYY-MM-DD_classId"
+  const lockedClassKeys = useMemo(() => {
+    const set = new Set<string>()
+    for (const req of myRequests) {
+      if (!ACTIVE_REQUEST_STATUSES.includes(req.status)) continue
+      const dk = dayjs(req.targetDate).format('YYYY-MM-DD')
+      for (const it of req.items || []) {
+        if (!it.classId) continue
+        set.add(`${dk}_${String(it.classId)}`)
+      }
+    }
+    return set
+  }, [myRequests])
+
+  // Lấy ca thay (ScheduleReplacement) cho tuần chứa ngày được chọn trong modal
+  useEffect(() => {
+    if (!swapDate) { setModalReplacements([]); return }
+    const monday = startOfVnWeek(dayjs(swapDate))
+    shiftChangeService.getMyReplacements(monday.format('YYYY-MM-DD'))
+      .then(res => setModalReplacements(res.data?.replacements || []))
+      .catch(() => setModalReplacements([]))
+  }, [swapDate])
 
   // Build lookup: "dayOfWeek_classCode" -> WeekAttendee
   const attendeesMap = useMemo(() => {
@@ -75,16 +140,82 @@ export default function PTSchedulePage() {
     return map
   }, [attendees])
 
-  // Classes that fall on the selected date
-  const dateClasses = useMemo(() => {
+  // Build lookup: "YYYY-MM-DD_classId" -> ScheduleReplacement (thay ca còn hiệu lực)
+  const replacementsMap = useMemo(() => {
+    const map = new Map<string, ScheduleReplacement>()
+    for (const r of replacements) {
+      const classId = typeof r.classId === 'object' ? r.classId?._id : r.classId
+      if (!classId) continue
+      const key = `${dayjs(r.date).format('YYYY-MM-DD')}_${classId}`
+      if (!map.has(key)) map.set(key, r)
+    }
+    return map
+  }, [replacements])
+
+  const isReplacingMe = (r: ScheduleReplacement) => String(r.replacementTrainerId) === String(user?._id)
+
+  // Ca thay PT B đã chấp nhận (status=approved, còn hiệu lực) — keyed theo YYYY-MM-DD
+  const myReplacementForDate = useMemo(() => {
+    const map = new Map<string, ScheduleReplacement[]>()
+    for (const r of replacements) {
+      if (!isReplacingMe(r)) continue
+      const key = dayjs(r.date).format('YYYY-MM-DD')
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(r)
+    }
+    for (const arr of map.values()) {
+      arr.sort((a, b) => (a.startTime || a.classStartTime || '').localeCompare(b.startTime || b.classStartTime || ''))
+    }
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replacements, user?._id])
+
+  // Toàn bộ ca của ngày được chọn (từ lịch PT): ca chính + ca thay PT đã nhận
+  const modalClasses = useMemo(() => {
     if (!swapDate) return []
     const dow = swapDate.day()
-    return classes
-      .filter(c => c.daysOfWeek.includes(dow))
-      .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
-  }, [swapDate, classes])
+    const dateKey = swapDate.format('YYYY-MM-DD')
+    const seen = new Set<string>()
+    const options: ModalClassOption[] = []
+    for (const c of classes) {
+      if (!c.daysOfWeek.includes(dow)) continue
+      seen.add(String(c._id))
+      options.push({
+        key: `own_${c._id}`,
+        classId: String(c._id),
+        name: c.name || '',
+        startTime: c.startTime || '',
+        endTime: c.endTime || '',
+        floorName: getFloorName(c.floorId),
+        zoneName: getZoneName(c.zoneId),
+        isReplacement: false,
+      })
+    }
+    for (const r of modalReplacements) {
+      if (!isReplacingMe(r)) continue
+      if (dayjs(r.date).format('YYYY-MM-DD') !== dateKey) continue
+      const cid = typeof r.classId === 'object' ? r.classId?._id : r.classId
+      if (!cid || seen.has(String(cid))) continue
+      seen.add(String(cid))
+      options.push({
+        key: `repl_${r._id}`,
+        classId: String(cid),
+        name: r.className || '',
+        startTime: r.startTime || r.classStartTime || '',
+        endTime: r.endTime || r.classEndTime || '',
+        floorName: r.floorName || '',
+        zoneName: r.zoneName || '',
+        isReplacement: true,
+      })
+    }
+    return options.sort((a, b) => a.startTime.localeCompare(b.startTime))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [swapDate, classes, modalReplacements, user?._id])
 
   const toggleClass = (id: string) => {
+    if (!swapDate) return
+    const dk = swapDate.format('YYYY-MM-DD')
+    if (lockedClassKeys.has(`${dk}_${id}`)) return
     setSelectedClassIds(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
@@ -92,24 +223,36 @@ export default function PTSchedulePage() {
     })
   }
 
-  const selectAll = () => setSelectedClassIds(new Set(dateClasses.map(c => c._id)))
+  const selectAll = () => {
+    if (!swapDate) return
+    const dk = swapDate.format('YYYY-MM-DD')
+    setSelectedClassIds(new Set(modalClasses.filter(o => !lockedClassKeys.has(`${dk}_${o.classId}`)).map(o => o.classId)))
+  }
   const deselectAll = () => setSelectedClassIds(new Set())
 
-  const selectedCount = selectedClassIds.size
+  // Chỉ tính ca thật sự được phép gửi (loại ca đã khóa)
+  const validSelectedClassIds = useMemo(() => {
+    if (!swapDate) return new Set<string>()
+    const dk = swapDate.format('YYYY-MM-DD')
+    return new Set(Array.from(selectedClassIds).filter(id => !lockedClassKeys.has(`${dk}_${id}`)))
+  }, [selectedClassIds, swapDate, lockedClassKeys])
+
+  const selectedCount = validSelectedClassIds.size
   const hasSelected = selectedCount > 0
 
   const handleSwapSubmit = async () => {
-    if (!swapDate || !hasSelected) { message.warning('Vui lòng chọn ngày và ít nhất 1 ca'); return }
+    if (!swapDate || !hasSelected) { message.warning('Vui lòng chọn ngày và ít nhất 1 ca chưa gửi yêu cầu'); return }
     setSwapSubmitting(true)
     try {
-      await shiftSwapService.create({
+      await shiftChangeService.create({
         targetDate: swapDate.format('YYYY-MM-DD'),
         reason: swapReason,
-        classIds: Array.from(selectedClassIds),
+        classIds: Array.from(validSelectedClassIds),
       })
       message.success('Đã gửi yêu cầu thay ca')
       setSwapModalOpen(false)
       resetForm()
+      loadMyRequests()
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Gửi yêu cầu thất bại')
     } finally {
@@ -130,7 +273,7 @@ export default function PTSchedulePage() {
           <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">LỊCH PT</p>
           <div className="flex items-center justify-between mt-3">
             <h1 className="text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">Lịch làm việc</h1>
-            <Button type="primary" icon={<SwapOutlined />} onClick={() => setSwapModalOpen(true)}>
+            <Button type="primary" icon={<SwapOutlined />} onClick={() => { loadMyRequests(); setSwapModalOpen(true) }}>
               Yêu cầu thay ca
             </Button>
           </div>
@@ -151,56 +294,136 @@ export default function PTSchedulePage() {
           </div>
           <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3">
-            {DAYS.map((day, idx) => {
+            {Array.from({ length: 7 }, (_, idx) => idx).map((idx) => {
               const actualDate = weekStart.add(idx, 'day')
+              const dayLabel = DAY_LABEL_MAP_VN[actualDate.day()]
               const dateStr = actualDate.format('DD/MM')
+              const dateKey = actualDate.format('YYYY-MM-DD')
               const dayClasses = classes
-                .filter(c => c.daysOfWeek.includes(idx))
+                .filter(c => c.daysOfWeek.includes(actualDate.day()))
                 .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+              const mainClassIds = new Set(dayClasses.map(c => String(c._id)))
+              const myRepls = (myReplacementForDate.get(dateKey) || []).filter(r => {
+                const cid = typeof r.classId === 'object' ? r.classId?._id : r.classId
+                if (cid && mainClassIds.has(String(cid))) return false
+                // PT gốc đã kết thúc phụ trách lớp → chỉ render khi lớp còn >= 2 hội viên (realtime)
+                if (r.originalTrainerActive === false) {
+                  const count = attendeesMap.get(`${actualDate.day()}_${r.classCode || ''}`)?.count ?? 0
+                  if (count < 2) return false
+                }
+                return true
+              })
+              const hasAny = dayClasses.length > 0 || myRepls.length > 0
               return (
                 <div key={idx} className="flex flex-col sm:flex-row gap-4 p-4 items-start rounded-lg border border-[var(--gs-border)]">
                   <div className="w-40 shrink-0">
-                    <p className="text-lg font-bold text-slate-100">{day}</p>
+                    <p className="text-lg font-bold text-slate-100">{dayLabel}</p>
                     <p className="text-xs text-[var(--gs-text-muted)]">{dateStr}</p>
                   </div>
                   <div className="flex-1 w-full">
-                    {dayClasses.length === 0 ? (
+                    {!hasAny ? (
                       <div className="border border-dashed border-zinc-800 rounded-lg p-4 text-center text-zinc-500 text-sm">🏝️ Không có lịch</div>
                     ) : (
                       <div className="flex flex-col gap-4">
                         {dayClasses.map((c, i) => {
-                          const attendee = attendeesMap.get(`${idx}_${c.code || ''}`)
+                          const attendee = attendeesMap.get(`${actualDate.day()}_${c.code || ''}`)
                           const count = attendee?.count ?? 0
+                          const repl = replacementsMap.get(`${dateKey}_${c._id}`)
                           return (
                             <div key={c._id}>
                               {i > 0 && <div className="border-t border-zinc-800 pt-4 mb-0" />}
-                              <div className="space-y-1.5">
+                              <div
+                                className={`space-y-1.5 rounded-xl px-3 py-2 -mx-3 ${
+                                  repl && !isReplacingMe(repl)
+                                    ? 'bg-amber-400/10 border border-amber-400/30'
+                                    : ''
+                                }`}
+                              >
                                 <div className="flex items-center justify-between">
                                   <p className="font-bold text-green-500">{c.startTime || '--:--'} - {c.endTime || '--:--'}</p>
-                                  <div
-                                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium cursor-pointer transition-colors ${
-                                      count > 0
-                                        ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20'
-                                        : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
-                                    }`}
-                                    onClick={() => {
-                                      if (count > 0 && attendee) {
-                                        setMemberModal({ open: true, title: `[${c.code}] ${c.name} • ${day} ${dateStr} • ${c.startTime}-${c.endTime}`, members: attendee.members })
-                                      }
-                                    }}
-                                  >
-                                    <UserOutlined />
-                                    <span>{count > 0 ? `${count} hội viên` : '0 hội viên'}</span>
+                                  <div className="flex items-center gap-2">
+                                    {repl && !isReplacingMe(repl) && (
+                                      <Tag
+                                        className="m-0 text-[11px] font-medium bg-amber-400/20 text-amber-300 border-amber-400/40"
+                                        color="gold"
+                                      >
+                                        🔁 Thay ca
+                                      </Tag>
+                                    )}
+                                    <div
+                                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium cursor-pointer transition-colors ${
+                                        count > 0
+                                          ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20'
+                                          : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                                      }`}
+                                      onClick={() => {
+                                        if (count > 0 && attendee) {
+                                          setMemberModal({ open: true, title: `${c.name} • ${dayLabel} ${dateStr} • ${c.startTime}-${c.endTime}`, members: attendee.members })
+                                        }
+                                      }}
+                                    >
+                                      <UserOutlined />
+                                      <span>{count > 0 ? `${count} hội viên` : '0 hội viên'}</span>
+                                    </div>
                                   </div>
                                 </div>
-                                <p className="font-medium text-[var(--gs-text)]">[{c.code || '???'}] {c.name}</p>
+                                <p className="font-medium text-[var(--gs-text)]">{c.name}</p>
                                 <div className="flex items-center gap-2">
                                   <span className="inline-block rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
                                     style={{ background: dark ? 'rgba(182,70,47,0.2)' : 'rgba(182,70,47,0.12)', color: dark ? 'rgb(235,130,100)' : 'rgb(150,55,35)' }}>
                                     {c.specialization || 'GYM'}
                                   </span>
+                                  {repl && !isReplacingMe(repl) && (
+                                    <span className="text-[11px] text-amber-300/90">Do PT khác đứng lớp hôm này</span>
+                                  )}
                                 </div>
                                 <p className="text-xs text-[var(--gs-text-muted)]">📍 {[getFloorName(c.floorId), getZoneName(c.zoneId)].filter(Boolean).join(' - ')}</p>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {myRepls.map((r) => {
+                          const replAttendee = attendeesMap.get(`${actualDate.day()}_${r.classCode || ''}`)
+                          const replCount = replAttendee?.count ?? 0
+                          return (
+                            <div key={`repl-${r._id}`}>
+                              <div className="space-y-1.5 rounded-xl px-3 py-2 -mx-3 border border-yellow-400/60 bg-yellow-400/10">
+                                <div className="flex items-center justify-between">
+                                  <p className="font-bold text-yellow-400">{r.startTime || r.classStartTime || '--:--'} - {r.endTime || r.classEndTime || '--:--'}</p>
+                                  <div className="flex items-center gap-2">
+                                    <Tag className="m-0 text-[11px] font-medium bg-yellow-400/20 text-yellow-300 border-yellow-400/50" color="gold">
+                                      Ca thay
+                                    </Tag>
+                                    <div
+                                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium cursor-pointer transition-colors ${
+                                        replCount > 0
+                                          ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20'
+                                          : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                                      }`}
+                                      onClick={() => {
+                                        if (replCount > 0 && replAttendee) {
+                                          setMemberModal({ open: true, title: `${r.className} • ${dayLabel} ${dateStr} • ${r.startTime || r.classStartTime || '--:--'}-${r.endTime || r.classEndTime || '--:--'}`, members: replAttendee.members })
+                                        }
+                                      }}
+                                    >
+                                      <UserOutlined />
+                                      <span>{replCount > 0 ? `${replCount} hội viên` : '0 hội viên'}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <p className="font-medium text-[var(--gs-text)]">{r.className}</p>
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="inline-block rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                                    style={{ background: dark ? 'rgba(234,179,8,0.2)' : 'rgba(234,179,8,0.12)', color: dark ? 'rgb(253,224,71)' : 'rgb(161,98,7)' }}
+                                  >
+                                    {r.specialization || 'GYM'}
+                                  </span>
+                                  {r.originalTrainerName && (
+                                    <span className="text-[11px] text-yellow-300/90">Thay cho PT {r.originalTrainerName}</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-[var(--gs-text-muted)]">📍 {[r.floorName, r.zoneName].filter(Boolean).join(' - ')}</p>
                               </div>
                             </div>
                           )
@@ -232,7 +455,7 @@ export default function PTSchedulePage() {
               disabledDate={(d) => d.isBefore(dayjs(), 'day')} placeholder="Chọn ngày" />
           </div>
 
-          {swapDate && dateClasses.length > 0 && (
+          {swapDate && modalClasses.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-[var(--gs-text)]">
@@ -244,25 +467,36 @@ export default function PTSchedulePage() {
                 </div>
               </div>
               <div className="space-y-2 max-h-56 overflow-y-auto">
-                {dateClasses.map(c => {
-                  const loc = [getFloorName(c.floorId), getZoneName(c.zoneId)].filter(Boolean).join(' - ')
+                {modalClasses.map(o => {
+                  const locked = lockedClassKeys.has(`${swapDate!.format('YYYY-MM-DD')}_${o.classId}`)
+                  const loc = [o.floorName, o.zoneName].filter(Boolean).join(' - ')
+                  const checked = validSelectedClassIds.has(o.classId)
                   return (
-                    <label key={c._id}
-                      className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
-                        selectedClassIds.has(c._id)
-                          ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
-                          : 'border-[var(--gs-border)] hover:border-[var(--theme-accent)]'
+                    <label key={o.key}
+                      className={`flex items-start gap-3 rounded-lg border p-3 transition-colors ${
+                        locked
+                          ? 'border-[var(--gs-border)] bg-[var(--gs-card-soft)] opacity-60 cursor-not-allowed'
+                          : checked
+                            ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] cursor-pointer'
+                            : 'border-[var(--gs-border)] hover:border-[var(--theme-accent)] cursor-pointer'
                       }`}
                     >
-                      <Checkbox checked={selectedClassIds.has(c._id)} onChange={() => toggleClass(c._id)} />
+                      <Checkbox checked={checked} disabled={locked} onChange={() => toggleClass(o.classId)} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-[var(--gs-text)]">
-                            {c.startTime || '--:--'} - {c.endTime || '--:--'}
+                          <span className={`text-sm font-semibold ${locked ? 'text-[var(--gs-text-muted)]' : 'text-[var(--gs-text)]'}`}>
+                            {o.startTime || '--:--'} - {o.endTime || '--:--'}
                           </span>
-                          <Tag className="m-0 text-[11px]" color="blue">[{c.code || '???'}] {c.name}</Tag>
+                          <Tag className="m-0 text-[11px]" color={o.isReplacement ? 'gold' : 'blue'}>{o.name}</Tag>
+                          {o.isReplacement && <span className="text-[10px] font-medium text-amber-400/90">Ca thay</span>}
                         </div>
                         {loc && <p className="mt-0.5 text-xs text-[var(--gs-text-muted)]">📍 {loc}</p>}
+                        {locked && (
+                          <p className="mt-1 text-[11px] font-medium text-amber-500">
+                            <ClockCircleOutlined className="mr-1" />
+                            Đã gửi yêu cầu thay ca
+                          </p>
+                        )}
                       </div>
                     </label>
                   )
@@ -271,7 +505,7 @@ export default function PTSchedulePage() {
             </div>
           )}
 
-          {swapDate && dateClasses.length === 0 && (
+          {swapDate && modalClasses.length === 0 && (
             <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card-soft)] px-3 py-2">
               <p className="text-xs text-[var(--gs-text-muted)]">Không có ca dạy nào vào ngày này.</p>
             </div>
@@ -287,7 +521,7 @@ export default function PTSchedulePage() {
               <p className="text-xs text-[var(--gs-text-muted)]">
                 Hệ thống sẽ gửi yêu cầu đổi{' '}
                 <strong className="text-[var(--gs-text)]">{selectedCount} ca</strong>{' '}
-                ({dateClasses.filter(c => selectedClassIds.has(c._id)).map(c => `${c.startTime}-${c.endTime}, [${c.code}] ${c.name}`).join('; ')})
+                ({modalClasses.filter(o => validSelectedClassIds.has(o.classId)).map(o => `${o.startTime}-${o.endTime}, ${o.name}`).join('; ')})
                 {' '}vào {DAY_LABEL_MAP_VN[swapDate.day()]}, {swapDate.format('DD/MM/YYYY')} lên admin duyệt.
               </p>
             </div>

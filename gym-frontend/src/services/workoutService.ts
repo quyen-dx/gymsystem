@@ -132,9 +132,6 @@ export type ScheduleSession = {
   exercises: ScheduleExercise[]
   status: 'pending' | 'completed' | 'skipped'
   feedback: string
-  _isSwapOverride?: boolean
-  _overridePtId?: { _id: string; name?: string; fullName?: string; email?: string }
-  _overrideLocation?: string
 }
 
 export type SessionFeedback = {

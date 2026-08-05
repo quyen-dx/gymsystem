@@ -6,13 +6,11 @@ import {
 } from '@ant-design/icons'
 import {
   Button,
-  Drawer,
   Input,
   Modal,
   Rate,
   Select,
   Space,
-  Spin,
   Table,
   Tag,
   Tooltip,
@@ -24,8 +22,7 @@ import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { trainerService } from '../../../services/trainerService'
 import { trainerScheduleService } from '../../../services/trainerScheduleService'
 import { ptAssignmentEndService } from '../../../services/ptAssignmentEndService'
-import { trainerReplacementService, type TrainerReplacementRequest } from '../../../services/trainerReplacementService'
-import { shiftSwapService, type ShiftSwapRequest, type ShiftSwapItem } from '../../../services/shiftSwapService'
+import { shiftChangeService } from '../../../services/shiftChangeService'
 import { workoutService } from '../../../services/workoutService'
 import { socketService } from '../../../services/socketService'
 import type { PT } from '../../../types/admin/trainer'
@@ -54,10 +51,9 @@ export default function AdminTrainersPage() {
   const [specialtyFilter, setSpecialtyFilter] = useState<string | undefined>()
 
   const [schedulesOpen, setSchedulesOpen] = useState(false)
-  const [replacementsOpen, setReplacementsOpen] = useState(false)
-  const [pendingSwapCount, setPendingSwapCount] = useState(0)
   const [pendingEndRequestCount, setPendingEndRequestCount] = useState(0)
   const [pendingWorkoutReportCount, setPendingWorkoutReportCount] = useState(0)
+  const [pendingShiftChangeCount, setPendingShiftChangeCount] = useState(0)
 
   const fetchPTs = useCallback(async (p = page, s = search, sp = specialtyFilter) => {
     setLoading(true)
@@ -77,16 +73,6 @@ export default function AdminTrainersPage() {
 
   useEffect(() => { fetchPTs() }, [])
 
-  // Socket: listen for shift swap count updates
-  useEffect(() => {
-    shiftSwapService.getAll({ status: 'cho_duyet', limit: 1 })
-      .then(res => setPendingSwapCount(res.data.total || 0))
-      .catch(() => {})
-    const countHandler = (data: { pendingCount: number }) => setPendingSwapCount(data.pendingCount)
-    socketService.on('shift_swap:count_updated', countHandler)
-    return () => { socketService.off('shift_swap:count_updated', countHandler) }
-  }, [])
-
   // Socket: listen for pt end request count updates
   useEffect(() => {
     ptAssignmentEndService.getAllRequests({ status: 'pending', limit: 1 })
@@ -105,6 +91,30 @@ export default function AdminTrainersPage() {
     const handler = (data: { pendingCount: number }) => setPendingWorkoutReportCount(data.pendingCount)
     socketService.on('workout_report:count_updated', handler)
     return () => { socketService.off('workout_report:count_updated', handler) }
+  }, [])
+
+  // Socket: listen for shift change (thay ca) pending count updates
+  useEffect(() => {
+    socketService.connect()
+    const refreshCount = () => {
+      Promise.all([
+        shiftChangeService.getAll({ status: 'pending', limit: 1 }),
+        shiftChangeService.getAll({ status: 'waiting_assignment', limit: 1 }),
+      ])
+        .then(([a, b]) => setPendingShiftChangeCount((a.data.total || 0) + (b.data.total || 0)))
+        .catch(() => {})
+    }
+    refreshCount()
+    const countHandler = (data: { pendingCount: number }) => setPendingShiftChangeCount(data.pendingCount)
+    const refreshHandler = () => refreshCount()
+    socketService.on('shift_change:count_updated', countHandler)
+    socketService.on('shift_change:new_request', refreshHandler)
+    socketService.on('shift_change:updated', refreshHandler)
+    return () => {
+      socketService.off('shift_change:count_updated', countHandler)
+      socketService.off('shift_change:new_request', refreshHandler)
+      socketService.off('shift_change:updated', refreshHandler)
+    }
   }, [])
 
   const handleSearch = (value: string) => {
@@ -177,21 +187,21 @@ export default function AdminTrainersPage() {
             className="inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white">
             Xem lịch PT
           </button>
-          <button type="button" onClick={() => setReplacementsOpen(true)}
-            className="inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white">
-            Thay ca
-            {pendingSwapCount > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#f5222d] text-white text-[10px] font-bold px-1">
-                {pendingSwapCount > 99 ? '99+' : pendingSwapCount}
-              </span>
-            )}
-          </button>
           <button type="button" onClick={() => navigate('/admin/trainer-end-requests')}
             className="inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white">
             Yêu cầu kết thúc phụ trách
             {pendingEndRequestCount > 0 && (
               <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#f5222d] text-white text-[10px] font-bold px-1">
                 {pendingEndRequestCount > 99 ? '99+' : pendingEndRequestCount}
+              </span>
+            )}
+          </button>
+          <button type="button" onClick={() => navigate('/admin/shift-change-requests')}
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--gs-card)] px-4 py-1.5 text-sm font-medium text-[var(--gs-text)] transition-all hover:bg-[var(--theme-accent)] hover:text-white">
+            Yêu cầu thay ca
+            {pendingShiftChangeCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#f5222d] text-white text-[10px] font-bold px-1">
+                {pendingShiftChangeCount > 99 ? '99+' : pendingShiftChangeCount}
               </span>
             )}
           </button>
@@ -228,9 +238,6 @@ export default function AdminTrainersPage() {
 
       {/* Modal: Lịch PT */}
       <SchedulesModal open={schedulesOpen} onClose={() => setSchedulesOpen(false)} />
-
-      {/* Drawer: Thay ca */}
-      <ReplacementsDrawer open={replacementsOpen} onClose={() => setReplacementsOpen(false)} />
 
     </DashboardLayout>
   )
@@ -349,146 +356,3 @@ function SchedulesModal({ open, onClose }: { open: boolean; onClose: () => void 
   )
 }
 
-function ReplacementsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [requests, setRequests] = useState<ShiftSwapRequest[]>([])
-  const [loading, setLoading] = useState(false)
-  const [detailOpen, setDetailOpen] = useState(false)
-  const [detailItems, setDetailItems] = useState<ShiftSwapItem[]>([])
-  const [detailPTs, setDetailPTs] = useState<any[]>([])
-  const [detailAssignments, setDetailAssignments] = useState<Map<string, string>>(new Map())
-  const [detailId, setDetailId] = useState<string>('')
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [rejectOpen, setRejectOpen] = useState(false)
-  const [rejectId, setRejectId] = useState<string>('')
-  const [rejectReason, setRejectReason] = useState('')
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      const rRes = await shiftSwapService.getAll()
-      setRequests(rRes.data.docs || [])
-    } finally { setLoading(false) }
-  }
-
-  useEffect(() => { if (open) load() }, [open])
-
-  // Auto-refresh when new request arrives while panel is open
-  useEffect(() => {
-    if (!open) return
-    const handler = () => load()
-    socketService.on('shift_swap:new_request', handler)
-    return () => { socketService.off('shift_swap:new_request', handler) }
-  }, [open])
-
-  const openDetail = async (id: string) => {
-    setDetailId(id)
-    setDetailOpen(true)
-    setDetailLoading(true)
-    try {
-      const res = await shiftSwapService.getDetail(id)
-      setDetailItems(res.data.items || [])
-      setDetailPTs(res.data.availablePTs || [])
-      setDetailAssignments(new Map())
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Lỗi tải chi tiết')
-    } finally { setDetailLoading(false) }
-  }
-
-  const handleApprove = async () => {
-    const assignments = Array.from(detailAssignments.entries()).map(([swapItemId, ptId]) => ({ swapItemId, ptId }))
-    if (assignments.some(a => !a.ptId)) { message.warning('Chọn PT thay thế cho tất cả buổi tập'); return }
-    try {
-      await shiftSwapService.approve(detailId, assignments)
-      message.success('Đã duyệt yêu cầu thay ca')
-      setDetailOpen(false)
-      load()
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Lỗi')
-    }
-  }
-
-  const handleReject = async () => {
-    try { await shiftSwapService.reject(rejectId, rejectReason); message.success('Đã từ chối'); setRejectOpen(false); load() }
-    catch (err: any) { message.error(err?.response?.data?.message || 'Lỗi') }
-  }
-
-  const statusMap: Record<string, [string, string]> = { cho_duyet: ['orange', 'Chờ duyệt'], da_duyet: ['green', 'Đã duyệt'], tu_choi: ['red', 'Từ chối'], da_huy: ['default', 'Đã hủy'] }
-
-  return (
-    <Drawer title="Yêu cầu thay ca" placement="right" width={720} open={open} onClose={onClose}>
-      <Table dataSource={requests} rowKey="_id" loading={loading} pagination={false} locale={{ emptyText: 'Không có yêu cầu nào' }}
-        columns={[
-          { title: 'PT gốc', dataIndex: 'requestingPtId', width: 130, render: (t: any) => <span className="text-[var(--gs-text)]">{t?.fullName || t?.name || '—'}</span> },
-          { title: 'Ngày', dataIndex: 'targetDate', width: 100, render: (d: string) => <span className="text-sm text-[var(--gs-text)]">{new Date(d).toLocaleDateString('vi-VN')}</span> },
-          { title: 'Lý do', dataIndex: 'reason', ellipsis: true, render: (r: string) => <span className="text-sm text-[var(--gs-text-muted)]">{r || '—'}</span> },
-          { title: 'Trạng thái', dataIndex: 'status', width: 100, render: (s: string) => { const [color, label] = statusMap[s] || ['default', s]; return <Tag color={color}>{label}</Tag> } },
-          {
-            title: 'Duyệt', key: 'approve', width: 80,
-            render: (_: any, r: ShiftSwapRequest) => r.status !== 'cho_duyet' ? null : (
-              <Button size="small" type="primary" onClick={() => openDetail(r._id)}>Duyệt</Button>
-            ),
-          },
-          {
-            title: '', key: 'reject', width: 60,
-            render: (_: any, r: ShiftSwapRequest) => r.status !== 'cho_duyet' ? null : (
-              <Button size="small" danger onClick={() => { setRejectId(r._id); setRejectOpen(true) }}>Từ chối</Button>
-            ),
-          },
-        ]}
-      />
-
-      <Modal title="Từ chối yêu cầu" open={rejectOpen} onOk={handleReject} onCancel={() => setRejectOpen(false)} okText="Xác nhận" cancelText="Hủy" okButtonProps={{ danger: true }}>
-        <Input.TextArea rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Lý do từ chối..." />
-      </Modal>
-
-      <Modal title="Chi tiết yêu cầu thay ca" open={detailOpen} onCancel={() => setDetailOpen(false)} width={700} footer={[
-        <Button key="cancel" onClick={() => setDetailOpen(false)}>Đóng</Button>,
-        <Button key="approve" type="primary" onClick={handleApprove}>Duyệt & Xếp PT thay thế</Button>,
-      ]}>
-        {detailLoading ? (
-          <div className="flex justify-center py-8"><Spin size="large" /></div>
-        ) : (
-          <div className="space-y-3 pt-3 max-h-[60vh] overflow-y-auto">
-            {detailItems.length === 0 && <p className="text-sm text-[var(--gs-text-muted)]">Không có buổi tập nào</p>}
-            {detailItems.map((item) => (
-              <div key={item._id} className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-semibold text-[var(--gs-text)]">
-                      {item.sessionTitle || 'Buổi tập'}
-                    </span>
-                    <span className="ml-2 text-xs text-[var(--gs-text-muted)]">{item.sessionTime}</span>
-                  </div>
-                  <Select
-                    size="small"
-                    style={{ width: 200 }}
-                    placeholder="Chọn PT thay thế..."
-                    value={detailAssignments.get(item._id)}
-                    onChange={(val) => setDetailAssignments(prev => { const n = new Map(prev); n.set(item._id, val); return n })}
-                    options={detailPTs.map((p: any) => ({ label: getUserDisplayName(p), value: p._id }))}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  <span className="text-xs text-[var(--gs-text-muted)]">Hội viên: </span>
-                  <span className="text-xs text-[var(--gs-text)]">
-                    {typeof item.memberId === 'object' ? (item.memberId as any).fullName || (item.memberId as any).name : item.memberId}
-                  </span>
-                </div>
-                {item.className && <div className="text-xs text-[var(--gs-text-muted)]">📍 {item.className}{item.classCode ? ` (${item.classCode})` : ''}</div>}
-                {item.specialization && (
-                  <div className="flex flex-wrap gap-1">
-                    <Tag className="m-0 text-xs" color="blue">{item.specialization}</Tag>
-                    {item.goals?.map((g, i) => <Tag key={i} className="m-0 text-xs" color="purple">{g}</Tag>)}
-                  </div>
-                )}
-                {item.healthNotes && (
-                  <div className="rounded border border-yellow-500/30 bg-yellow-500/5 px-2 py-1 text-xs text-yellow-400">⚠ {item.healthNotes}</div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </Modal>
-    </Drawer>
-  )
-}

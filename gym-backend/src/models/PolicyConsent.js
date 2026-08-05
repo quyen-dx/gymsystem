@@ -23,9 +23,4 @@ policyConsentSchema.index({ userId: 1, policyType: 1 })
 
 const PolicyConsent = mongoose.model('PolicyConsent', policyConsentSchema)
 
-// migrate old unique index (userId,policyType,policyVersion) → (userId,policyType,policyVersion,context)
-PolicyConsent.syncIndexes().catch((err) => {
-  console.error('Failed to sync PolicyConsent indexes:', err.message)
-})
-
 export default PolicyConsent
