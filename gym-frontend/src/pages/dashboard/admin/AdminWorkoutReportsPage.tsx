@@ -26,6 +26,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { workoutService, type WorkoutReport } from '../../../services/workoutService'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const REASON_LABELS: Record<string, string> = {
   wrong_expertise: 'Sai chuyên môn',
@@ -46,7 +47,7 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 const getName = (v: unknown): string => {
   if (!v) return '-'
   if (typeof v === 'string') return v
-  return (v as any).fullName || (v as any).name || '-'
+  return getUserDisplayName(v as any, '-')
 }
 
 const getWorkoutName = (v: unknown): string => {

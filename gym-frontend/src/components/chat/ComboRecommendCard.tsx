@@ -1,4 +1,5 @@
 import type { SmartRecommendPayload, PlanPayloadPlan } from '../../types/aichat/aichat'
+import { getUserDisplayName } from '../../utils/userDisplay'
 
 interface Props {
   data: SmartRecommendPayload
@@ -65,7 +66,7 @@ export function ComboRecommendCard({ data, lang: propLang }: Props) {
           <div className="ai-plan-row" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 36, height: 36, borderRadius: '50%', background: pt.avatar ? `url(${pt.avatar}) center/cover` : '#333', flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
-              <div className="ai-plan-name" style={{ fontSize: 14 }}>{pt.name}</div>
+              <div className="ai-plan-name" style={{ fontSize: 14 }}>{getUserDisplayName(pt as any, '')}</div>
               {pt.specialties && pt.specialties.length > 0 && (
                 <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{pt.specialties.slice(0, 3).join(' · ')}</div>
               )}

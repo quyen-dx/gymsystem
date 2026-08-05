@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { trainerService } from '../../../services/trainerService'
 import type { PT } from '../../../types/admin/trainer'
 import { UploadOutlined, ArrowLeftOutlined } from '@ant-design/icons'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const SPECIALTY_OPTIONS = [
   'YOGA', 'GYM', 'BOXING', 'CROSSFIT', 'PILATES', 'ZUMBA', 'PERSONAL TRAINING',
@@ -30,7 +31,7 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
   useEffect(() => {
     if (pt) {
       form.setFieldsValue({
-        name: pt.name,
+        name: getUserDisplayName(pt, ''),
         email: pt.email || '',
         phone: pt.phone || '',
         dateOfBirth: pt.dateOfBirth ? dayjs(pt.dateOfBirth) : null,

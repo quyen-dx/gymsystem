@@ -85,7 +85,7 @@ function extractClient(assignment: PTAssignment): ClientInfo | null {
     : null
   return {
     _id: member._id,
-    name: member.name || member.fullName || '',
+    name: getUserDisplayName(member, ''),
     fullName: member.fullName,
     email: member.email ?? undefined,
     phone: member.phone ?? undefined,

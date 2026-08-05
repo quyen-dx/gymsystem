@@ -14,6 +14,7 @@ import { useSearchParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { checkInService } from '../../../services/checkInService'
 import type { CheckinStats, HeatmapCell } from '../../../types/admin/checkin'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const { RangePicker } = DatePicker
 
@@ -123,7 +124,7 @@ function OverviewTab() {
                           {cell.members && cell.members.length > 0 && (
                             <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid rgba(255,255,255,0.2)', fontSize: '11px' }}>
                               {cell.members.map((member: any, idx: number) => (
-                                <div key={idx}>• {member.name || member}</div>
+                                <div key={idx}>• {typeof member === 'object' && member ? getUserDisplayName(member, '') : member}</div>
                               ))}
                             </div>
                           )}

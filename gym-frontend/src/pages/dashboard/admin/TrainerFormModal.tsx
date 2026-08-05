@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react'
 import { trainerService } from '../../../services/trainerService'
 import type { PT } from '../../../types/admin/trainer'
 import { UploadOutlined } from '@ant-design/icons'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const SPECIALTY_OPTIONS = [
   'YOGA', 'GYM', 'BOXING', 'CROSSFIT', 'PILATES', 'ZUMBA', 'PERSONAL TRAINING',
@@ -37,7 +38,7 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
     if (open) {
       if (pt) {
         form.setFieldsValue({
-          name: pt.name,
+          name: getUserDisplayName(pt, ''),
           email: pt.email || '',
           phone: pt.phone || '',
           dateOfBirth: pt.dateOfBirth ? dayjs(pt.dateOfBirth) : null,

@@ -446,7 +446,7 @@ export default function AdminMembersPage() {
           classId: cls._id,
           className: cls.name,
           trainerId: typeof pt === 'object' ? pt?._id : pt || undefined,
-          trainerName: typeof pt === 'object' ? (pt?.fullName || pt?.name) : undefined,
+          trainerName: typeof pt === 'object' ? getUserDisplayName(pt, '') : undefined,
           specialization: cls.specialization,
           timeSlots: cls.startTime && cls.endTime ? [`${cls.startTime.slice(0, 5)}-${cls.endTime.slice(0, 5)}`] : [],
           daysOfWeek: cls.daysOfWeek || [],
@@ -465,7 +465,7 @@ export default function AdminMembersPage() {
         proposal = {
           type: 'pt1on1',
           trainerId: pt._id,
-          trainerName: pt.fullName || pt.name || '',
+          trainerName: getUserDisplayName(pt, ''),
           specialization: proposalRequest.specialization,
           goals: proposalRequest.goals || [],
         }
@@ -733,7 +733,7 @@ export default function AdminMembersPage() {
       render: (_: any, r: TrainingRequest) => {
         if (r.preferredTrainerId) {
           const name = typeof r.preferredTrainerId === 'object'
-            ? (r.preferredTrainerId.fullName || r.preferredTrainerId.name)
+            ? getUserDisplayName(r.preferredTrainerId, '')
             : null
           return name ? <span className="text-sm">{name}</span> : <Tag className="m-0">Có yêu cầu</Tag>
         }
@@ -806,7 +806,7 @@ export default function AdminMembersPage() {
   const filteredAssignTrainers = assignTrainers.filter((t) => {
     if (!assignSearch) return true
     const q = assignSearch.toLowerCase()
-    return (t.fullName || t.name || '').toLowerCase().includes(q)
+    return getUserDisplayName(t, '').toLowerCase().includes(q)
       || (t.email || '').toLowerCase().includes(q)
       || (t.specialties || []).some((s) => s.toLowerCase().includes(q))
   })
@@ -1124,7 +1124,7 @@ export default function AdminMembersPage() {
         {msgModal.request && (() => {
           const r = msgModal.request
           const info = r.membershipInfo
-          const memberName = typeof r.memberId === 'object' ? r.memberId.fullName || r.memberId.name : ''
+          const memberName = typeof r.memberId === 'object' ? getUserDisplayName(r.memberId, '') : ''
 
           const handleSend = async () => {
             setMsgModal((prev) => ({ ...prev, sending: true }))
@@ -1284,7 +1284,7 @@ export default function AdminMembersPage() {
                     optionFilterProp="label"
                     options={proposalPTs.map((t) => ({
                       value: t._id,
-                      label: `${t.fullName || t.name}${(t.specialties || []).length ? ` — ${t.specialties.join(', ')}` : ''}`,
+                      label: `${getUserDisplayName(t, '')}${(t.specialties || []).length ? ` — ${t.specialties.join(', ')}` : ''}`,
                     }))}
                   />
                 </div>
@@ -1420,7 +1420,7 @@ export default function AdminMembersPage() {
                 }
                 if (r.status === 'assigned' && r.type === 'pt1on1') {
                   const pt = r.assignedTrainerId as any
-                  return <span className="text-xs text-[var(--gs-text)]">Đã phân công PT: <strong>{pt?.fullName || pt?.name || '—'}</strong></span>
+                  return <span className="text-xs text-[var(--gs-text)]">Đã phân công PT: <strong>{getUserDisplayName(pt, '—')}</strong></span>
                 }
                 if (r.lastMessage) return <span className="text-xs text-[var(--gs-text)] line-clamp-2 whitespace-normal">{r.lastMessage}</span>
                 return <span className="text-xs text-[var(--gs-text-muted)]">—</span>
@@ -1490,10 +1490,10 @@ export default function AdminMembersPage() {
                   }`}
                 >
                   <Avatar src={t.avatar} size={40} className="shrink-0">
-                    {(t.fullName || t.name || 'PT').charAt(0)}
+                    {getUserDisplayName(t, 'PT').charAt(0)}
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm text-[var(--gs-text)]">{t.fullName || t.name}</div>
+                    <div className="font-medium text-sm text-[var(--gs-text)]">{getUserDisplayName(t)}</div>
                     <div className="flex flex-wrap gap-1 mt-0.5">
                       {t.specialties?.map((s, i) => (
                         <Tag key={i} className="m-0 text-xs">{s}</Tag>

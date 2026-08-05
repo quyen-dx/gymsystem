@@ -25,7 +25,7 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 const getName = (v: unknown): string => {
   if (!v) return '—'
   if (typeof v === 'string') return v
-  return (v as any).fullName || (v as any).name || '—'
+  return getUserDisplayName(v as any, '—')
 }
 
 export default function AdminPTAssignmentEndRequestsPage() {

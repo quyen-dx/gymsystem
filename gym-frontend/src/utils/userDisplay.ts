@@ -1,4 +1,4 @@
-type DisplayableUser = {
+export type DisplayableUser = {
   fullName?: string | null
   displayName?: string | null
   name?: string | null
@@ -10,6 +10,8 @@ const clean = (value?: string | null) => String(value || '').trim()
 
 export const getUserDisplayName = (user?: DisplayableUser | null, fallback = 'User') =>
   clean(user?.fullName) || clean(user?.displayName) || clean(user?.name) || clean(user?.username) || clean(user?.email) || fallback
+
+export const getDisplayName = getUserDisplayName
 
 export const getUserInitialName = (user?: DisplayableUser | null, fallback = 'U') =>
   getUserDisplayName(user, fallback)

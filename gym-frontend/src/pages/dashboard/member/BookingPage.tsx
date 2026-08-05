@@ -10,6 +10,7 @@ import { trainingRequestService, type TrainingRequest } from '../../../services/
 import YourRequestPanel from '../../../components/member/YourRequestPanel'
 import { memberService, type EnrollmentStatus } from '../../../services/memberService'
 import { socketService } from '../../../services/socketService'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 import { planFeatureService, type PlanFeature } from '../../../services/planFeatureService'
 import { trainerService } from '../../../services/trainerService'
 import { enrollmentService } from '../../../services/ptAssignmentService'
@@ -368,7 +369,7 @@ export default function BookingPage() {
 
   const selectTrainer = (trainer: PT) => {
     setPtPreferredTrainerId(trainer._id)
-    const name = trainer.fullName || trainer.name || ''
+    const name = getUserDisplayName(trainer, '')
     const contact = trainer.phone || (trainer.email && trainer.email !== 'undefined' ? trainer.email : '')
     setPtSearchQuery(name + (contact ? ' • ' + contact : ''))
     setPtSearchOpen(false)
@@ -452,7 +453,7 @@ export default function BookingPage() {
               {enrollment.pt && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-[var(--gs-text-muted)] w-20 shrink-0">PT:</span>
-                  <span className="text-sm font-semibold text-[var(--gs-text)]">{enrollment.pt.name}</span>
+                  <span className="text-sm font-semibold text-[var(--gs-text)]">{getUserDisplayName(enrollment.pt, 'PT')}</span>
                 </div>
               )}
               {enrollment.class && (
@@ -972,11 +973,11 @@ export default function BookingPage() {
                                     }`}
                                   >
                                     <Avatar src={t.avatar} size={36} className="shrink-0">
-                                      {(t.fullName || t.name || 'PT').charAt(0)}
+                                      {getUserDisplayName(t, 'PT').charAt(0)}
                                     </Avatar>
                                     <div className="min-w-0 flex-1">
                                       <div className="text-sm font-medium text-[var(--gs-text)] truncate">
-                                        {t.fullName || t.name}
+                                        {getUserDisplayName(t)}
                                       </div>
                                       <div className="flex flex-wrap items-center gap-x-2 text-xs text-[var(--gs-text-muted)]">
                                         {t.specialties?.length > 0 && (

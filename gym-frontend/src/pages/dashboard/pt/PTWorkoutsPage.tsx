@@ -32,6 +32,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 import {
   workoutService,
   type LibraryWorkout,
@@ -190,7 +191,7 @@ function AssignModal({
 const getName = (v: unknown): string => {
   if (!v) return '-'
   if (typeof v === 'string') return v
-  return (v as any).fullName || (v as any).name || '-'
+  return getUserDisplayName(v as any, '-')
 }
 
 export default function PTWorkoutsPage() {
@@ -594,7 +595,7 @@ export default function PTWorkoutsPage() {
               { value: '__mine__', label: 'Giáo án của tôi' },
               ...trainers.map((t) => ({
                 value: t._id,
-                label: t.fullName || t.name || t._id,
+                label: getUserDisplayName(t, t._id),
               })),
             ]}
           />

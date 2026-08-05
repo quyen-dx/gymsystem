@@ -1,5 +1,5 @@
-import { App as AntdApp, Button, ConfigProvider, theme } from 'antd'
-import { useEffect, useMemo, useState } from 'react'
+import { App as AntdApp, Button, ConfigProvider, Spin, theme } from 'antd'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import FeatureDisabled from './components/system/FeatureDisabled'
 import { getAuthToken, startRefreshScheduler } from './services/api'
@@ -22,7 +22,21 @@ import AdminPartnershipRequestsPage from './pages/dashboard/admin/AdminPartnersh
 import AdminPlanCreatePage from './pages/dashboard/admin/AdminPlanCreatePage'
 import AdminPlansPage from './pages/dashboard/admin/AdminPlansPage'
 import AdminFeatureManagePage from './pages/dashboard/admin/AdminFeatureManagePage'
-import AdminReports from './pages/dashboard/admin/AdminReports'
+const StatisticsHomePage = lazy(() => import('./pages/dashboard/admin/reports/StatisticsHomePage'))
+const FinanceDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/FinanceDashboardPage'))
+const MembersDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/MembersDashboardPage'))
+const PtDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/PtDashboardPage'))
+const BookingDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/BookingDashboardPage'))
+const ShopDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/ShopDashboardPage'))
+const SystemDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/SystemDashboardPage'))
+
+function ReportPageLoader() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <Spin size="large" />
+    </div>
+  )
+}
 import AdminTrainersPage from './pages/dashboard/admin/AdminTrainersPage'
 import AdminTrainersCreatePage from './pages/dashboard/admin/AdminTrainersCreatePage'
 import AdminTrainersEditPage from './pages/dashboard/admin/AdminTrainersEditPage'
@@ -411,7 +425,13 @@ function AppWithTheme() {
         <Route path="/admin/trainers/:id/edit" element={<PrivateRoute feature="pt.moduleEnabled"><AdminTrainersEditPage /></PrivateRoute>} />
         <Route path="/admin/trainers/:id" element={<PrivateRoute feature="pt.moduleEnabled"><TrainerDetailPage /></PrivateRoute>} />
         <Route path="/admin/pts" element={<Navigate to="/admin/trainers" replace />} />
-        <Route path="/admin/reports" element={<PrivateRoute feature="reports.revenueChartEnabled"><AdminReports /></PrivateRoute>} />
+        <Route path="/admin/reports" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><StatisticsHomePage /></Suspense></PrivateRoute>} />
+        <Route path="/admin/reports/finance" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><FinanceDashboardPage /></Suspense></PrivateRoute>} />
+        <Route path="/admin/reports/members" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><MembersDashboardPage /></Suspense></PrivateRoute>} />
+        <Route path="/admin/reports/pt" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><PtDashboardPage /></Suspense></PrivateRoute>} />
+        <Route path="/admin/reports/booking" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><BookingDashboardPage /></Suspense></PrivateRoute>} />
+        <Route path="/admin/reports/shop" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><ShopDashboardPage /></Suspense></PrivateRoute>} />
+        <Route path="/admin/reports/system" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><SystemDashboardPage /></Suspense></PrivateRoute>} />
         <Route path="/admin/checkin" element={<PrivateRoute><AdminCheckinPage /></PrivateRoute>} />
         <Route path="/admin/checkin-history" element={<Navigate to="/admin/checkin?tab=history" replace />} />
         <Route path="/admin/daily-qr" element={<Navigate to="/admin/checkin?tab=qr" replace />} />

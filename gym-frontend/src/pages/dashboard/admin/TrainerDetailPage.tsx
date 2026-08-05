@@ -179,7 +179,7 @@ export default function TrainerDetailPage() {
         <Col xs={24} lg={16}>
           <Card className="rounded-[24px]" title={<><UserOutlined /> Thông tin cơ bản</>} style={{ marginBottom: 16 }}>
             <Descriptions column={{ xs: 1, sm: 2 }} size="small">
-              <Descriptions.Item label='Họ tên'>{pt.name}</Descriptions.Item>
+              <Descriptions.Item label='Họ tên'>{getUserDisplayName(pt, 'PT')}</Descriptions.Item>
               <Descriptions.Item label='Email'>{pt.email || '—'}</Descriptions.Item>
               <Descriptions.Item label='Số điện thoại'>{pt.phone || '—'}</Descriptions.Item>
               <Descriptions.Item label='Ngày sinh'>

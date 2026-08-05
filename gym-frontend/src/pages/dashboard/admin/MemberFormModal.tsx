@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { memberService } from '../../../services/memberService'
 import type { MemberFormData, MemberListItem } from '../../../types/admin/member'
 import { UploadOutlined } from '@ant-design/icons'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const PHONE_REGEX = /^0\d{9,10}$/
 
@@ -33,7 +34,7 @@ export default function MemberFormModal({ open, member, onClose, onSuccess }: Pr
     if (open) {
       if (member) {
         form.setFieldsValue({
-          name: member.name,
+          name: getUserDisplayName(member, ''),
           email: member.email || '',
           phone: member.phone || '',
           dateOfBirth: member.dateOfBirth ? dayjs(member.dateOfBirth) : null,

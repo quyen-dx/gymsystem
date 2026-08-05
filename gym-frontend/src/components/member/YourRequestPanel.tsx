@@ -4,6 +4,7 @@ import { Button, Modal, Tag, message } from 'antd'
 import { CalendarOutlined, CloseCircleOutlined, ExclamationCircleOutlined, MessageOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { trainingRequestService, type TrainingRequest } from '../../services/trainingRequestService'
+import { getUserDisplayName } from '../../utils/userDisplay'
 
 const DAY_LABELS = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7']
 
@@ -46,7 +47,7 @@ function specLabel(spec?: string) {
 function nameOf(t?: TrainingRequest['preferredTrainerId'] | TrainingRequest['assignedTrainerId']) {
   if (!t) return ''
   if (typeof t === 'string') return ''
-  return t.fullName || t.name || ''
+  return getUserDisplayName(t, '')
 }
 
 function idOf(t?: TrainingRequest['assignedTrainerId']) {

@@ -6,6 +6,7 @@ import { bookingService } from '../../../services/bookingService'
 import { membershipService } from '../../../services/membershipService'
 import { trainerService } from '../../../services/trainerService'
 import type { PT } from '../../../types/admin/trainer'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const DAY_OPTIONS = [
   { value: 1, label: 'Thứ 2' },
@@ -186,12 +187,12 @@ export default function BookingDetailPage() {
                 <div className="flex items-center gap-4">
                   <img
                     src={pt.avatar || '/default-avatar.png'}
-                    alt={pt.name || 'PT'}
+                    alt={getUserDisplayName(pt, 'PT')}
                     className="h-24 w-24 rounded-2xl object-cover"
                   />
                   <div>
                     <h2 className="text-xl font-bold text-[var(--theme-text)]">
-                      {pt.name || pt.email || 'PT'}
+                      {getUserDisplayName(pt, 'PT')}
                     </h2>
                     <p className="mt-1 text-sm text-yellow-400">
                       ⭐ {pt.rating || 0} / 5

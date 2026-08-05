@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { memberService } from '../../../services/memberService'
 import type { MemberListItem } from '../../../types/admin/member'
 import { UploadOutlined, ArrowLeftOutlined } from '@ant-design/icons'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const PHONE_REGEX = /^0\d{9,10}$/
 
@@ -24,7 +25,7 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
   useEffect(() => {
     if (member) {
       form.setFieldsValue({
-        name: member.name,
+        name: getUserDisplayName(member, ''),
         email: member.email || '',
         phone: member.phone || '',
         dateOfBirth: member.dateOfBirth ? dayjs(member.dateOfBirth) : null,

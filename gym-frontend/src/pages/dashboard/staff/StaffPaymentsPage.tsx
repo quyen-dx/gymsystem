@@ -5,6 +5,7 @@ import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { membershipService, type RefundRequest } from '../../../services/membershipService'
 import { socketService } from '../../../services/socketService'
 import { staffListAllPayments } from '../../../services/walletService'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const { RangePicker } = DatePicker
 
@@ -151,7 +152,7 @@ export default function StaffPaymentsPage() {
     },
     {
       title: 'Họ tên', width: 160,
-      render: (_: any, r: any) => r.userId?.fullName || r.userId?.name || '-',
+      render: (_: any, r: any) => getUserDisplayName(r.userId, '-'),
     },
     {
       title: 'Loại giao dịch', width: 150,
@@ -234,7 +235,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
   const refundRequestColumns = [
     {
       title: 'Hội viên', dataIndex: 'memberId', key: 'memberId', width: 180,
-      render: (member: any) => <div><div className="font-medium">{member?.fullName || member?.name || '-'}</div><div className="text-xs text-[var(--gs-text-muted)]">{member?.email}</div></div>,
+      render: (member: any) => <div><div className="font-medium">{getUserDisplayName(member, '-')}</div><div className="text-xs text-[var(--gs-text-muted)]">{member?.email}</div></div>,
     },
     {
       title: 'Gói tập', dataIndex: 'planId', key: 'planId', width: 120,
@@ -305,7 +306,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
   const refundHistoryColumns = [
     {
       title: 'Hội viên', dataIndex: 'memberId', key: 'memberId', width: 180,
-      render: (member: any) => <div><div className="font-medium">{member?.fullName || member?.name || '-'}</div><div className="text-xs text-[var(--gs-text-muted)]">{member?.email || member?.memberCode || ''}</div></div>,
+      render: (member: any) => <div><div className="font-medium">{getUserDisplayName(member, '-')}</div><div className="text-xs text-[var(--gs-text-muted)]">{member?.email || member?.memberCode || ''}</div></div>,
     },
     {
       title: 'Gói tập', dataIndex: 'planId', key: 'planId', width: 120,
@@ -330,7 +331,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
       title: 'Người xử lý', dataIndex: 'reviewedBy', key: 'reviewedBy', width: 130,
       render: (user: any) => {
         if (!user) return <span className="text-[var(--gs-text-muted)]">—</span>
-        return user?.fullName || user?.name || user?.email || '—'
+        return getUserDisplayName(user, '—')
       },
     },
     {
@@ -644,7 +645,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
                     <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] overflow-hidden text-sm">
                       <div className="px-4 py-2.5 font-semibold text-[var(--gs-text)] border-b border-[var(--gs-border)]">Hội viên</div>
                       <div className="divide-y divide-[var(--gs-border)]">
-                        <Row label="Họ tên" value={member.fullName || member.name || '-'} bold />
+                        <Row label="Họ tên" value={getUserDisplayName(member, '-')} bold />
                         <Row label="Mã hội viên" value={member.memberCode || '-'} />
                         <Row label="Email" value={member.email || '-'} />
                         <Row label="SĐT" value={member.phone || '-'} />
@@ -752,7 +753,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
                 <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-[var(--gs-text-soft)]">Hội viên</span>
-                    <span className="font-medium">{approvingRR.memberId?.fullName || approvingRR.memberId?.name || '-'}</span>
+                    <span className="font-medium">{getUserDisplayName(approvingRR.memberId, '-')}</span>
                   </div>
                   <div className="border-t border-[var(--gs-border)] pt-2 mt-2">
                     <div className="text-xs font-semibold text-[var(--gs-text)] mb-1">Chi tiết hoàn tiền</div>
@@ -826,7 +827,7 @@ const renderBenefitsTag = (rr: RefundRequest) => {
                 <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-[var(--gs-text-soft)]">Hội viên</span>
-                    <span className="font-medium">{rejectingRR.memberId?.fullName || rejectingRR.memberId?.name || '-'}</span>
+                    <span className="font-medium">{getUserDisplayName(rejectingRR.memberId, '-')}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-[var(--gs-text-soft)]">Lý do yêu cầu</span>

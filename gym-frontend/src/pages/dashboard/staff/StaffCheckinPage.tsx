@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from 'react'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { checkInService } from '../../../services/checkInService'
 import type { SearchedMember, StaffCheckinHistoryItem } from '../../../types/admin/checkin'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const { Text } = Typography
 
@@ -268,11 +269,11 @@ export default function StaffCheckinPage() {
               <div className="mt-4 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4">
                 <div className="flex items-center gap-3">
                   <Avatar size={48} src={searchedMember.avatar || undefined}>
-                    {searchedMember.fullName?.charAt(0)?.toUpperCase()}
+                    {getUserDisplayName(searchedMember).charAt(0)?.toUpperCase()}
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <Text strong className="text-[var(--gs-text)] text-base block truncate">
-                      {searchedMember.fullName}
+                      {getUserDisplayName(searchedMember)}
                     </Text>
                     <Text className="text-[var(--gs-text-muted)] text-xs">
                       {searchedMember.memberCode}
@@ -433,10 +434,10 @@ export default function StaffCheckinPage() {
           {searchedMember && (
             <div className="mb-4 flex items-center gap-3 rounded-lg bg-[var(--gs-card)] p-3">
               <Avatar size={40} src={searchedMember.avatar || undefined}>
-                {searchedMember.fullName?.charAt(0)?.toUpperCase()}
+                {getUserDisplayName(searchedMember).charAt(0)?.toUpperCase()}
               </Avatar>
               <div>
-                <Text strong className="text-[var(--gs-text)]">{searchedMember.fullName}</Text>
+                <Text strong className="text-[var(--gs-text)]">{getUserDisplayName(searchedMember)}</Text>
                 <div className="text-xs text-[var(--gs-text-muted)]">{searchedMember.memberCode}</div>
               </div>
             </div>

@@ -29,6 +29,7 @@ import { memberService } from '../../../services/memberService'
 import { ptAssignmentService, type SuggestedSlot } from '../../../services/ptAssignmentService'
 import { scheduleService } from '../../../services/scheduleService'
 import { workoutService, type TemplateDay, type TemplateDayExercise, type WorkoutPlan } from '../../../services/workoutService'
+import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const DAY_SHORT = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
 
@@ -146,7 +147,7 @@ export default function CreateSchedulePage() {
         || ''
       const effectiveGoals = acceptedProposal?.goals?.length ? acceptedProposal.goals : prefsRes.data?.goals || []
       const memberData = memberRes.data?.member
-      setClientInfo(memberData ? { fullName: memberData.fullName || memberData.name, preferredTime: memberData.preferredTime } : null)
+      setClientInfo(memberData ? { fullName: getUserDisplayName(memberData, ''), preferredTime: memberData.preferredTime } : null)
       setTemplates(Array.isArray(tmplRes.data) ? tmplRes.data : [])
       setAllAvailableSlots(slotsRes.data.slots || [])
       setPreferredTimeSlots(effectiveTimeSlots)
