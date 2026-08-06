@@ -123,6 +123,7 @@ const formatHistoryItem = (checkin, membershipByMemberId = {}) => {
   const cycle = membershipByMemberId[String(member._id)] || null
   const plan = cycle?.currentPlanId
   const dailyQR = checkin.dailyQRCodeId || {}
+  const snapshotPlanName = checkin.planName || plan?.nameVi || plan?.nameEn || ''
 
   return {
     checkinId: checkin._id,
@@ -133,7 +134,9 @@ const formatHistoryItem = (checkin, membershipByMemberId = {}) => {
     memberName: getUserDisplayName(member, 'Thành viên'),
     email: member.email || '',
     phone: member.phone || '',
-    planName: plan?.nameVi || plan?.nameEn || '',
+    planId: checkin.planId || plan?._id || null,
+    planName: snapshotPlanName,
+    planPrice: Number(checkin.planPrice || plan?.price || 0),
     staffId: staff._id,
     staffName: getUserDisplayName(staff, 'Staff'),
     status: checkin.status,
@@ -367,12 +370,16 @@ export const staffVerifyCheckin = async (req, res) => {
       throw new AppError('Hội viên này đã check-in thành công trước đó!', 429, 'ALREADY_CHECKED_IN')
     }
 
+    const activePlan = activeMembership.currentPlanId || {}
     const streakDay = (await calculateStreak(member._id)) + 1
     const [checkin] = await CheckIn.create([{
       memberId: member._id,
       staffId,
       checkinTime: new Date(),
       status: 'success',
+      planId: activePlan._id || activeMembership.currentPlanId || null,
+      planName: activePlan.nameVi || activePlan.nameEn || '',
+      planPrice: Number(activePlan.price || 0),
       qrToken: token || undefined,
       streakDay,
       checkInMethod: checkInMethod || 'STAFF',
@@ -416,7 +423,9 @@ export const staffVerifyCheckin = async (req, res) => {
         memberName: getUserDisplayName(member, 'Thành viên'),
         email: member.email,
         phone: member.phone,
-        planName: activeMembership.currentPlanId?.nameVi || activeMembership.currentPlanId?.nameEn,
+        planId: checkin.planId,
+        planName: checkin.planName,
+        planPrice: checkin.planPrice,
         staffId,
         staffName: getUserDisplayName(req.user, 'Staff'),
         status: checkin.status,

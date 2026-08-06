@@ -1,29 +1,30 @@
-import { CheckCircleFilled, FilterOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
+import { CheckCircleFilled, ClockCircleOutlined, FilterOutlined, IdcardOutlined, ReloadOutlined, SearchOutlined, UserOutlined } from '@ant-design/icons'
 import {
+  Alert,
   Avatar,
   Button,
   Card,
-  Col,
   DatePicker,
+  Descriptions,
+  Empty,
   Input,
   Modal,
   Radio,
-  Row,
   Select,
   Space,
+  Statistic,
   Table,
   Tag,
+  TimePicker,
   Typography,
   message,
 } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { checkInService } from '../../../services/checkInService'
 import type { SearchedMember, StaffCheckinHistoryItem } from '../../../types/admin/checkin'
 import { getUserDisplayName } from '../../../utils/userDisplay'
-
-const { Text } = Typography
 
 type TimeMode = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'all' | 'custom'
 
@@ -32,7 +33,7 @@ const checkInMethodLabels: Record<string, { label: string; color: string }> = {
   QR_PROJECTOR: { label: 'QR trình chiếu', color: 'cyan' },
   STAFF: { label: 'Lễ tân điểm danh', color: 'orange' },
   RECEPTION: { label: 'Lễ tân điểm danh', color: 'purple' },
-  AUTO: { label: 'Auto check-in', color: 'geekblue' },
+  AUTO: { label: 'Tự động', color: 'geekblue' },
 }
 
 const reasonOptions = [
@@ -43,6 +44,10 @@ const reasonOptions = [
   { value: 'Staff xác minh trực tiếp', label: 'Staff xác minh trực tiếp' },
   { value: 'Khác', label: 'Khác' },
 ]
+
+const formatDateTime = (value?: string) => value ? dayjs(value).format('HH:mm:ss DD/MM/YYYY') : '—'
+const formatDate = (value?: string) => value ? dayjs(value).format('DD/MM/YYYY') : '—'
+const formatMoney = (value?: number) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 
 export default function StaffCheckinPage() {
   const [searchValue, setSearchValue] = useState('')
@@ -65,7 +70,11 @@ export default function StaffCheckinPage() {
   const [customReason, setCustomReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const successCount = useMemo(() => checkins.filter((item) => item.status === 'success').length, [checkins])
+  const staffCount = useMemo(() => checkins.filter((item) => ['STAFF', 'RECEPTION'].includes(item.checkInMethod || '')).length, [checkins])
+  const qrCount = useMemo(() => checkins.filter((item) => ['QR_SELF', 'QR_PROJECTOR'].includes(item.checkInMethod || '')).length, [checkins])
 
   const doSearch = async (q: string) => {
     const trimmed = q.trim()
@@ -88,52 +97,20 @@ export default function StaffCheckinPage() {
     } catch {
       setSearchedMember(null)
       setSearchError('Tìm kiếm thất bại.')
+    } finally {
+      setSearching(false)
     }
-    setSearching(false)
   }
 
   const handleSearchChange = (value: string) => {
     setSearchValue(value)
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-    searchTimerRef.current = setTimeout(() => doSearch(value), 400)
+    if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = window.setTimeout(() => doSearch(value), 350)
   }
 
   const handleSearchEnter = () => {
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current)
     doSearch(searchValue)
-  }
-
-  const handleCheckin = async () => {
-    if (!searchedMember) return
-    const reason = selectedReason === 'Khác' ? customReason.trim() : selectedReason
-    if (selectedReason === 'Khác' && !reason) {
-      message.warning('Vui lòng nhập lý do.')
-      return
-    }
-    setSubmitting(true)
-    try {
-      await checkInService.verifyStaffCheckin({
-        memberId: searchedMember._id,
-        manualReason: reason || undefined,
-      })
-      message.success('Điểm danh thành công!')
-      setModalOpen(false)
-      setSearchedMember(null)
-      setSearchValue('')
-      setSelectedReason('Staff xác minh trực tiếp')
-      setCustomReason('')
-      loadCheckinHistory(historyPage)
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Điểm danh thất bại.'
-      if (err?.response?.data?.code === 'ALREADY_CHECKED_IN') {
-        message.info(msg)
-        setModalOpen(false)
-        loadCheckinHistory(historyPage)
-      } else {
-        message.error(msg)
-      }
-    }
-    setSubmitting(false)
   }
 
   const loadCheckinHistory = async (page = historyPage) => {
@@ -173,190 +150,225 @@ export default function StaffCheckinPage() {
     setTimeout(() => loadCheckinHistory(1), 0)
   }
 
-  const formatDate = (value?: string) =>
-    value ? new Date(value).toLocaleString('vi-VN') : '-'
+  const handleCheckin = async () => {
+    if (!searchedMember) return
+    const reason = selectedReason === 'Khác' ? customReason.trim() : selectedReason
+    if (selectedReason === 'Khác' && !reason) {
+      message.warning('Vui lòng nhập lý do.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await checkInService.verifyStaffCheckin({
+        memberId: searchedMember._id,
+        manualReason: reason || undefined,
+      })
+      message.success('Điểm danh thành công!')
+      setModalOpen(false)
+      setSearchedMember(null)
+      setSearchValue('')
+      setSelectedReason('Staff xác minh trực tiếp')
+      setCustomReason('')
+      loadCheckinHistory(1)
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Điểm danh thất bại.'
+      if (err?.response?.data?.code === 'ALREADY_CHECKED_IN') {
+        message.info(msg)
+        setModalOpen(false)
+        loadCheckinHistory(1)
+      } else {
+        message.error(msg)
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const columns = [
     {
       title: 'Thời gian',
       dataIndex: 'checkinTime',
-      width: 150,
-      render: (v: string) => formatDate(v),
+      width: 170,
+      render: (value: string) => <span className="font-medium">{formatDateTime(value)}</span>,
     },
     {
-      title: 'Mã HV',
-      dataIndex: 'memberCode',
-      width: 100,
-      render: (v: string) => v || '—',
-    },
-    {
-      title: 'Họ tên',
-      dataIndex: 'memberName',
-      ellipsis: true,
+      title: 'Hội viên',
+      width: 230,
+      render: (_: any, record: StaffCheckinHistoryItem) => (
+        <div>
+          <div className="font-semibold text-[var(--gs-text)]">{record.memberName || '—'}</div>
+          <div className="text-xs text-[var(--gs-text-muted)]">{record.memberCode || '—'} • {record.phone || record.email || '—'}</div>
+        </div>
+      ),
     },
     {
       title: 'Gói tập',
       dataIndex: 'planName',
       ellipsis: true,
-      render: (v: string) => v || '—',
+      render: (value: string) => value || '—',
     },
     {
       title: 'Hình thức',
       dataIndex: 'checkInMethod',
-      width: 130,
-      render: (v: string) => {
-        const meta = checkInMethodLabels[v] || { label: v || '—', color: 'default' }
+      width: 150,
+      render: (value: string) => {
+        const meta = checkInMethodLabels[value] || { label: value || '—', color: 'default' }
         return <Tag color={meta.color}>{meta.label}</Tag>
       },
     },
     {
       title: 'Người thực hiện',
       dataIndex: 'performedByName',
-      width: 130,
-      render: (v: string, r: StaffCheckinHistoryItem) => v || r.staffName || '—',
+      width: 160,
+      render: (value: string, record: StaffCheckinHistoryItem) => value || record.staffName || '—',
     },
     {
       title: 'Lý do',
       dataIndex: 'manualReason',
-      width: 150,
+      width: 180,
       ellipsis: true,
-      render: (v: string) => v || '—',
+      render: (value: string) => value || '—',
     },
     {
       title: 'Trạng thái',
       dataIndex: 'status',
-      width: 100,
-      render: (v: string, r: StaffCheckinHistoryItem) => (
-        <Tag color={v === 'success' ? 'success' : 'error'}>
-          {v === 'success' ? 'Thành công' : r.errorNote || 'Thất bại'}
+      width: 120,
+      render: (value: string, record: StaffCheckinHistoryItem) => (
+        <Tag color={value === 'success' ? 'success' : 'error'}>
+          {value === 'success' ? 'Thành công' : record.errorNote || 'Thất bại'}
         </Tag>
       ),
     },
   ]
 
+  const canCheckin = searchedMember?.membership && searchedMember.membership.status !== 'expired' && !searchedMember.checkedInToday
+
   return (
     <DashboardLayout>
-      <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">CHECK-IN HỘI VIÊN</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">Điểm danh thủ công</h1>
-        <p className="mt-1 text-sm text-[var(--gs-text-muted)]">
-          Điểm danh thủ công khi hội viên không thể tự quét QR.
-        </p>
-      </div>
+      <div className="space-y-6">
+        <section className="rounded-2xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-6">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <p className="m-0 text-xs uppercase tracking-[0.24em] text-[var(--gs-text-soft)]">CHECK-IN HỘI VIÊN</p>
+              <Typography.Title level={2} className="!m-0 !mt-2 !text-[var(--gs-text)]">
+                Điểm danh tại quầy
+              </Typography.Title>
+              <Typography.Paragraph className="!mb-0 !mt-2 !text-[var(--gs-text-muted)]">
+                Tìm hội viên bằng mã, số điện thoại hoặc email để hỗ trợ check-in khi không tự quét QR được.
+              </Typography.Paragraph>
+            </div>
+            <div className="grid grid-cols-3 gap-3 xl:min-w-[430px]">
+              <Card size="small" className="rounded-xl">
+                <Statistic title="Hiển thị" value={historyTotal} prefix={<ClockCircleOutlined />} valueStyle={{ fontSize: 18 }} />
+              </Card>
+              <Card size="small" className="rounded-xl">
+                <Statistic title="Thành công" value={successCount} prefix={<CheckCircleFilled />} valueStyle={{ fontSize: 18, color: '#10B981' }} />
+              </Card>
+              <Card size="small" className="rounded-xl">
+                <Statistic title="Tại quầy" value={staffCount} prefix={<IdcardOutlined />} valueStyle={{ fontSize: 18 }} />
+              </Card>
+            </div>
+          </div>
+        </section>
 
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={9}>
-          <Card className="rounded-[24px]" title={<Text strong>Tìm hội viên</Text>}>
-            <Input
-              size="large"
-              prefix={<SearchOutlined />}
-              placeholder="Nhập: Email Google OAuth • Email đăng ký • Mã hội viên • Số điện thoại"
-              value={searchValue}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              onPressEnter={handleSearchEnter}
-              allowClear
-            />
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_1fr]">
+          <div className="space-y-4">
+            <Card title="Check-in nhanh" className="rounded-2xl">
+              <Input.Search
+                size="large"
+                prefix={<SearchOutlined />}
+                placeholder="Mã hội viên, tên, SĐT hoặc email"
+                value={searchValue}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onSearch={doSearch}
+                onPressEnter={handleSearchEnter}
+                allowClear
+                loading={searching}
+              />
 
-            {searching && (
-              <div className="mt-4 text-center text-[var(--gs-text-muted)]">Đang tìm kiếm...</div>
-            )}
+              {searchError && !searching && (
+                <Alert className="mt-4" type="warning" showIcon message={searchError} />
+              )}
 
-            {searchError && !searching && (
-              <div className="mt-4 text-center text-[var(--gs-text-muted)]">{searchError}</div>
-            )}
-
-            {searchedMember && !searching && (
-              <div className="mt-4 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4">
-                <div className="flex items-center gap-3">
-                  <Avatar size={48} src={searchedMember.avatar || undefined}>
-                    {getUserDisplayName(searchedMember).charAt(0)?.toUpperCase()}
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <Text strong className="text-[var(--gs-text)] text-base block truncate">
-                      {getUserDisplayName(searchedMember)}
-                    </Text>
-                    <Text className="text-[var(--gs-text-muted)] text-xs">
-                      {searchedMember.memberCode}
-                    </Text>
-                  </div>
+              {!searchedMember && !searchError && !searching && (
+                <div className="mt-4 rounded-xl border border-dashed border-[var(--gs-border)] p-6 text-center text-sm text-[var(--gs-text-muted)]">
+                  Nhập thông tin hội viên để bắt đầu điểm danh.
                 </div>
+              )}
 
-                <div className="mt-3 space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <Text className="text-[var(--gs-text-muted)]">Email:</Text>
-                    <Text className="text-[var(--gs-text)]">{searchedMember.email || '—'}</Text>
-                  </div>
-                  <div className="flex justify-between">
-                    <Text className="text-[var(--gs-text-muted)]">SĐT:</Text>
-                    <Text className="text-[var(--gs-text)]">{searchedMember.phone || '—'}</Text>
-                  </div>
-                  {searchedMember.membership ? (
-                    <>
-                      <div className="flex justify-between">
-                        <Text className="text-[var(--gs-text-muted)]">Gói tập:</Text>
-                        <Text className="text-[var(--gs-text)] font-medium">
-                          {searchedMember.membership.planName}
-                        </Text>
-                      </div>
-                      <div className="flex justify-between">
-                        <Text className="text-[var(--gs-text-muted)]">Hạn dùng:</Text>
-                        <Text className="text-[var(--gs-text)]">
-                          {new Date(searchedMember.membership.endDate).toLocaleDateString('vi-VN')}
-                        </Text>
-                      </div>
-                      {searchedMember.membership.price > 0 && (
-                        <div className="flex justify-between">
-                          <Text className="text-[var(--gs-text-muted)]">Giá gói:</Text>
-                          <Text className="text-[var(--gs-text)] font-medium">
-                            {searchedMember.membership.price.toLocaleString('vi-VN')}đ
-                          </Text>
-                        </div>
-                      )}
-                      <div className="flex justify-between">
-                        <Text className="text-[var(--gs-text-muted)]">Trạng thái:</Text>
-                        {searchedMember.membership.status === 'active' ? (
-                          <Tag color="success">Đang hoạt động</Tag>
-                        ) : (
-                          <Tag color="red">Đã hết hạn</Tag>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="mt-2">
-                      <Tag color="error">Chưa có gói tập</Tag>
+              {searchedMember && !searching && (
+                <div className="mt-4 rounded-2xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
+                  <div className="flex items-center gap-3">
+                    <Avatar size={56} src={searchedMember.avatar || undefined} icon={<UserOutlined />}>
+                      {getUserDisplayName(searchedMember).charAt(0)?.toUpperCase()}
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-base font-semibold text-[var(--gs-text)]">{getUserDisplayName(searchedMember)}</div>
+                      <div className="text-xs text-[var(--gs-text-muted)]">{searchedMember.memberCode || '—'}</div>
                     </div>
-                  )}
-                </div>
+                    {searchedMember.checkedInToday && <Tag color="success">Đã check-in</Tag>}
+                  </div>
 
-                <div className="mt-4">
-                  {searchedMember.checkedInToday ? (
-                    <div className="flex items-center justify-center gap-2 rounded-lg bg-[var(--gs-success-bg)] py-3">
-                      <CheckCircleFilled style={{ color: '#22c55e' }} />
-                      <Text className="text-[var(--gs-text-muted)]">Đã check-in hôm nay</Text>
-                    </div>
-                  ) : (
-                    <Button
-                      type="primary"
-                      size="large"
-                      block
-                      disabled={!searchedMember.membership || searchedMember.membership.status === 'expired'}
-                      onClick={() => setModalOpen(true)}
-                    >
-                      Điểm danh
-                    </Button>
-                  )}
+                  <Descriptions className="mt-4" bordered size="small" column={1}>
+                    <Descriptions.Item label="Email">{searchedMember.email || '—'}</Descriptions.Item>
+                    <Descriptions.Item label="SĐT">{searchedMember.phone || '—'}</Descriptions.Item>
+                    {searchedMember.membership ? (
+                      <>
+                        <Descriptions.Item label="Gói tập">{searchedMember.membership.planName}</Descriptions.Item>
+                        <Descriptions.Item label="Hạn dùng">{formatDate(searchedMember.membership.endDate)}</Descriptions.Item>
+                        <Descriptions.Item label="Giá gói">{formatMoney(searchedMember.membership.price)}</Descriptions.Item>
+                        <Descriptions.Item label="Trạng thái">
+                          {searchedMember.membership.status === 'active'
+                            ? <Tag color="success">Đang hoạt động</Tag>
+                            : <Tag color="error">Đã hết hạn</Tag>}
+                        </Descriptions.Item>
+                      </>
+                    ) : (
+                      <Descriptions.Item label="Gói tập"><Tag color="error">Chưa có gói tập</Tag></Descriptions.Item>
+                    )}
+                  </Descriptions>
+
+                  <div className="mt-4">
+                    {searchedMember.checkedInToday ? (
+                      <Alert type="success" showIcon message="Hội viên đã check-in hôm nay." />
+                    ) : (
+                      <Button
+                        type="primary"
+                        size="large"
+                        block
+                        disabled={!canCheckin}
+                        onClick={() => setModalOpen(true)}
+                      >
+                        Điểm danh tại quầy
+                      </Button>
+                    )}
+                    {!searchedMember.membership && (
+                      <div className="mt-2 text-xs text-[var(--gs-text-muted)]">Hội viên cần có gói tập hợp lệ trước khi check-in.</div>
+                    )}
+                    {searchedMember.membership?.status === 'expired' && (
+                      <div className="mt-2 text-xs text-red-500">Gói tập đã hết hạn, không thể check-in.</div>
+                    )}
+                  </div>
                 </div>
+              )}
+            </Card>
+
+            <Card className="rounded-2xl">
+              <div className="grid grid-cols-2 gap-3">
+                <Statistic title="QR" value={qrCount} valueStyle={{ fontSize: 18 }} />
+                <Statistic title="Lễ tân" value={staffCount} valueStyle={{ fontSize: 18 }} />
               </div>
-            )}
-          </Card>
-        </Col>
+            </Card>
+          </div>
 
-        <Col xs={24} lg={15}>
-          <Card className="rounded-[24px]" title={<Text strong>Lịch sử check-in</Text>}>
-            <div className="mb-4 space-y-3">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Card
+            className="rounded-2xl"
+            title="Lịch sử check-in"
+            extra={<Button size="small" icon={<ReloadOutlined />} onClick={() => loadCheckinHistory(historyPage)}>Tải lại</Button>}
+          >
+            <div className="mb-4 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <Select<TimeMode>
-                  className="w-full"
                   value={timeMode}
                   onChange={(value) => {
                     setTimeMode(value)
@@ -371,41 +383,41 @@ export default function StaffCheckinPage() {
                     { value: 'custom', label: 'Tùy chọn' },
                   ]}
                 />
-                {timeMode === 'custom' && (
+                {timeMode === 'custom' ? (
                   <DatePicker
-                    className="w-full"
                     value={filterDate}
                     onChange={setFilterDate}
                     format="DD/MM/YYYY"
                     placeholder="Chọn ngày"
                   />
+                ) : (
+                  <Input disabled value="Theo bộ lọc thời gian" />
                 )}
-              </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Input
                   prefix={<SearchOutlined />}
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
                   onPressEnter={() => loadCheckinHistory(1)}
-                  placeholder="Tìm theo mã HV / tên / SĐT"
+                  placeholder="Mã HV / tên / SĐT"
                 />
-                <Space>
-                  <Button type="primary" icon={<FilterOutlined />} onClick={() => loadCheckinHistory(1)}>
-                    Tìm kiếm
-                  </Button>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto]">
+                <TimePicker value={startTime} onChange={setStartTime} format="HH:mm" placeholder="Từ giờ" className="w-full" />
+                <TimePicker value={endTime} onChange={setEndTime} format="HH:mm" placeholder="Đến giờ" className="w-full" />
+                <Space wrap>
+                  <Button type="primary" icon={<FilterOutlined />} onClick={() => loadCheckinHistory(1)}>Tìm kiếm</Button>
                   <Button onClick={handleResetFilters}>Xóa lọc</Button>
-                  <Button icon={<ReloadOutlined />} onClick={() => loadCheckinHistory(historyPage)}>
-                    Tải lại
-                  </Button>
                 </Space>
               </div>
             </div>
+
             <Table
               size="small"
               rowKey="checkinId"
               dataSource={checkins}
               loading={historyLoading}
               columns={columns}
+              locale={{ emptyText: <Empty description="Chưa có lịch sử check-in" /> }}
               pagination={{
                 current: historyPage,
                 pageSize: 10,
@@ -413,14 +425,14 @@ export default function StaffCheckinPage() {
                 showSizeChanger: false,
                 onChange: (page) => loadCheckinHistory(page),
               }}
-              scroll={{ x: 1000 }}
+              scroll={{ x: 1100 }}
             />
           </Card>
-        </Col>
-      </Row>
+        </div>
+      </div>
 
       <Modal
-        title="Xác nhận điểm danh thủ công"
+        title="Xác nhận điểm danh tại quầy"
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={[
@@ -430,35 +442,38 @@ export default function StaffCheckinPage() {
           </Button>,
         ]}
       >
-        <div className="py-2">
+        <div className="space-y-4 py-2">
           {searchedMember && (
-            <div className="mb-4 flex items-center gap-3 rounded-lg bg-[var(--gs-card)] p-3">
-              <Avatar size={40} src={searchedMember.avatar || undefined}>
+            <div className="flex items-center gap-3 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+              <Avatar size={44} src={searchedMember.avatar || undefined} icon={<UserOutlined />}>
                 {getUserDisplayName(searchedMember).charAt(0)?.toUpperCase()}
               </Avatar>
               <div>
-                <Text strong className="text-[var(--gs-text)]">{getUserDisplayName(searchedMember)}</Text>
+                <div className="font-semibold text-[var(--gs-text)]">{getUserDisplayName(searchedMember)}</div>
                 <div className="text-xs text-[var(--gs-text-muted)]">{searchedMember.memberCode}</div>
               </div>
             </div>
           )}
-          <div className="mb-2 text-sm font-medium text-[var(--gs-text)]">Lý do:</div>
-          <Radio.Group
-            value={selectedReason}
-            onChange={(e) => setSelectedReason(e.target.value)}
-            className="w-full"
-          >
-            <Space direction="vertical" className="w-full">
-              {reasonOptions.map((opt) => (
-                <Radio key={opt.value} value={opt.value} className="text-[var(--gs-text)]">
-                  {opt.label}
-                </Radio>
-              ))}
-            </Space>
-          </Radio.Group>
+
+          <div>
+            <div className="mb-2 text-sm font-medium text-[var(--gs-text)]">Lý do điểm danh thủ công</div>
+            <Radio.Group
+              value={selectedReason}
+              onChange={(e) => setSelectedReason(e.target.value)}
+              className="w-full"
+            >
+              <Space direction="vertical" className="w-full">
+                {reasonOptions.map((option) => (
+                  <Radio key={option.value} value={option.value} className="text-[var(--gs-text)]">
+                    {option.label}
+                  </Radio>
+                ))}
+              </Space>
+            </Radio.Group>
+          </div>
+
           {selectedReason === 'Khác' && (
             <Input.TextArea
-              className="mt-3"
               rows={3}
               placeholder="Nhập lý do..."
               value={customReason}

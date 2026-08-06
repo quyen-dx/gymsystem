@@ -8,6 +8,8 @@ import User from '../models/User.js'
 import Wallet from '../models/Wallet.js'
 import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, transferWalletBalance, IdempotencyConflictError } from '../services/walletService.js'
 import { finalizeWalletDeposit, notifyDepositSuccess } from '../services/walletDepositService.js'
+import { finalizePlanPurchase } from '../services/membershipService.js'
+import { finalizePlanChangePurchase } from './planChangeController.js'
 import { createVnpayPaymentUrl, verifyVnpayReturn } from '../services/vnpayService.js'
 import AppError from '../utils/appError.js'
 import { assertPolicyConsent } from '../utils/policyConsent.js'
@@ -446,25 +448,61 @@ export const createVnpayDepositPayment = async (req, res, next) => {
 }
 
 export const handleVnpayReturn = async (req, res, next) => {
-    const redirectWithStatus = (status, txnRef) => res.redirect(buildClientUrl('/deposit', {
-        payment: status,
-        txnRef,
-    }))
+  const redirectWithStatus = (status, txnRef, target = '/deposit') => res.redirect(buildClientUrl(target, {
+    payment: status,
+    txnRef,
+  }))
 
+  try {
+    const txnRef = req.query.vnp_TxnRef
+    if (!txnRef) return redirectWithStatus('failed')
+
+    const isValidSignature = verifyVnpayReturn(req.query)
+    const responseCode = req.query.vnp_ResponseCode
+    const transactionStatus = req.query.vnp_TransactionStatus
+    const isPaid = isValidSignature && responseCode === '00' && transactionStatus === '00'
+
+    const payment = await Payment.findOne({ txnRef }).lean()
+    if (!payment) return redirectWithStatus('failed')
+
+    // === Thanh toán gói tập (đăng ký/gia hạn) ===
+    if (payment.metadata?.purpose === 'PLAN_PURCHASE') {
+      const redirectTarget = '/my-membership'
+      if (payment.status === 'PAID') return redirectWithStatus('success', txnRef, redirectTarget)
+      if (payment.status !== 'PENDING') return redirectWithStatus('failed', txnRef, redirectTarget)
+
+      const metaPatch = {
+        ...(payment.metadata || {}),
+        vnpayReturn: req.query,
+        verified: isValidSignature,
+      }
+
+      if (!isPaid) {
+        await Payment.updateOne({ txnRef, status: 'PENDING' }, { $set: { status: 'FAILED', metadata: metaPatch } })
+        return redirectWithStatus('failed', txnRef, redirectTarget)
+      }
+
+      await Payment.updateOne({ txnRef, status: 'PENDING' }, { $set: { metadata: metaPatch } })
+      try {
+        if (payment.metadata?.planChange) {
+          await finalizePlanChangePurchase({ paymentId: payment._id })
+        } else {
+          await finalizePlanPurchase({ paymentId: payment._id, vnpayQuery: req.query })
+        }
+      } catch (error) {
+        if (error instanceof IdempotencyConflictError || error?.errorLabels?.includes('TransientTransactionError')) {
+          return redirectWithStatus('success', txnRef, redirectTarget)
+        }
+        throw error
+      }
+      return redirectWithStatus('success', txnRef, redirectTarget)
+    }
+
+    const session = await mongoose.startSession()
     try {
-        const txnRef = req.query.vnp_TxnRef
-        if (!txnRef) return redirectWithStatus('failed')
-
-        const isValidSignature = verifyVnpayReturn(req.query)
-        const responseCode = req.query.vnp_ResponseCode
-        const transactionStatus = req.query.vnp_TransactionStatus
-        const isPaid = isValidSignature && responseCode === '00' && transactionStatus === '00'
-
-        const session = await mongoose.startSession()
-        try {
-            const outcome = await session.withTransaction(async () => {
-                const payment = await Payment.findOne({ txnRef }).session(session)
-                if (!payment) return { status: 'failed' }
+      const outcome = await session.withTransaction(async () => {
+        const payment = await Payment.findOne({ txnRef }).session(session)
+        if (!payment) return { status: 'failed' }
 
                 if (payment.status === 'PAID') return { status: 'success', alreadyPaid: true }
 

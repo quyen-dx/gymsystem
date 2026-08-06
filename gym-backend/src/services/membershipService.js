@@ -1,6 +1,7 @@
 ﻿import mongoose from 'mongoose'
 import Stripe from 'stripe'
 import { buildClientUrl } from '../config/appUrls.js'
+import { createVnpayPaymentUrl } from './vnpayService.js'
 import Membership from '../models/Membership.js'
 import MembershipPeriod from '../models/MembershipPeriod.js'
 import MembershipRenewal from '../models/MembershipRenewal.js'
@@ -228,13 +229,25 @@ const ensureMemberAndPlan = async ({ userId, planId }) => {
   return { user, plan, memberId, planObjectId }
 }
 
-const subscribeWithWallet = async ({ userId, planId, mode = 'register', durationMultiplier = 1 }) => {
+const subscribeWithWallet = async ({
+  userId,
+  planId,
+  mode = 'register',
+  durationMultiplier = 1,
+  walletDeductAmount = null,
+  externalPayment = null,
+  vnpayQuery = null,
+  session: externalSession = null,
+}) => {
   await assertPolicyConsent(userId, ['membership', 'terms'])
 
   const { user, plan, memberId, planObjectId } = await ensureMemberAndPlan({ userId, planId })
   const multiplier = Math.max(1, Math.floor(Number(durationMultiplier) || 1))
   const effectiveDays = plan.durationDays * multiplier
   const amount = Number(plan.price || 0) * multiplier
+  const walletPart = walletDeductAmount == null
+    ? amount
+    : Math.max(0, Math.min(Number(walletDeductAmount) || 0, amount))
 
   const existingActiveCycle = await MembershipCycle.findOne({
     memberId, status: 'active',
@@ -255,33 +268,41 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
     await assertRenewalAllowed(existingActiveCycle.expiresAt)
   }
 
-  const session = await mongoose.startSession()
+  const ownsSession = !externalSession
+  const session = externalSession || (await mongoose.startSession())
+  if (ownsSession) session.startTransaction()
   let committed = false
   let membership = null
   let payment = null
   let renewalPeriodsData = null
   let newRegistrationPeriodData = null
   let walletBalance = 0
+  let balanceBefore = 0
+  let wallet = null
 
   const isRenew = mode === 'renew'
 
   try {
-    session.startTransaction()
+    wallet = await Wallet.findOne({ userId: memberId }).session(session)
 
-    const wallet = await Wallet.findOneAndUpdate(
-      { userId: memberId, balance: { $gte: amount } },
-      { $inc: { balance: -amount } },
-      { new: false, session },
-    )
+    if (walletPart > 0) {
+      wallet = await Wallet.findOneAndUpdate(
+        { userId: memberId, balance: { $gte: walletPart } },
+        { $inc: { balance: -walletPart } },
+        { new: false, session },
+      )
 
-    if (!wallet) {
-      const error = new Error('Đăng ký không thành công, tài khoản không đủ số dư')
-      error.statusCode = 400
-      throw error
+      if (!wallet) {
+        const error = new Error('Đăng ký không thành công, tài khoản không đủ số dư')
+        error.statusCode = 400
+        throw error
+      }
     }
 
-    const balanceBefore = Number(wallet.balance || 0)
-    walletBalance = balanceBefore - amount
+    balanceBefore = Number(wallet?.balance || 0)
+    walletBalance = walletPart > 0
+      ? Math.max(0, balanceBefore - walletPart)
+      : balanceBefore
     const today = startOfTodayVN()
 
     const existingActive = existingActiveCycle
@@ -362,27 +383,52 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
       }
     }
 
-    const [createdPayment] = await Payment.create(
-      [
-        {
-          userId: memberId,
-          planId: planObjectId,
-          membershipId: membership._id,
-          amount,
-          currency: 'vnd',
-          status: 'PAID',
-          paymentMethod: 'WALLET',
-          source: 'ONLINE',
-          paidAt: new Date(),
-          metadata: {
-            walletBalanceBefore: balanceBefore,
-            walletBalanceAfter: walletBalance,
+    if (externalPayment) {
+      payment = externalPayment
+      payment.status = 'PAID'
+      payment.paidAt = new Date()
+      payment.completedAt = new Date()
+      payment.paymentMethod = 'VNPAY'
+      payment.planId = planObjectId
+      payment.membershipId = membership._id
+      if (wallet) payment.walletId = wallet._id
+      payment.metadata = {
+        ...(payment.metadata || {}),
+        purpose: 'PLAN_PURCHASE',
+        planId: planObjectId,
+        mode,
+        durationMultiplier: multiplier,
+        walletUsed: walletPart,
+        totalAmount: amount,
+        walletBalanceBefore: balanceBefore,
+        walletBalanceAfter: walletBalance,
+        finalizedAt: new Date(),
+        ...(vnpayQuery ? { vnpayReturnVerified: true, vnpTransactionNo: vnpayQuery.vnp_TransactionNo || null } : {}),
+      }
+      await payment.save({ session })
+    } else {
+      const [createdPayment] = await Payment.create(
+        [
+          {
+            userId: memberId,
+            planId: planObjectId,
+            membershipId: membership._id,
+            amount,
+            currency: 'vnd',
+            status: 'PAID',
+            paymentMethod: 'WALLET',
+            source: 'ONLINE',
+            paidAt: new Date(),
+            metadata: {
+              walletBalanceBefore: balanceBefore,
+              walletBalanceAfter: walletBalance,
+            },
           },
-        },
-      ],
-      { session },
-    )
-    payment = createdPayment
+        ],
+        { session },
+      )
+      payment = createdPayment
+    }
 
     membership.paymentId = payment._id
 
@@ -392,12 +438,12 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
         [
           {
             userId: memberId,
-            walletId: wallet._id,
+            walletId: wallet?._id || null,
             type: 'payment',
             provider: 'wallet',
             source: 'membership',
             description: `Thanh toán gói tập ${plan.nameVi || plan.nameEn}`,
-            amount: -amount,
+            amount: -walletPart,
             balanceBefore,
             balanceAfter: walletBalance,
             referenceId: payment._id.toString(),
@@ -407,6 +453,7 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
               paymentId: payment._id,
               planId: plan._id,
               membershipId: membership._id,
+              ...(externalPayment ? { paymentMethod: 'VNPAY', walletUsed: walletPart, totalAmount: amount } : {}),
             },
             idempotencyKey: payment._id.toString(),
           },
@@ -505,15 +552,17 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
     await Promise.all(tasks)
     // === end MembershipCycle integration ===
 
-    await session.commitTransaction()
-    committed = true
+    if (ownsSession) {
+      await session.commitTransaction()
+      committed = true
+    }
   } catch (error) {
-    if (!committed) {
+    if (ownsSession && !committed) {
       await session.abortTransaction()
     }
     throw error
   } finally {
-    session.endSession()
+    if (ownsSession) session.endSession()
   }
 
   // === SAU COMMIT: chỉ giữ bước bắt buộc cho response.
@@ -643,6 +692,9 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
   return {
     message: isRenew ? 'Gia hạn thành công' : 'Đăng ký gói tập thành công',
     walletBalance,
+    paymentMethod: externalPayment ? 'VNPAY' : 'WALLET',
+    walletUsed: walletPart,
+    totalAmount: amount,
     membership: serializeMembership(populatedMembership, cycle),
     cycle: cycle
       ? {
@@ -657,6 +709,140 @@ const subscribeWithWallet = async ({ userId, planId, mode = 'register', duration
     ...(renewalPeriodsData && renewalPeriodsData.length > 0
       ? { newEndDate: renewalPeriodsData[renewalPeriodsData.length - 1].endDate }
       : {}),
+  }
+}
+
+/**
+ * Checkout linh hoạt cho đăng ký/gia hạn gói tập (3 trường hợp):
+ * 1. Ví đủ → thanh toán ví ngay (status = PAID)
+ * 2. 0 < ví < tổng → tạo Payment PENDING VNPAY cho phần còn thiếu (status = PARTIAL)
+ * 3. Ví = 0 → tạo Payment PENDING VNPAY toàn bộ (status = NO_BALANCE)
+ */
+export const createMembershipCheckout = async ({ userId, planId, mode = 'register', durationMultiplier = 1, ipAddr = '127.0.0.1', locale = 'vn' }) => {
+  await assertPolicyConsent(userId, ['membership', 'terms'])
+
+  const { plan, memberId, planObjectId } = await ensureMemberAndPlan({ userId, planId })
+  const multiplier = Math.max(1, Math.floor(Number(durationMultiplier) || 1))
+  const amount = Number(plan.price || 0) * multiplier
+
+  const existingActiveCycle = await MembershipCycle.findOne({
+    memberId, status: 'active',
+  }).sort({ createdAt: -1 }).lean()
+
+  if (mode === 'register' && existingActiveCycle) {
+    const error = new Error('Bạn đang có gói tập hoạt động. Vui lòng gia hạn trong mục Gói tập của tôi.')
+    error.statusCode = 400
+    throw error
+  }
+
+  if (mode === 'renew') {
+    if (!existingActiveCycle) {
+      const error = new Error('Bạn chưa có gói tập để gia hạn. Vui lòng đăng ký gói mới.')
+      error.statusCode = 404
+      throw error
+    }
+    await assertRenewalAllowed(existingActiveCycle.expiresAt)
+  }
+
+  let wallet = await Wallet.findOne({ userId: memberId })
+  if (!wallet) {
+    [wallet] = await Wallet.create([{ userId: memberId, balance: 0 }])
+  }
+  const balance = Number(wallet.balance || 0)
+
+  // Case 1: ví đủ tiền → xử lý ngay bằng ví
+  if (balance >= amount) {
+    const result = await subscribeWithWallet({ userId, planId, mode, durationMultiplier })
+    return { status: 'PAID', ...result }
+  }
+
+  // Case 2/3: thanh toán phần còn thiếu qua VNPay
+  const walletUsed = balance
+  const remaining = amount - balance
+  const txnRef = `PLAN${Date.now()}${memberId.toString().slice(-6).toUpperCase()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+
+  const payment = await Payment.create({
+    userId: memberId,
+    walletId: wallet._id,
+    planId: planObjectId,
+    amount,
+    currency: 'vnd',
+    status: 'PENDING',
+    paymentMethod: 'VNPAY',
+    method: 'VNPAY',
+    source: 'ONLINE',
+    txnRef,
+    metadata: {
+      purpose: 'PLAN_PURCHASE',
+      provider: 'VNPAY',
+      mode,
+      durationMultiplier: multiplier,
+      totalAmount: amount,
+      walletUsed,
+      remainingAmount: remaining,
+      walletBalanceAtCheckout: balance,
+      planName: plan.nameVi || plan.nameEn,
+    },
+  })
+
+  const paymentUrl = createVnpayPaymentUrl({
+    amount: remaining,
+    txnRef,
+    orderInfo: `Thanh toan goi tap GymPro ${txnRef}`,
+    ipAddr,
+    locale,
+  })
+
+  return {
+    status: balance > 0 ? 'PARTIAL' : 'NO_BALANCE',
+    totalAmount: amount,
+    walletBalance: balance,
+    walletUsed,
+    remainingAmount: remaining,
+    paymentId: payment._id,
+    txnRef,
+    paymentUrl,
+    planName: plan.nameVi || plan.nameEn,
+  }
+}
+
+/**
+ * Hoàn tất đơn mua/gia hạn gói sau khi VNPay đã xác nhận thanh toán.
+ * Idempotent: nếu Payment đã PAID sẽ trả về luôn mà không xử lý lại.
+ */
+export const finalizePlanPurchase = async ({ paymentId, vnpayQuery = null }) => {
+  const session = await mongoose.startSession()
+  try {
+    const result = await session.withTransaction(async () => {
+      const payment = await Payment.findById(paymentId).session(session)
+      if (!payment) {
+        const error = new Error('Không tìm thấy giao dịch thanh toán')
+        error.statusCode = 404
+        throw error
+      }
+      if (String(payment.status).toUpperCase() === 'PAID') {
+        return { alreadyPaid: true }
+      }
+      if (String(payment.status).toUpperCase() !== 'PENDING') {
+        const error = new Error('Giao dịch không còn ở trạng thái chờ thanh toán')
+        error.statusCode = 400
+        throw error
+      }
+      const meta = payment.metadata || {}
+      return subscribeWithWallet({
+        userId: payment.userId,
+        planId: meta.planId,
+        mode: meta.mode || 'register',
+        durationMultiplier: meta.durationMultiplier || 1,
+        walletDeductAmount: meta.walletUsed || 0,
+        externalPayment: payment,
+        vnpayQuery,
+        session,
+      })
+    })
+    return result
+  } finally {
+    session.endSession()
   }
 }
 

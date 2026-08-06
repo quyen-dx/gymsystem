@@ -1,5 +1,5 @@
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
-import { Badge, Button, Input, Select, Space, Table, Tag, message } from 'antd'
+import { Badge, Button, Input, Select, Space, Table, Tag, Tooltip, message } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
@@ -7,6 +7,8 @@ import { membershipService, type MembershipPlan } from '../../../services/member
 import { memberService } from '../../../services/memberService'
 import type { MemberListItem } from '../../../types/admin/member'
 import { getUserDisplayName } from '../../../utils/userDisplay'
+
+type MemberPlanState = 'inactive' | 'no_plan' | 'active' | 'expired'
 
 export default function StaffMemberPage() {
   const navigate = useNavigate()
@@ -74,6 +76,17 @@ export default function StaffMemberPage() {
     return record.activeMembership.status === 'expired' || new Date(record.activeMembership.endDate).getTime() < Date.now()
   }
 
+  const getPlanState = (record: MemberListItem): MemberPlanState => {
+    if (!record.isActive) return 'inactive'
+    if (!record.activeMembership) return 'no_plan'
+    if (isExpired(record)) return 'expired'
+    return 'active'
+  }
+
+  const showChangePlanNotice = () => {
+    message.info('Chức năng đổi gói tại quầy cần API tính chênh lệch/hoàn ví riêng. Hiện tại hãy xử lý đổi gói ở luồng hội viên hoặc bổ sung API staff đổi gói.')
+  }
+
   const columns = [
     {
       title: 'Mã hội viên',
@@ -101,7 +114,7 @@ export default function StaffMemberPage() {
       render: (_: any, record: MemberListItem) => {
         const plan = record.activeMembership?.planId
         if (!plan) return <Tag>Chưa có gói</Tag>
-        return plan.nameVi
+        return <span className="font-medium">{plan.nameVi}</span>
       },
     },
     {
@@ -110,6 +123,7 @@ export default function StaffMemberPage() {
       align: 'center' as const,
       render: (_: any, record: MemberListItem) => {
         if (!record.activeMembership) return '—'
+        if (isExpired(record)) return <Badge count={0} style={{ backgroundColor: '#EF4444' }} />
         const days = Number(record.remainingDays || 0)
         const color = days <= 7 ? '#EF4444' : days <= 30 ? '#F59E0B' : '#10B981'
         return <Badge count={days} style={{ backgroundColor: color }} />
@@ -117,32 +131,56 @@ export default function StaffMemberPage() {
     },
     {
       title: 'Trạng thái',
-      width: 140,
+      width: 160,
       align: 'center' as const,
       render: (_: any, record: MemberListItem) => {
-        if (!record.isActive) return <Tag color="error">Đã khóa</Tag>
-        if (!record.activeMembership) return <Tag>Chưa có gói</Tag>
-        if (isExpired(record)) return <Tag color="error">Đã hết hạn</Tag>
+        const state = getPlanState(record)
+        if (state === 'inactive') return <Tag color="error">Đã khóa</Tag>
+        if (state === 'no_plan') return <Tag>Chưa từng có gói</Tag>
+        if (state === 'expired') return <Tag color="error">Đã hết hạn</Tag>
         if (record.remainingDays <= 7) return <Tag color="warning">Sắp hết hạn</Tag>
         return <Tag color="success">Đang hoạt động</Tag>
       },
     },
     {
       title: 'Thao tác',
-      width: 150,
+      width: 280,
       render: (_: any, record: MemberListItem) => {
-        if (!record.isActive) return null
-        if (!record.activeMembership) {
+        const state = getPlanState(record)
+        if (state === 'inactive') return null
+
+        if (state === 'no_plan') {
           return (
             <Button size="small" type="primary" onClick={() => navigate(`/staff/members/${record._id}/register-plan`)}>
               Đăng ký gói
             </Button>
           )
         }
+
+        if (state === 'expired') {
+          return (
+            <Space wrap size={6}>
+              <Button size="small" type="primary" onClick={() => navigate(`/staff/members/${record._id}/renew-plan`)}>
+                Gia hạn
+              </Button>
+              <Button size="small" onClick={() => navigate(`/staff/members/${record._id}/register-plan`)}>
+                Đăng ký lại gói
+              </Button>
+            </Space>
+          )
+        }
+
         return (
-          <Button size="small" onClick={() => navigate(`/staff/members/${record._id}/renew-plan`)}>
-            Gia hạn
-          </Button>
+          <Space wrap size={6}>
+            <Button size="small" type="primary" onClick={() => navigate(`/staff/members/${record._id}/renew-plan`)}>
+              Gia hạn
+            </Button>
+            <Tooltip title="Cần API staff đổi gói để tính chênh lệch đúng">
+              <Button size="small" onClick={showChangePlanNotice}>
+                Đổi gói
+              </Button>
+            </Tooltip>
+          </Space>
         )
       },
     },
@@ -152,6 +190,9 @@ export default function StaffMemberPage() {
     <DashboardLayout>
       <section className="mb-6 rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-6">
         <h1 className="m-0 text-3xl font-semibold text-[var(--gs-text)]">Quản lý hội viên</h1>
+        <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
+          Khách mới tạo hội viên kèm đăng ký gói. Hội viên hiện có chỉ thao tác theo trạng thái gói.
+        </p>
       </section>
 
       <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
@@ -170,7 +211,7 @@ export default function StaffMemberPage() {
             options={[
               { value: '', label: 'Tất cả trạng thái' },
               { value: 'no_plan', label: 'Chưa có gói' },
-              { value: 'active', label: 'Đang có gói' },
+              { value: 'active', label: 'Đang hoạt động' },
               { value: 'expiring', label: 'Sắp hết hạn' },
               { value: 'expired', label: 'Đã hết hạn' },
             ]}
@@ -203,7 +244,7 @@ export default function StaffMemberPage() {
             <Button onClick={handleResetFilters}>Xóa lọc</Button>
             <Button icon={<ReloadOutlined />} onClick={() => fetchMembers(page)}>Tải lại</Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/staff/members/new')}>
-              Tạo hội viên
+              Thêm hội viên + đăng ký gói
             </Button>
           </Space>
         </div>

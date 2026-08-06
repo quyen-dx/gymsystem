@@ -277,6 +277,50 @@ export const membershipService = {
   getPlans: (params?: Record<string, any>) => api.get<{ plans: MembershipPlan[] }>('/plans', { params: { limit: 100, ...params } }),
   registerPlan: (planId: string) => api.post('/memberships', { planId }),
   subscribePlan: (planId: string) => api.post('/memberships/subscribe', { planId }),
+  checkoutPlan: (planId: string) =>
+    api.post<{
+      status: 'PAID' | 'PARTIAL' | 'NO_BALANCE'
+      totalAmount?: number
+      walletBalance?: number
+      walletUsed?: number
+      remainingAmount?: number
+      paymentId?: string
+      txnRef?: string
+      paymentUrl?: string
+      planName?: string
+      message?: string
+      paymentMethod?: string
+    }>('/memberships/checkout', { planId }),
+  checkoutRenew: (durationMultiplier: number) =>
+    api.post<{
+      status: 'PAID' | 'PARTIAL' | 'NO_BALANCE'
+      totalAmount?: number
+      walletBalance?: number
+      walletUsed?: number
+      remainingAmount?: number
+      paymentId?: string
+      txnRef?: string
+      paymentUrl?: string
+      planName?: string
+      message?: string
+      paymentMethod?: string
+    }>('/memberships/checkout-renew', { mode: 'renew', durationMultiplier }),
+  changePlanCheckout: (newPlanId: string, cancelRenewals = false) =>
+    api.post<{
+      status: 'PAID' | 'PARTIAL' | 'NO_BALANCE'
+      totalAmount?: number
+      walletBalance?: number
+      walletUsed?: number
+      remainingAmount?: number
+      paymentId?: string
+      txnRef?: string
+      paymentUrl?: string
+      changeType?: string
+      oldPlanName?: string
+      newPlanName?: string
+      message?: string
+      amountToPay?: number
+    }>('/memberships/change-plan/checkout', { newPlanId, cancelRenewals }),
   getMyMembership: () => api.get<{ membership: MyMembership | null; canRenew: boolean; renewalThresholdDays: number; pendingCancelRequest: PendingCancelRequest | null; cycle: MyMembershipCycle | null; refundInfo: RefundInfo | null }>('/memberships/my'),
   getMyRenewals: () => api.get<{ renewals: MembershipRenewal[] }>('/memberships/my/renewals'),
   getMyPeriods: () => api.get<{ periods: MembershipPeriod[] }>('/memberships/my/periods'),

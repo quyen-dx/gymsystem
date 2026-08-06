@@ -5,6 +5,7 @@ import {
   cancelRenewal,
   confirmRegistration,
   createMembership as createMembershipService,
+  createMembershipCheckout,
   createRenewalCheckoutSession,
   getMyMembership as getMyMembershipService,
   getCancelInfo,
@@ -25,6 +26,12 @@ import PlanFeature from '../models/PlanFeature.js'
 import MembershipCycle from '../models/MembershipCycle.js'
 import ClassEnrollment from '../models/ClassEnrollment.js'
 import PTAssignment from '../models/PTAssignment.js'
+
+const getClientIp = (req) => {
+  const forwardedFor = req.headers['x-forwarded-for']
+  if (forwardedFor) return String(forwardedFor).split(',')[0].trim()
+  return req.ip || req.socket?.remoteAddress || '127.0.0.1'
+}
 
 const sendServiceError = (res, error, next) => {
   if (error.statusCode) {
@@ -59,6 +66,27 @@ export const subscribeMembership = async (req, res, next) => {
 
     const payload = await subscribeWithWallet({ userId: req.user._id, planId })
     return res.status(201).json(payload)
+  } catch (error) {
+    return sendServiceError(res, error, next)
+  }
+}
+
+export const checkoutMembership = async (req, res, next) => {
+  try {
+    const { planId, mode = 'register', durationMultiplier = 1 } = req.body
+    if (!planId) {
+      return res.status(400).json({ message: 'planId là bắt buộc' })
+    }
+
+    const payload = await createMembershipCheckout({
+      userId: req.user._id,
+      planId,
+      mode,
+      durationMultiplier,
+      ipAddr: getClientIp(req),
+      locale: req.body.locale || 'vn',
+    })
+    return res.json(payload)
   } catch (error) {
     return sendServiceError(res, error, next)
   }

@@ -257,9 +257,16 @@ export const submitDailyQRCheckin = async (req, res) => {
       memberId,
       status: 'active',
       expiresAt: { $gte: now },
-    }).lean()
+    }).populate('currentPlanId', 'nameVi nameEn price').lean()
     if (!activeCycle) {
       return res.status(403).json({ message: 'Gói tập đã hết hạn hoặc không còn hiệu lực. Vui lòng gia hạn.' })
+    }
+
+    const activePlan = activeCycle.currentPlanId || {}
+    const planSnapshot = {
+      planId: activePlan._id || activeCycle.currentPlanId || null,
+      planName: activePlan.nameVi || activePlan.nameEn || '',
+      planPrice: Number(activePlan.price || 0),
     }
 
     if (!isFreeWorkout) {
@@ -326,6 +333,7 @@ export const submitDailyQRCheckin = async (req, res) => {
         staffId: null,
         checkinTime: now,
         status: 'success',
+        ...planSnapshot,
         dailyQRCodeId: qrCode._id,
         scheduleId: schedule._id,
         sessionDate: session.date,
@@ -375,6 +383,7 @@ export const submitDailyQRCheckin = async (req, res) => {
         staffId: null,
         checkinTime: now,
         status: 'success',
+        ...planSnapshot,
         dailyQRCodeId: qrCode._id,
         sessionDate: today,
         sessionType: 'free_workout',

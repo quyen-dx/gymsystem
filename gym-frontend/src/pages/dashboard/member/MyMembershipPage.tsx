@@ -1,4 +1,4 @@
-import { ArrowUpOutlined, CheckCircleFilled, CloseCircleOutlined, DownOutlined, ExclamationCircleFilled, ExclamationCircleOutlined, HistoryOutlined, InfoCircleOutlined, MailOutlined, SwapOutlined, WalletOutlined } from '@ant-design/icons'
+import { ArrowUpOutlined, CheckCircleFilled, CloseCircleOutlined, CreditCardOutlined, DownOutlined, ExclamationCircleFilled, ExclamationCircleOutlined, HistoryOutlined, InfoCircleOutlined, MailOutlined, SwapOutlined, WalletOutlined } from '@ant-design/icons'
 import { Button, Card, Descriptions, Empty, List, Modal, Radio, Spin, Table, Tabs, Tag, Tooltip, message } from 'antd'
 import dayjs from 'dayjs'
 import { useEffect, useMemo, useState } from 'react'
@@ -197,17 +197,23 @@ export default function MyMembershipPage() {
         )
         setConsentSubmitted(true)
       }
-      const res = await membershipService.renewPlanWithDuration(selectedMultiplier)
-      setRenewResult({
-        newEndDate: res.data.newEndDate,
-        amount: res.data.payment?.amount || planPrice * selectedMultiplier,
-        walletBalance: res.data.walletBalance,
-        planName,
-      })
-      setRenewModalOpen(false)
-      setSuccessModalOpen(true)
-      loadData()
-      refreshWallet()
+      const res = await membershipService.checkoutRenew(selectedMultiplier)
+      if (res.data?.status === 'PAID') {
+        setRenewResult({
+          newEndDate: res.data.newEndDate,
+          amount: res.data.payment?.amount || planPrice * selectedMultiplier,
+          walletBalance: res.data.walletBalance || 0,
+          planName,
+        })
+        setRenewModalOpen(false)
+        setSuccessModalOpen(true)
+        loadData()
+        refreshWallet()
+      } else if (res.data?.paymentUrl) {
+        window.location.href = res.data.paymentUrl
+      } else {
+        message.error('Không thể tạo phiên thanh toán')
+      }
     } catch (error: any) {
       message.error(error?.response?.data?.message || 'Gia hạn thất bại')
     } finally {
@@ -231,8 +237,12 @@ export default function MyMembershipPage() {
     if (!selectedPlan) return
     setChangeLoading(true)
     try {
-      const res = await api.post('/memberships/change-plan', { newPlanId: selectedPlan._id, cancelRenewals })
+      const res = await membershipService.changePlanCheckout(selectedPlan._id, cancelRenewals)
       const d = res.data
+      if (d?.status && d.status !== 'PAID' && d.paymentUrl) {
+        window.location.href = d.paymentUrl
+        return
+      }
       const msg = d.creditToWallet > 0
         ? `Đổi gói thành công! Đã hoàn ${formatMoney(d.creditToWallet)} vào ví.`
         : d.amountToPay > 0
@@ -270,6 +280,8 @@ export default function MyMembershipPage() {
   }
 
   const balanceSufficient = (wallet?.balance || 0) >= planPrice * selectedMultiplier
+  const renewTotal = planPrice * selectedMultiplier
+  const renewRemaining = Math.max(0, renewTotal - (wallet?.balance || 0))
 
   const pendingPeriods = useMemo(() => periods.filter(p => {
     const ds = p.displayStatus || p.status
@@ -765,6 +777,28 @@ export default function MyMembershipPage() {
                   <span className="text-sm text-[var(--gs-text-soft)]">Gói tập</span>
                   <span className="text-sm font-semibold text-[var(--gs-text)]">{planName}</span>
                 </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm max-[480px]:grid-cols-1">
+                  <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                    <div className="text-xs text-[var(--gs-text-muted)]">Thời hạn hiện tại</div>
+                    <div className="mt-0.5 font-semibold">{planDays} ngày</div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                    <div className="text-xs text-[var(--gs-text-muted)]">Ngày hết hạn hiện tại</div>
+                    <div className="mt-0.5 font-semibold">{formatDate(membership?.endDate || cycle?.expiresAt)}</div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                    <div className="text-xs text-[var(--gs-text-muted)]">Số ngày còn lại</div>
+                    <div className={`mt-0.5 font-semibold ${membership && membership.remainingDays > 0 ? 'text-[var(--gs-success)]' : 'text-[var(--gs-error)]'}`}>
+                      {membership?.remainingDays ?? 0} ngày
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                    <div className="text-xs text-[var(--gs-text-muted)]">Giá gói</div>
+                    <div className="mt-0.5 font-semibold text-[var(--gs-accent)]">{formatMoney(planPrice)} / {planDays} ngày</div>
+                  </div>
+                </div>
+
                 <div className="border-t border-[var(--gs-border)] pt-3">
                   <span className="text-sm font-medium text-[var(--gs-text-soft)]">Chọn thời gian gia hạn</span>
                   <Radio.Group
@@ -774,6 +808,7 @@ export default function MyMembershipPage() {
                   >
                       {multiplierOptions.map((m) => {
                         const days = planDays * m
+                        const newEnd = dayjs(membership?.endDate || cycle?.expiresAt).add(days, 'day')
                         return (
                           <Radio.Button
                             key={m}
@@ -782,8 +817,16 @@ export default function MyMembershipPage() {
                             style={{ border: '1px solid var(--gs-border)', borderRadius: 0 }}
                           >
                             <div className="flex w-full items-center justify-between gap-4">
-                              <span className="text-sm font-semibold text-[var(--gs-success)]">
-                                + {days} ngày ({m} tháng)
+                              <div className="flex flex-col gap-1">
+                                <span className="text-sm font-semibold text-[var(--gs-success)]">
+                                  + {days} ngày ({m} tháng)
+                                </span>
+                                <span className="text-xs text-[var(--gs-text-muted)]">
+                                  Hết hạn: {newEnd.format('DD/MM/YYYY')}
+                                </span>
+                              </div>
+                              <span className="text-sm font-bold text-[var(--gs-text)]">
+                                {formatMoney(planPrice * m)}
                               </span>
                             </div>
                           </Radio.Button>
@@ -791,25 +834,67 @@ export default function MyMembershipPage() {
                       })}
                   </Radio.Group>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-[var(--gs-text-soft)]">Giá</span>
-                  <span className="text-base font-bold text-[var(--gs-accent)]">{formatMoney(planPrice * selectedMultiplier)}</span>
+
+                <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-bg-subtle)] p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--gs-text-soft)]">Tổng cộng ({selectedMultiplier} tháng)</span>
+                    <span className="text-base font-bold text-[var(--gs-accent)]">{formatMoney(planPrice * selectedMultiplier)}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--gs-text-muted)]">
+                    {formatMoney(planPrice)} × {selectedMultiplier} kỳ ({planDays * selectedMultiplier} ngày)
+                  </div>
                 </div>
-                <div className="border-t border-[var(--gs-border)] pt-3 flex items-center justify-between">
-                  <span className="text-sm text-[var(--gs-text-soft)]">
-                    <WalletOutlined className="mr-1" />
-                    {'Số dư ví'}
-                  </span>
-                  <span className={`text-sm font-semibold ${balanceSufficient ? 'text-[var(--gs-success)]' : 'text-[var(--gs-error)]'}`}>
-                    {formatMoney(wallet?.balance || 0)}
-                  </span>
-                </div>
+
+                {balanceSufficient ? (
+                  <div className="rounded-xl border border-[var(--gs-success-border)] bg-[var(--gs-success-bg)] p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-[var(--gs-success)]">
+                      <WalletOutlined />
+                      {'Số dư đủ để thanh toán bằng ví'}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm max-[480px]:grid-cols-1">
+                      <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Số dư hiện tại</div>
+                        <div className="mt-0.5 font-semibold">{formatMoney(wallet?.balance || 0)}</div>
+                      </div>
+                      <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Số dư sau khi gia hạn</div>
+                        <div className="mt-0.5 font-semibold text-[var(--gs-success)]">{formatMoney((wallet?.balance || 0) - renewTotal)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (wallet?.balance || 0) > 0 ? (
+                  <div className="rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-3 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-[var(--gs-warning)]">
+                      <WalletOutlined />
+                      {'Số dư không đủ — thanh toán kết hợp ví + VNPay'}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm max-[480px]:grid-cols-1">
+                      <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Tổng tiền gia hạn</div>
+                        <div className="mt-0.5 font-bold">{formatMoney(renewTotal)}</div>
+                      </div>
+                      <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Số dư ví (sẽ dùng hết)</div>
+                        <div className="mt-0.5 font-bold">{formatMoney(wallet?.balance || 0)}</div>
+                      </div>
+                      <div className="col-span-2 rounded-lg border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-3 max-[480px]:col-span-1">
+                        <div className="text-xs text-[var(--gs-warning)]">Còn thiếu — thanh toán qua VNPay</div>
+                        <div className="mt-0.5 text-lg font-bold text-[var(--gs-warning)]">{formatMoney(renewRemaining)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-[var(--gs-info-border)] bg-[var(--gs-info-bg)] p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-[var(--gs-info)]">
+                      <WalletOutlined />
+                      {'Ví của bạn hiện không có số dư'}
+                    </div>
+                    <p className="m-0 text-sm text-[var(--gs-text)]">
+                      {'Bạn vẫn có thể thanh toán trực tiếp bằng phương thức khác mà không cần nạp ví.'}
+                    </p>
+                  </div>
+                )}
               </div>
-              {!balanceSufficient && (
-                <div className="rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-3 text-sm text-[var(--gs-warning)]">
-                  {'Số dư ví không đủ để gia hạn. Vui lòng nạp thêm tiền.'}
-                </div>
-              )}
               <PolicyConsentCard
                 policies={[
                   { type: 'membership', label: 'Chính sách hội viên' },
@@ -827,15 +912,18 @@ export default function MyMembershipPage() {
               <Button onClick={() => setRenewModalOpen(false)}>
                 Hủy
               </Button>
-              <Tooltip title={!consentReady ? 'Vui lòng đồng ý với chính sách' : !balanceSufficient ? 'Số dư ví không đủ' : undefined}>
+              <Tooltip title={!consentReady ? 'Vui lòng đồng ý với chính sách' : undefined}>
                 <Button
                   className="policy-confirm-action"
                   type="primary"
+                  icon={balanceSufficient ? <WalletOutlined /> : <CreditCardOutlined />}
                   loading={renewing}
-                  disabled={!consentReady || !balanceSufficient}
+                  disabled={!consentReady}
                   onClick={handleRenew}
                 >
-                  Xác nhận gia hạn
+                  {balanceSufficient
+                    ? 'Xác nhận gia hạn'
+                    : `Thanh toán ${formatMoney(renewRemaining)}đ qua VNPay`}
                 </Button>
               </Tooltip>
             </div>
@@ -961,51 +1049,89 @@ export default function MyMembershipPage() {
       </Modal>
 
       {/* Change Plan Modal */}
-      <Modal title="Đổi gói tập" open={changeModalOpen} onCancel={() => { setChangeModalOpen(false); setSelectedPlan(null); setAvailablePlans(null) }} footer={null} width={640}>
+      <Modal
+        title="Đổi gói tập"
+        open={changeModalOpen}
+        onCancel={() => { setChangeModalOpen(false); setSelectedPlan(null); setAvailablePlans(null) }}
+        footer={null}
+        width={780}
+        centered
+      >
         <Spin spinning={plansLoading}>
           {availablePlans ? (
-            <>
-              <Card size="small" className="mb-4 bg-[var(--gs-bg-subtle)]">
-                <Descriptions column={2} size="small">
-                  <Descriptions.Item label="Gói hiện tại">{availablePlans.currentPlan?.nameVi}</Descriptions.Item>
-                  <Descriptions.Item label="Trạng thái">{(statusMeta[availablePlans.cycleStatus] || statusMeta.active).label}</Descriptions.Item>
-                </Descriptions>
+            <div className="space-y-4">
+              <Card size="small" className="bg-[var(--gs-bg-subtle)]">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="text-xs text-[var(--gs-text-muted)]">Gói hiện tại</div>
+                    <div className="mt-1 text-lg font-semibold text-[var(--gs-text)]">{availablePlans.currentPlan?.nameVi || '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-[var(--gs-text-muted)]">Trạng thái</div>
+                    <Tag color="green" className="mt-1">{(statusMeta[availablePlans.cycleStatus] || statusMeta.active).label}</Tag>
+                  </div>
+                  <div>
+                    <div className="text-xs text-[var(--gs-text-muted)]">Số ngày còn lại</div>
+                    <div className="mt-1 font-semibold text-[var(--gs-success)]">{availablePlans.remainingDays || 0} ngày</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-[var(--gs-text-muted)]">Giá trị còn lại quy đổi</div>
+                    <div className="mt-1 font-semibold text-[var(--theme-accent)]">{formatMoney(availablePlans.remainingValue || 0)}</div>
+                  </div>
+                </div>
               </Card>
+
               {availablePlans.plans?.length === 0 ? (
                 <Empty description="Không có gói nào khác" />
               ) : (
                 <List
+                  className="rounded-xl border border-[var(--gs-border)]"
                   dataSource={availablePlans.plans}
                   renderItem={(plan: any) => {
                     const isSelected = selectedPlan?._id === plan._id
-                    const needPay = plan.diff > 0
+                    const amountToPay = Number(plan.amountToPay ?? Math.max(0, plan.diff || 0))
+                    const creditToWallet = Number(plan.creditToWallet ?? Math.max(0, -(plan.diff || 0)))
                     return (
                       <List.Item
-                        className={`cursor-pointer rounded-lg px-3 py-3 transition-colors ${isSelected ? 'bg-[var(--theme-accent)]/10 border border-[var(--theme-accent)]' : 'hover:bg-[var(--gs-border)]/20'}`}
+                        className={`cursor-pointer px-4 py-3 transition-colors ${isSelected ? 'bg-[var(--theme-accent)]/10' : 'hover:bg-[var(--gs-border)]/20'}`}
                         onClick={() => setSelectedPlan(plan)}
                       >
-                        <div className="flex w-full items-center justify-between">
+                        <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
                           <div>
-                            <span className="font-semibold">{plan.nameVi}</span>
-                            <div className="text-sm text-[var(--gs-text-muted)]">{formatMoney(plan.price)} / {plan.durationDays} ngày</div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-[var(--gs-text)]">{plan.nameVi}</span>
+                              {isSelected && <Tag color="purple">Đang chọn</Tag>}
+                            </div>
+                            <div className="mt-1 text-sm text-[var(--gs-text-muted)]">
+                              {formatMoney(plan.price)} / {plan.durationDays} ngày
+                            </div>
+                            {plan.descriptionVi && (
+                              <div className="mt-1 max-w-xl text-xs text-[var(--gs-text-soft)]">{plan.descriptionVi}</div>
+                            )}
                             {plan.featureIds?.length > 0 && (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {plan.featureIds.slice(0, 3).map((f) => (
-                                  <Tag key={f._id} style={{ fontSize: 10 }}>{f.name}</Tag>
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {plan.featureIds.slice(0, 4).map((feature: any) => (
+                                  <Tag key={feature._id} style={{ fontSize: 11 }}>{feature.name}</Tag>
                                 ))}
+                                {plan.featureIds.length > 4 && <Tag style={{ fontSize: 11 }}>+{plan.featureIds.length - 4}</Tag>}
                               </div>
                             )}
                           </div>
-                          <div className="text-right shrink-0">
-                            {needPay ? (
+                          <div className="rounded-lg bg-[var(--gs-bg-subtle)] px-3 py-2 text-right md:min-w-[150px]">
+                            {amountToPay > 0 ? (
                               <>
                                 <div className="text-xs text-[var(--gs-text-muted)]">Cần thanh toán</div>
-                                <div className="font-bold text-[var(--theme-accent)]">{formatMoney(Math.abs(plan.diff))}</div>
+                                <div className="font-bold text-[var(--theme-accent)]">{formatMoney(amountToPay)}</div>
+                              </>
+                            ) : creditToWallet > 0 ? (
+                              <>
+                                <div className="text-xs text-[var(--gs-text-muted)]">Hoàn vào ví</div>
+                                <div className="font-bold text-green-600">{formatMoney(creditToWallet)}</div>
                               </>
                             ) : (
                               <>
-                                <div className="text-xs text-[var(--gs-text-muted)]">Hoàn vào ví</div>
-                                <div className="font-bold text-green-600">{formatMoney(Math.abs(plan.diff))}</div>
+                                <div className="text-xs text-[var(--gs-text-muted)]">Không phát sinh</div>
+                                <div className="font-bold text-[var(--gs-text)]">0đ</div>
                               </>
                             )}
                           </div>
@@ -1015,39 +1141,151 @@ export default function MyMembershipPage() {
                   }}
                 />
               )}
-              {selectedPlan && (
-                <div className="mt-4 rounded-xl border border-[var(--gs-border)] p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Tag>{availablePlans.currentPlan?.nameVi}</Tag>
-                    <ArrowUpOutlined className="text-[var(--gs-text-muted)]" />
-                    <Tag color="blue">{selectedPlan.nameVi}</Tag>
+
+              {selectedPlan && (() => {
+                const amountToPay = Number(selectedPlan.amountToPay ?? Math.max(0, selectedPlan.diff || 0))
+                const creditToWallet = Number(selectedPlan.creditToWallet ?? Math.max(0, -(selectedPlan.diff || 0)))
+                const remainingValue = Number(selectedPlan.remainingValue ?? availablePlans.remainingValue ?? 0)
+                const currentDuration = availablePlans.durationDays || availablePlans.currentPlan?.durationDays || 0
+                const newStartDate = selectedPlan.newStartDate ? dayjs(selectedPlan.newStartDate) : dayjs()
+                const newEndDate = selectedPlan.newEndDate ? dayjs(selectedPlan.newEndDate) : newStartDate.add((selectedPlan.durationDays || 1) - 1, 'day')
+                const walletBalance = Number(wallet?.balance || 0)
+                const currentDaily = currentDuration > 0 ? (availablePlans.currentPlan?.price || 0) / currentDuration : 0
+                const newDaily = (selectedPlan.durationDays || 1) > 0 ? (selectedPlan.price || 0) / selectedPlan.durationDays : 0
+
+                return (
+                  <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-bg-subtle)] p-4">
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                      <Tag>{availablePlans.currentPlan?.nameVi}</Tag>
+                      <ArrowUpOutlined className="text-[var(--gs-text-muted)]" />
+                      <Tag color="blue">{selectedPlan.nameVi}</Tag>
+                    </div>
+
+                    <div className="grid gap-3 text-sm md:grid-cols-2">
+                      <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Giá gói hiện tại</div>
+                        <div className="font-semibold">{formatMoney(availablePlans.currentPlan?.price)}</div>
+                      </div>
+                      <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Giá gói mới</div>
+                        <div className="font-semibold">{formatMoney(selectedPlan.price)}</div>
+                      </div>
+                      <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Thời hạn gói hiện tại</div>
+                        <div className="font-semibold">{currentDuration} ngày</div>
+                      </div>
+                      <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Số ngày còn lại</div>
+                        <div className="font-semibold">{availablePlans.remainingDays || 0} ngày</div>
+                      </div>
+                      <div className="rounded-lg border border-[var(--gs-border)] p-3 md:col-span-2">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Giá trị còn lại quy đổi</div>
+                        <div className="font-semibold text-[var(--theme-accent)]">{formatMoney(remainingValue)}</div>
+                      </div>
+                      <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Ngày bắt đầu gói mới</div>
+                        <div className="font-semibold">{newStartDate.format('DD/MM/YYYY')}</div>
+                      </div>
+                      <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Ngày hết hạn gói mới</div>
+                        <div className="font-semibold">{newEndDate.format('DD/MM/YYYY')}</div>
+                      </div>
+                      <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Giá/ngày gói hiện tại</div>
+                        <div className="font-semibold">{formatMoney(currentDaily)}</div>
+                      </div>
+                      <div className="rounded-lg border border-[var(--gs-border)] p-3">
+                        <div className="text-xs text-[var(--gs-text-muted)]">Giá/ngày gói mới</div>
+                        <div className="font-semibold">{formatMoney(newDaily)}</div>
+                      </div>
+                    </div>
+
+                    {selectedPlan.descriptionVi && (
+                      <div className="mt-3 rounded-lg border border-[var(--gs-border)] p-3 text-sm text-[var(--gs-text-soft)]">
+                        {selectedPlan.descriptionVi}
+                      </div>
+                    )}
+
+                    {selectedPlan.featureIds?.length > 0 && (
+                      <div className="mt-3 rounded-lg border border-[var(--gs-border)] p-3">
+                        <div className="mb-2 text-xs text-[var(--gs-text-muted)]">Quyền lợi gói mới</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedPlan.featureIds.map((feature: any) => (
+                            <Tag key={feature._id} color="blue" style={{ fontSize: 11 }}>{feature.name}</Tag>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {creditToWallet > 0 ? (
+                      <div className="mt-4 rounded-xl bg-green-500/10 p-3">
+                        <div className="flex items-center justify-between gap-3 font-bold">
+                          <span>{'Số tiền hoàn vào Ví GymPro'}</span>
+                          <span className="text-green-600">{formatMoney(creditToWallet)}</span>
+                        </div>
+                        <div className="mt-1 text-xs text-[var(--gs-text-muted)]">Tiền dư sẽ được cộng vào ví sau khi đổi gói thành công.</div>
+                      </div>
+                    ) : amountToPay > 0 && walletBalance >= amountToPay ? (
+                      <div className="mt-4 rounded-xl border border-[var(--gs-success-border)] bg-[var(--gs-success-bg)] p-3 space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-[var(--gs-success)]">
+                          <WalletOutlined />
+                          {'Số dư đủ để thanh toán bằng ví'}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-sm max-[480px]:grid-cols-1">
+                          <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                            <div className="text-xs text-[var(--gs-text-muted)]">Số tiền cần thanh toán</div>
+                            <div className="mt-0.5 font-bold">{formatMoney(amountToPay)}</div>
+                          </div>
+                          <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                            <div className="text-xs text-[var(--gs-text-muted)]">Số dư ví</div>
+                            <div className="mt-0.5 font-semibold">{formatMoney(walletBalance)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : amountToPay > 0 && walletBalance > 0 ? (
+                      <div className="mt-4 rounded-xl border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-3 space-y-3">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-[var(--gs-warning)]">
+                          <WalletOutlined />
+                          {'Số dư không đủ — thanh toán kết hợp ví + VNPay'}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-sm max-[480px]:grid-cols-1">
+                          <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                            <div className="text-xs text-[var(--gs-text-muted)]">Số tiền cần thanh toán</div>
+                            <div className="mt-0.5 font-bold">{formatMoney(amountToPay)}</div>
+                          </div>
+                          <div className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-3">
+                            <div className="text-xs text-[var(--gs-text-muted)]">Số dư ví (sẽ dùng hết)</div>
+                            <div className="mt-0.5 font-bold">{formatMoney(walletBalance)}</div>
+                          </div>
+                          <div className="col-span-2 rounded-lg border border-[var(--gs-warning)] bg-[var(--gs-warning-bg)] p-3 max-[480px]:col-span-1">
+                            <div className="text-xs text-[var(--gs-warning)]">Còn thiếu — thanh toán qua VNPay</div>
+                            <div className="mt-0.5 text-lg font-bold text-[var(--gs-warning)]">{formatMoney(Math.max(0, amountToPay - walletBalance))}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-4 rounded-xl border border-[var(--gs-info-border)] bg-[var(--gs-info-bg)] p-3 space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-[var(--gs-info)]">
+                          <WalletOutlined />
+                          {'Ví của bạn hiện không có số dư'}
+                        </div>
+                        <p className="m-0 text-sm text-[var(--gs-text)]">
+                          {'Bạn vẫn có thể thanh toán trực tiếp bằng phương thức khác mà không cần nạp ví.'}
+                        </p>
+                      </div>
+                    )}
+
+                    <Button type="primary" block className="mt-4" icon={amountToPay > 0 && walletBalance < amountToPay ? <CreditCardOutlined /> : undefined} loading={changeLoading} onClick={handleChangePlanClick}>
+                      {creditToWallet > 0 || amountToPay === 0
+                        ? 'Xác nhận đổi gói'
+                        : (walletBalance >= amountToPay
+                            ? 'Thanh toán và đổi gói'
+                            : `Thanh toán ${formatMoney(Math.max(0, amountToPay - walletBalance))}đ qua VNPay`)}
+                    </Button>
                   </div>
-                  <div className="flex justify-between text-sm"><span>Giá gói hiện tại</span><span>{formatMoney(availablePlans.currentPlan?.price)}</span></div>
-                  <div className="flex justify-between text-sm"><span>Giá gói mới</span><span>{formatMoney(selectedPlan.price)}</span></div>
-                  {selectedPlan.diff > 0 ? (
-                    <>
-                      <hr className="my-2" />
-                      <div className="flex justify-between font-bold"><span>Thanh toán thêm</span><span className="text-[var(--theme-accent)]">{formatMoney(Math.abs(selectedPlan.diff))}</span></div>
-                      <div className="mt-1 text-xs text-[var(--gs-text-muted)]">Số dư ví: {formatMoney(wallet?.balance)}</div>
-                      <Button type="primary" block className="mt-3" loading={changeLoading} onClick={handleChangePlanClick}
-                        disabled={wallet ? wallet.balance < Math.abs(selectedPlan.diff) : true}
-                      >
-                        Thanh toán và đổi gói
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <hr className="my-2" />
-                      <div className="flex justify-between font-bold"><span>Hoàn vào Ví GymPro</span><span className="text-green-600">{formatMoney(Math.abs(selectedPlan.diff))}</span></div>
-                      <div className="mt-1 text-xs text-[var(--gs-text-muted)]">Bạn không cần thanh toán thêm. Tiền dư sẽ được cộng vào ví.</div>
-                      <Button type="primary" block className="mt-3" loading={changeLoading} onClick={handleChangePlanClick}>
-                        Xác nhận đổi gói
-                      </Button>
-                    </>
-                  )}
-                </div>
-              )}
-            </>
+                )
+              })()}
+            </div>
           ) : (
             <Empty description="Không có dữ liệu" />
           )}
@@ -1073,50 +1311,50 @@ export default function MyMembershipPage() {
             </Button>
           </div>
         }
-        width={520}
+        width={560}
         centered
       >
-        <div className="py-2">
-          <p className="m-0 text-sm text-[var(--gs-text)]">
-            Bạn đang có <strong>{availablePlans?.pendingRenewalsCount}</strong> gói gia hạn (tổng giá trị <strong>{formatMoney(availablePlans?.pendingRenewalsTotal || 0)}</strong>).
-          </p>
-          <p className="mt-1 text-sm text-[var(--gs-text-soft)]">Bạn muốn xử lý các gói gia hạn như thế nào?</p>
+        <div className="space-y-4 py-2">
+          <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-bg-subtle)] p-4 text-sm text-[var(--gs-text)]">
+            <div>Bạn đang có <strong>{availablePlans?.pendingRenewalsCount}</strong> lần gia hạn chưa sử dụng, tổng giá trị <strong>{formatMoney(availablePlans?.pendingRenewalsTotal || 0)}</strong>.</div>
+            <div className="mt-1 text-xs text-[var(--gs-text-muted)]">
+              Chọn cách xử lý trước khi đổi sang gói mới.
+            </div>
+          </div>
 
-          <div className={`mt-4 rounded-xl border p-4 cursor-pointer transition-colors ${renewalAction === 'convert' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/10' : 'border-[var(--gs-border)] hover:bg-[var(--gs-border)]/20'}`}
+          <div className={`rounded-xl border p-4 cursor-pointer transition-colors ${renewalAction === 'convert' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/10' : 'border-[var(--gs-border)] hover:bg-[var(--gs-border)]/20'}`}
             onClick={() => setRenewalAction('convert')}
           >
             <div className="flex items-start gap-3">
-              <div className="mt-0.5">
-                <div className={`h-4 w-4 rounded-full border-2 ${renewalAction === 'convert' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]' : 'border-[var(--gs-text-muted)]'}`}>
-                  {renewalAction === 'convert' && <div className="h-2 w-2 rounded-full bg-white m-0.5" />}
-                </div>
+              <div className={`mt-1 h-4 w-4 rounded-full border-2 ${renewalAction === 'convert' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]' : 'border-[var(--gs-text-muted)]'}`}>
+                {renewalAction === 'convert' && <div className="m-0.5 h-2 w-2 rounded-full bg-white" />}
               </div>
               <div>
-                <p className="m-0 text-sm font-semibold text-[var(--gs-text)]">Quy đổi sang gói mới</p>
+                <p className="m-0 text-sm font-semibold text-[var(--gs-text)]">Quy đổi giá trị gia hạn sang gói mới</p>
                 <p className="mt-1 text-xs text-[var(--gs-text-muted)]">
-                  {selectedPlan && selectedPlan.diff > 0
-                    ? `Bạn cần thanh toán thêm ${formatMoney(Math.abs(selectedPlan.diff))}.`
-                    : selectedPlan && selectedPlan.diff < 0
-                      ? `Bạn sẽ được hoàn ${formatMoney(Math.abs(selectedPlan.diff))} vào Ví GymPro.`
-                      : 'Không có chênh lệch giá.'}
+                  {selectedPlan && (() => {
+                    const amountToPay = Number(selectedPlan.amountToPay ?? Math.max(0, selectedPlan.diff || 0))
+                    const creditToWallet = Number(selectedPlan.creditToWallet ?? Math.max(0, -(selectedPlan.diff || 0)))
+                    if (amountToPay > 0) return `Giá trị gia hạn sẽ được cộng vào, bạn cần thanh toán thêm ${formatMoney(amountToPay)}.`
+                    if (creditToWallet > 0) return `Bạn sẽ được hoàn ${formatMoney(creditToWallet)} vào Ví GymPro.`
+                    return 'Không có chênh lệch giá.'
+                  })()}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className={`mt-3 rounded-xl border p-4 cursor-pointer transition-colors ${renewalAction === 'cancel' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/10' : 'border-[var(--gs-border)] hover:bg-[var(--gs-border)]/20'}`}
+          <div className={`rounded-xl border p-4 cursor-pointer transition-colors ${renewalAction === 'cancel' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/10' : 'border-[var(--gs-border)] hover:bg-[var(--gs-border)]/20'}`}
             onClick={() => setRenewalAction('cancel')}
           >
             <div className="flex items-start gap-3">
-              <div className="mt-0.5">
-                <div className={`h-4 w-4 rounded-full border-2 ${renewalAction === 'cancel' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]' : 'border-[var(--gs-text-muted)]'}`}>
-                  {renewalAction === 'cancel' && <div className="h-2 w-2 rounded-full bg-white m-0.5" />}
-                </div>
+              <div className={`mt-1 h-4 w-4 rounded-full border-2 ${renewalAction === 'cancel' ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]' : 'border-[var(--gs-text-muted)]'}`}>
+                {renewalAction === 'cancel' && <div className="m-0.5 h-2 w-2 rounded-full bg-white" />}
               </div>
               <div>
-                <p className="m-0 text-sm font-semibold text-[var(--gs-text)]">Hủy các gói gia hạn</p>
+                <p className="m-0 text-sm font-semibold text-[var(--gs-text)]">Hủy các gói gia hạn và hoàn ví</p>
                 <p className="mt-1 text-xs text-[var(--gs-text-muted)]">
-                  Toàn bộ Gia hạn sẽ bị hủy. Bạn sẽ được hoàn <strong>{formatMoney(availablePlans?.pendingRenewalsTotal || 0)}</strong> vào Ví GymPro.
+                  Các lần gia hạn chưa sử dụng sẽ bị hủy. Bạn được hoàn <strong className="text-green-600">{formatMoney(availablePlans?.pendingRenewalsTotal || 0)}</strong> vào Ví GymPro.
                 </p>
               </div>
             </div>

@@ -39,6 +39,20 @@ const checkInSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+    planId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Plan',
+      default: null,
+    },
+    planName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    planPrice: {
+      type: Number,
+      default: 0,
+    },
     // New fields for the daily QR check-in flow
     dailyQRCodeId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -102,6 +116,7 @@ checkInSchema.index({ checkinTime: -1 })
 checkInSchema.index({ qrToken: 1 })
 checkInSchema.index({ dailyQRCodeId: 1 })
 checkInSchema.index({ memberId: 1, scheduleId: 1, sessionDate: 1 })
+checkInSchema.index({ planId: 1, checkinTime: -1 })
 
 const CheckIn = mongoose.model('CheckIn', checkInSchema)
 export default CheckIn

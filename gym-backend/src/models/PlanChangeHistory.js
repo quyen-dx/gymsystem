@@ -67,6 +67,22 @@ const planChangeHistorySchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  oldPlanRemainingDays: {
+    type: Number,
+    default: 0,
+  },
+  oldPlanRemainingValue: {
+    type: Number,
+    default: 0,
+  },
+  newStartDate: {
+    type: Date,
+    default: null,
+  },
+  newEndDate: {
+    type: Date,
+    default: null,
+  },
   paymentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Payment',

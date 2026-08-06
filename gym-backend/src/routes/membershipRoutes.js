@@ -4,6 +4,7 @@ import {
   cancelMembershipRegistration,
   cancelMyPeriod,
   cancelMyRenewal,
+  checkoutMembership,
   confirmMembershipRegistration,
   createMembership,
   getCancelInfoHandler,
@@ -37,6 +38,7 @@ import {
 } from '../controllers/refundRequestController.js'
 import {
   changePlan,
+  changePlanCheckout,
   downgradePlan,
   getAvailablePlans,
   getChangeHistory,
@@ -51,6 +53,8 @@ router.use(protect)
 router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next() })
 router.get('/my', getMyMembership)
 router.post('/subscribe', requireFeature('billing.allowPlanPurchase'), subscribeMembership)
+router.post('/checkout', requireFeature('billing.allowPlanPurchase'), checkoutMembership)
+router.post('/checkout-renew', requireFeature('billing.allowPlanRenewal'), checkoutMembership)
 router.post('/', requireFeature('billing.allowPlanPurchase'), createMembership)
 router.post('/my/renew', requireFeature('billing.allowPlanRenewal'), renewMyMembership)
 router.post('/my/renew-wallet', requireFeature('billing.allowPlanRenewal'), renewMembershipByWallet)
@@ -85,6 +89,7 @@ router.post('/staff/refund-requests/:id/reject', adminOrStaff, rejectRefundReque
 
 router.get('/available-plans', getAvailablePlans)
 router.post('/change-plan', changePlan)
+router.post('/change-plan/checkout', changePlanCheckout)
 router.post('/upgrade', upgradePlan)
 router.post('/downgrade', downgradePlan)
 router.get('/change-history', getChangeHistory)
