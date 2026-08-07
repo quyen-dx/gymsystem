@@ -16,6 +16,18 @@ export interface TrainerScheduleResponse {
   classSchedules: TrainingClass[]
 }
 
+export interface AffectedTrainerSchedule {
+  source: string
+  date: string
+  dayOfWeek: number
+  time: string
+  member: string
+  type: string
+  status: string
+  className?: string
+  referenceId?: string
+}
+
 export const trainerScheduleService = {
   getMySchedule: () => api.get<TrainerScheduleResponse>('/trainer-schedules/my'),
   getTrainerSchedule: (trainerId: string) => api.get<TrainerScheduleResponse>(`/trainer-schedules/${trainerId}`),

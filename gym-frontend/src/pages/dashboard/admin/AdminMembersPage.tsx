@@ -50,18 +50,13 @@ interface PlanOption {
 
 const SPEC_LABELS: Record<string, string> = {
   GYM: 'GYM',
+  CARDIO: 'Cardio',
+  'STRENGTH TRAINING': 'Strength Training',
   YOGA: 'Yoga',
   BOXING: 'Boxing',
-  ZUMBA: 'Zumba',
-  PILATES: 'Pilates',
-  CARDIO: 'Cardio',
-  AEROBICS: 'Aerobics',
   CROSSFIT: 'Crossfit',
-  KICKBOXING: 'Kickboxing',
-  DANCE: 'Dance',
-  MUAYTHAI: 'Muay Thái',
-  FUNCTIONAL: 'Functional Training',
-  OTHER: 'Khác',
+  PILATES: 'Pilates',
+  ZUMBA: 'Zumba',
 }
 
 const HISTORY_TABS = [
@@ -360,14 +355,14 @@ export default function AdminMembersPage() {
     setAssignRequest(r)
     setAssignSearch('')
     setSelectedTrainerId(null)
-    loadAssignTrainers()
+    loadAssignTrainers(r.specialization)
     setAssignModalOpen(true)
   }
 
-  const loadAssignTrainers = async () => {
+  const loadAssignTrainers = async (specialization?: string) => {
     setAssignLoading(true)
     try {
-      const res = await trainerService.getPTs({ isActive: true, limit: 100 })
+      const res = await trainerService.getPTs({ isActive: true, limit: 100, specialty: specialization })
       setAssignTrainers(res.data.pts || [])
     } catch {
       message.error('Không thể tải danh sách PT')
@@ -787,7 +782,7 @@ export default function AdminMembersPage() {
             </Space>
           )
         }
-        if (r.status === 'waiting_assignment') {
+        if (r.status === 'waiting_assignment' || r.status === 'waiting_reassign') {
           return (
             <Button type="primary" size="small" icon={<UserOutlined />}
               onClick={() => openAssignTrainer(r)}>
@@ -804,6 +799,9 @@ export default function AdminMembersPage() {
   ]
 
   const filteredAssignTrainers = assignTrainers.filter((t) => {
+    const requestSpec = String(assignRequest?.specialization || '').trim().toUpperCase()
+    const ptSpecs = (t.specialties || []).map((s) => String(s || '').trim().toUpperCase())
+    if (requestSpec && ptSpecs.length > 0 && !ptSpecs.includes(requestSpec)) return false
     if (!assignSearch) return true
     const q = assignSearch.toLowerCase()
     return getUserDisplayName(t, '').toLowerCase().includes(q)

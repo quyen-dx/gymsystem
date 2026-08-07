@@ -1,7 +1,7 @@
 import mongoose from 'mongoose'
 import User from '../models/User.js'
 import PT from '../models/PT.js'
-import PTSchedule from '../models/PTSchedule.js'
+import TrainerSchedule from '../models/TrainerSchedule.js'
 
 const DAY_LABELS = { vi: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] }
 const SHIFT_LABELS = { vi: { morning: 'Sáng', afternoon: 'Chiều', evening: 'Tối' }, en: { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' } }
@@ -57,14 +57,16 @@ export const getAvailablePTs = async ({ specialization = '' } = {}) => {
   for (const pm of ptModels) {
     ptModelMap[String(pm.userId)] = pm
   }
-  const ptIds = ptModels.map((p) => p._id)
-  const scheduleDocs = ptIds.length > 0 ? await PTSchedule.find({ ptId: { $in: ptIds } }).sort({ dayOfWeek: 1 }).lean() : []
+  const userIds = pts.map((p) => p._id)
+  const scheduleDocs = userIds.length > 0
+    ? await TrainerSchedule.find({ trainerId: { $in: userIds }, status: 'active' }).sort({ dayOfWeek: 1 }).lean()
+    : []
 
   return {
     count: pts.length,
     pts: pts.map((pt) => {
       const pm = ptModelMap[String(pt._id)]
-      const schedules = pm ? scheduleDocs.filter((s) => String(s.ptId) === String(pm._id)) : []
+      const schedules = scheduleDocs.filter((s) => String(s.trainerId) === String(pt._id))
       return {
         id: pt._id,
         name: pt.fullName || pt.name,

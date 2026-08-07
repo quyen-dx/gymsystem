@@ -1,4 +1,4 @@
-import {
+﻿import {
   Button,
   DatePicker,
   Form,
@@ -17,8 +17,7 @@ import { UploadOutlined } from '@ant-design/icons'
 import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const SPECIALTY_OPTIONS = [
-  'YOGA', 'GYM', 'BOXING', 'CROSSFIT', 'PILATES', 'ZUMBA', 'PERSONAL TRAINING',
-  'CARDIO', 'STRENGTH TRAINING', 'HIIT', 'DANCE', 'MEDITATION',
+  'GYM', 'CARDIO', 'STRENGTH TRAINING', 'YOGA', 'BOXING', 'CROSSFIT', 'PILATES', 'ZUMBA',
 ]
 
 interface Props {
@@ -155,8 +154,8 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
 
         <Form.Item label='Chuyên môn' name="specialties">
           <Select
-            mode="tags"
-            placeholder='Nhập chuyên môn'
+            mode="multiple"
+            placeholder='Chọn chuyên môn'
             options={SPECIALTY_OPTIONS.map((s) => ({ value: s, label: s }))}
           />
         </Form.Item>
@@ -175,7 +174,7 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
 
         <Form.Item label='Chứng chỉ' name="certificates">
           <Select
-            mode="tags"
+            mode="multiple"
             placeholder='Nhập chứng chỉ'
           />
       </Form.Item>
@@ -204,3 +203,5 @@ export default function TrainerFormModal({ open, pt, onClose, onSuccess }: Props
     </Modal>
   )
 }
+
+

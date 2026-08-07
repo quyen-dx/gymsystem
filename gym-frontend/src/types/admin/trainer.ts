@@ -3,6 +3,9 @@ export interface PTSchedule {
   ptId: string
   dayOfWeek: number
   shift: 'morning' | 'afternoon' | 'evening'
+  startTime?: string
+  endTime?: string
+  status?: 'active' | 'cancelled'
 }
 
 export interface PT {

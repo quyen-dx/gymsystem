@@ -7,6 +7,7 @@ import { applyWalletTransaction } from '../services/walletService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import { checkMemberFeature } from '../utils/featureCheck.js'
+import { validatePTAssignment } from '../services/ptScheduleValidationService.js'
 
 const activeStatus = ['pending', 'awaiting_payment', 'confirmed']
 
@@ -138,6 +139,12 @@ export const createBooking = async (req, res) => {
         })
       }
 
+    // Kiểm tra lịch làm việc của PT: ngày làm việc, ca phù hợp, nghỉ phép, cover thay ca, trùng lớp nhóm
+    const scheduleCheck = await validatePTAssignment({ trainerId: ptId, date: bookingDate, slot })
+    if (!scheduleCheck.ok) {
+      return res.status(400).json({ message: scheduleCheck.message })
+    }
+
     // FIX: priceAtBooking/ totalAmount hardcoded to 0 because PT pricing is not yet implemented.
     // TODO: Fetch PT session price from PlanFeature or SystemSettings when implemented
     const priceAtBooking = 0
@@ -260,6 +267,17 @@ export const createRecurringBooking = async (req, res) => {
         const bookingDate = normalizeDate(date)
         bookingDate.setDate(bookingDate.getDate() + i * 7)
 
+        // Kiểm tra lịch làm việc của PT cho từng ngày trong chuỗi lặp
+        const scheduleCheck = await validatePTAssignment({ trainerId: ptId, date: bookingDate, slot })
+        if (!scheduleCheck.ok) {
+          conflicts.push({
+            date: bookingDate,
+            slot,
+            reason: scheduleCheck.message,
+          })
+          continue
+        }
+
         const conflict = await Booking.findOne({
           $or: [
             {
@@ -371,6 +389,17 @@ export const scheduleWeeklyBooking = async (req, res) => {
         if (!(await requireActiveMembershipForDate(req.user._id, bookingDate, res))) {
           await session.abortTransaction()
           return
+        }
+
+        // Kiểm tra lịch làm việc của PT cho từng ngày đăng ký
+        const scheduleCheck = await validatePTAssignment({ trainerId: ptId, date: bookingDate, slot: time })
+        if (!scheduleCheck.ok) {
+          errors.push({
+            day,
+            date: bookingDate,
+            reason: scheduleCheck.message,
+          })
+          continue
         }
 
         const conflict = await Booking.findOne({

@@ -1,6 +1,6 @@
 import User from '../models/User.js'
 import PT from '../models/PT.js'
-import PTSchedule from '../models/PTSchedule.js'
+import TrainerSchedule from '../models/TrainerSchedule.js'
 import Booking from '../models/Booking.js'
 import TrainingClass from '../models/TrainingClass.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
@@ -14,6 +14,29 @@ import sendError from '../utils/sendError.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import { getActiveReplacementsForPT } from '../services/shiftChangeService.js'
+import { getAvailabilitySlots } from '../services/ptScheduleValidationService.js'
+
+const ALLOWED_PT_SPECIALTIES = new Set([
+  'GYM',
+  'CARDIO',
+  'STRENGTH TRAINING',
+  'YOGA',
+  'BOXING',
+  'CROSSFIT',
+  'PILATES',
+  'ZUMBA',
+])
+
+function parseSpecialties(value) {
+  const list = typeof value === 'string' ? JSON.parse(value) : (value || [])
+  if (!Array.isArray(list)) return []
+
+  return [...new Set(
+    list
+      .map((item) => String(item || '').trim().toUpperCase())
+      .filter((item) => ALLOWED_PT_SPECIALTIES.has(item)),
+  )]
+}
 
 export const getPTs = async (req, res) => {
   try {
@@ -35,47 +58,54 @@ export const getPTs = async (req, res) => {
     if (status === 'active') userFilter.isActive = true
     else if (status === 'locked') userFilter.isActive = false
 
-    const totalUsers = await User.countDocuments(userFilter)
-    const users = await User.find(userFilter)
+    const allUsers = await User.find(userFilter)
       .sort({ [sortBy]: sortOrder === 'asc' ? 1 : -1 })
-      .skip((Number(page) - 1) * Number(limit))
-      .limit(Number(limit))
       .lean()
 
-    const userIds = users.map((u) => u._id)
+    const userIds = allUsers.map((u) => u._id)
     const ptRecords = await PT.find({ userId: { $in: userIds } }).lean()
     const ptMap = {}
     ptRecords.forEach((pt) => { ptMap[pt.userId.toString()] = pt })
 
-    const ptIds = ptRecords.map((pt) => pt._id)
+    // Lịch làm việc lấy từ TrainerSchedule (lịch cố định theo tuần do Admin thiết lập)
     const scheduleMap = {}
-    if (ptIds.length > 0) {
-      const schedules = await PTSchedule.find({ ptId: { $in: ptIds } }).lean()
+    if (userIds.length > 0) {
+      const schedules = await TrainerSchedule.find({ trainerId: { $in: userIds }, status: 'active' })
+        .sort({ dayOfWeek: 1 })
+        .lean()
       schedules.forEach((s) => {
-        const key = s.ptId.toString()
+        const key = s.trainerId.toString()
         if (!scheduleMap[key]) scheduleMap[key] = []
         scheduleMap[key].push(s)
       })
     }
 
+    // Booking.ptId tham chiếu User (không phải PT profile)
     const stats = await Booking.aggregate([
-      { $match: { ptId: { $in: ptIds }, status: { $ne: 'cancelled' } } },
-      { $lookup: { from: 'pts', localField: 'ptId', foreignField: '_id', as: 'pt' } },
-      { $unwind: { path: '$pt', preserveNullAndEmptyArrays: true } },
-      { $group: { _id: '$pt.userId', count: { $sum: 1 } } },
+      { $match: { ptId: { $in: userIds }, status: { $ne: 'cancelled' } } },
+      { $group: { _id: '$ptId', count: { $sum: 1 } } },
     ])
     const bookingCountMap = {}
     stats.forEach((s) => { bookingCountMap[s._id.toString()] = s.count })
 
     let specialtyFilter = null
-    if (specialty) specialtyFilter = new RegExp(specialty, 'i')
+    if (specialty) {
+      const escapedSpecialty = String(specialty).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      specialtyFilter = new RegExp(`^${escapedSpecialty}$`, 'i')
+    }
 
-    const result = users
+    const filteredUsers = allUsers
       .filter((u) => {
         if (!specialtyFilter) return true
         const pt = ptMap[u._id.toString()]
         return pt?.specialties?.some((s) => specialtyFilter.test(s))
       })
+
+    const pageNumber = Number(page)
+    const limitNumber = Number(limit)
+    const pagedUsers = filteredUsers.slice((pageNumber - 1) * limitNumber, pageNumber * limitNumber)
+
+    const result = pagedUsers
       .map((u) => {
         const pt = ptMap[u._id.toString()]
         const ptId = pt?._id?.toString()
@@ -101,7 +131,7 @@ export const getPTs = async (req, res) => {
           totalSessions: pt?.totalSessions || 0,
           totalStudents: pt?.totalStudents || 0,
           ptId: ptId,
-          schedules: scheduleMap[ptId] || [],
+          schedules: scheduleMap[u._id.toString()] || [],
           bookingCount: bookingCountMap[u._id.toString()] || 0,
         }
       })
@@ -109,10 +139,10 @@ export const getPTs = async (req, res) => {
     res.json({
       pts: result,
       pagination: {
-        total: totalUsers,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(totalUsers / Number(limit)),
+        total: filteredUsers.length,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(filteredUsers.length / limitNumber),
       },
     })
   } catch (error) {
@@ -126,7 +156,7 @@ export const getPTById = async (req, res) => {
     if (!user) throw new AppError('Không tìm thấy PT', 404)
 
     const pt = await PT.findOne({ userId: user._id }).lean()
-    const schedules = pt ? await PTSchedule.find({ ptId: pt._id }).lean() : []
+    const schedules = await TrainerSchedule.find({ trainerId: user._id, status: 'active' }).sort({ dayOfWeek: 1 }).lean()
 
     const now = new Date()
     const weekStart = new Date(now)
@@ -135,8 +165,9 @@ export const getPTById = async (req, res) => {
     const weekEnd = new Date(weekStart)
     weekEnd.setDate(weekEnd.getDate() + 7)
 
+    // Booking.ptId tham chiếu User
     const bookings = await Booking.find({
-      ptId: pt?._id,
+      ptId: user._id,
       date: { $gte: weekStart, $lt: weekEnd },
       status: { $ne: 'cancelled' },
     })
@@ -189,8 +220,9 @@ export const getPTSchedule = async (req, res) => {
     const weekEnd = new Date(weekStart)
     weekEnd.setDate(weekEnd.getDate() + 7)
 
+    // Booking.ptId tham chiếu User
     const bookings = await Booking.find({
-      ptId: pt._id,
+      ptId: user._id,
       date: { $gte: weekStart, $lt: weekEnd },
       status: { $ne: 'cancelled' },
     })
@@ -213,7 +245,8 @@ export const getPTSchedule = async (req, res) => {
       })
     }
 
-    const scheduleSlots = await PTSchedule.find({ ptId: pt._id }).lean()
+    // Lịch làm việc cố định theo tuần (TrainerSchedule)
+    const scheduleSlots = await TrainerSchedule.find({ trainerId: user._id, status: 'active' }).sort({ dayOfWeek: 1 }).lean()
 
     res.json({ schedule: days, availableSlots: scheduleSlots })
   } catch (error) {
@@ -498,7 +531,7 @@ export const createPT = async (req, res) => {
 
     const ptData = {
       userId: user._id,
-      specialties: typeof specialties === 'string' ? JSON.parse(specialties) : (specialties || []),
+      specialties: parseSpecialties(specialties),
       bio: bio?.trim() || '',
       experienceYears: Number(experienceYears) || 0,
       certificates: typeof certificates === 'string' ? JSON.parse(certificates) : (certificates || []),
@@ -557,7 +590,7 @@ export const updatePT = async (req, res) => {
       pt = await PT.create({ userId: user._id })
     }
 
-    if (specialties !== undefined) pt.specialties = typeof specialties === 'string' ? JSON.parse(specialties) : specialties
+    if (specialties !== undefined) pt.specialties = parseSpecialties(specialties)
     if (bio !== undefined) pt.bio = bio.trim()
     if (experienceYears !== undefined) pt.experienceYears = Number(experienceYears)
     if (certificates !== undefined) pt.certificates = typeof certificates === 'string' ? JSON.parse(certificates) : certificates
@@ -607,18 +640,8 @@ export const updatePTSchedule = async (req, res) => {
     const user = await User.findById(req.params.id)
     if (!user || user.role !== 'pt') throw new AppError('Không tìm thấy PT', 404)
 
-    let pt = await PT.findOne({ userId: user._id })
-    if (!pt) {
-      pt = await PT.create({ userId: user._id })
-    }
-
-    await PTSchedule.deleteMany({ ptId: pt._id })
-
-    if (Array.isArray(schedules) && schedules.length > 0) {
-      await PTSchedule.insertMany(
-        schedules.map((s) => ({ ptId: userId, dayOfWeek: s.dayOfWeek, shift: s.shift })),
-      )
-    }
+    const { setSchedule } = await import('../services/trainerScheduleService.js')
+    await setSchedule({ trainerId: user._id, schedules: Array.isArray(schedules) ? schedules : [] })
 
     createNotification({
       receiverId: req.params.id,
@@ -646,56 +669,15 @@ export const getPTAvailability = async (req, res) => {
     const user = await User.findById(userId)
     if (!user || user.role !== 'pt') throw new AppError('Không tìm thấy PT', 404)
 
-    const pt = await PT.findOne({ userId })
-    if (!pt) throw new AppError('Không tìm thấy thông tin PT', 404)
-
-    const queryDate = new Date(date)
-    const dayOfWeek = queryDate.getDay()
-
-    // Get PT's working schedule for this day
-    const schedules = await PTSchedule.find({ ptId: pt._id, dayOfWeek })
-
-    // Get shift mapping
-    const shifts = {
-      morning: { start: 6, end: 12 },
-      afternoon: { start: 12, end: 18 },
-      evening: { start: 18, end: 22 },
+    if (!date || Number.isNaN(new Date(date).getTime())) {
+      throw new AppError('Thiếu hoặc sai tham số date (YYYY-MM-DD)', 400)
     }
 
-    const availability = {}
+    // Khung giờ trống sinh từ lịch làm việc cố định (TrainerSchedule),
+    // loại trừ slot đã đặt / đang cover ca thay / trùng lớp nhóm.
+    const { availability, windows, schedules } = await getAvailabilitySlots({ trainerId: userId, date })
 
-    // Generate 10-minute slots for each shift
-    for (const schedule of schedules) {
-      const shift = shifts[schedule.shift]
-      if (!shift) continue
-
-      for (let hour = shift.start; hour < shift.end; hour++) {
-        for (let minute = 0; minute < 60; minute += 10) {
-          const slot = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-          availability[slot] = true
-        }
-      }
-    }
-
-    // Check for existing bookings and mark as unavailable
-    const bookings = await Booking.find({
-      ptId: pt._id,
-      date: queryDate,
-      status: { $in: ['pending', 'confirmed'] },
-    })
-
-    bookings.forEach((booking) => {
-      availability[booking.slot] = false
-    })
-
-    // If no schedules, all slots are unavailable
-    if (schedules.length === 0) {
-      for (const slots of Object.keys(availability)) {
-        availability[slots] = false
-      }
-    }
-
-    res.json({ availability, schedules: schedules.map((s) => s.shift) })
+    res.json({ availability, schedules, windows })
   } catch (error) {
     return sendError(res, error)
   }

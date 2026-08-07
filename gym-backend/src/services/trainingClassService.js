@@ -2,6 +2,7 @@ import TrainingClass from '../models/TrainingClass.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
 import ClassEnrollment from '../models/ClassEnrollment.js'
 import { getActiveCountMap as getActiveEnrollmentCountMap } from './classEnrollmentService.js'
+import { validateClassPTWorkingSchedule } from './ptScheduleValidationService.js'
 
 const SPECIALIZATION_LABELS = {
   YOGA: 'Yoga',
@@ -84,6 +85,11 @@ async function validateConflicts({ name, ptId, floorId, zoneId, daysOfWeek, star
 export const createClass = async ({ name, description, specialization, ptId, floorId, zoneId, daysOfWeek, startTime, endTime }) => {
   await validateConflicts({ name, ptId, floorId, zoneId, daysOfWeek, startTime, endTime })
 
+  // PT chỉ được dạy lớp nằm trong ca làm việc đã thiết lập
+  if (ptId && daysOfWeek?.length > 0 && startTime && endTime) {
+    await validateClassPTWorkingSchedule({ trainerId: ptId, daysOfWeek, startTime, endTime })
+  }
+
   const cls = await TrainingClass.create({
     name,
     description: description || '',
@@ -111,6 +117,11 @@ export const updateClass = async ({ classId, data }) => {
   const name = data.name || existing.name
 
   await validateConflicts({ name, ptId, floorId, zoneId, daysOfWeek, startTime, endTime, excludeId: classId })
+
+  // PT chỉ được dạy lớp nằm trong ca làm việc đã thiết lập
+  if (ptId && daysOfWeek?.length > 0 && startTime && endTime) {
+    await validateClassPTWorkingSchedule({ trainerId: ptId, daysOfWeek, startTime, endTime })
+  }
 
   Object.assign(existing, data)
   const cls = await existing.save()

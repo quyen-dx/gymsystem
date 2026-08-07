@@ -19,25 +19,51 @@ const DAY_OPTIONS = [
 ]
 
 const TIME_PRESETS = [
-  { label: '06:00-07:00', shift: 'morning' as const },
-  { label: '07:00-08:00', shift: 'morning' as const },
-  { label: '08:00-09:00', shift: 'morning' as const },
-  { label: '09:00-10:00', shift: 'morning' as const },
-  { label: '17:00-18:00', shift: 'afternoon' as const },
-  { label: '18:00-19:00', shift: 'evening' as const },
-  { label: '18:00-19:30', shift: 'evening' as const },
-  { label: '19:00-20:00', shift: 'evening' as const },
-  { label: '19:30-21:00', shift: 'evening' as const },
-  { label: '20:00-21:00', shift: 'evening' as const },
+  { label: '06:00-08:00', shift: 'morning' as const },
+  { label: '08:00-10:00', shift: 'morning' as const },
+  { label: '10:00-12:00', shift: 'morning' as const },
+  { label: '12:00-14:00', shift: 'afternoon' as const },
+  { label: '14:00-16:00', shift: 'afternoon' as const },
+  { label: '16:00-18:00', shift: 'afternoon' as const },
+  { label: '18:00-20:00', shift: 'evening' as const },
+  { label: '20:00-22:00', shift: 'evening' as const },
 ]
 
-function getDayShiftMap(schedules: { dayOfWeek: number; shift: string }[]): Map<number, Set<string>> {
-  const map = new Map<number, Set<string>>()
+function toMinutes(t: string): number {
+  if (!t) return 0
+  const [h, m] = t.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
+interface ScheduleWindow {
+  dayOfWeek: number
+  start: string
+  end: string
+}
+
+// Member KHÔNG thấy ca làm việc — chỉ thấy khung giờ tập (slot) nằm trong lịch làm việc của PT
+function getDayWindows(schedules: { dayOfWeek: number; shift: string; startTime?: string; endTime?: string }[]): Map<number, ScheduleWindow[]> {
+  const SHIFT_FALLBACK: Record<string, [string, string]> = {
+    morning: ['06:00', '12:00'],
+    afternoon: ['12:00', '18:00'],
+    evening: ['18:00', '22:00'],
+  }
+  const map = new Map<number, ScheduleWindow[]>()
   for (const s of schedules) {
-    if (!map.has(s.dayOfWeek)) map.set(s.dayOfWeek, new Set())
-    map.get(s.dayOfWeek)!.add(s.shift)
+    const [start, end] = SHIFT_FALLBACK[s.shift] || ['', '']
+    const window = {
+      dayOfWeek: s.dayOfWeek,
+      start: s.startTime || start,
+      end: s.endTime || end,
+    }
+    if (!map.has(s.dayOfWeek)) map.set(s.dayOfWeek, [])
+    map.get(s.dayOfWeek)!.push(window)
   }
   return map
+}
+
+function presetFitsWindow(presetStart: string, presetEnd: string, window: ScheduleWindow): boolean {
+  return toMinutes(presetStart) >= toMinutes(window.start) && toMinutes(presetEnd) <= toMinutes(window.end)
 }
 
 export default function BookingDetailPage() {
@@ -55,42 +81,32 @@ export default function BookingDetailPage() {
     remainingSessions: number
   } | null>(null)
 
-  const dayShiftMap = useMemo(() => {
-    if (!pt?.schedules) return new Map<number, Set<string>>()
-    return getDayShiftMap(pt.schedules)
+  const dayWindows = useMemo(() => {
+    if (!pt?.schedules) return new Map<number, ScheduleWindow[]>()
+    return getDayWindows(pt.schedules)
   }, [pt?.schedules])
 
-  const workingDays = useMemo(() => new Set(dayShiftMap.keys()), [dayShiftMap])
+  const workingDays = useMemo(() => new Set(dayWindows.keys()), [dayWindows])
 
   const availableTimeSlots = useMemo(() => {
-    if (selectedDays.length === 0) {
-      const allShifts = new Set<string>()
-      for (const shifts of dayShiftMap.values()) {
-        for (const s of shifts) allShifts.add(s)
-      }
-      return TIME_PRESETS.map((t) => ({ ...t, disabled: !allShifts.has(t.shift) }))
-    }
-
-    const commonShifts = new Set<string>()
-    let first = true
-    for (const day of selectedDays) {
-      const shifts = dayShiftMap.get(day)
-      if (!shifts || shifts.size === 0) {
-        commonShifts.clear()
-        break
-      }
-      if (first) {
-        for (const s of shifts) commonShifts.add(s)
-        first = false
-      } else {
-        for (const s of commonShifts) {
-          if (!shifts.has(s)) commonShifts.delete(s)
+    const isEnabled = (preset: { start: string; end: string }) => {
+      if (selectedDays.length === 0) {
+        for (const windows of dayWindows.values()) {
+          if (windows.some((w) => presetFitsWindow(preset.start, preset.end, w))) return true
         }
+        return false
       }
+      return selectedDays.every((day) => {
+        const windows = dayWindows.get(day)
+        return !!windows && windows.some((w) => presetFitsWindow(preset.start, preset.end, w))
+      })
     }
 
-    return TIME_PRESETS.map((t) => ({ ...t, disabled: !commonShifts.has(t.shift) }))
-  }, [selectedDays, dayShiftMap])
+    return TIME_PRESETS.map((t) => {
+      const [start, end] = t.label.split('-')
+      return { ...t, disabled: !isEnabled({ start, end }) }
+    })
+  }, [selectedDays, dayWindows])
 
   const loadPT = async () => {
     if (!ptId) return

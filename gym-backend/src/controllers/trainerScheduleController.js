@@ -20,7 +20,11 @@ export const setSchedule = async (req, res) => {
     }).catch(err => console.error('Notify trainer schedule failed:', err.message))
     res.json({ message: 'Đã cập nhật lịch làm việc', schedules: result })
   } catch (error) {
-    res.status(409).json({ message: error.message })
+    res.status(error.statusCode || 409).json({
+      message: error.message,
+      code: error.code,
+      affectedSchedules: error.affectedSchedules || [],
+    })
   }
 }
 

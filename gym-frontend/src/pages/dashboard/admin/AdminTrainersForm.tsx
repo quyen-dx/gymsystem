@@ -8,8 +8,7 @@ import { UploadOutlined, ArrowLeftOutlined } from '@ant-design/icons'
 import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const SPECIALTY_OPTIONS = [
-  'YOGA', 'GYM', 'BOXING', 'CROSSFIT', 'PILATES', 'ZUMBA', 'PERSONAL TRAINING',
-  'CARDIO', 'STRENGTH TRAINING', 'HIIT', 'DANCE', 'MEDITATION',
+  'GYM', 'CARDIO', 'STRENGTH TRAINING', 'YOGA', 'BOXING', 'CROSSFIT', 'PILATES', 'ZUMBA',
 ]
 
 const PHONE_REGEX = /^0\d{9,10}$/
@@ -223,7 +222,7 @@ export default function AdminTrainersForm({ pt, onSuccess, isEdit: editProp, pag
 
             <Form.Item label="Chuyên môn" name="specialties">
               <Select
-                mode="tags"
+                mode="multiple"
                 placeholder="Chọn chuyên môn"
                 size="large"
                 options={SPECIALTY_OPTIONS.map((s) => ({ value: s, label: s }))}

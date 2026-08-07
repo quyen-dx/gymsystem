@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../hooks/useAuth'
 import { Button, Tag, Radio, message, Input, Spin, Tooltip, Avatar, Modal } from 'antd'
@@ -17,14 +18,21 @@ import { enrollmentService } from '../../../services/ptAssignmentService'
 import { authService } from '../../../services/authService'
 import type { PT } from '../../../types/admin/trainer'
 
-const SPECIALIZATIONS = [
+const SPECIALIZATIONS: Array<{
+  value: string
+  label: string
+  color: string
+  icon: ReactNode
+  disabled?: boolean
+}> = [
   { value: 'GYM', label: 'GYM', color: '#6366f1', icon: <ThunderboltOutlined /> },
-  { value: 'YOGA', label: 'Yoga', color: '#84cc16', icon: <EnvironmentOutlined />, disabled: true },
-  { value: 'BOXING', label: 'Boxing', color: '#f97316', icon: <FireOutlined />, disabled: true },
-  { value: 'ZUMBA', label: 'Zumba', color: '#ef4444', icon: <HeartOutlined />, disabled: true },
-  { value: 'PILATES', label: 'Pilates', color: '#10b981', icon: <RiseOutlined />, disabled: true },
-  { value: 'CARDIO', label: 'Cardio', color: '#06b6d4', icon: <AimOutlined />, disabled: true },
-  { value: 'CROSSFIT', label: 'Crossfit', color: '#8b5cf6', icon: <QuestionCircleOutlined />, disabled: true },
+  { value: 'CARDIO', label: 'Cardio', color: '#06b6d4', icon: <AimOutlined /> },
+  { value: 'STRENGTH TRAINING', label: 'Strength Training', color: '#a855f7', icon: <SafetyOutlined /> },
+  { value: 'YOGA', label: 'Yoga', color: '#84cc16', icon: <EnvironmentOutlined /> },
+  { value: 'BOXING', label: 'Boxing', color: '#f97316', icon: <FireOutlined /> },
+  { value: 'CROSSFIT', label: 'Crossfit', color: '#8b5cf6', icon: <QuestionCircleOutlined /> },
+  { value: 'PILATES', label: 'Pilates', color: '#10b981', icon: <RiseOutlined /> },
+  { value: 'ZUMBA', label: 'Zumba', color: '#ef4444', icon: <HeartOutlined /> },
 ]
 
 const GOALS = [
@@ -38,7 +46,7 @@ const GOALS = [
   { value: 'Người mới cần được hướng dẫn trực tiếp', icon: <QuestionCircleOutlined />, color: '#a855f7' },
 ]
 
-const TIME_SLOTS = ['07:00-09:00', '09:00-11:00', '12:00-14:00', '14:00-16:00', '16:00-18:00', '18:00-20:00', '20:00-22:00']
+const TIME_SLOTS = ['06:00-08:00', '08:00-10:00', '10:00-12:00', '12:00-14:00', '14:00-16:00', '16:00-18:00', '18:00-20:00', '20:00-22:00']
 const DAYS = [
   { value: 0, label: 'Chủ nhật', short: 'CN' },
   { value: 1, label: 'Thứ 2', short: 'T2' },

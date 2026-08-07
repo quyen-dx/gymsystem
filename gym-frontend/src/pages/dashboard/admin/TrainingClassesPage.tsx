@@ -9,8 +9,9 @@ import { getUserDisplayName } from '../../../utils/userDisplay'
 import { ptClassService } from '../../../services/ptAssignmentService'
 
 const TIME_SLOTS = [
-  '07:00 - 09:00',
-  '09:00 - 11:00',
+  '06:00 - 08:00',
+  '08:00 - 10:00',
+  '10:00 - 12:00',
   '12:00 - 14:00',
   '14:00 - 16:00',
   '16:00 - 18:00',

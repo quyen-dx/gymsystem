@@ -124,7 +124,7 @@ const executePlanChangeCore = async ({ memberId, newPlanId, expectedDirection, c
     const {
       cycle, membershipId, newPlan, oldPlan,
       allPeriods, activePeriod, remainingDays,
-      currentDailyValue, changeType,
+      currentDailyValue, remainingValue, changeType,
       amountToPayPreview, creditToWalletPreview, wallet,
     } = await computePlanChangeSnapshot({ memberId, newPlanId, expectedDirection, session })
 

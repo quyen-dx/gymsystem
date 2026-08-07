@@ -3,10 +3,12 @@ import ShiftChangeItem from '../models/ShiftChangeItem.js'
 import ScheduleReplacement from '../models/ScheduleReplacement.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
 import TrainingClass from '../models/TrainingClass.js'
+import TrainerSchedule from '../models/TrainerSchedule.js'
 import User from '../models/User.js'
 import Notification, { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import { emitNotificationToUser, emitNotificationToStaff, emitNotificationUpdated, emitShiftChangeCountUpdate, emitShiftChangeUpdated, emitShiftChangeMyUpdated } from './socketService.js'
+import { SHIFT_RANGES } from './ptScheduleValidationService.js'
 
 const DAY_LABELS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
 
@@ -344,6 +346,21 @@ export const getAvailableReplacementPTs = async ({ requestId, itemId }) => {
           break
         }
       }
+      // PT chỉ được phân công ca nằm trong lịch làm việc đã thiết lập (TrainerSchedule)
+      if (!reason) {
+        const daySchedules = await TrainerSchedule.find({ trainerId: pt._id, dayOfWeek, status: 'active' }).lean()
+        const windows = daySchedules.map((s) => {
+          const range = SHIFT_RANGES[s.shift] || {}
+          return { start: toMinutes(s.startTime || range.start), end: toMinutes(s.endTime || range.end) }
+        })
+        const fitted = windows.some((w) => startMin >= w.start && endMin <= w.end)
+        if (!fitted) {
+          const windowText = windows.length > 0
+            ? windows.map((w) => `${String(Math.floor(w.start / 60)).padStart(2, '0')}:${String(w.start % 60).padStart(2, '0')} - ${String(Math.floor(w.end / 60)).padStart(2, '0')}:${String(w.end % 60).padStart(2, '0')}`).join(', ')
+            : 'không có ca làm việc ngày này'
+          reason = `không có ca làm việc phù hợp trong khung giờ này (${windowText})`
+        }
+      }
       // Trùng giờ với ca PT đang cover qua ScheduleReplacement (đã chấp nhận) trong cùng ngày
       if (!reason) {
         const covers = await ScheduleReplacement.find({
@@ -451,6 +468,24 @@ export const assignReplacementPTs = async ({ requestId, handledBy, assignments }
     if (!pt || pt.role !== 'pt') throw Object.assign(new Error('Không tìm thấy PT'), { statusCode: 404 })
     if (pt.availabilityStatus !== 'ACTIVE' || pt.isLocked || pt.status === 'locked') {
       throw Object.assign(new Error('PT này hiện không sẵn sàng nhận ca'), { statusCode: 400 })
+    }
+
+    // PT thay phải có ca làm việc phù hợp với khung giờ của ca được cover
+    const itemStartMin = toMinutes(item.startTime)
+    const itemEndMin = toMinutes(item.endTime) || itemStartMin + 60
+    const daySchedules = await TrainerSchedule.find({
+      trainerId: ptId,
+      dayOfWeek: new Date(request.targetDate).getDay(),
+      status: 'active',
+    }).lean()
+    const fitted = daySchedules.some((s) => {
+      const range = SHIFT_RANGES[s.shift] || {}
+      const wStart = toMinutes(s.startTime || range.start)
+      const wEnd = toMinutes(s.endTime || range.end)
+      return itemStartMin >= wStart && itemEndMin <= wEnd
+    })
+    if (!fitted) {
+      throw Object.assign(new Error('PT này không có ca làm việc phù hợp với khung giờ yêu cầu, không thể phân công'), { statusCode: 400 })
     }
 
     await ShiftChangeItem.updateOne(

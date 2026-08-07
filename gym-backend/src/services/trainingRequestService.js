@@ -11,6 +11,27 @@ import { notifyPtMemberChanged } from './notificationService.js'
 import { calculateRemainingDays } from '../utils/dateUtils.js'
 import { getActivePeriodEndDate } from '../utils/membershipDays.js'
 
+const ALLOWED_SPECIALIZATIONS = new Set([
+  'GYM',
+  'CARDIO',
+  'STRENGTH TRAINING',
+  'YOGA',
+  'BOXING',
+  'CROSSFIT',
+  'PILATES',
+  'ZUMBA',
+])
+
+function normalizeSpecialization(value) {
+  const specialization = String(value || 'GYM').trim().toUpperCase()
+  if (!ALLOWED_SPECIALIZATIONS.has(specialization)) {
+    const err = new Error('Chuyen mon khong hop le')
+    err.statusCode = 400
+    throw err
+  }
+  return specialization
+}
+
 export const reconcileStaleRequests = async ({ memberId } = {}) => {
   // `assigned` is the single state waiting for PT confirmation. It must not
   // be treated as stale merely because PTAssignment is not active yet.
@@ -84,6 +105,11 @@ export const reconcileStaleRequests = async ({ memberId } = {}) => {
 
 export const createRequest = async ({ memberId, data }) => {
   const type = data.type || 'group'
+  if (!['group', 'pt1on1'].includes(type)) {
+    const err = new Error('Loai yeu cau khong hop le')
+    err.statusCode = 400
+    throw err
+  }
   await reconcileStaleRequests({ memberId })
 
   // Chặn trùng: 1 hội viên chỉ có 1 yêu cầu đang xử lý cho mỗi loại dịch vụ
@@ -101,7 +127,7 @@ export const createRequest = async ({ memberId, data }) => {
   const base = {
     memberId,
     type,
-    specialization: data.specialization || 'GYM',
+    specialization: normalizeSpecialization(data.specialization),
     goals: data.goals || [],
     note: data.note || '',
     status: 'pending',
@@ -227,7 +253,6 @@ export const markAsAssigned = async ({ memberId, classId, assignedBy }) => {
   )
   return request
 }
-
 export const getPt1on1Counts = async () => {
   const defaultCounts = {
     pending: 0, processing: 0, message_sent: 0, waiting_member: 0,
@@ -253,6 +278,19 @@ export const getRequestById = async (requestId) => {
 }
 
 export const assignToClass = async ({ requestId, classId, assignedBy }) => {
+  const existing = await TrainingRequest.findById(requestId)
+  if (!existing) return null
+  if (existing.type !== 'group') {
+    const err = new Error('Yeu cau nay khong phai yeu cau PT nhom')
+    err.statusCode = 400
+    throw err
+  }
+  if (!['pending', 'waiting_assignment', 'waiting_reassign'].includes(existing.status)) {
+    const err = new Error('Yeu cau khong o trang thai cho phep xep lop')
+    err.statusCode = 400
+    throw err
+  }
+
   const trainingClass = await TrainingClass.findById(classId).populate('zoneId', 'maxCapacity').lean()
   if (!trainingClass) {
     const err = new Error('Không tìm thấy lớp tập')
@@ -268,6 +306,25 @@ export const assignToClass = async ({ requestId, classId, assignedBy }) => {
       err.statusCode = 400
       throw err
     }
+  }
+
+  const requestSpec = normalizeSpecialization(existing.specialization)
+  const classSpec = normalizeSpecialization(trainingClass.specialization)
+  if (requestSpec !== classSpec) {
+    const err = new Error('Lop duoc chon khong khop chuyen mon yeu cau')
+    err.statusCode = 400
+    throw err
+  }
+
+  const existingEnrollment = await Promise.all([
+    TrainingAssignment.exists({ memberId: existing.memberId, status: { $in: ['active', 'waiting_pt'] } }),
+    ClassEnrollment.exists({ memberId: existing.memberId, status: 'active' }),
+    PTAssignment.exists({ memberId: existing.memberId, status: 'active' }),
+  ])
+  if (existingEnrollment.some(Boolean)) {
+    const err = new Error('Hoi vien dang co PT/lop active, khong the xep them')
+    err.statusCode = 409
+    throw err
   }
 
   const request = await TrainingRequest.findByIdAndUpdate(
@@ -321,17 +378,42 @@ export const assignTrainer = async ({ requestId, trainerId, assignedBy }) => {
   const existing = await TrainingRequest.findById(requestId)
   if (!existing) return null
   if (existing.type !== 'pt1on1') {
-    const err = new Error('Yêu cầu này không phải yêu cầu PT 1-1')
+    const err = new Error('Yeu cau nay khong phai yeu cau PT 1-1')
     err.statusCode = 400
     throw err
   }
-  if (!['pending', 'waiting_assignment'].includes(existing.status)) {
-    const err = new Error('Yêu cầu không ở trạng thái cho phép phân công PT')
+  if (!['pending', 'waiting_assignment', 'waiting_reassign'].includes(existing.status)) {
+    const err = new Error('Yeu cau khong o trang thai cho phep phan cong PT')
     err.statusCode = 400
     throw err
   }
   if ((existing.rejectedPtIds || []).some((id) => String(id) === String(trainerId))) {
-    const err = new Error('PT này đã từ chối hội viên này. Vui lòng chọn PT khác.')
+    const err = new Error('PT nay da tu choi hoi vien nay. Vui long chon PT khac.')
+    err.statusCode = 409
+    throw err
+  }
+
+  const trainer = await (await import('../models/User.js')).default.findOne({
+    _id: trainerId,
+    role: 'pt',
+    isActive: true,
+  }).select('specialties').lean()
+  if (!trainer) {
+    const err = new Error('PT khong ton tai hoac dang bi khoa')
+    err.statusCode = 404
+    throw err
+  }
+  const requestSpec = normalizeSpecialization(existing.specialization)
+  const trainerSpecs = (trainer.specialties || []).map((item) => String(item || '').trim().toUpperCase())
+  if (trainerSpecs.length > 0 && !trainerSpecs.includes(requestSpec)) {
+    const err = new Error('PT duoc chon khong khop chuyen mon yeu cau')
+    err.statusCode = 400
+    throw err
+  }
+
+  const activeAssignment = await PTAssignment.exists({ memberId: existing.memberId, status: 'active' })
+  if (activeAssignment) {
+    const err = new Error('Hoi vien da co PT 1-1 dang hoat dong')
     err.statusCode = 409
     throw err
   }

@@ -10,7 +10,7 @@ import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const TIME_SLOT_GROUPS = [
   { label: 'Tất cả', value: '' },
-  { label: 'Sáng (07:00 - 12:00)', value: 'morning' },
+  { label: 'Sáng (06:00 - 12:00)', value: 'morning' },
   { label: 'Chiều (12:00 - 18:00)', value: 'afternoon' },
   { label: 'Tối (18:00 - 22:00)', value: 'evening' },
 ]
@@ -24,7 +24,7 @@ function slotToMinutes(s: string): number {
 
 function timeSlotGroup(time: string): string {
   const start = slotToMinutes(time.split('-')[0].trim())
-  if (start >= 420 && start < 720) return 'morning'
+  if (start >= 360 && start < 720) return 'morning'
   if (start >= 720 && start < 1080) return 'afternoon'
   return 'evening'
 }

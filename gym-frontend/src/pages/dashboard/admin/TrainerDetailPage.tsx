@@ -274,6 +274,7 @@ export default function TrainerDetailPage() {
                     {pt.schedules.map((s) => (
                       <Tag key={`${s.dayOfWeek}-${s.shift}`} color="blue">
                         {DAY_LABELS[s.dayOfWeek]} - {SHIFT_LABELS[s.shift]}
+                        {s.startTime && s.endTime ? ` (${s.startTime} - ${s.endTime})` : ''}
                       </Tag>
                     ))}
                   </Space>

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import Booking from '../models/Booking.js'
 import User from '../models/User.js'
+import { validatePTAssignment } from './ptScheduleValidationService.js'
 
 const toObjectId = (value, fieldName) => {
   if (!mongoose.Types.ObjectId.isValid(value)) {
@@ -82,6 +83,16 @@ export const createBookingRequest = async ({ userId, ptId, date, slot, note = ''
       created: false,
       reason: 'slot_unavailable',
       message: 'Slot này đã có người đặt. Bạn hãy chọn khung giờ khác.',
+    }
+  }
+
+  // Kiểm tra lịch làm việc của PT: ngày làm việc, ca phù hợp, nghỉ phép, cover thay ca, trùng lớp nhóm
+  const scheduleCheck = await validatePTAssignment({ trainerId, date: bookingDate, slot: normalizedSlot })
+  if (!scheduleCheck.ok) {
+    return {
+      created: false,
+      reason: 'pt_schedule_conflict',
+      message: scheduleCheck.message,
     }
   }
 
