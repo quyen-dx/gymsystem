@@ -12,32 +12,44 @@ const api = axios.create({
 let refreshPromise: Promise<string | null> | null = null
 let lastFeatureDisabledToastAt = 0
 const authTokenKey = 'token'
+const authRefreshTokenKey = 'refreshToken'
 const legacyAuthKeys = ['token', 'accessToken', 'refreshToken', 'auth', 'user', 'role']
 
 export const getAuthToken = () => sessionStorage.getItem(authTokenKey)
+
+// Refresh token lưu theo từng TAB (sessionStorage) — không dùng chung cookie,
+// tránh việc 2 tab đăng nhập 2 tài khoản khác nhau ghi đè lẫn nhau
+export const getRefreshToken = () => sessionStorage.getItem(authRefreshTokenKey)
 
 export const clearLegacyAuthStorage = () => {
   legacyAuthKeys.forEach((key) => localStorage.removeItem(key))
 }
 
-export const setAuthToken = (token: string) => {
+export const setAuthToken = (token: string, refreshToken?: string) => {
   sessionStorage.setItem(authTokenKey, token)
+  if (refreshToken) sessionStorage.setItem(authRefreshTokenKey, refreshToken)
   clearLegacyAuthStorage()
 }
 
 export const clearAuthSession = () => {
   sessionStorage.removeItem(authTokenKey)
+  sessionStorage.removeItem(authRefreshTokenKey)
   clearLegacyAuthStorage()
 }
 
 export const refreshAccessToken = async () => {
   if (!refreshPromise) {
-    refreshPromise = api.post('/auth/refresh', undefined, {
+    refreshPromise = api.post('/auth/refresh', {
+      refreshToken: getRefreshToken(),
+      accessToken: getAuthToken(),
+    }, {
       skipAuthRefresh: true,
     } as any)
       .then((response) => {
         const accessToken = response.data?.accessToken || null
-        if (accessToken) setAuthToken(accessToken)
+        if (accessToken) {
+          setAuthToken(accessToken, response.data?.refreshToken)
+        }
         return accessToken
       })
       .catch((error) => {

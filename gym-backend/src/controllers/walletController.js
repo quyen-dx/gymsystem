@@ -6,10 +6,12 @@ import Payment from '../models/Payment.js'
 import Transaction from '../models/Transaction.js'
 import User from '../models/User.js'
 import Wallet from '../models/Wallet.js'
+import Booking from '../models/Booking.js'
 import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, transferWalletBalance, IdempotencyConflictError } from '../services/walletService.js'
 import { finalizeWalletDeposit, notifyDepositSuccess } from '../services/walletDepositService.js'
 import { finalizePlanPurchase } from '../services/membershipService.js'
 import { finalizePlanChangePurchase } from './planChangeController.js'
+import { finalizePtBookingPayment } from './bookingController.js'
 import { createVnpayPaymentUrl, verifyVnpayReturn } from '../services/vnpayService.js'
 import AppError from '../utils/appError.js'
 import { assertPolicyConsent } from '../utils/policyConsent.js'
@@ -465,6 +467,12 @@ export const handleVnpayReturn = async (req, res, next) => {
     const payment = await Payment.findOne({ txnRef }).lean()
     if (!payment) return redirectWithStatus('failed')
 
+    // Chống lệch tiền: số tiền VNPay báo phải khớp số tiền giao dịch (vnp_Amount = tiền * 100)
+    const vnpAmount = Number(req.query.vnp_Amount)
+    if (vnpAmount && Math.round(Number(payment.amount) * 100) !== vnpAmount) {
+      return redirectWithStatus('failed')
+    }
+
     // === Thanh toán gói tập (đăng ký/gia hạn) ===
     if (payment.metadata?.purpose === 'PLAN_PURCHASE') {
       const redirectTarget = '/my-membership'
@@ -496,6 +504,63 @@ export const handleVnpayReturn = async (req, res, next) => {
         throw error
       }
       return redirectWithStatus('success', txnRef, redirectTarget)
+    }
+
+    // === Thanh toán đặt lịch PT (trả phần còn thiếu qua VNPay) ===
+    if (payment.metadata?.purpose === 'PT_BOOKING_PAYMENT') {
+      const redirectTarget = '/booking'
+      if (payment.status === 'PAID') return redirectWithStatus('success', txnRef, redirectTarget)
+      if (payment.status !== 'PENDING') return redirectWithStatus('failed', txnRef, redirectTarget)
+
+      if (!isPaid) {
+        await Payment.updateOne({ txnRef, status: 'PENDING' }, {
+          $set: {
+            status: 'FAILED',
+            metadata: { ...(payment.metadata || {}), vnpayReturn: req.query, verified: isValidSignature },
+          },
+        })
+        const bookingIds = (payment.metadata?.bookingIds || []).map(String)
+        if (bookingIds.length) {
+          await Booking.updateMany(
+            { _id: { $in: bookingIds }, status: 'awaiting_payment', paymentStatus: { $ne: 'paid' } },
+            { $set: { paymentStatus: 'failed', paymentFailedAt: new Date() } },
+          )
+          const firstBooking = await Booking.findOne({ _id: bookingIds[0] }).select('memberId').lean()
+          if (firstBooking) {
+            createNotification({
+              receiverId: firstBooking.memberId,
+              receiverRole: 'member',
+              notificationType: NOTIFICATION_TYPES.PAYMENT_FAILED,
+              title: 'Thanh toán qua VNPay thất bại',
+              content: 'Thanh toán phần còn thiếu qua VNPay chưa hoàn tất. Bạn có thể thử lại trước khi hết thời hạn giữ chỗ.',
+              relatedId: firstBooking._id,
+              relatedType: 'Booking',
+              redirectUrl: '/booking',
+              createdBy: 'System',
+            }).catch(() => {})
+          }
+        }
+        return redirectWithStatus('failed', txnRef, redirectTarget)
+      }
+
+      try {
+        const outcome = await finalizePtBookingPayment({ paymentId: payment._id, vnpayQuery: req.query })
+        if (outcome?.status === 'success') {
+          return redirectWithStatus('success', txnRef, redirectTarget)
+        }
+        if (outcome?.status === 'already_paid') {
+          return redirectWithStatus('success', txnRef, redirectTarget)
+        }
+        if (outcome?.status === 'expired') {
+          return redirectWithStatus('expired', txnRef, redirectTarget)
+        }
+        return redirectWithStatus('failed', txnRef, redirectTarget)
+      } catch (error) {
+        if (error instanceof IdempotencyConflictError || error?.errorLabels?.includes('TransientTransactionError')) {
+          return redirectWithStatus('success', txnRef, redirectTarget)
+        }
+        throw error
+      }
     }
 
     const session = await mongoose.startSession()
@@ -570,6 +635,99 @@ export const handleVnpayReturn = async (req, res, next) => {
     }
 }
 
+export const handleVnpayIpn = async (req, res, next) => {
+  // VNPay gọi endpoint này ngay sau khi xử lý thanh toán (không phụ thuộc trình duyệt).
+  // Phải trả lời nhanh: RspCode=00 = đã xử lý OK, 99 = lỗi (VNPay sẽ gọi lại).
+  const respond = (code, message) => res.json({ RspCode: code, Message: message })
+
+  try {
+    if (!verifyVnpayReturn(req.query)) {
+      return respond('97', 'Invalid Signature')
+    }
+
+    const txnRef = req.query.vnp_TxnRef
+    const payment = await Payment.findOne({ txnRef }).lean()
+    if (!payment) {
+      return respond('01', 'Order Not Found')
+    }
+
+    // Chống lệch tiền: vnp_Amount (đơn vị *100) phải khớp số tiền giao dịch
+    const vnpAmount = Number(req.query.vnp_Amount)
+    if (vnpAmount && Math.round(Number(payment.amount) * 100) !== vnpAmount) {
+      return respond('04', 'Invalid Amount')
+    }
+
+    const isPaid = req.query.vnp_ResponseCode === '00' && req.query.vnp_TransactionStatus === '00'
+
+    if (String(payment.status).toUpperCase() === 'PAID') {
+      return respond('02', 'Order Already Confirmed')
+    }
+
+    const ipnMeta = { ...(payment.metadata || {}), vnpayIpn: req.query, verified: true, ipnProcessedAt: new Date() }
+
+    if (!isPaid) {
+      await Payment.updateOne(
+        { _id: payment._id, status: 'PENDING' },
+        { $set: { status: 'FAILED', metadata: ipnMeta } },
+      )
+      return respond('00', 'Confirm Success')
+    }
+
+    // Race hiếm: return trước đó đánh FAILED nhưng VNPay thực tế đã trừ tiền → khôi phục về PENDING để finalize
+    if (String(payment.status).toUpperCase() !== 'PENDING') {
+      await Payment.updateOne({ _id: payment._id }, { $set: { status: 'PENDING' } })
+    }
+
+    try {
+      const purpose = payment.metadata?.purpose
+      if (purpose === 'PLAN_PURCHASE') {
+        if (payment.metadata?.planChange) {
+          await finalizePlanChangePurchase({ paymentId: payment._id })
+        } else {
+          await finalizePlanPurchase({ paymentId: payment._id, vnpayQuery: req.query })
+        }
+      } else if (purpose === 'PT_BOOKING_PAYMENT') {
+        await finalizePtBookingPayment({ paymentId: payment._id, vnpayQuery: req.query })
+      } else {
+        const depositCredit = calculateDepositCredit(payment.amount)
+        await finalizeWalletDeposit({
+          userId: payment.userId,
+          amountVnd: depositCredit.creditedAmount,
+          originalAmount: depositCredit.originalAmount,
+          bonusAmount: depositCredit.bonusAmount,
+          bonusRate: depositCredit.bonusRate,
+          paymentMethod: 'VNPAY',
+          description: 'Nạp tiền vào ví qua VNPay',
+          txnRef,
+          providerRef: req.query.vnp_TransactionNo,
+          providerRefKey: 'vnpTransactionNo',
+          providerMetadata: {
+            vnpayIpn: req.query,
+            verified: true,
+            vnpTransactionNo: req.query.vnp_TransactionNo,
+            bankCode: req.query.vnp_BankCode,
+            bankTranNo: req.query.vnp_BankTranNo,
+            payDate: req.query.vnp_PayDate,
+          },
+          idempotencyKey: txnRef,
+          existingPayment: payment,
+        })
+        notifyDepositSuccess({ userId: payment.userId, amountVnd: depositCredit.creditedAmount, paymentMethod: 'VNPAY' })
+      }
+    } catch (error) {
+      if (error instanceof IdempotencyConflictError || error?.errorLabels?.includes('TransientTransactionError')) {
+        return respond('02', 'Order Already Confirmed')
+      }
+      console.error('[VNPay IPN] finalize failed:', error?.message || error)
+      return respond('99', 'Unknown Error')
+    }
+
+    return respond('00', 'Confirm Success')
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const createStripePaymentIntent = async (req, res, next) => {
     try {
         if (!stripe) {
@@ -631,14 +789,10 @@ export const handleStripeWebhook = async (req, res, next) => {
 
         const signature = req.headers['stripe-signature']
         const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
-        let event
-
-        if (webhookSecret) {
-            event = stripe.webhooks.constructEvent(req.body, signature, webhookSecret)
-        } else {
-            const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : JSON.stringify(req.body)
-            event = JSON.parse(rawBody)
+        if (!webhookSecret) {
+            throw new AppError('STRIPE_WEBHOOK_SECRET chưa được cấu hình, từ chối xử lý webhook', 503)
         }
+        const event = stripe.webhooks.constructEvent(req.body, signature, webhookSecret)
 
         if (event.type === 'payment_intent.succeeded') {
             const paymentIntent = event.data.object

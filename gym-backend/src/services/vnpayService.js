@@ -58,6 +58,7 @@ const getRequiredConfig = () => {
 export const createVnpayPaymentUrl = ({ amount, txnRef, orderInfo, ipAddr, locale = 'vn', bankCode }) => {
   const { tmnCode, hashSecret, paymentUrl } = getRequiredConfig()
   const returnUrl = process.env.VNPAY_RETURN_URL || `${getBackendUrl()}/api/wallet/vnpay-return`
+  const ipnUrl = process.env.VNPAY_IPN_URL || `${getBackendUrl()}/api/wallet/vnpay-ipn`
   const createDate = formatDate(new Date())
   const expireDate = formatDate(new Date(Date.now() + 15 * 60 * 1000))
 
@@ -72,6 +73,7 @@ export const createVnpayPaymentUrl = ({ amount, txnRef, orderInfo, ipAddr, local
     vnp_OrderType: 'other',
     vnp_Locale: locale,
     vnp_ReturnUrl: returnUrl,
+    vnp_IpnUrl: ipnUrl,
     vnp_IpAddr: ipAddr || '127.0.0.1',
     vnp_CreateDate: createDate,
     vnp_ExpireDate: expireDate,

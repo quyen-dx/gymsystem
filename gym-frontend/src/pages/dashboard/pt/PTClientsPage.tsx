@@ -24,10 +24,12 @@ import {
 } from 'antd'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { useAuth } from '../../../hooks/useAuth'
+import { bookingService } from '../../../services/bookingService'
+import type { Booking } from '../../../services/bookingService'
 import { socketService } from '../../../services/socketService'
 import {
   ptAssignmentService,
@@ -68,6 +70,9 @@ interface ClientInfo {
   membershipStatus?: 'active' | 'expired' | null
   membershipStartAt?: string | null
   membershipExpiresAt?: string | null
+  requestTimeSlots?: string[]
+  requestDaysOfWeek?: number[]
+  requestDaySlots?: Array<{ day: number; slot: string }>
   requestNote?: string
   requestContactPhone?: string
   requestContactEmail?: string
@@ -102,6 +107,9 @@ function extractClient(assignment: PTAssignment): ClientInfo | null {
     membershipStatus: assignment.membershipStatus,
     membershipStartAt: assignment.membershipStartAt,
     membershipExpiresAt: assignment.membershipExpiresAt,
+    requestTimeSlots: assignment.requestTimeSlots || assignment.currentSchedule?.timeSlots || assignment.acceptedProposal?.timeSlots || [],
+    requestDaysOfWeek: assignment.requestDaysOfWeek || assignment.currentSchedule?.daysOfWeek || assignment.acceptedProposal?.daysOfWeek || [],
+    requestDaySlots: assignment.requestDaySlots || [],
     requestNote: assignment.requestNote,
     requestContactPhone: assignment.requestContactPhone,
     requestContactEmail: assignment.requestContactEmail,
@@ -132,6 +140,38 @@ function remainingDays(expiresAt?: string | null): number | null {
 export default function PTClientsPage() {
   useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const assignWorkoutId = searchParams.get('assignWorkout') || ''
+  const [assignWorkoutName, setAssignWorkoutName] = useState<string>('')
+
+  // Tải tên giáo án được chọn từ nút "Sử dụng" ở thư viện giáo án
+  useEffect(() => {
+    if (!assignWorkoutId) {
+      setAssignWorkoutName('')
+      return
+    }
+    workoutService.getWorkoutById(assignWorkoutId)
+      .then((res) => {
+        const d = (res.data as { workout?: unknown; data?: unknown })?.workout
+          || (res.data as { data?: unknown })?.data
+          || res.data
+        if (d && typeof d === 'object') {
+          const t = d as { workoutName?: string; name?: string }
+          setAssignWorkoutName(t.workoutName || t.name || '')
+        }
+      })
+      .catch(() => setAssignWorkoutName(''))
+  }, [assignWorkoutId])
+
+  const createScheduleUrl = (record: ClientInfo) => {
+    const params = new URLSearchParams()
+    if (record.assignmentId) params.set('assignmentId', record.assignmentId)
+    if (assignWorkoutId) params.set('templateId', assignWorkoutId)
+    const bookedCount = clientBookings[record._id]?.length
+    if (bookedCount) params.set('booked', String(bookedCount))
+    const qs = params.toString()
+    return `/pt/clients/${record._id}/create-schedule${qs ? `?${qs}` : ''}`
+  }
 
   const [activeTab, setActiveTab] = useState<'active' | 'pending' | 'history'>('active')
   const [serviceTab, setServiceTab] = useState<'pt1on1' | 'group'>('pt1on1')
@@ -141,7 +181,9 @@ export default function PTClientsPage() {
   const [clientsLoading, setClientsLoading] = useState(false)
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null)
   const [clientSchedules, setClientSchedules] = useState<Record<string, WorkoutSchedule[]>>({})
+  const [clientBookings, setClientBookings] = useState<Record<string, Booking[]>>({})
   const [schedulesLoading, setSchedulesLoading] = useState<string | null>(null)
+  const [bookingsLoading, setBookingsLoading] = useState<string | null>(null)
   const [filterSpecialization, setFilterSpecialization] = useState<string | undefined>(undefined)
   const [filterGoals, setFilterGoals] = useState<string[]>([])
 
@@ -258,11 +300,24 @@ export default function PTClientsPage() {
     }
   }, [])
 
+  const fetchClientBookings = useCallback(async (memberId: string) => {
+    setBookingsLoading(memberId)
+    try {
+      const res = await bookingService.getPTBookings({ memberId, from: 'today' })
+      setClientBookings((prev) => ({ ...prev, [memberId]: res.data || [] }))
+    } catch {
+      message.error('Không thể tải lịch PT 1-1 đã book')
+    } finally {
+      setBookingsLoading(null)
+    }
+  }, [])
+
   const handleExpand = (expanded: boolean, record: ClientInfo) => {
     if (expanded) {
       setExpandedMemberId(record._id)
-      // PT 1-1 không dùng lịch chung của hệ thống → không cần tải lịch tập
-      if (record.type !== 'PT_1_1' && !clientSchedules[record._id]) {
+      if (record.type === 'PT_1_1') {
+        if (!clientBookings[record._id]) fetchClientBookings(record._id)
+      } else if (!clientSchedules[record._id]) {
         fetchClientSchedules(record._id)
       }
     } else {
@@ -278,6 +333,45 @@ export default function PTClientsPage() {
       fetchClients()
     } catch (error: any) {
       message.error(error?.response?.data?.message || 'Không thể xoá lịch tập')
+    }
+  }
+
+  // ============ ADD SESSION (thêm buổi vào giáo án đang chạy) ============
+
+  const [addSessionModal, setAddSessionModal] = useState<{
+    open: boolean
+    schedule: WorkoutSchedule | null
+    memberId: string
+    date: dayjs.Dayjs | null
+    time: string
+    submitting: boolean
+  }>({ open: false, schedule: null, memberId: '', date: null, time: '', submitting: false })
+
+  const openAddSession = (schedule: WorkoutSchedule, memberId: string) => {
+    setAddSessionModal({ open: true, schedule, memberId, date: null, time: '', submitting: false })
+  }
+
+  const handleAddSession = async () => {
+    const { schedule, date, time } = addSessionModal
+    if (!schedule || !date || !time) {
+      message.warning('Vui lòng chọn ngày và khung giờ cho buổi mới')
+      return
+    }
+    setAddSessionModal((p) => ({ ...p, submitting: true }))
+    try {
+      const res = await scheduleService.addScheduleSession(schedule._id, {
+        date: date.format('YYYY-MM-DD'),
+        time,
+      })
+      message.success(res.data.message || 'Đã thêm buổi tập')
+      const memberId = addSessionModal.memberId
+      setAddSessionModal((p) => ({ ...p, open: false, schedule: null, date: null, time: '' }))
+      if (memberId) fetchClientSchedules(memberId)
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } } }
+      message.error(e?.response?.data?.message || 'Không thể thêm buổi tập')
+    } finally {
+      setAddSessionModal((p) => ({ ...p, submitting: false }))
     }
   }
 
@@ -356,7 +450,7 @@ export default function PTClientsPage() {
     },
     {
       title: 'Thao tác',
-      width: 200,
+      width: 260,
       render: (_: unknown, record: WorkoutSchedule) => (
         <Space size={4}>
           <Button
@@ -367,6 +461,13 @@ export default function PTClientsPage() {
           >
             Xem tiến độ
           </Button>
+          {record.status === 'active' && (
+            <Tooltip title="Thêm buổi tập mới — buổi kế tiếp của giáo án sẽ được mở">
+              <Button size="small" icon={<PlusOutlined />} onClick={() => openAddSession(record, client._id)}>
+                Thêm buổi
+              </Button>
+            </Tooltip>
+          )}
           <Popconfirm
             title="Xoá lịch tập này?"
             okText="Xoá"
@@ -391,7 +492,27 @@ export default function PTClientsPage() {
     const contactEmail = record.requestContactEmail || record.email
     const phoneHref = contactPhone?.trim()
     const emailHref = contactEmail?.trim()
-    const membershipActive = record.membershipStatus === 'active'
+    const bookings = clientBookings[record._id] || []
+    const sortedBookings = [...bookings].sort((a, b) => {
+      const dateDiff = dayjs(a.date).valueOf() - dayjs(b.date).valueOf()
+      if (dateDiff !== 0) return dateDiff
+      return String(a.slot || '').localeCompare(String(b.slot || ''))
+    })
+    const requestDays = record.requestDaysOfWeek || []
+    const requestSlots = record.requestTimeSlots || []
+    const requestPairs = record.requestDaySlots || []
+    const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
+    const bookingStatusTag = (status: Booking['status']) => {
+      const map: Record<Booking['status'], { color: string; label: string }> = {
+        pending: { color: 'orange', label: 'Chờ PT xác nhận' },
+        awaiting_payment: { color: 'gold', label: 'Chờ thanh toán' },
+        confirmed: { color: 'green', label: 'Đã xác nhận' },
+        cancelled: { color: 'red', label: 'Đã hủy' },
+        completed: { color: 'blue', label: 'Hoàn thành' },
+      }
+      const item = map[status] || { color: 'default', label: status }
+      return <Tag color={item.color} className="m-0">{item.label}</Tag>
+    }
 
     // Responsive: mobile label/value xuống dòng; desktop "label : value" cùng dòng
     const Row = ({ label, children }: { label: string; children: ReactNode }) => (
@@ -414,7 +535,12 @@ export default function PTClientsPage() {
       <div className="space-y-4 p-4">
         {/* Kết thúc phụ trách */}
         <div className="flex justify-end gap-2">
-          <Button size="small" icon={<ReloadOutlined />} onClick={() => fetchClientSchedules(record._id)}>
+          <Button
+            size="small"
+            icon={<ReloadOutlined />}
+            loading={bookingsLoading === record._id}
+            onClick={() => fetchClientBookings(record._id)}
+          >
             Tải lại
           </Button>
           <Button
@@ -493,19 +619,54 @@ export default function PTClientsPage() {
 
           {/* Cột phải */}
           <div className="flex flex-col gap-4">
-            <SectionCard title="Thông tin gói">
-              <div className="space-y-2">
-                <Row label="Loại">
-                  <Tag color="purple" className="m-0">PT 1-1</Tag>
-                </Row>
-                <Row label="Trạng thái">
-                  {membershipActive
-                    ? <Tag color="blue" className="m-0">Đang hoạt động</Tag>
-                    : <Tag color="red" className="m-0">Đã hết hạn</Tag>}
-                </Row>
-                <Row label="Ngày bắt đầu">{fmtDate(record.membershipStartAt)}</Row>
-                <Row label="Ngày hết hạn">{fmtDate(record.membershipExpiresAt)}</Row>
-              </div>
+            <SectionCard title="Lịch PT 1-1 đã book">
+              {bookingsLoading === record._id ? (
+                <div className="py-4 text-sm text-[var(--gs-text-muted)]">Đang tải lịch...</div>
+              ) : sortedBookings.length > 0 ? (
+                <div className="space-y-3">
+                  {sortedBookings.map((booking) => (
+                    <div key={booking._id} className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-bg)] p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-semibold text-[var(--gs-text)]">
+                          {dayjs(booking.date).format('dddd, DD/MM/YYYY')}
+                        </div>
+                        {bookingStatusTag(booking.status)}
+                      </div>
+                      <div className="mt-2 grid gap-2 text-sm text-[var(--gs-text-muted)] sm:grid-cols-2">
+                        <span>Khung giờ: <b className="text-[var(--gs-text)]">{booking.slot || '—'}</b></span>
+                        <span>Loại: <b className="text-[var(--gs-text)]">PT 1-1</b></span>
+                      </div>
+                      {booking.note && (
+                        <div className="mt-2 text-sm text-[var(--gs-text-muted)]">Ghi chú: {booking.note}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="rounded-lg border border-dashed border-[var(--gs-border)] bg-[var(--gs-bg)] p-3 text-sm text-[var(--gs-text-muted)]">
+                    Chưa có buổi booking cụ thể.
+                  </div>
+                  {(requestDays.length > 0 || requestSlots.length > 0 || requestPairs.length > 0) && (
+                    <div className="space-y-2">
+                      {requestPairs.length > 0 ? (
+                        <Row label="Lịch mong muốn">
+                          {requestPairs.map((p) => `${dayNames[p.day] || p.day} ${p.slot.replace('-', ' - ')}`).join(', ')}
+                        </Row>
+                      ) : (
+                        <>
+                          <Row label="Ngày member chọn">
+                            {requestDays.length > 0 ? requestDays.map((d) => dayNames[d] || d).join(', ') : '—'}
+                          </Row>
+                          <Row label="Khung giờ mong muốn">
+                            {requestSlots.length > 0 ? requestSlots.join(', ') : '—'}
+                          </Row>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </SectionCard>
 
             <SectionCard title="Ghi chú">
@@ -591,9 +752,13 @@ export default function PTClientsPage() {
       },
     },
     {
-      title: 'Gói PT',
-      width: 100,
-      render: () => <Tag color="purple">PT 1-1</Tag>,
+      title: 'Lịch book',
+      width: 120,
+      render: (_: unknown, record: ClientInfo) => {
+        const bookingCount = clientBookings[record._id]?.length
+        const fallbackCount = record.requestDaysOfWeek?.length || 0
+        return <Tag color={bookingCount ? 'blue' : 'purple'}>{bookingCount ?? fallbackCount} buổi</Tag>
+      },
     },
     {
       title: 'Trạng thái',
@@ -602,6 +767,20 @@ export default function PTClientsPage() {
         record.membershipStatus === 'active'
           ? <Tag color="blue">Đang hoạt động</Tag>
           : <Tag color="red">Đã hết hạn</Tag>
+      ),
+    },
+    {
+      title: 'Thao tác',
+      width: 200,
+      render: (_: unknown, record: ClientInfo) => (
+        <Button
+          size="small"
+          icon={<PlusOutlined />}
+          type="primary"
+          onClick={() => navigate(createScheduleUrl(record))}
+        >
+          Tạo lịch & Gán giáo án
+        </Button>
       ),
     },
   ]
@@ -694,7 +873,7 @@ export default function PTClientsPage() {
           size="small"
           icon={<PlusOutlined />}
           type="primary"
-          onClick={() => navigate(`/pt/clients/${record._id}/create-schedule?assignmentId=${record.assignmentId || ''}`)}
+          onClick={() => navigate(createScheduleUrl(record))}
         >
           Tạo lịch & Gán giáo án
         </Button>
@@ -893,6 +1072,14 @@ export default function PTClientsPage() {
 
   const activeTabEl = (
     <div className="member-scroll-x">
+      {assignWorkoutId && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2">
+          <span className="text-sm text-blue-300">
+            Đã chọn giáo án: <b>{assignWorkoutName || 'Đang tải...'}</b> — chọn hội viên rồi bấm "Tạo lịch & Gán giáo án" để áp dụng.
+          </span>
+          <Button size="small" onClick={() => navigate('/pt/clients')}>Hủy chọn</Button>
+        </div>
+      )}
       <div className="pt-clients-filters mb-4 flex flex-wrap items-center gap-3">
         <Select
           className="max-[767px]:!w-full"
@@ -990,8 +1177,12 @@ export default function PTClientsPage() {
               {isPt1on1 ? (
                 <>
                   <div className="pt-client-detail">
-                    <span className="pt-label">Gói PT</span>
-                    <span className="pt-value"><Tag color="purple" className="m-0">PT 1-1</Tag></span>
+                    <span className="pt-label">Lịch book</span>
+                    <span className="pt-value">
+                      <Tag color={clientBookings[record._id]?.length ? 'blue' : 'purple'} className="m-0">
+                        {clientBookings[record._id]?.length ?? record.requestDaysOfWeek?.length ?? 0} buổi
+                      </Tag>
+                    </span>
                   </div>
                   {record.specialization && (
                     <div className="pt-client-detail">
@@ -1067,7 +1258,7 @@ export default function PTClientsPage() {
                   size="small"
                   block
                   icon={<PlusOutlined />}
-                  onClick={() => navigate(`/pt/clients/${record._id}/create-schedule?assignmentId=${record.assignmentId || ''}`)}
+                  onClick={() => navigate(createScheduleUrl(record))}
                 >
                   Tạo lịch & Gán giáo án
                 </Button>
@@ -1373,6 +1564,56 @@ export default function PTClientsPage() {
             <li>Giáo án đang gán sẽ được ngừng sử dụng.</li>
             <li>Hội viên có thể đăng ký PT hoặc lớp mới sau đó.</li>
           </ul>
+        </div>
+      </Modal>
+
+      <Modal
+        title="Thêm buổi tập vào giáo án"
+        open={addSessionModal.open}
+        onCancel={() => setAddSessionModal((p) => ({ ...p, open: false, schedule: null }))}
+        okText="Thêm buổi"
+        cancelText="Hủy"
+        confirmLoading={addSessionModal.submitting}
+        onOk={handleAddSession}
+        destroyOnClose
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-[var(--gs-text-muted)]">
+            Buổi mới sẽ tự động gán <b>buổi kế tiếp chưa hoàn thành</b> trong giáo án mẫu
+            (dùng khi hội viên mua thêm buổi PT). Nếu giáo án đã hết buổi, buổi mới sẽ trống để PT tự soạn nội dung.
+          </p>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[var(--gs-text-muted)]">Ngày tập</label>
+            <DatePicker
+              className="w-full"
+              value={addSessionModal.date}
+              disabledDate={(d) => d.isBefore(dayjs().startOf('day'))}
+              onChange={(d) => setAddSessionModal((p) => ({ ...p, date: d }))}
+              format="DD/MM/YYYY"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[var(--gs-text-muted)]">Khung giờ (1 giờ)</label>
+            <Select
+              className="w-full"
+              placeholder="Chọn khung giờ..."
+              value={addSessionModal.time || undefined}
+              onChange={(v) => setAddSessionModal((p) => ({ ...p, time: v }))}
+              showSearch
+              options={['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00']
+                .map((t) => ({ value: t, label: t }))}
+            />
+          </div>
+          {addSessionModal.schedule && (
+            <p className="text-xs text-[var(--gs-text-muted)]">
+              Giáo án:{' '}
+              {(() => {
+                const tpl = addSessionModal.schedule?.templateId
+                const name = tpl && typeof tpl === 'object' ? (tpl as { name?: string }).name : undefined
+                return name || 'Giáo án mẫu'
+              })()}
+            </p>
+          )}
         </div>
       </Modal>
 

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import crypto from 'crypto'
 import Order from '../models/Order.js'
 import Product from '../models/Product.js'
 import Shop from '../models/Shop.js'
@@ -101,7 +102,7 @@ export const calculateCheckoutDiscount = async ({ code, subtotal, shippingFee })
     return { code: normalizedCode, type: discountCode.type, amount: Math.min(Number(discountCode.amount || 0), Number(subtotal || 0)) }
 }
 
-export const createOrder = async ({ userId, items, address, paymentReference, discountCode }) => {
+export const createOrder = async ({ userId, items, address, paymentReference, discountCode, idempotencyKey }) => {
     if (!userId || !Array.isArray(items) || items.length === 0) {
         throw new AppError('Order must include at least one item', 400)
     }
@@ -109,9 +110,17 @@ export const createOrder = async ({ userId, items, address, paymentReference, di
         throw new AppError('Shipping address is incomplete', 400)
     }
 
+    // Idempotency: cùng idempotencyKey → trả lại đơn đã tạo, không trừ tiền lần 2
+    if (idempotencyKey) {
+        const existingOrders = await Order.find({ userId, idempotencyKey }).sort({ createdAt: 1 })
+        if (existingOrders.length) {
+            return existingOrders
+        }
+    }
+
     const productIds = items.map((item) => item.productId).filter(Boolean)
     const products = await Product.find({ _id: { $in: productIds } })
-        .select('name image images price shop_id')
+        .select('name image images price shop_id stock weightVariants isActive')
         .populate('shop_id', 'user_id name')
         .lean()
     const productById = products.reduce((map, product) => {
@@ -124,9 +133,15 @@ export const createOrder = async ({ userId, items, address, paymentReference, di
         if (!product) {
             throw new AppError('Sản phẩm trong đơn hàng không tồn tại', 400)
         }
+        if (product.isActive === false) {
+            throw new AppError(`Sản phẩm ${product.name} đã ngừng bán`, 400)
+        }
 
-        const price = Number(item.price)
         const quantity = Number(item.quantity)
+        if (typeof quantity !== 'number' || Number.isNaN(quantity) || quantity <= 0) {
+            throw new AppError('Order item quantity must be a positive number', 400)
+        }
+
         const variantWeight = String(item.variant?.weight || item.weight || '').trim()
         let weight = variantWeight || 0
 
@@ -143,14 +158,25 @@ export const createOrder = async ({ userId, items, address, paymentReference, di
             weight = Number(weight)
         }
 
-        if (typeof price !== 'number' || Number.isNaN(price) || price < 0) {
-            throw new AppError('Order item price must be a valid number', 400)
-        }
-        if (typeof quantity !== 'number' || Number.isNaN(quantity) || quantity <= 0) {
-            throw new AppError('Order item quantity must be a positive number', 400)
-        }
         if (typeof weight !== 'number' || Number.isNaN(weight) || weight < 0) {
             weight = 0
+        }
+
+        // Giá tính từ backend (không tin giá client gửi lên)
+        let price = Number(product.price || 0)
+        let stockCheck = Number(product.stock || 0)
+        if (Array.isArray(product.weightVariants) && product.weightVariants.length > 0) {
+            const variant = product.weightVariants.find((entry) => String(entry.label || '').trim() === variantWeight)
+            if (!variant) {
+                throw new AppError(`Không tìm thấy biến thể ${variantWeight} của sản phẩm ${product.name}`, 400)
+            }
+            price = Number(product.price || 0) + Number(variant.priceDelta || 0)
+            stockCheck = Number(variant.stock || 0)
+        }
+
+        // Kiểm tra tồn kho tại thời điểm đặt hàng (tránh bán quá số lượng có sẵn)
+        if (stockCheck < quantity) {
+            throw new AppError(`Tồn kho không đủ cho sản phẩm ${product.name} (còn ${stockCheck})`, 400)
         }
 
         return {
@@ -210,8 +236,9 @@ export const createOrder = async ({ userId, items, address, paymentReference, di
             amount: -grandTotal,
             type: 'payment',
             provider: 'wallet',
-            referenceId: paymentReference || `order_${Date.now()}`,
+            referenceId: paymentReference || idempotencyKey || `order_${Date.now()}`,
             status: 'completed',
+            idempotencyKey: `order_checkout_${idempotencyKey || paymentReference || crypto.randomUUID()}`,
             metadata: {
                 items: orderItems,
                 shippingFee,
@@ -243,6 +270,7 @@ export const createOrder = async ({ userId, items, address, paymentReference, di
                     status: 'CHỜ XÁC NHẬN',
                     paymentStatus: 'paid',
                     paymentReference,
+                    idempotencyKey: idempotencyKey || null,
                     discountCode: discount.code,
                     discountAmount: groupDiscount,
                 }],

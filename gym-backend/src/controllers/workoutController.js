@@ -34,6 +34,8 @@ const canViewWorkout = (user, workout) =>
 
 const canViewTemplate = (user, workout) => {
   if (isAdminRole(user.role)) return true
+  // Chế độ riêng tư: chỉ PT tạo được xem (giáo án cũ không có field này mặc định là công khai)
+  if (workout.visibility === 'private' && !sameId(workout.ptId, user._id)) return false
   if (workout.templateStatus === 'published') return true
   if (workout.templateStatus === 'under_review') return true
   if (workout.templateStatus === 'hidden') {
@@ -61,7 +63,14 @@ const buildScopedWorkoutFilter = (user, memberId, isTemplate) => {
     return base
   }
   if (isPtRole(user.role)) {
-    base.ptId = user._id
+    // Template là thư viện dùng chung: PT thấy giáo án công khai + giáo án của chính mình
+    if (isTemplate) {
+      base.$and = [
+        { $or: [{ visibility: { $ne: 'private' } }, { ptId: user._id }] },
+      ]
+    } else {
+      base.ptId = user._id
+    }
     if (memberId) base.memberId = memberId
     return base
   }
@@ -214,6 +223,13 @@ export const getSharedTemplates = async (req, res) => {
       }
     } else {
       filter.templateStatus = { $in: ['published', 'under_review'] }
+      // Trang "Giáo án của tôi" (mine=true): toàn bộ giáo án của chính PT, kể cả chế độ riêng tư.
+      // Thư viện chung: chỉ giáo án công khai (public / giáo án cũ không có field).
+      if (mine === 'true' || mine === '1') {
+        filter.ptId = req.user._id
+      } else {
+        filter.visibility = { $ne: 'private' }
+      }
     }
 
     if (search) {
@@ -287,11 +303,15 @@ export const getSharedTemplates = async (req, res) => {
 
 export const getDistinctSpecializations = async (req, res) => {
   try {
-    const specializations = await Workout.distinct('specializationId', {
+    const filter = {
       isTemplate: true,
       templateStatus: { $in: ['published', 'under_review'] },
       specializationId: { $ne: '' },
-    })
+    }
+    if (!isAdminRole(req.user.role)) {
+      filter.$or = [{ visibility: { $ne: 'private' } }, { ptId: req.user._id }]
+    }
+    const specializations = await Workout.distinct('specializationId', filter)
     return res.status(200).json({ specializations })
   } catch (error) {
     return res.status(500).json({ message: 'Loi lay danh sach chuyen mon', error: error.message })
@@ -300,11 +320,15 @@ export const getDistinctSpecializations = async (req, res) => {
 
 export const getDistinctGoals = async (req, res) => {
   try {
-    const goals = await Workout.distinct('goal', {
+    const filter = {
       isTemplate: true,
       templateStatus: { $in: ['published', 'under_review'] },
       goal: { $ne: '' },
-    })
+    }
+    if (!isAdminRole(req.user.role)) {
+      filter.$or = [{ visibility: { $ne: 'private' } }, { ptId: req.user._id }]
+    }
+    const goals = await Workout.distinct('goal', filter)
     return res.status(200).json({ goals })
   } catch (error) {
     return res.status(500).json({ message: 'Lỗi lấy danh sách mục tiêu', error: error.message })
@@ -319,6 +343,9 @@ export const getDistinctGoalsBySpecialization = async (req, res) => {
       templateStatus: { $in: ['published', 'under_review'] },
       goal: { $ne: '' },
     }
+    if (!isAdminRole(req.user.role)) {
+      filter.$or = [{ visibility: { $ne: 'private' } }, { ptId: req.user._id }]
+    }
     if (specializationId) {
       filter.specializationId = specializationId
     }
@@ -331,8 +358,12 @@ export const getDistinctGoalsBySpecialization = async (req, res) => {
 
 export const getDistinctTrainersWithWorkouts = async (req, res) => {
   try {
+    const match = { isTemplate: true, templateStatus: { $in: ['published', 'under_review'] } }
+    if (!isAdminRole(req.user.role)) {
+      match.$or = [{ visibility: { $ne: 'private' } }, { ptId: req.user._id }]
+    }
     const trainers = await Workout.aggregate([
-      { $match: { isTemplate: true, templateStatus: { $in: ['published', 'under_review'] } } },
+      { $match: match },
       { $group: { _id: '$ptId' } },
       {
         $lookup: {
@@ -419,6 +450,8 @@ export const createWorkout = async (req, res) => {
       status: isTemplate ? undefined : (req.body.status || 'active'),
       specializationId: req.body.specializationId || '',
       templateStatus: isTemplate ? 'published' : undefined,
+      // Chế độ hiển thị: 'public' = mọi PT xem được, mặc định 'private' (chỉ mình PT tạo)
+      visibility: isTemplate ? (req.body.visibility === 'public' ? 'public' : 'private') : undefined,
       version: 1,
     }
 
@@ -472,7 +505,7 @@ export const updateWorkout = async (req, res) => {
     const allowedFields = [
       'name', 'goal', 'duration', 'startDate', 'endDate', 'description',
       'memberId', 'ptId', 'weeks', 'days', 'estimatedCalories',
-      'isTemplate', 'status', 'specializationId',
+      'isTemplate', 'status', 'specializationId', 'visibility',
     ]
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) workout[field] = req.body[field]

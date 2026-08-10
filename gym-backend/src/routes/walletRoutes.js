@@ -1,11 +1,13 @@
 import express from 'express'
-import { cancelDeposit, confirmDeposit, confirmStripeCardPayment, createDepositTransaction, createManualQrDepositPayment, createStripePaymentIntent, createVnpayDepositPayment, fakeDeposit, getManualQrDepositInfo, getMyDepositPayments, getMyWallet, getMyWalletTransactions, getStripeExchangeRate, handleManualQrScan, handleVnpayReturn, simulateManualQrPayment, staffListAllPayments, staffListAllTransactions, transferWallet } from '../controllers/walletController.js'
+import { cancelDeposit, confirmDeposit, confirmStripeCardPayment, createDepositTransaction, createManualQrDepositPayment, createStripePaymentIntent, createVnpayDepositPayment, fakeDeposit, getManualQrDepositInfo, getMyDepositPayments, getMyWallet, getMyWalletTransactions, getStripeExchangeRate, handleManualQrScan, handleVnpayIpn, handleVnpayReturn, simulateManualQrPayment, staffListAllPayments, staffListAllTransactions, transferWallet } from '../controllers/walletController.js'
 import { protect, adminOrStaff } from '../middlewares/authMiddleware.js'
 import { requireFeature } from '../middlewares/systemSettingsMiddleware.js'
 
 const router = express.Router()
 
 router.get('/vnpay-return', handleVnpayReturn)
+router.get('/vnpay-ipn', handleVnpayIpn)
+router.post('/vnpay-ipn', handleVnpayIpn)
 router.get('/manual-qr-scan/:txnRef', handleManualQrScan)
 router.get('/manual-qr-info/:txnRef', getManualQrDepositInfo)
 router.post('/manual-qr-demo-pay/:txnRef', simulateManualQrPayment)

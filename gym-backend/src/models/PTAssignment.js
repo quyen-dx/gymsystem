@@ -6,7 +6,10 @@ const ptAssignmentSchema = new mongoose.Schema({
   membershipId: { type: mongoose.Schema.Types.ObjectId, ref: 'Membership' },
   status: {
     type: String,
-    enum: ['active', 'pending_end_approval', 'cancelled', 'completed'],
+    // active = đang phụ trách; pending_end_approval = chờ admin duyệt kết thúc;
+    // completed = PT đã kết thúc giáo án; ended = PT không còn phụ trách (kết thúc phụ trách);
+    // cancelled = bị hủy (cleanup/lỗi gán)
+    enum: ['active', 'pending_end_approval', 'cancelled', 'completed', 'ended'],
     default: 'active',
   },
   workoutId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workout', default: null },

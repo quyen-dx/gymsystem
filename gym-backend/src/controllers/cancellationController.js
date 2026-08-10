@@ -420,7 +420,9 @@ export const approveCancellationRequest = async (req, res, next) => {
       const cycle = await MembershipCycle.findById(cancellationRequest.membershipCycleId)
         .session(session).lean()
 
-      // Hoàn tiền chỉ đến từ các kỳ gia hạn chưa bắt đầu (gói chính đã hoạt động ngay sau thanh toán)
+      // Hoàn tiền: gói chính theo chính sách (7 ngày/chưa dùng quyền lợi) + các kỳ
+      // gia hạn chưa bắt đầu. Tất cả được credit MỘT lần qua aggregate ở dưới —
+      // các kỳ gia hạn đã được đánh dấu CANCELLED/refunded ở loop trên.
       const refundMethod = refundAmount > 0 ? 'WALLET' : 'NONE'
 
       if (cycle) {
@@ -430,6 +432,9 @@ export const approveCancellationRequest = async (req, res, next) => {
         ).session(session)
 
         // Hủy tất cả các MembershipPeriod đang PENDING (gia hạn chưa sử dụng)
+        // LƯU Ý: tiền hoàn được credit MỘT lần duy nhất ở block dưới (refundAmount =
+        // main + renewals chưa bắt đầu). Loop này chỉ quản lý vòng đời period,
+        // KHÔNG credit ví từng kỳ — tránh double-refund.
         if (cancellationRequest.membershipId) {
           const pendingPeriods = await MembershipPeriod.find({
             membershipId: cancellationRequest.membershipId,
@@ -440,32 +445,7 @@ export const approveCancellationRequest = async (req, res, next) => {
           for (const p of pendingPeriods) {
             const start = new Date(p.startDate).getTime()
             if (now.getTime() < start) {
-              // Gia hạn chưa bắt đầu → hoàn tiền
-              let wallet = await Wallet.findOne({ userId: cancellationRequest.memberId }).session(session)
-              if (!wallet) {
-                [wallet] = await Wallet.create([{ userId: cancellationRequest.memberId, balance: 0 }], { session })
-              }
-              const balanceBefore = Number(wallet.balance || 0)
-              wallet.balance += p.price
-              await wallet.save({ session })
-
-              await Transaction.create([{
-                userId: cancellationRequest.memberId,
-                walletId: wallet._id,
-                type: 'REFUND_TO_WALLET',
-                provider: 'wallet',
-                source: 'membership',
-                description: `Hoàn tiền hủy gia hạn khi duyệt hủy gói (+${p.totalDays} ngày)`,
-                amount: p.price,
-                balanceBefore,
-                balanceAfter: wallet.balance,
-                referenceId: p._id.toString(),
-                status: 'completed',
-                completedAt: now,
-                metadata: { periodId: p._id, membershipId: cancellationRequest.membershipId, reason: 'cancelled_on_approve' },
-                idempotencyKey: `approve_cancel_period_${p._id}`,
-              }], { session })
-
+              // Gia hạn chưa bắt đầu → được hoàn (tiền nằm trong aggregate credit bên dưới)
               await MembershipPeriod.updateOne(
                 { _id: p._id },
                 {

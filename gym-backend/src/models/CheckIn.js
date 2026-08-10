@@ -82,10 +82,29 @@ const checkInSchema = new mongoose.Schema(
       enum: ['daily_qr', 'staff_qr'],
       default: 'daily_qr',
     },
+    // Nghiệp vụ: tách riêng loại buổi tập và trạng thái.
+    // sessionType: SCHEDULED (có lịch hợp lệ tại thời điểm check-in) / FREE_TRAINING (tập tự do).
+    // status: trạng thái bản ghi check-in (success/failed/expired/blocked).
     sessionType: {
       type: String,
-      enum: ['scheduled', 'free_workout'],
-      default: 'scheduled',
+      enum: ['SCHEDULED', 'FREE_TRAINING'],
+      default: 'FREE_TRAINING',
+    },
+    // Liên kết nghiệp vụ khi check-in SCHEDULED (backend tự xác định — không tin client)
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
+      default: null,
+    },
+    ptId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    classId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TrainingClass',
+      default: null,
     },
     checkInMethod: {
       type: String,
@@ -116,6 +135,8 @@ checkInSchema.index({ checkinTime: -1 })
 checkInSchema.index({ qrToken: 1 })
 checkInSchema.index({ dailyQRCodeId: 1 })
 checkInSchema.index({ memberId: 1, scheduleId: 1, sessionDate: 1 })
+checkInSchema.index({ bookingId: 1 })
+checkInSchema.index({ ptId: 1, checkinTime: -1 })
 checkInSchema.index({ planId: 1, checkinTime: -1 })
 
 const CheckIn = mongoose.model('CheckIn', checkInSchema)

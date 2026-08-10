@@ -4,6 +4,7 @@ import {
   ClockCircleOutlined,
   DownOutlined,
   ExclamationCircleOutlined,
+  InfoCircleOutlined,
   UpOutlined,
   WarningOutlined,
 } from '@ant-design/icons'
@@ -16,7 +17,6 @@ import {
   Select,
   Spin,
   Tag,
-  Tooltip,
 } from 'antd'
 import dayjs from 'dayjs'
 import 'dayjs/locale/vi'
@@ -25,10 +25,11 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { useAuth } from '../../../hooks/useAuth'
+import { bookingService, type Booking } from '../../../services/bookingService'
 import { memberService } from '../../../services/memberService'
 import { ptAssignmentService, type SuggestedSlot } from '../../../services/ptAssignmentService'
 import { scheduleService } from '../../../services/scheduleService'
-import { workoutService, type TemplateDay, type TemplateDayExercise, type WorkoutPlan } from '../../../services/workoutService'
+import { workoutService, type TemplateDayExercise, type WorkoutPlan } from '../../../services/workoutService'
 import { getUserDisplayName } from '../../../utils/userDisplay'
 
 const DAY_SHORT = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
@@ -76,6 +77,10 @@ export default function CreateSchedulePage() {
   const { memberId } = useParams<{ memberId: string }>()
   const [searchParams] = useSearchParams()
   const assignmentId = searchParams.get('assignmentId') || undefined
+  // Từ nút "Sử dụng" ở thư viện giáo án (PTClientsPage truyền sang)
+  const templateIdParam = searchParams.get('templateId') || undefined
+  const bookedCountParam = searchParams.get('booked') || ''
+  const bookedCount = bookedCountParam ? parseInt(bookedCountParam, 10) : 0
 
   const [pageLoading, setPageLoading] = useState(true)
   const [templates, setTemplates] = useState<WorkoutPlan[]>([])
@@ -86,7 +91,9 @@ export default function CreateSchedulePage() {
   const [clientInfo, setClientInfo] = useState<{ fullName: string; preferredTime?: string } | null>(null)
   const [preferredTimeSlots, setPreferredTimeSlots] = useState<string[]>([])
   const [preferredDaysOfWeek, setPreferredDaysOfWeek] = useState<number[]>([])
-  const [memberPrefs, setMemberPrefs] = useState<{ goals: string[]; desiredSessions: number; healthNotes: string; isNewToGym: boolean; note: string; specialization: string } | null>(null)
+  const [bookedSlots, setBookedSlots] = useState<Array<{ dayOfWeek: number; slot: string; date: string }>>([])
+  const [skippedBookedDayOrders, setSkippedBookedDayOrders] = useState<Set<number>>(new Set())
+  const [memberPrefs, setMemberPrefs] = useState<{ goals: string[]; desiredSessions: number; weeks: number; healthNotes: string; isNewToGym: boolean; note: string; specialization: string } | null>(null)
 
   const [startDate, setStartDate] = useState<dayjs.Dayjs | null>(null)
   const [isRepeating, setIsRepeating] = useState(false)
@@ -99,6 +106,23 @@ export default function CreateSchedulePage() {
   const slotInfoRef = useRef<Map<number, { startTime: string; endTime: string; className: string; classCode: string }>>(new Map())
 
   const normalizeTime = (str: string) => str.replace(/\s+/g, '').toLowerCase()
+  // Slot "khớp" nếu trùng/đè khung giờ mong muốn (không so chuỗi chính xác —
+  // pref 18:00-20:00 vẫn khớp slot 18:00-19:00, 19:00-20:00)
+  const slotOverlapsPrefs = (slotTime: string, prefs: string[]) => {
+    const parse = (t: string) => {
+      const m = String(t).match(/^(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/)
+      if (!m) return null
+      const toMin = (s: string) => { const [h, mm] = s.split(':').map(Number); return h * 60 + (mm || 0) }
+      return { start: toMin(m[1]), end: toMin(m[2]) }
+    }
+    const s = parse(normalizeTime(slotTime))
+    if (!s) return false
+    return prefs.some((p) => {
+      const r = parse(normalizeTime(p))
+      if (!r) return false
+      return s.start < r.end && r.start < s.end
+    })
+  }
   const hasTimePref = preferredTimeSlots.length > 0
   const hasDayPref = preferredDaysOfWeek.length > 0
   const hasAnyPref = hasTimePref || hasDayPref
@@ -107,13 +131,24 @@ export default function CreateSchedulePage() {
     if (!memberId) return
     setPageLoading(true)
     try {
-      const [memberRes, tmplRes, slotsRes, prefsRes, assignmentsRes] = await Promise.all([
+      const [memberRes, tmplRes, slotsRes, prefsRes, assignmentsRes, bookingsRes] = await Promise.all([
         memberService.getMemberById(memberId),
         workoutService.getTemplates(),
         ptAssignmentService.getSuggestedSlots(),
         ptAssignmentService.getMemberPreferences(memberId),
         ptAssignmentService.getPTClients(),
+        bookingService.getPTBookings({ memberId, from: 'today' }),
       ])
+      const activeBookings: Booking[] = (bookingsRes.data || []).filter((b: Booking) =>
+        b.status === 'confirmed' && b.slot)
+      setBookedSlots(
+        Array.from(new Map(
+          activeBookings.map((b) => [
+            `${new Date(b.date).getDay()}_${b.slot}`,
+            { dayOfWeek: new Date(b.date).getDay(), slot: b.slot, date: b.date },
+          ]),
+        ).values()),
+      )
       const assignments = assignmentsRes.data?.assignments || []
       const assignment = assignments.find((item) => assignmentId
         ? String(item._id) === String(assignmentId)
@@ -146,15 +181,26 @@ export default function CreateSchedulePage() {
         || prefsRes.data?.specialization
         || ''
       const effectiveGoals = acceptedProposal?.goals?.length ? acceptedProposal.goals : prefsRes.data?.goals || []
+      const requestedWeeks = Math.min(Math.max(Number(assignment?.requestWeeks ?? prefsRes.data?.weeks) || 1, 1), 12)
       const memberData = memberRes.data?.member
       setClientInfo(memberData ? { fullName: getUserDisplayName(memberData, ''), preferredTime: memberData.preferredTime } : null)
       setTemplates(Array.isArray(tmplRes.data) ? tmplRes.data : [])
       setAllAvailableSlots(slotsRes.data.slots || [])
+      // Tự chọn template từ nút "Sử dụng" + bỏ lọc để template luôn hiển thị
+      if (templateIdParam && Array.isArray(tmplRes.data) && tmplRes.data.some((t) => t._id === templateIdParam)) {
+        setSelectedTemplateId(templateIdParam)
+        setFilterSpecialty('')
+        setFilterGoals([])
+        setFilterSessions(0)
+      }
       setPreferredTimeSlots(effectiveTimeSlots)
       setPreferredDaysOfWeek(effectiveDays)
+      // Áp dụng thời lượng của đúng yêu cầu PT đang phụ trách, không dùng mặc định 4 tuần.
+      setRepeatWeeks(requestedWeeks)
+      setIsRepeating(requestedWeeks > 1)
       const pd = prefsRes.data
       if (pd && (pd.goals?.length > 0 || pd.desiredSessions > 0 || pd.healthNotes || pd.isNewToGym || pd.note || pd.specialization)) {
-        setMemberPrefs({ goals: effectiveGoals, desiredSessions: pd.desiredSessions || 0, healthNotes: pd.healthNotes || '', isNewToGym: pd.isNewToGym || false, note: pd.note || '', specialization: effectiveSpecialization })
+        setMemberPrefs({ goals: effectiveGoals, desiredSessions: pd.desiredSessions || 0, weeks: requestedWeeks, healthNotes: pd.healthNotes || '', isNewToGym: pd.isNewToGym || false, note: pd.note || '', specialization: effectiveSpecialization })
       }
     } catch {
       message.error('Không thể tải dữ liệu')
@@ -181,15 +227,28 @@ export default function CreateSchedulePage() {
     const cycles = isRepeating ? repeatWeeks : 1
     const entries: ScheduleDayEntry[] = []
 
+    // Số vị trí/tuần: member đã đặt ca cố định thì lấy theo số ca đã đặt, ngược lại theo số buổi giáo án
+    const slotsPerWeek = (bookedSlots.length > 0
+      ? Math.min(bookedSlots.length, templateDays.length)
+      : templateDays.length) || 1
+
     for (let c = 0; c < cycles; c++) {
       const weekFirst = startDate.add(c * 7, 'day')
       const weekStart = weekFirst.subtract(weekFirst.day(), 'day')
 
-      for (let i = 0; i < templateDays.length; i++) {
-        const dof = i + 1
-        const day = templateDays[i]
-        const targetDow = dayOrderDow.get(dof)
-        const si = slotInfoRef.current.get(dof)
+      for (let p = 1; p <= slotsPerWeek; p++) {
+        // Slot thứ j của toàn bộ lịch (theo thứ tự tuần/ngày) ↔ buổi thứ j của giáo án.
+        // Tuần 1: T2→Buổi 1, T3→Buổi 2; Tuần 2: T2→Buổi 3, T3→Buổi 4.
+        // Giáo án hết buổi (ít buổi hơn số slot) → lặp lại từ buổi 1.
+        const globalSlot = c * slotsPerWeek + (p - 1)
+        const templateIdx = globalSlot % templateDays.length
+        const day = templateDays[templateIdx]
+        const dof = templateIdx + 1
+        const targetDow = dayOrderDow.get(p)
+        const si = slotInfoRef.current.get(p)
+
+        // Hội viên đã đặt lịch → chỉ giữ các buổi đã chọn khung giờ (không ép đủ số buổi của giáo án)
+        if (bookedSlots.length > 0 && targetDow == null) continue
 
         let date: dayjs.Dayjs | null = null
         let time: dayjs.Dayjs | null = null
@@ -223,7 +282,7 @@ export default function CreateSchedulePage() {
     // Sort by date ascending
     entries.sort((a, b) => { const au = a.date?.unix() ?? Infinity; const bu = b.date?.unix() ?? Infinity; return au - bu })
     setScheduleDays(entries)
-  }, [templateDays, startDate, isRepeating, repeatWeeks, dayOrderDow])
+  }, [templateDays, startDate, isRepeating, repeatWeeks, dayOrderDow, bookedSlots])
 
   useEffect(() => { rebuildSchedule() }, [rebuildSchedule])
 
@@ -231,6 +290,7 @@ export default function CreateSchedulePage() {
     setSelectedTemplateId(id)
     setStartDate(findNearestTrainingDay(preferredDaysOfWeek))
     setDayOrderDow(new Map())
+    setSkippedBookedDayOrders(new Set())
     slotInfoRef.current = new Map()
     setCollapsedWeeks(new Set())
     setScheduleDays([])
@@ -250,6 +310,22 @@ export default function CreateSchedulePage() {
     })
   }
 
+  const applyBookedSlot = (booking: { dayOfWeek: number; slot: string }, dayOrder: number) => {
+    const [startTime = '', endTime = ''] = booking.slot.replace(/\s/g, '').split('-')
+    if (!startTime || !endTime) return
+    slotInfoRef.current.set(dayOrder, { startTime, endTime, className: '', classCode: '' })
+    setDayOrderDow((prev) => {
+      const next = new Map(prev)
+      next.set(dayOrder, booking.dayOfWeek)
+      return next
+    })
+    setSkippedBookedDayOrders((prev) => {
+      const next = new Set(prev)
+      next.delete(dayOrder)
+      return next
+    })
+  }
+
   const handleClearSlot = (dayOrder: number) => {
     setDayOrderDow(prev => {
       const next = new Map(prev)
@@ -257,6 +333,9 @@ export default function CreateSchedulePage() {
       return next
     })
     slotInfoRef.current.delete(dayOrder)
+    if (bookedSlots.length > 0) {
+      setSkippedBookedDayOrders((prev) => new Set(prev).add(dayOrder))
+    }
   }
 
   const handleSubmit = async () => {
@@ -271,34 +350,31 @@ export default function CreateSchedulePage() {
       const cycles = new Map<number, typeof scheduleDays>()
       for (const d of scheduleDays) { if (!cycles.has(d.cycleIndex)) cycles.set(d.cycleIndex, []); cycles.get(d.cycleIndex)!.push(d) }
 
-      const weekPromises: Promise<any>[] = []
       let weekNum = 0
-      const totalWeeks = cycles.size
-      for (const [_, items] of cycles) {
+      const weeksPayload: { weekIndex: number; sessions: unknown[] }[] = []
+      for (const [cycleIndex, items] of cycles) {
         weekNum++
-        const sessions = items.map(d => ({
-          dayOrder: d.dayOrder, date: d.date!.format('YYYY-MM-DD'), time: d.time ? d.time.format('HH:mm') : '',
-          endTime: d.endTime || '', className: d.className || '', classCode: d.classCode || '',
-          title: `${d.title}${isRepeating ? ` (Tuần ${weekNum})` : ''}`,
-          muscleGroup: d.muscleGroup, exercises: d.exercises,
-        }))
-        if (assignmentId && weekNum === 1) {
-          weekPromises.push(ptAssignmentService.createScheduleAndAssignWorkout(assignmentId, {
-            templateId: selectedTemplateId, memberId, sessions,
-            weekIndex: weekNum, totalWeeks,
-          }))
-        } else {
-          weekPromises.push(scheduleService.createSchedule({
-            templateId: selectedTemplateId, memberId, sessions,
-            weekIndex: weekNum, totalWeeks,
-          }))
-        }
+        weeksPayload.push({
+          weekIndex: cycleIndex,
+          sessions: items.map(d => ({
+            dayOrder: d.dayOrder, date: d.date!.format('YYYY-MM-DD'), time: d.time ? d.time.format('HH:mm') : '',
+            endTime: d.endTime || '', className: d.className || '', classCode: d.classCode || '',
+            title: `${d.title}${isRepeating ? ` (Tuần ${weekNum})` : ''}`,
+            muscleGroup: d.muscleGroup, exercises: d.exercises,
+          })),
+        })
       }
-      await Promise.all(weekPromises)
+      await scheduleService.bulkCreateSchedules({
+        templateId: selectedTemplateId,
+        memberId,
+        assignmentId,
+        weeks: weeksPayload,
+      })
       message.success(isRepeating ? `Đã tạo lịch tập ${weekNum} tuần thành công` : 'Đã tạo lịch tập thành công')
       navigate('/pt/clients')
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Không thể tạo lịch tập')
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } } }
+      message.error(e?.response?.data?.message || 'Không thể tạo lịch tập')
     } finally {
       setSubmitting(false)
     }
@@ -331,12 +407,14 @@ export default function CreateSchedulePage() {
   const [filterSessions, setFilterSessions] = useState<number>(0)
 
   useEffect(() => {
-    if (memberPrefs) {
+    // Khi có templateIdParam (từ nút "Sử dụng"), không ghi đè bộ lọc theo memberPrefs
+    // vì có thể lọc sạch template đang được chọn.
+    if (memberPrefs && !templateIdParam) {
       setFilterSpecialty(memberPrefs.specialization || '')
       setFilterGoals(memberPrefs.goals || [])
       setFilterSessions(memberPrefs.desiredSessions || 0)
     }
-  }, [memberPrefs])
+  }, [memberPrefs, templateIdParam])
 
   const filteredTemplates = useMemo(() => {
     return templates.filter((t) => {
@@ -347,9 +425,25 @@ export default function CreateSchedulePage() {
     })
   }, [templates, filterSpecialty, filterGoals, filterSessions])
 
-  const allFilled = scheduleDays.length > 0 && scheduleDays.every(d => d.time)
-  const neededSlots = templateDays?.length || 0
+  // Hội viên đặt N buổi → lịch cần đủ N buổi (không bắt buộc đủ số buổi của giáo án mẫu)
+  const neededSlots = (bookedSlots.length > 0
+    ? Math.min(bookedSlots.length, templateDays?.length || 0)
+    : templateDays?.length) || 0
   const filledDowCount = dayOrderDow.size
+  const allFilled = filledDowCount >= neededSlots && neededSlots > 0
+  const scheduledWeekCount = isRepeating ? repeatWeeks : 1
+  const scheduledSessionCount = scheduledWeekCount * neededSlots
+
+  // Lịch PT 1-1 đã được xác nhận là lịch chính thức. Dùng nguyên khung giờ đã đặt,
+  // không buộc PT chọn lại các ca con trong khung giờ đó.
+  useEffect(() => {
+    if (bookedSlots.length === 0 || dayOrderDow.size > 0) return
+    if (!selectedTemplateId || !startDate) return
+    bookedSlots.slice(0, neededSlots).forEach((booking, index) => {
+      if (!skippedBookedDayOrders.has(index + 1)) applyBookedSlot(booking, index + 1)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookedSlots, selectedTemplateId, startDate, neededSlots, skippedBookedDayOrders])
 
   if (pageLoading) {
     return <DashboardLayout><div className="flex min-h-[400px] items-center justify-center"><Spin size="large" /></div></DashboardLayout>
@@ -450,6 +544,26 @@ export default function CreateSchedulePage() {
                   <Select.Option key="__empty" value="__empty" disabled style={{ display: 'none' }} />
                 )}
               </Select>
+              {selectedTemplateId && templateDays && (memberPrefs?.desiredSessions > 0 || bookedCount > 0) && (
+                <div className="mt-2 flex flex-col gap-1 rounded-lg border border-orange-500/40 bg-orange-500/10 px-3 py-2">
+                  {memberPrefs && memberPrefs.desiredSessions > 0 && templateDays.length !== memberPrefs.desiredSessions && (
+                    <div className="flex items-start gap-2">
+                      <WarningOutlined className="mt-0.5 text-sm text-orange-500" />
+                      <p className="text-xs text-orange-400">
+                        Giáo án có <b>{templateDays.length} buổi/tuần</b> nhưng hội viên đăng ký <b>{memberPrefs.desiredSessions} buổi/tuần</b>. Nên chọn giáo án có số buổi phù hợp (hoặc nhân bản rồi chỉnh số buổi).
+                      </p>
+                    </div>
+                  )}
+                  {bookedCount > 0 && (
+                    <div className="flex items-start gap-2">
+                      <InfoCircleOutlined className="mt-0.5 text-sm text-blue-500" />
+                      <p className="text-xs text-blue-300">
+                        Hội viên đang có <b>{bookedCount} buổi PT 1-1</b> đã book — tránh đặt lịch tập trùng khung giờ với các buổi này.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex items-center gap-2 max-[767px]:flex-col max-[767px]:items-stretch">
                 <span className="text-xs text-[var(--gs-text-muted)]">{filteredTemplates.length} giáo án khớp</span>
                 {(filterSpecialty || filterGoals.length > 0 || filterSessions > 0) && (
@@ -502,8 +616,8 @@ export default function CreateSchedulePage() {
                 </div>
                 {startDate && (
                   <div className="flex flex-wrap gap-1">
-                    <Tag color="blue" className="text-xs">{isRepeating ? `${repeatWeeks} tuần × ${templateDays.length} buổi/tuần = ${repeatWeeks * templateDays.length} buổi` : `${templateDays.length} buổi`}</Tag>
-                    {templateDays.map((d, i) => {
+                    <Tag color="blue" className="text-xs">{isRepeating ? `${repeatWeeks} tuần × ${neededSlots} buổi/tuần = ${scheduledSessionCount} buổi` : `${neededSlots} buổi`}</Tag>
+                    {templateDays.slice(0, neededSlots).map((d, i) => {
                       const dow = dayOrderDow.get(i + 1)
                       return <Tag key={i} className="text-xs">{d.muscleGroup || `Buổi ${i + 1}`}: {dow != null ? DAY_SHORT[dow] : '?'}</Tag>
                     })}
@@ -514,23 +628,114 @@ export default function CreateSchedulePage() {
           </div>
 
           {/* ── Section 3: Slot suggestions ── */}
-          {selectedTemplateId && startDate && allAvailableSlots.length > 0 && (
+          {selectedTemplateId && startDate && (
             <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-5">
-              <p className="mb-3 text-sm font-semibold text-[var(--gs-text)]">
-                Khung giờ gợi ý từ lịch dạy của bạn
-                <span className="ml-2 text-xs font-normal text-[var(--gs-text-muted)]">(đã chọn {filledDowCount}/{neededSlots} buổi)</span>
-              </p>
-              {(() => {
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-[var(--gs-text)]">
+                {bookedSlots.length > 0
+                  ? 'Lịch đặt của hội viên'
+                  : 'Khung giờ gợi ý từ lịch dạy của bạn'}
+                </p>
+                <span className="text-xs text-[var(--gs-text-muted)]">Đã chọn {filledDowCount}/{neededSlots} buổi/tuần</span>
+              </div>
+              {bookedSlots.length > 0 && (
+                <div className="mb-4 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-cyan-200">Buổi hội viên đã đặt</p>
+                    <span className="text-xs text-cyan-300">
+                      {bookedSlots.length} buổi/tuần{memberPrefs?.weeks && memberPrefs.weeks > 1 ? ` × ${memberPrefs.weeks} tuần = ${bookedSlots.length * memberPrefs.weeks} buổi` : ''}
+                    </span>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {bookedSlots.map((booking, index) => {
+                      const selectedInfo = slotInfoRef.current.get(index + 1)
+                      const isSkipped = skippedBookedDayOrders.has(index + 1)
+                      return (
+                        <div key={`${booking.dayOfWeek}-${booking.slot}`} className="rounded-md border border-cyan-400/20 bg-[var(--gs-card)] px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-[var(--gs-text)]">Buổi {index + 1}</span>
+                            <div className="flex items-center gap-2">
+                              <Tag color={isSkipped ? 'default' : 'green'} className="m-0 text-[10px]">
+                                {isSkipped ? 'Đã bỏ khỏi giáo án' : 'Đã áp dụng'}
+                              </Tag>
+                              <Button
+                                size="small"
+                                type="link"
+                                danger={!isSkipped}
+                                className="h-auto p-0 text-xs"
+                                onClick={() => isSkipped ? applyBookedSlot(booking, index + 1) : handleClearSlot(index + 1)}
+                              >
+                                {isSkipped ? 'Thêm lại' : 'Bỏ'}
+                              </Button>
+                            </div>
+                          </div>
+                          <p className="mt-1 text-sm font-medium text-cyan-200">{formatDayLabel(booking.dayOfWeek)}, {booking.slot.replace('-', ' - ')}</p>
+                          {selectedInfo && !isSkipped && (
+                            <p className="mt-1 text-[11px] text-[var(--gs-text-muted)]">
+                              Thời gian áp dụng: {selectedInfo.startTime} - {selectedInfo.endTime}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-3 text-xs text-cyan-200">
+                    Các khung giờ này được áp dụng trực tiếp cho giáo án. PT không cần chọn lại ca nhỏ.
+                  </p>
+                </div>
+              )}
+              {bookedSlots.length === 0 && (() => {
                 const available = allAvailableSlots.filter(s => !s.isFull)
-                const normPrefTimes = preferredTimeSlots.map(t => normalizeTime(t))
+                const bookedMatching = bookedSlots.length > 0
+                  ? available.filter(s => bookedSlots.some(b =>
+                      b.dayOfWeek === s.dayOfWeek && slotOverlapsPrefs(`${s.startTime}-${s.endTime}`, [b.slot])))
+                  : []
+                const pool = bookedSlots.length > 0 && bookedMatching.length > 0 ? bookedMatching : available
                 const matched: SuggestedSlot[] = []
                 const unmatched: SuggestedSlot[] = []
-                for (const s of available) {
-                  const timeOk = !hasTimePref || normPrefTimes.some(pt => pt === normalizeTime(s.time))
+                for (const s of pool) {
+                  const timeOk = !hasTimePref || slotOverlapsPrefs(s.time, preferredTimeSlots)
                   const dayOk = !hasDayPref || preferredDaysOfWeek.includes(s.dayOfWeek)
                   ;(timeOk && dayOk ? matched : unmatched).push(s)
                 }
                 const noSlots = matched.length === 0 && unmatched.length === 0
+                const selectSlot = (slot: SuggestedSlot) => {
+                  if (bookedSlots.length > 0) {
+                    const bookingIndex = bookedSlots.findIndex((booking) =>
+                      booking.dayOfWeek === slot.dayOfWeek
+                      && slotOverlapsPrefs(`${slot.startTime}-${slot.endTime}`, [booking.slot]))
+                    if (bookingIndex >= 0) {
+                      handleSlotClick(slot, bookingIndex + 1)
+                      return
+                    }
+                  }
+                  const free = [...Array(neededSlots).keys()].map(k => k + 1).filter(d => !dayOrderDow.has(d))
+                  if (free.length > 0) handleSlotClick(slot, free[0])
+                }
+
+                const renderBookedSlotButton = (slot: SuggestedSlot, bookingIndex: number) => {
+                  const dayOrder = bookingIndex + 1
+                  const selectedInfo = slotInfoRef.current.get(dayOrder)
+                  const selected = selectedInfo?.startTime === slot.startTime && selectedInfo?.endTime === slot.endTime
+                  return (
+                    <button key={`${slot.dayOfWeek}-${slot.time}`} type="button"
+                      onClick={() => handleSlotClick(slot, dayOrder)}
+                      className="flex min-h-[64px] items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-xs transition-all hover:border-[var(--theme-accent)]"
+                      style={{
+                        borderColor: selected ? 'var(--theme-accent)' : 'var(--gs-border)',
+                        background: selected ? 'color-mix(in srgb, var(--theme-accent) 15%, transparent)' : undefined,
+                      }}
+                    >
+                      <div>
+                        <p className="font-semibold text-[var(--gs-text)]">{slot.startTime} - {slot.endTime}</p>
+                        {slot.className && <p className="mt-0.5 text-[11px] text-[var(--gs-text-muted)]">{slot.className}</p>}
+                      </div>
+                      <Tag color={selected ? 'purple' : 'default'} className="m-0 text-[10px]">
+                        {selected ? 'Đang chọn' : 'Chọn'}
+                      </Tag>
+                    </button>
+                  )
+                }
 
                 const renderSlotBtn = (slot: SuggestedSlot) => {
                   const usedByDayOrder = Array.from(dayOrderDow.entries()).find(([dayOrder, dow]) => {
@@ -540,10 +745,7 @@ export default function CreateSchedulePage() {
                   })?.[0]
                   return (
                     <button key={`${slot.dayOfWeek}-${slot.time}`} type="button"
-                      onClick={() => {
-                        const free = [...Array(neededSlots).keys()].map(k => k + 1).filter(d => !dayOrderDow.has(d))
-                        if (free.length > 0) handleSlotClick(slot, free[0])
-                      }}
+                      onClick={() => selectSlot(slot)}
                       className="flex items-center gap-2 rounded-lg border-2 px-3 py-2 text-left text-xs transition-all hover:bg-green-500/10"
                       style={{ borderColor: usedByDayOrder ? 'var(--theme-accent)' : '#22C55E', background: usedByDayOrder ? 'color-mix(in srgb, var(--theme-accent) 15%, transparent)' : undefined }}
                     >
@@ -551,35 +753,84 @@ export default function CreateSchedulePage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-[var(--gs-text)]">{formatDayLabel(slot.dayOfWeek)}</span>
-                          {usedByDayOrder ? <Tag className="m-0 text-[10px] leading-none" color="blue" style={{ fontSize: 10, lineHeight: '16px' }}>Buổi {usedByDayOrder}</Tag> : <span className="text-[10px] text-green-500">Khớp</span>}
+                          {usedByDayOrder ? <Tag className="m-0 text-[10px] leading-none" color="blue" style={{ fontSize: 10, lineHeight: '16px' }}>Đã gán cho buổi {usedByDayOrder}</Tag> : <span className="text-[10px] text-green-500">Chọn ca này</span>}
                         </div>
                         <div className="text-green-400">{slot.startTime} - {slot.endTime}</div>
-                        <div className="text-[var(--gs-text-muted)]">[{slot.classCode}] {slot.className}</div>
+                        {slot.className && <div className="text-[var(--gs-text-muted)]">{slot.className}</div>}
                       </div>
-                      <Tag className="m-0 text-[10px] leading-none" style={{ fontSize: 10, lineHeight: '16px' }}>{slot.count}/{slot.maxCapacity || 5}</Tag>
                     </button>
                   )
                 }
 
-                const renderDisabledSlot = (slot: SuggestedSlot) => (
-                  <Tooltip key={`${slot.dayOfWeek}-${slot.time}`} title="Không nằm trong khung giờ mong muốn của hội viên">
-                    <span className="flex cursor-not-allowed items-center gap-2 rounded-lg border-2 border-[var(--gs-border)] px-3 py-2 text-left text-xs opacity-40 grayscale">
+                const renderUnmatchedSlot = (slot: SuggestedSlot) => {
+                  const usedByDayOrder = Array.from(dayOrderDow.entries()).find(([dayOrder, dow]) => {
+                    if (dow !== slot.dayOfWeek) return false
+                    const si = slotInfoRef.current.get(dayOrder)
+                    return si?.startTime === slot.startTime && si?.endTime === slot.endTime
+                  })?.[0]
+                  return (
+                    <button key={`${slot.dayOfWeek}-${slot.time}`} type="button"
+                      onClick={() => selectSlot(slot)}
+                      className="flex items-center gap-2 rounded-lg border-2 border-[var(--gs-border)] px-3 py-2 text-left text-xs transition-all hover:bg-blue-500/10"
+                      style={{ background: usedByDayOrder ? 'color-mix(in srgb, var(--theme-accent) 10%, transparent)' : undefined, borderColor: usedByDayOrder ? 'var(--theme-accent)' : undefined }}
+                    >
                       <ClockCircleOutlined style={{ color: 'var(--gs-text-muted)' }} />
-                      <div className="flex-1"><span className="font-medium text-[var(--gs-text)]">{formatDayLabel(slot.dayOfWeek)}</span><span className="ml-2 text-[10px] text-[var(--gs-text-muted)]">Không khớp</span><div className="text-green-400">{slot.startTime} - {slot.endTime}</div><div className="text-[var(--gs-text-muted)]">[{slot.classCode}] {slot.className}</div></div>
-                      <Tag className="m-0 text-[10px] leading-none" style={{ fontSize: 10, lineHeight: '16px' }}>{slot.count}/{slot.maxCapacity || 5}</Tag>
-                    </span>
-                  </Tooltip>
-                )
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-[var(--gs-text)]">{formatDayLabel(slot.dayOfWeek)}</span>
+                          {usedByDayOrder
+                            ? <Tag className="m-0 text-[10px] leading-none" color="blue" style={{ fontSize: 10, lineHeight: '16px' }}>Đã gán cho buổi {usedByDayOrder}</Tag>
+                            : <span className="text-[10px] text-[var(--gs-text-muted)]">Có thể chọn</span>}
+                        </div>
+                        <div className="text-[var(--gs-text)]">{slot.startTime} - {slot.endTime}</div>
+                        {slot.className && <div className="text-[var(--gs-text-muted)]">{slot.className}</div>}
+                      </div>
+                    </button>
+                  )
+                }
 
                 return (
                   <>
                     {noSlots && hasAnyPref && <p className="mb-2 text-xs text-[var(--gs-text-muted)]">Không có khung giờ nào phù hợp.</p>}
-                    {noSlots && !hasAnyPref && <p className="text-xs text-[var(--gs-text-muted)]">Tất cả các ca đã đầy.</p>}
-                    <div className="flex flex-wrap gap-2">
-                      {matched.map(s => renderSlotBtn(s))}
-                      {hasAnyPref && unmatched.map(s => renderDisabledSlot(s))}
-                      {!hasAnyPref && unmatched.map(s => renderSlotBtn(s))}
-                    </div>
+                    {noSlots && !hasAnyPref && (
+                      <p className="mb-2 text-xs text-[var(--gs-text-muted)]">
+                        {allAvailableSlots.length === 0
+                          ? 'Bạn chưa dạy lớp nhóm nào và chưa có lịch làm việc (TrainerSchedule) để gợi ý khung giờ. Vui lòng cập nhật lịch làm việc trong "Lịch dạy" trước.'
+                          : 'Tất cả các ca đã đầy.'}
+                      </p>
+                    )}
+                    {bookedSlots.length > 0 && (matched.length > 0 || unmatched.length > 0) && (
+                      <p className="mb-2 text-xs text-[var(--gs-text-muted)]">Chọn ca PT phù hợp trong khung giờ hội viên đã đặt</p>
+                    )}
+                    {bookedSlots.length > 0 ? (
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        {bookedSlots.map((booking, bookingIndex) => {
+                          const candidates = matched.filter((slot) =>
+                            slot.dayOfWeek === booking.dayOfWeek
+                            && slotOverlapsPrefs(`${slot.startTime}-${slot.endTime}`, [booking.slot]))
+                          return (
+                            <div key={`${booking.dayOfWeek}-${booking.slot}`} className="rounded-lg border border-[var(--gs-border)] bg-[var(--gs-card-soft)] p-3">
+                              <div className="mb-2 flex items-center justify-between gap-2">
+                                <span className="text-xs font-semibold text-[var(--gs-text)]">Buổi {bookingIndex + 1}: {formatDayLabel(booking.dayOfWeek)}</span>
+                                <Tag color="cyan" className="m-0 text-[10px]">{booking.slot.replace('-', ' - ')}</Tag>
+                              </div>
+                              {candidates.length > 0 ? (
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  {candidates.map((slot) => renderBookedSlotButton(slot, bookingIndex))}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-[var(--gs-text-muted)]">Chưa có ca PT khả dụng trong khung giờ này.</p>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {matched.map(s => renderSlotBtn(s))}
+                        {unmatched.map(s => renderUnmatchedSlot(s))}
+                      </div>
+                    )}
                   </>
                 )
               })()}
@@ -608,21 +859,24 @@ export default function CreateSchedulePage() {
                     </button>
                     {!isCollapsed && (
                       <div className="space-y-2 p-3">
-                        {items.map((day, i) => (
-                          <div key={i} className="rounded-lg border border-[var(--gs-border)] p-3">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2"><span className="text-sm font-semibold text-[var(--gs-text)]">Buổi {day.dayOrder}</span><Tag className="m-0 text-xs">{day.title}</Tag><span className="text-xs text-[var(--gs-text-muted)]">{day.exercises.length} bài tập</span></div>
-                              {dayOrderDow.has(day.dayOrder) ? <Button size="small" danger type="text" onClick={() => handleClearSlot(day.dayOrder)}>Bỏ</Button> : <span className="text-xs text-[var(--gs-text-muted)]">Chưa chọn giờ</span>}
-                            </div>
-                            {day.time && day.date && (
-                              <div className="mt-1 space-y-0.5">
-                                <div className="flex items-center gap-2 text-xs text-green-400"><CheckCircleFilled />{formatDayLabel(day.date.day())}, {day.date.format('DD/MM/YYYY')}<span className="text-[var(--gs-text-muted)]">{day.time.format('HH:mm')}{day.endTime ? ` - ${day.endTime}` : ''}</span></div>
-                                {day.className && <div className="text-xs text-[var(--gs-text-muted)]">📍 {day.className}{day.classCode ? ` (${day.classCode})` : ''}</div>}
+                        {items.map((day, i) => {
+                          const position = ((day.dayOrder - 1) % (neededSlots || 1)) + 1
+                          return (
+                            <div key={i} className="rounded-lg border border-[var(--gs-border)] p-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2"><span className="text-sm font-semibold text-[var(--gs-text)]">Buổi {day.dayOrder}</span><Tag className="m-0 text-xs">{day.title}</Tag><span className="text-xs text-[var(--gs-text-muted)]">{day.exercises.length} bài tập</span></div>
+                                {dayOrderDow.has(position) ? <Button size="small" danger type="text" onClick={() => handleClearSlot(position)}>Bỏ</Button> : <span className="text-xs text-[var(--gs-text-muted)]">Chưa chọn giờ</span>}
                               </div>
-                            )}
-                            <div className="mt-2 flex flex-wrap gap-1">{day.exercises.map((ex, ei) => <Tag key={ei} className="text-xs">{ex.name}{ex.note ? ` (${ex.note})` : ''}</Tag>)}</div>
-                          </div>
-                        ))}
+                              {day.time && day.date && (
+                                <div className="mt-1 space-y-0.5">
+                                  <div className="flex items-center gap-2 text-xs text-green-400"><CheckCircleFilled />{formatDayLabel(day.date.day())}, {day.date.format('DD/MM/YYYY')}<span className="text-[var(--gs-text-muted)]">{day.time.format('HH:mm')}{day.endTime ? ` - ${day.endTime}` : ''}</span></div>
+                                  {day.className && <div className="text-xs text-[var(--gs-text-muted)]">📍 {day.className}{day.classCode ? ` (${day.classCode})` : ''}</div>}
+                                </div>
+                              )}
+                              <div className="mt-2 flex flex-wrap gap-1">{day.exercises.map((ex, ei) => <Tag key={ei} className="text-xs">{ex.name}{ex.note ? ` (${ex.note})` : ''}</Tag>)}</div>
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </div>

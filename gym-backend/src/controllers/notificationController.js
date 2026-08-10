@@ -9,6 +9,16 @@ import {
   markAllAsRead as markAllRead,
 } from '../services/notificationService.js'
 
+// Chỉ chủ sở hữu (receiver) hoặc nhân viên được thao tác trên thông báo cụ thể
+const assertCanModify = async (id, user) => {
+  const notification = await Notification.findById(id)
+  if (!notification) return null
+  const isStaff = ['admin', 'super_admin', 'staff'].includes(user?.role)
+  const isOwner = String(notification.receiverId) === String(user?._id)
+  if (!isStaff && !isOwner) return null
+  return notification
+}
+
 export const sendNotification = async (req, res) => {
   try {
     const { title, content, userId, receiverId, receiverRole, notificationType, category, relatedId, relatedType, redirectUrl, requiresAction, actions } = req.body
@@ -46,6 +56,8 @@ export const getMyNotifications = async (req, res) => {
 export const handleMarkAsRead = async (req, res) => {
   try {
     const { id } = req.params
+    const notification = await assertCanModify(id, req.user)
+    if (!notification) return res.status(404).json({ success: false, message: 'Không tìm thấy thông báo' })
     await markAsRead(id)
     res.status(200).json({ success: true, message: 'Đã đánh dấu đọc' })
   } catch (error) {
@@ -56,6 +68,8 @@ export const handleMarkAsRead = async (req, res) => {
 export const handleMarkAsUnread = async (req, res) => {
   try {
     const { id } = req.params
+    const notification = await assertCanModify(id, req.user)
+    if (!notification) return res.status(404).json({ success: false, message: 'Không tìm thấy thông báo' })
     await markAsUnread(id)
     res.status(200).json({ success: true, message: 'Đã đánh dấu chưa đọc' })
   } catch (error) {
@@ -66,6 +80,8 @@ export const handleMarkAsUnread = async (req, res) => {
 export const handleDeleteNotification = async (req, res) => {
   try {
     const { id } = req.params
+    const notification = await assertCanModify(id, req.user)
+    if (!notification) return res.status(404).json({ success: false, message: 'Không tìm thấy thông báo' })
     await softDelete(id)
     res.status(200).json({ success: true, message: 'Đã xóa thông báo' })
   } catch (error) {

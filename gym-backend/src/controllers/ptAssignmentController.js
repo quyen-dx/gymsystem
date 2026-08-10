@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import User from '../models/User.js'
 import PTAssignment from '../models/PTAssignment.js'
+import TrainingRequest from '../models/TrainingRequest.js'
 import Workout from '../models/Workout.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
@@ -13,6 +14,7 @@ import sendError from '../utils/sendError.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import { leaveCurrentTraining as cleanupCurrentTraining } from '../services/trainingCleanupService.js'
+import { validateScheduleSessions, buildClassLocation } from './scheduleController.js'
 
 export const getMyAssignment = async (req, res) => {
   try {
@@ -22,7 +24,23 @@ export const getMyAssignment = async (req, res) => {
     if (!assignment) {
       return res.json({ assignment: null })
     }
-    res.json({ assignment })
+    const assignmentObj = assignment.toObject ? assignment.toObject() : assignment
+    const request = await TrainingRequest.findOne({
+      memberId: req.user._id,
+      type: 'pt1on1',
+      assignedTrainerId: assignmentObj.ptId?._id || assignmentObj.ptId,
+      status: { $in: ['assigned', 'active', 'completed'] },
+    })
+      .select('timeSlots daysOfWeek daySlots specialization goals note healthNotes assignedAt createdAt')
+      .sort({ assignedAt: -1, createdAt: -1 })
+      .lean()
+
+    res.json({
+      assignment: {
+        ...assignmentObj,
+        trainingRequest: request || null,
+      },
+    })
   } catch (error) {
     res.status(500).json({ message: error.message })
   }
@@ -109,24 +127,42 @@ export const assignWorkout = async (req, res) => {
     const assignment = await PTAssignment.findById(id)
     if (!assignment) throw new AppError('Không tìm thấy phân công', 404)
 
+    // Ownership: chỉ PT phụ trách assignment này (hoặc admin) mới được gán giáo án
+    const isAdminUser = ['admin', 'super_admin'].includes(req.user.role)
+    if (!isAdminUser && String(assignment.ptId) !== String(ptId)) {
+      throw new AppError('Bạn không phụ trách phân công này', 403)
+    }
+
     if (assignment.status === 'pending_end_approval') {
       return res.status(400).json({ message: 'Không thể gán giáo án khi đang chờ Admin phê duyệt kết thúc phụ trách' })
+    }
+
+    // Không gán giáo án cho assignment đã kết thúc
+    if (!['active', 'pending_end_approval'].includes(assignment.status)) {
+      return res.status(400).json({ message: 'Không thể gán giáo án cho phân công đã kết thúc' })
+    }
+
+    const pendingPaymentRequest = await TrainingRequest.findOne({
+      memberId: assignment.memberId,
+      assignedTrainerId: assignment.ptId,
+      type: 'pt1on1',
+      status: { $in: ['assigned', 'awaiting_payment'] },
+    }).lean()
+    if (pendingPaymentRequest) {
+      return res.status(409).json({ message: 'Chỉ có thể gán giáo án sau khi yêu cầu PT đã được thanh toán và xác nhận.' })
     }
 
     assignment.workoutId = workoutId || null
     await assignment.save()
 
-    // Auto-create WorkoutSchedule if one does not exist yet
-    if (workoutId) {
-      const existing = await WorkoutSchedule.findOne({ memberId: assignment.memberId, templateId: workoutId, status: 'active' }).lean()
-      if (!existing) {
-        await ptAssignmentService.buildSchedulesFromTemplate({
-          templateId: workoutId,
-          memberId: assignment.memberId,
-          ptId,
-        })
-      }
-    }
+    recordAuditLog({
+      req,
+      module: 'pt_assignment',
+      action: 'assign_workout',
+      entity: assignment,
+      entityName: `Assignment ${id}`,
+      details: `workoutId: ${workoutId || 'null'}`,
+    }).catch((err) => console.error('Audit assignWorkout failed:', err.message))
 
     const updated = await PTAssignment.findById(id)
       .populate('memberId', 'name fullName email phone avatar memberCode memberNumber')
@@ -173,10 +209,58 @@ export const createScheduleAndAssignWorkout = async (req, res) => {
       return res.status(400).json({ message: 'Thiếu thông tin: templateId, memberId, sessions' })
     }
 
+    // Ownership: chỉ PT phụ trách assignment này (hoặc admin) mới tạo lịch qua nó
+    const existingAssignment = await PTAssignment.findById(assignmentId).session(mongoSession)
+    if (!existingAssignment) {
+      await mongoSession.abortTransaction()
+      return res.status(404).json({ message: 'Không tìm thấy phân công' })
+    }
+    const isAdminUser = ['admin', 'super_admin'].includes(req.user.role)
+    if (!isAdminUser && String(existingAssignment.ptId) !== String(ptId)) {
+      await mongoSession.abortTransaction()
+      return res.status(403).json({ message: 'Bạn không phụ trách phân công này' })
+    }
+
+    // Chính sách 1 member = 1 PT active cho PT 1-1
+    const pendingPaymentRequest = await TrainingRequest.findOne({
+      memberId,
+      assignedTrainerId: existingAssignment.ptId,
+      type: 'pt1on1',
+      status: { $in: ['assigned', 'awaiting_payment'] },
+    }).session(mongoSession)
+    if (pendingPaymentRequest) {
+      await mongoSession.abortTransaction()
+      return res.status(409).json({ message: 'Chỉ có thể gán giáo án sau khi yêu cầu PT đã được thanh toán và xác nhận.' })
+    }
+
+    const otherActive = await PTAssignment.findOne({
+      memberId,
+      status: 'active',
+      ptId: { $ne: ptId },
+    }).session(mongoSession).lean()
+    if (otherActive) {
+      await mongoSession.abortTransaction()
+      return res.status(409).json({ message: 'Hội viên này đã có PT phụ trách khác đang hoạt động' })
+    }
+
+    // Mỗi member chỉ có 1 kế hoạch (WorkoutSchedule) đang hoạt động — tránh trùng giáo án
+    const existingActiveSchedule = await WorkoutSchedule.findOne({ memberId, status: 'active', deletedAt: null }).session(mongoSession).lean()
+    if (existingActiveSchedule) {
+      await mongoSession.abortTransaction()
+      return res.status(409).json({ message: 'Hội viên này đã có giáo án đang hoạt động. Vui lòng kết thúc giáo án cũ trước khi tạo lịch mới.' })
+    }
+
     const template = await Workout.findById(templateId).session(mongoSession)
     if (!template || !template.isTemplate) {
       await mongoSession.abortTransaction()
       return res.status(404).json({ message: 'Không tìm thấy giáo án mẫu' })
+    }
+
+    // Validate từng buổi: gói còn hạn + lịch làm việc PT + không trùng slot PT với member khác
+    const validationErrors = await validateScheduleSessions({ memberId, ptId, sessions })
+    if (validationErrors.length > 0) {
+      await mongoSession.abortTransaction()
+      return res.status(409).json({ message: validationErrors.join('; ') })
     }
 
     // Match EACH session to its training class by dayOfWeek + startTime + endTime + ptId
@@ -194,7 +278,7 @@ export const createScheduleAndAssignWorkout = async (req, res) => {
       }
       if (s.endTime) matchQuery.endTime = s.endTime
 
-      const match = await TrainingClass.findOne(matchQuery).session(mongoSession).lean()
+      const match = await TrainingClass.findOne(matchQuery).populate('zoneId', 'name').populate('floorId', 'name').session(mongoSession).lean()
       if (match) {
         matchedClassMap.set(s.dayOrder, match)
         if (!firstMatchedClass) {
@@ -242,6 +326,7 @@ export const createScheduleAndAssignWorkout = async (req, res) => {
           endTime: s.endTime || '',
           className: matched?.name || '',
           classCode: matched?.code || '',
+          location: buildClassLocation(matched) || '',
           title: s.title || '',
           muscleGroup: s.muscleGroup || '',
           exercises: (s.exercises || []).map(ex => ({
@@ -251,6 +336,7 @@ export const createScheduleAndAssignWorkout = async (req, res) => {
           })),
           status: 'pending',
           feedback: '',
+          changeHistory: [{ action: 'created', by: ptId, byRole: 'pt' }],
         }
       }),
     }], { session: mongoSession })
@@ -261,6 +347,15 @@ export const createScheduleAndAssignWorkout = async (req, res) => {
     await pa.save({ session: mongoSession })
 
     await mongoSession.commitTransaction()
+
+    recordAuditLog({
+      req,
+      module: 'schedule',
+      action: 'create_schedule_and_assign_workout',
+      entity: schedule[0],
+      entityName: `Lịch tập ${schedule[0]._id} - member ${memberId}`,
+      details: `${sessions.length} buổi, template ${templateId}, assignment ${assignmentId}`,
+    }).catch((err) => console.error('Audit createScheduleAndAssignWorkout failed:', err.message))
 
     await createNotification({
       receiverId: memberId,
@@ -321,12 +416,14 @@ export const getWorkoutProgress = async (req, res) => {
     const schedule = await WorkoutSchedule.findById(scheduleId)
       .populate('templateId', 'name goal days')
 
-    // Find assignment by memberId + current PT
+    // Find assignment by memberId + current PT (chỉ assignment còn hiệu lực,
+    // tránh lấy nhầm assignment cũ khi PT thay đổi)
     let assignment = null
     if (schedule) {
       assignment = await PTAssignment.findOne({
         memberId: schedule.memberId,
         ptId,
+        status: { $in: ['active', 'pending_end_approval'] },
       })
         .populate('memberId', 'name fullName email phone avatar memberCode memberNumber')
         .populate('workoutId', 'name goal days totalSessions')
@@ -352,6 +449,12 @@ export const endWorkout = async (req, res) => {
         return res.status(404).json({ message: 'Không tìm thấy lịch tập' })
       }
 
+      // Ownership: chỉ PT tạo lịch (hoặc admin) được kết thúc lịch
+      const isAdminUser = ['admin', 'super_admin'].includes(req.user.role)
+      if (!isAdminUser && String(schedule.assignedBy) !== String(ptId)) {
+        return res.status(403).json({ message: 'Bạn không phải PT phụ trách lịch tập này' })
+      }
+
       schedule.status = 'completed'
       await schedule.save()
 
@@ -366,6 +469,15 @@ export const endWorkout = async (req, res) => {
 
       const sessions = schedule.sessions || []
       const completedCount = sessions.filter((s) => s.status === 'completed').length
+
+      recordAuditLog({
+        req,
+        module: 'schedule',
+        action: 'end_workout_schedule',
+        entity: schedule,
+        entityName: `Lịch ${scheduleId}`,
+        details: `Kết thúc lịch tuần ${schedule.weekIndex || '?'}/${schedule.totalWeeks || '?'} - ${completedCount}/${sessions.length} buổi hoàn thành`,
+      }).catch((err) => console.error('Audit endWorkout failed:', err.message))
 
       await createNotification({
         receiverId: schedule.memberId,
@@ -492,6 +604,15 @@ export const endWorkout = async (req, res) => {
         endAllSession.endSession()
       }
 
+      recordAuditLog({
+        req,
+        module: 'pt_assignment',
+        action: 'end_workout_all',
+        entity: { _id: id },
+        entityName: `Assignment ${id}`,
+        details: `Kết thúc toàn bộ giáo án member ${req.body.memberId} - ${totalCompletedSessions}/${totalSessions} buổi hoàn thành`,
+      }).catch((err) => console.error('Audit endWorkout failed:', err.message))
+
       await createNotification({
         receiverId: req.body.memberId,
         receiverRole: 'member',
@@ -555,6 +676,15 @@ export const endWorkout = async (req, res) => {
     assignment.workoutId = null
     await assignment.save()
 
+    recordAuditLog({
+      req,
+      module: 'pt_assignment',
+      action: 'end_workout_assignment',
+      entity: assignment,
+      entityName: `Assignment ${assignment._id}`,
+      details: `Kết thúc giáo án "${assignment.workoutNameSnapshot}" của member ${assignment.memberId}`,
+    }).catch((err) => console.error('Audit endWorkout failed:', err.message))
+
     const memberUser = await User.findById(assignment.memberId).select('name fullName').lean()
     const memberName = memberUser?.fullName || memberUser?.name || 'Hội viên'
 
@@ -612,7 +742,11 @@ export const endWorkout = async (req, res) => {
  */
 export const getMemberEnrollmentPreview = async (req, res) => {
   try {
-    const { memberId } = req.query
+    let { memberId } = req.query
+    // Member chỉ xem được enrollment của chính mình (chống IDOR)
+    if (req.user?.role === 'member') {
+      memberId = req.user._id
+    }
     if (!memberId) return res.status(400).json({ message: 'Thiếu memberId' })
 
     const currentEnrollment = await ClassEnrollment.findOne({ memberId, status: 'active' })
@@ -785,10 +919,10 @@ export const leaveMemberClass = async (req, res) => {
     const actorRole = req.user?.role
 
     // Nguồn duy nhất cho memberId:
-    // - Hội viên tự rời (role=member) → lấy từ JWT (req.user._id), không bắt frontend gửi.
+    // - Hội viên tự rời (role=member) → luôn lấy từ JWT (req.user._id), không nhận body.memberId (chống IDOR).
     // - PT/admin thao tác cho hội viên → body.memberId.
     let memberId = req.body.memberId
-    if (!memberId && actorRole === 'member') {
+    if (actorRole === 'member') {
       memberId = req.user?._id
     }
     const reason = req.body.reason

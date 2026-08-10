@@ -8,6 +8,8 @@ import Workout from '../models/Workout.js'
 import PTAssignmentEndRequest from '../models/PTAssignmentEndRequest.js'
 import ClassEnrollment from '../models/ClassEnrollment.js'
 import MembershipCycle from '../models/MembershipCycle.js'
+import TrainerSchedule from '../models/TrainerSchedule.js'
+import PT from '../models/PT.js'
 
 const nearestFutureDay = (startDate, targetDayOfWeek) => {
   const d = new Date(startDate)
@@ -141,6 +143,10 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
             _id: '$memberId',
             specialization: { $first: '$specialization' },
             goals: { $first: '$goals' },
+            timeSlots: { $first: '$timeSlots' },
+            daysOfWeek: { $first: '$daysOfWeek' },
+            daySlots: { $first: '$daySlots' },
+            weeks: { $first: '$weeks' },
             note: { $first: '$note' },
             contactPhone: { $first: '$contactPhone' },
             contactEmail: { $first: '$contactEmail' },
@@ -170,6 +176,10 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
       trainingRequestMap.set(String(tr._id), {
         specialization: tr.specialization,
         goals: tr.goals,
+        timeSlots: tr.timeSlots,
+        daysOfWeek: tr.daysOfWeek,
+        daySlots: tr.daySlots,
+        weeks: tr.weeks,
         note: tr.note,
         contactPhone: tr.contactPhone,
         contactEmail: tr.contactEmail,
@@ -186,6 +196,10 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
       const tr = trainingRequestMap.get(mid)
       a.specialization = tr?.specialization || ''
       a.goals = tr?.goals || []
+      a.requestTimeSlots = tr?.timeSlots || []
+      a.requestDaysOfWeek = tr?.daysOfWeek || []
+      a.requestDaySlots = tr?.daySlots || []
+      a.requestWeeks = tr?.weeks || 1
       a.requestNote = tr?.note || ''
       a.requestContactPhone = tr?.contactPhone || ''
       a.requestContactEmail = tr?.contactEmail || ''
@@ -462,8 +476,8 @@ export const createAssignment = async ({ memberId, ptId, membershipId, session }
 
   // BUSINESS RULE: 1 (memberId, ptId) pair can have AT MOST 1 active PTAssignment at a time.
   //  - If an active assignment exists for the SAME pair (memberId, ptId): reuse it (idempotent).
-  //  - If an active assignment exists for the SAME memberId but a DIFFERENT ptId: leave it
-  //    alone (member can have multiple PTs, e.g. PT for different specialization).
+  //  - If an active assignment exists for the SAME memberId but a DIFFERENT ptId: BLOCK.
+  //    (chính sách 1 member = 1 PT 1-1 active — đồng nhất với createRequest)
   //  - Note: any stale duplicate actives for the same (memberId, ptId) pair are cancelled
   //    here defensively to recover from legacy dup data.
   const existingSamePair = await PTAssignment.findOne({
@@ -484,6 +498,15 @@ export const createAssignment = async ({ memberId, ptId, membershipId, session }
       opts,
     )
     return existingSamePair
+  }
+
+  const existingOtherPt = await PTAssignment.findOne({
+    memberId, status: 'active', ptId: { $ne: ptId },
+  }).session(session || null)
+  if (existingOtherPt) {
+    const err = new Error('Hội viên này đã có PT phụ trách khác đang hoạt động. Không thể tạo phân công mới.')
+    err.statusCode = 409
+    throw err
   }
 
   const [assignment] = await PTAssignment.create([{
@@ -589,6 +612,50 @@ export const getSuggestedSlots = async ({ ptId }) => {
   }
 
   slots.sort((a, b) => a.dayOfWeek - b.dayOfWeek || (a.startTime || '').localeCompare(b.startTime || ''))
+
+  // FALLBACK: PT không dạy lớp nhóm nào → sinh slot từ lịch làm việc (TrainerSchedule).
+  // Chia ca làm việc thành các khung 1 giờ để PT 1-1 vẫn có khung giờ để chọn.
+  if (slots.length === 0) {
+    const SHIFT_RANGES = {
+      morning: { start: '06:00', end: '12:00' },
+      afternoon: { start: '12:00', end: '18:00' },
+      evening: { start: '18:00', end: '22:00' },
+    }
+    const toMin = (t) => {
+      const [h, m] = String(t).split(':').map(Number)
+      return h * 60 + (m || 0)
+    }
+    const fmt = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+
+    const windows = await TrainerSchedule.find({ trainerId: ptId, status: 'active' }).lean()
+    const seen = new Set()
+    for (const ts of windows) {
+      const range = SHIFT_RANGES[ts.shift] || {}
+      const start = toMin(ts.startTime || range.start)
+      const end = toMin(ts.endTime || range.end)
+      for (let m = start; m + 60 <= end; m += 60) {
+        const key = `${ts.dayOfWeek}-${m}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        slots.push({
+          classId: null,
+          dayOfWeek: ts.dayOfWeek,
+          dayLabel: DAY_LABELS[ts.dayOfWeek] || `Day ${ts.dayOfWeek}`,
+          startTime: fmt(m),
+          endTime: fmt(m + 60),
+          time: `${fmt(m)} - ${fmt(m + 60)}`,
+          className: '',
+          classCode: '',
+          specialization: '',
+          count: 0,
+          maxCapacity: 0,
+          isFull: false,
+        })
+      }
+    }
+    slots.sort((a, b) => a.dayOfWeek - b.dayOfWeek || (a.startTime || '').localeCompare(b.startTime || ''))
+  }
+
   return slots
 }
 
@@ -599,11 +666,13 @@ export const getSuggestedSlots = async ({ ptId }) => {
 export const getMemberTrainingPreferences = async ({ memberId }) => {
   const request = await TrainingRequest.findOne(
     { memberId, status: { $in: ['assigned', 'pending'] } },
-  ).sort({ createdAt: -1 }).select('timeSlots daysOfWeek specialization goals desiredSessions healthNotes isNewToGym note').lean()
+  ).sort({ createdAt: -1 }).select('daySlots timeSlots daysOfWeek weeks specialization goals desiredSessions healthNotes isNewToGym note').lean()
 
   return {
+    daySlots: request?.daySlots || [],
     timeSlots: request?.timeSlots || [],
     daysOfWeek: request?.daysOfWeek || [],
+    weeks: request?.weeks || 1,
     specialization: request?.specialization || '',
     goals: request?.goals || [],
     desiredSessions: request?.desiredSessions ?? 0,
@@ -697,6 +766,15 @@ export const cancelAssignment = async ({ memberId, session, reason = 'Gói tập
 // === NEW: Request/Accept/Decline/BulkRelease ===
 
 export const requestClassAssignment = async ({ classId, trainerId, assignedBy }) => {
+  // BR-04: chỉ gán PT đã được cấu hình giá đặt lịch nhóm (groupPrice > 0)
+  const ptProfile = await PT.findOne({ userId: trainerId }).lean()
+  const groupPrice = ptProfile?.groupPrice || 0
+  if (!groupPrice || groupPrice <= 0) {
+    const err = new Error('PT này chưa được cấu hình giá đặt lịch nhóm. Vui lòng cấu hình giá trước khi xếp lớp.')
+    err.statusCode = 400
+    throw err
+  }
+
   // Atomic: chỉ cập nhật nếu class đang waiting_pt
   const result = await TrainingClass.findOneAndUpdate(
     { _id: classId, status: 'waiting_pt' },

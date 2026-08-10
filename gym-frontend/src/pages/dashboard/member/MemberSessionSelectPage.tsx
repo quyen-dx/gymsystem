@@ -39,17 +39,23 @@ export default function MemberSessionSelectPage() {
 
   useEffect(() => { fetchSessions() }, [fetchSessions])
 
-  const handleCheckin = async (scheduleId?: string, sessionIndex?: number) => {
+  const handleCheckin = async (s: { scheduleId?: string; sessionIndex?: number; bookingId?: string }) => {
     if (!token) return
     setSubmitting(true)
     try {
       const body: any = { token }
-      if (scheduleId && scheduleId !== 'free') {
-        body.scheduleId = scheduleId
-        body.sessionIndex = sessionIndex
+      if (s.bookingId) {
+        body.bookingId = s.bookingId
+      } else if (s.scheduleId) {
+        body.scheduleId = s.scheduleId
+        body.sessionIndex = s.sessionIndex
       }
       const res = await checkInService.submitDailyQRCheckin(body)
-      message.success(res.data.message || 'Check-in thành công!')
+      const info = res.data.checkin
+      const resolvedNote = info?.sessionType === 'SCHEDULED'
+        ? `Đã check-in buổi theo lịch: ${info.sessionTitle || 'Theo lịch'}${info.sessionTime ? ` (${info.sessionTime})` : ''}`
+        : 'Đã check-in tập tự do (không có lịch hợp lệ tại thời điểm này).'
+      message.success(info?.sessionType === 'SCHEDULED' ? `Check-in thành công! ${resolvedNote}` : `Check-in thành công! ${resolvedNote}`)
       fetchSessions()
     } catch (err: any) {
       const data = err?.response?.data || {}
@@ -146,6 +152,9 @@ export default function MemberSessionSelectPage() {
                         [{s.classCode}] {s.className}
                       </Tag>
                     )}
+                    {s.source === 'booking' && !s.classCode && (
+                      <Tag className="mt-1" color="volcano">PT đã đặt lịch</Tag>
+                    )}
                   </div>
                   <div className="ml-3 flex-shrink-0">
                     {s.alreadyCheckedIn ? (
@@ -155,7 +164,7 @@ export default function MemberSessionSelectPage() {
                       </div>
                     ) : (
                       <Button type="primary" size="small"
-                        onClick={() => handleCheckin(s.scheduleId, s.sessionIndex)}
+                        onClick={() => handleCheckin(s)}
                         loading={submitting}
                       >
                         Check-in
@@ -176,7 +185,9 @@ export default function MemberSessionSelectPage() {
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-[var(--gs-text)]">Tập tự do</div>
-                  <div className="text-sm text-[var(--gs-text-muted)]">Không theo lịch PT</div>
+                  <div className="text-sm text-[var(--gs-text-muted)]">
+                    Không có lịch trong khung giờ này (hệ thống tự nhận diện buổi theo lịch nếu có)
+                  </div>
                 </div>
                 <div className="ml-3 flex-shrink-0">
                   {freeCheckedIn ? (
@@ -185,7 +196,7 @@ export default function MemberSessionSelectPage() {
                       <div className="text-xs text-[var(--gs-text-muted)] mt-1">Đã check-in</div>
                     </div>
                   ) : (
-                    <Button onClick={() => handleCheckin('free')} loading={submitting}>
+                    <Button onClick={() => handleCheckin({})} loading={submitting}>
                       Check-in
                     </Button>
                   )}

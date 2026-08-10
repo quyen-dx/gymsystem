@@ -1,11 +1,15 @@
 import crypto from 'crypto'
+import mongoose from 'mongoose'
 import DailyQRCode from '../models/DailyQRCode.js'
 import ClassEnrollment from '../models/ClassEnrollment.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import CheckIn from '../models/CheckIn.js'
+import Booking from '../models/Booking.js'
 import MembershipCycle from '../models/MembershipCycle.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
+import { calculateStreak, isAfterCheckinCutoff, CHECKIN_CUTOFF_MESSAGE } from './checkInController.js'
+import { resolveCheckinSession } from '../services/checkinSessionResolver.js'
 
 function startOfDay(date) {
   const d = new Date(date)
@@ -17,14 +21,6 @@ function endOfDay(date) {
   const d = new Date(date)
   d.setHours(23, 59, 59, 999)
   return d
-}
-
-/**
- * Parse "HH:MM" string to total minutes from midnight.
- */
-function parseTime(timeStr) {
-  const [h, m] = timeStr.split(':').map(Number)
-  return h * 60 + (m || 0)
 }
 
 /**
@@ -103,15 +99,15 @@ export const verifyDailyQRAndGetSessions = async (req, res) => {
     const today = startOfDay(new Date())
     const eod = endOfDay(today)
 
-    const qrCode = await DailyQRCode.findOne({ token, isActive: true }).lean()
+    const qrCode = await DailyQRCode.findOne({ token }).lean()
 
     if (!qrCode) {
       return res.status(400).json({ message: 'Mã QR không hợp lệ.' })
     }
 
-    if (qrCode.expiresAt < now) {
+    if (qrCode.expiresAt < now || !qrCode.isActive) {
       return res.status(400).json({
-        message: 'Mã QR này đã hết hạn, vui lòng quét mã QR mới được trình chiếu tại phòng gym.',
+        message: 'Mã QR này đã hết hạn hoặc đã được thay thế. Vui lòng quét mã QR mới được trình chiếu tại phòng gym.',
       })
     }
 
@@ -159,6 +155,9 @@ export const verifyDailyQRAndGetSessions = async (req, res) => {
         const sDate = startOfDay(new Date(s.date))
         if (sDate.getTime() !== today.getTime()) continue
 
+        // Chỉ hiển thị buổi chưa diễn ra (không cho check-in buổi đã completed/skipped/cancelled/no_show)
+        if (s.status !== 'pending') continue
+
         const alreadyCheckedIn = await CheckIn.exists({
           memberId,
           scheduleId: schedule._id,
@@ -184,10 +183,43 @@ export const verifyDailyQRAndGetSessions = async (req, res) => {
       }
     }
 
+    // Buổi PT 1-1 / PT nhóm đã confirmed + thanh toán trong hôm nay (liên kết Booking)
+    const bookings = await Booking.find({
+      memberId,
+      date: { $gte: today, $lte: eod },
+      status: 'confirmed',
+      paymentStatus: 'paid',
+    }).lean()
+    for (const b of bookings) {
+      const [time, endTime] = String(b.slot || '').split('-')
+      const alreadyCheckedIn = await CheckIn.exists({
+        memberId,
+        bookingId: b._id,
+        status: 'success',
+      })
+      sessions.push({
+        source: 'booking',
+        bookingId: b._id,
+        ptId: b.ptId,
+        scheduleId: null,
+        sessionIndex: null,
+        date: b.date,
+        time: time || null,
+        endTime: endTime || null,
+        title: b.trainingType === 'group' ? 'Buổi tập nhóm (PT)' : 'Buổi PT 1-1',
+        className: null,
+        classCode: null,
+        muscleGroup: null,
+        location: null,
+        alreadyCheckedIn: !!alreadyCheckedIn,
+        checkedInAt: null,
+      })
+    }
+
     // Also check if already checked in as free workout today
     const freeCheckedIn = await CheckIn.findOne({
       memberId,
-      sessionType: 'free_workout',
+      sessionType: 'FREE_TRAINING',
       checkinSource: 'daily_qr',
       sessionDate: { $gte: today, $lte: eod },
       status: 'success',
@@ -216,27 +248,38 @@ export const verifyDailyQRAndGetSessions = async (req, res) => {
 
 /**
  * Member: Submit check-in for a selected session (or free workout).
+ * Toàn bộ logic nằm trong transaction để chống race TOCTOU (check trùng bên trong transaction).
  */
 export const submitDailyQRCheckin = async (req, res) => {
+  const mongoSession = await mongoose.startSession()
   try {
-    const { token, scheduleId, sessionIndex } = req.body
-    const isFreeWorkout = !scheduleId || scheduleId === 'free'
+    mongoSession.startTransaction()
+
+    const { token, scheduleId, sessionIndex, bookingId } = req.body
+    const isFreeWorkout = !scheduleId && !bookingId || scheduleId === 'free'
     const memberId = req.user._id
     const now = new Date()
     const today = startOfDay(now)
     const eod = endOfDay(today)
 
-    // Check if already checked in today by any method (QR, staff, reception, auto)
+    // Quy tắc nghiệp vụ: check-in sau 23:00 (giờ Việt Nam) sẽ không được tính
+    if (isAfterCheckinCutoff()) {
+      await mongoSession.abortTransaction()
+      return res.status(400).json({ message: CHECKIN_CUTOFF_MESSAGE })
+    }
+
+    // Check-in toàn cục 1 lần/ngày (mọi phương thức) — check BÊN TRONG transaction (chống bấm đúp song song)
     const todayCheckin = await CheckIn.findOne({
       memberId,
       checkinTime: { $gte: today, $lte: eod },
       status: 'success',
-    }).lean()
+    }).session(mongoSession).lean()
 
     if (todayCheckin) {
       const checkinTime = new Date(todayCheckin.checkinTime).toLocaleTimeString('vi-VN', {
         hour: '2-digit', minute: '2-digit',
       })
+      await mongoSession.abortTransaction()
       return res.status(400).json({
         message: `Bạn đã check-in hôm nay lúc ${checkinTime}.`,
         alreadyCheckedIn: true,
@@ -244,12 +287,16 @@ export const submitDailyQRCheckin = async (req, res) => {
     }
 
     // Validate QR token
-    const qrCode = await DailyQRCode.findOne({ token, isActive: true }).lean()
+    const qrCode = await DailyQRCode.findOne({ token }).lean()
     if (!qrCode) {
+      await mongoSession.abortTransaction()
       return res.status(400).json({ message: 'Mã QR không hợp lệ.' })
     }
-    if (qrCode.expiresAt < now) {
-      return res.status(400).json({ message: 'Mã QR đã hết hạn.' })
+    if (qrCode.expiresAt < now || !qrCode.isActive) {
+      await mongoSession.abortTransaction()
+      return res.status(400).json({
+        message: 'Mã QR này đã hết hạn hoặc đã được thay thế. Vui lòng quét mã QR mới được trình chiếu tại phòng gym.',
+      })
     }
 
     // Kiểm tra gói tập đang hoạt động (cycle active, kích hoạt ngay sau thanh toán)
@@ -257,8 +304,20 @@ export const submitDailyQRCheckin = async (req, res) => {
       memberId,
       status: 'active',
       expiresAt: { $gte: now },
-    }).populate('currentPlanId', 'nameVi nameEn price').lean()
+    }).populate('currentPlanId', 'nameVi nameEn price').session(mongoSession).lean()
     if (!activeCycle) {
+      // Ghi nhận lượt check-in thất bại (phục vụ báo cáo lễ tân) — commit để lưu vết này
+      await CheckIn.create([{
+        memberId,
+        staffId: null,
+        checkinTime: now,
+        status: 'failed',
+        errorNote: 'Gói tập đã hết hạn',
+        checkInMethod: 'QR_SELF',
+        checkinSource: 'daily_qr',
+        dailyQRCodeId: qrCode._id,
+      }], { session: mongoSession })
+      await mongoSession.commitTransaction()
       return res.status(403).json({ message: 'Gói tập đã hết hạn hoặc không còn hiệu lực. Vui lòng gia hạn.' })
     }
 
@@ -269,137 +328,92 @@ export const submitDailyQRCheckin = async (req, res) => {
       planPrice: Number(activePlan.price || 0),
     }
 
-    if (!isFreeWorkout) {
-      // === SCHEDULED SESSION CHECK-IN ===
+    // Streak hiện tại + 1 (P2: luồng daily QR trước đây không lưu streakDay)
+    const streakDay = (await calculateStreak(memberId)) + 1
 
-      // 1. Validate scheduleId + sessionIndex
-      const schedule = await WorkoutSchedule.findOne({
-        _id: scheduleId,
-        memberId,
-        status: 'active',
-      }).lean()
+    // === BACKEND QUYẾT ĐỊNH CUỐI CÙNG: SCHEDULED hay FREE_TRAINING ===
+    // Client chỉ gợi ý (scheduleId/sessionIndex/bookingId); nếu gợi ý không hợp lệ
+    // hoặc không có lịch hợp lệ tại thời điểm check-in → FREE_TRAINING.
+    const resolved = await resolveCheckinSession({
+      memberId,
+      now,
+      clientScheduleId: isFreeWorkout ? undefined : scheduleId,
+      clientSessionIndex: isFreeWorkout ? undefined : Number(sessionIndex),
+      clientBookingId: bookingId,
+    })
 
-      if (!schedule) {
-        return res.status(400).json({ message: 'Không tìm thấy lịch tập phù hợp.' })
-      }
-
-      const session = schedule.sessions?.[sessionIndex]
-      if (!session || !session.date) {
-        return res.status(400).json({ message: 'Buổi tập không hợp lệ.' })
-      }
-
-      const sessionDate = startOfDay(new Date(session.date))
-      if (sessionDate.getTime() !== today.getTime()) {
-        return res.status(400).json({ message: 'Buổi tập không thuộc ngày hôm nay.' })
-      }
-
-      // 2. Validate time window
-      if (session.time && session.endTime) {
-        const nowMinutes = now.getHours() * 60 + now.getMinutes()
-        const startMinutes = parseTime(session.time)
-        const endMinutes = parseTime(session.endTime)
-        const windowStart = startMinutes - 30
-
-        if (nowMinutes < windowStart || nowMinutes > endMinutes) {
-          return res.status(400).json({
-            message: `Buổi tập này diễn ra từ ${session.time} đến ${session.endTime}. Thời điểm hiện tại không nằm trong khung giờ cho phép. Vui lòng chọn "Tập tự do" thay thế.`,
-            suggestFreeWorkout: true,
-          })
-        }
-      }
-
-      // 3. Prevent duplicate
-      const existing = await CheckIn.findOne({
-        memberId,
-        scheduleId,
-        sessionDate: session.date,
-        sessionIndex,
-        status: 'success',
-      }).lean()
-
-      if (existing) {
-        const checkinTime = new Date(existing.checkinTime).toLocaleTimeString('vi-VN', {
-          hour: '2-digit', minute: '2-digit',
-        })
-        return res.status(400).json({
-          message: `Bạn đã check-in buổi này rồi lúc ${checkinTime}.`,
-          alreadyCheckedIn: true,
-        })
-      }
-
-      // 5. Create check-in record
-      const checkin = await CheckIn.create({
-        memberId,
-        staffId: null,
-        checkinTime: now,
-        status: 'success',
-        ...planSnapshot,
-        dailyQRCodeId: qrCode._id,
-        scheduleId: schedule._id,
-        sessionDate: session.date,
-        sessionTitle: session.title || null,
-        sessionTime: session.time && session.endTime ? `${session.time}-${session.endTime}` : null,
-        sessionIndex,
-        classCode: session.classCode || null,
-        checkinSource: 'daily_qr',
-        sessionType: 'scheduled',
+    // Chống duplicate theo đúng thực thể được nhận diện (nếu có)
+    const duplicateFilter = resolved?.bookingId
+      ? { memberId, bookingId: resolved.bookingId, status: 'success' }
+      : resolved?.scheduleId
+        ? { memberId, scheduleId: resolved.scheduleId, sessionDate: resolved.sessionDate, sessionIndex: resolved.sessionIndex, status: 'success' }
+        : { memberId, sessionType: 'FREE_TRAINING', checkinSource: 'daily_qr', sessionDate: { $gte: today, $lte: eod }, status: 'success' }
+    const existingCheckin = await CheckIn.findOne(duplicateFilter).session(mongoSession).lean()
+    if (existingCheckin) {
+      const checkinTime = new Date(existingCheckin.checkinTime).toLocaleTimeString('vi-VN', {
+        hour: '2-digit', minute: '2-digit',
       })
-
-      res.json({
-        message: 'Check-in thành công.',
-        checkin: {
-          _id: checkin._id,
-          checkinTime: checkin.checkinTime,
-          sessionTitle: session.title || null,
-          sessionTime: session.time && session.endTime ? `${session.time}-${session.endTime}` : null,
-          classCode: session.classCode || null,
-          sessionType: 'scheduled',
-        },
-      })
-    } else {
-      // === FREE WORKOUT CHECK-IN ===
-
-      // Check if already checked in as free workout today
-      const existingFree = await CheckIn.findOne({
-        memberId,
-        sessionType: 'free_workout',
-        checkinSource: 'daily_qr',
-        sessionDate: { $gte: today, $lte: eod },
-        status: 'success',
-      }).lean()
-
-      if (existingFree) {
-        const checkinTime = new Date(existingFree.checkinTime).toLocaleTimeString('vi-VN', {
-          hour: '2-digit', minute: '2-digit',
-        })
-        return res.status(400).json({
-          message: `Bạn đã check-in "Tập tự do" hôm nay lúc ${checkinTime}.`,
-          alreadyCheckedIn: true,
-        })
-      }
-
-      const checkin = await CheckIn.create({
-        memberId,
-        staffId: null,
-        checkinTime: now,
-        status: 'success',
-        ...planSnapshot,
-        dailyQRCodeId: qrCode._id,
-        sessionDate: today,
-        sessionType: 'free_workout',
-        checkinSource: 'daily_qr',
-      })
-
-      res.json({
-        message: 'Check-in thành công.',
-        checkin: {
-          _id: checkin._id,
-          checkinTime: checkin.checkinTime,
-          sessionType: 'free_workout',
-        },
+      await mongoSession.abortTransaction()
+      return res.status(400).json({
+        message: resolved
+          ? `Bạn đã check-in buổi này rồi lúc ${checkinTime}.`
+          : `Bạn đã check-in "Tập tự do" hôm nay lúc ${checkinTime}.`,
+        alreadyCheckedIn: true,
       })
     }
+
+    // Tạo ĐÚNG 1 bản ghi check-in cho 1 lần check-in.
+    // SCHEDULED: liên kết đầy đủ (WorkoutSchedule / Booking / PT / Class nếu có).
+    // FREE_TRAINING: KHÔNG liên kết gì, KHÔNG tạo Booking/WorkoutSchedule, KHÔNG tính là hoàn thành buổi PT.
+    const checkin = await CheckIn.create([{
+      memberId,
+      staffId: null,
+      checkinTime: now,
+      status: 'success',
+      ...planSnapshot,
+      streakDay,
+      dailyQRCodeId: qrCode._id,
+      checkinSource: 'daily_qr',
+      sessionType: resolved ? 'SCHEDULED' : 'FREE_TRAINING',
+      sessionDate: resolved ? resolved.sessionDate : today,
+      scheduleId: resolved?.scheduleId || null,
+      sessionIndex: resolved?.sessionIndex ?? undefined,
+      sessionTitle: resolved?.sessionTitle || null,
+      sessionTime: resolved?.sessionTime || null,
+      classCode: resolved?.classCode || null,
+      bookingId: resolved?.bookingId || null,
+      ptId: resolved?.ptId || null,
+    }], { session: mongoSession })
+
+    await mongoSession.commitTransaction()
+
+    res.json({
+      message: resolved
+        ? `Check-in thành công — buổi theo lịch: ${resolved.sessionTitle || 'Theo lịch'}${resolved.sessionTime ? ` (${resolved.sessionTime})` : ''}.`
+        : 'Check-in thành công — Tập tự do (không có lịch hợp lệ tại thời điểm này).',
+      checkin: {
+        _id: checkin[0]._id,
+        checkinTime: checkin[0].checkinTime,
+        sessionType: checkin[0].sessionType,
+        sessionTitle: checkin[0].sessionTitle || null,
+        sessionTime: checkin[0].sessionTime || null,
+        classCode: checkin[0].classCode || null,
+        scheduleId: checkin[0].scheduleId || null,
+        bookingId: checkin[0].bookingId || null,
+        ptId: checkin[0].ptId || null,
+        sessionDate: checkin[0].sessionDate || null,
+        streakDay: checkin[0].streakDay,
+      },
+    })
   } catch (error) {
+    if (mongoSession) {
+      try { await mongoSession.abortTransaction() } catch {}
+      mongoSession.endSession()
+    }
     res.status(500).json({ message: error.message })
+  } finally {
+    if (mongoSession) {
+      mongoSession.endSession()
+    }
   }
 }

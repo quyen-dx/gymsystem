@@ -54,8 +54,15 @@ import reportRoutes from "./src/routes/reportRoutes.js"
 import notificationRoutes from "./src/routes/notificationRoutes.js"
 import aiRoutes from './src/routes/aiRoutes.js'
 import visionRoutes from './src/routes/visionRoutes.js'
+import ptPriceRoutes from './src/routes/ptPriceRoutes.js'
 import { initSocketIO } from './src/services/socketService.js'
 import { runStartupTasks } from './src/config/startupTasks.js'
+import { startPtConfirmationTimeoutJob } from './src/jobs/ptConfirmationTimeout.js'
+import { startPtPaymentTimeoutJob } from './src/jobs/ptPaymentTimeout.js'
+import { startPtAdminTimeoutJob } from './src/jobs/ptAdminTimeout.js'
+import { startPaymentExpiryJob } from './src/jobs/paymentExpiry.js'
+import { startNoShowSweeperJob } from './src/jobs/noShowSweeper.js'
+import { startMembershipCron } from './src/jobs/membershipCron.js'
 
 const app = express()
 const allowedOrigins = [...new Set([
@@ -142,6 +149,7 @@ app.use("/api/admin/reports", reportRoutes)
 app.use("/api/notifications", notificationRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/ai', visionRoutes)
+app.use('/api/pt-prices', ptPriceRoutes)
 
 app.get('/api/system/status', (_req, res) => {
   res.json({
@@ -183,6 +191,16 @@ initSocketIO(httpServer)
 connectDB()
   .then(async () => {
     await runStartupTasks()
+    // Thu hồi phân công khi PT không phản hồi yêu cầu PT 1-1 trong 48h
+    startPtConfirmationTimeoutJob()
+    startPtPaymentTimeoutJob()
+    startPtAdminTimeoutJob()
+    // Đóng Payment VNPay PENDING hết hạn (member mở cổng rồi bỏ giữa chừng)
+    startPaymentExpiryJob()
+    // Chốt kết quả buổi PT (completed / member_no_show) khi PT không ghi nhận
+    startNoShowSweeperJob()
+    // Membership: kích hoạt kỳ gia hạn đúng ngày + nhắc hết hạn 7D/1D
+    startMembershipCron()
     httpServer.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`)
     })

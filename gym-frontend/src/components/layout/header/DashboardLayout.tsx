@@ -6,11 +6,12 @@ import {
   CreditCardOutlined,
   DashboardOutlined,
   FileTextOutlined,
+  FolderOpenOutlined,
   HomeOutlined,
   LogoutOutlined,
   MenuOutlined,
+  MoneyCollectOutlined,
   QuestionCircleOutlined,
-  SettingOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
   TeamOutlined,
@@ -163,7 +164,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       notificationService.getMyNotifications()
         .then((res) => {
           const data = res.data.data || []
-          setPendingNotificationCount(data.filter((n: any) => !n.isRead).length)
+          setPendingNotificationCount(data.filter((n: { isRead?: boolean }) => !n.isRead).length)
         })
         .catch(() => { })
     }
@@ -173,7 +174,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     // Socket: lắng nghe notification mới
     socketService.connect()
-    const handler = (_notification: any) => {
+    const handler = () => {
       setPendingNotificationCount((prev) => prev + 1)
     }
     socketService.on('notification:new', handler)
@@ -200,7 +201,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </span>
   )
 
-  const roleMenus: Record<string, any[]> = {
+  type RoleMenuItem = {
+    key: string
+    label: React.ReactNode
+    icon?: React.ReactNode
+    hidden?: boolean
+  }
+
+  const roleMenus: Record<string, RoleMenuItem[]> = {
     admin: [
       { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
       { key: '/admin', label: 'Tổng quan', icon: <DashboardOutlined /> },
@@ -287,6 +295,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ...(isEnabled('pt.moduleEnabled') ? [
         { key: '/pt/clients', label: 'Khách hàng', icon: <TeamOutlined /> },
         { key: '/pt/workouts', label: 'Thư viện giáo án', icon: <FileTextOutlined /> },
+        { key: '/pt/my-workouts', label: 'Giáo án của tôi', icon: <FolderOpenOutlined /> },
       ] : []),
       { key: '/pt/notifications', label: badgeLabel('Thông báo', pendingNotificationCount), icon: <BellOutlined /> },
     ],

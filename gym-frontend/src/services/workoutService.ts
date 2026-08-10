@@ -92,6 +92,7 @@ export type WorkoutPlan = {
   days?: TemplateDay[]
   isTemplate?: boolean
   status?: 'active' | 'completed' | 'archived'
+  visibility?: 'private' | 'public'
   createdAt?: string
   updatedAt?: string
 }
@@ -111,12 +112,18 @@ export type WorkoutPlanPayload = {
   days?: TemplateDay[]
   isTemplate?: boolean
   status?: 'active' | 'completed' | 'archived'
+  visibility?: 'private' | 'public'
 }
 
 export type ScheduleExercise = {
   name: string
   note?: string
   completed?: boolean
+  // Kết quả thực hiện do PT ghi nhận
+  setsDone?: number
+  repsDone?: number
+  weightUsed?: number
+  durationMin?: number
 }
 
 export type ScheduleSession = {
@@ -130,8 +137,19 @@ export type ScheduleSession = {
   title: string
   muscleGroup: string
   exercises: ScheduleExercise[]
-  status: 'pending' | 'completed' | 'skipped'
+  status: 'pending' | 'completed' | 'skipped' | 'cancelled' | 'no_show'
   feedback: string
+  performance?: '' | 'excellent' | 'good' | 'average' | 'below_average' | 'poor'
+  completedAt?: string | null
+  changeHistory?: Array<{
+    action: string
+    from?: unknown
+    to?: unknown
+    reason?: string
+    by?: string
+    byRole?: string
+    at?: string
+  }>
 }
 
 export type SessionFeedback = {
@@ -186,6 +204,7 @@ export type LibraryWorkout = {
   weeks: WorkoutWeek[]
   days?: TemplateDay[]
   isTemplate?: boolean
+  visibility?: 'private' | 'public'
   createdAt?: string
   updatedAt?: string
 }
@@ -228,7 +247,7 @@ export type ImprovementRequest = {
 
 export type WorkoutReport = {
   _id: string
-  workoutTemplateId: string | { _id: string; name: string; goal?: string; specializationId?: string; ptId?: any; templateStatus?: string }
+  workoutTemplateId: string | { _id: string; name: string; goal?: string; specializationId?: string; ptId?: string | { _id: string; name?: string; fullName?: string }; templateStatus?: string }
   reporterTrainerId: string | { _id: string; name?: string; fullName?: string; email?: string; avatar?: string }
   reason: string
   detail: string
@@ -335,11 +354,11 @@ export const workoutService = {
   },
 
   getWorkoutReports(params?: { status?: string; page?: number; limit?: number }) {
-    return api.get<{ reports: WorkoutReport[]; pagination: any }>('/workout-reports', { params })
+    return api.get<{ reports: WorkoutReport[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>('/workout-reports', { params })
   },
 
   getReportSummary() {
-    return api.get<{ summary: any[] }>('/workout-reports/summary')
+    return api.get<{ summary: Array<Record<string, unknown>> }>('/workout-reports/summary')
   },
 
   resolveReport(id: string, data?: { action?: string; resolution?: string }) {

@@ -8,11 +8,11 @@ import {
   handleDeleteNotification,
   getUnreadCount,
 } from '../controllers/notificationController.js'
-import { protect } from '../middlewares/authMiddleware.js'
+import { adminOrStaff, protect } from '../middlewares/authMiddleware.js'
 
 const router = express.Router()
 
-router.post('/send', protect, sendNotification)
+router.post('/send', protect, adminOrStaff, sendNotification)
 router.get('/my', protect, getMyNotifications)
 router.get('/unread-count', protect, getUnreadCount)
 router.put('/read-all', protect, handleMarkAllAsRead)

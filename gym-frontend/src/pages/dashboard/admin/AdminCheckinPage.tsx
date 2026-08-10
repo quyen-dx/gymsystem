@@ -195,15 +195,15 @@ function HistoryTab() {
     {
       title: 'Loại', dataIndex: 'sessionType', key: 'sessionType', width: 140,
       render: (t: string) => {
-        if (t === 'scheduled') return <Tag color="blue">Theo lịch</Tag>
-        if (t === 'free_workout') return <Tag color="green">Tập tự do</Tag>
+        if (t === 'SCHEDULED') return <Tag color="blue">Theo lịch</Tag>
+        if (t === 'FREE_TRAINING') return <Tag color="green">Tập tự do</Tag>
         return <Tag color="default">QR Staff</Tag>
       },
     },
     {
       title: 'Buổi tập', key: 'session', width: 200,
       render: (_: any, r: any) => (
-        r.sessionType === 'scheduled' ? (
+        r.sessionType === 'SCHEDULED' ? (
           <div>
             <div className="text-sm font-medium">{r.sessionTitle || '-'}</div>
             <div className="text-xs text-[var(--gs-text-muted)]">
@@ -248,8 +248,8 @@ function HistoryTab() {
           <Select className="w-full" value={sessionType} onChange={(v) => setSessionType(v)}
             options={[
               { value: '', label: 'Tất cả' },
-              { value: 'scheduled', label: 'Theo lịch cụ thể' },
-              { value: 'free_workout', label: 'Tập tự do' },
+              { value: 'SCHEDULED', label: 'Theo lịch cụ thể' },
+              { value: 'FREE_TRAINING', label: 'Tập tự do' },
             ]}
           />
         </div>

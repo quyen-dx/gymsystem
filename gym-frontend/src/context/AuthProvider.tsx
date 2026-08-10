@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = async (payload: LoginPayload) => {
     const { data } = await authService.login(payload)
-    setAuthToken(data.accessToken)
+    setAuthToken(data.accessToken, data.refreshToken)
     startRefreshScheduler()
     try {
       const freshUser = await refreshUser()

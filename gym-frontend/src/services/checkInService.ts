@@ -30,8 +30,11 @@ export const checkInService = {
       enrollment: { classId: string; classCode: string; className: string } | null
       sessionDate: string
       sessions: Array<{
-        scheduleId: string
-        sessionIndex: number
+        source?: 'schedule' | 'booking'
+        scheduleId: string | null
+        sessionIndex: number | null
+        bookingId: string | null
+        ptId: string | null
         date: string
         time: string | null
         endTime: string | null
@@ -46,8 +49,23 @@ export const checkInService = {
       freeWorkoutCheckedIn: { checkedInAt: string } | null
     }>('/checkin/daily-qr/verify', { token }),
 
-  submitDailyQRCheckin: (data: { token: string; scheduleId?: string; sessionIndex?: number }) =>
-    api.post<{ message: string; checkin: any }>('/checkin/daily-qr/checkin', data),
+  submitDailyQRCheckin: (data: { token: string; scheduleId?: string; sessionIndex?: number; bookingId?: string }) =>
+    api.post<{
+      message: string
+      checkin: {
+        _id: string
+        checkinTime: string
+        sessionType: 'SCHEDULED' | 'FREE_TRAINING'
+        sessionTitle: string | null
+        sessionTime: string | null
+        classCode: string | null
+        scheduleId: string | null
+        bookingId: string | null
+        ptId: string | null
+        sessionDate: string | null
+        streakDay: number
+      }
+    }>('/checkin/daily-qr/checkin', data),
 
   getMyCheckinHistory: (params?: Record<string, any>) =>
     api.get<{ checkins: any[]; pagination: any }>('/checkin/my-history', { params }),

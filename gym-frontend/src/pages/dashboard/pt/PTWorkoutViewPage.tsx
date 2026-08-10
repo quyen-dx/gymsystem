@@ -18,7 +18,7 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 const getName = (v: unknown): string => {
   if (!v) return '-'
   if (typeof v === 'string') return v
-  return getUserDisplayName(v as any, '-')
+  return getUserDisplayName(v as { fullName?: string | null; displayName?: string | null; name?: string | null; username?: string | null; email?: string | null }, '-')
 }
 
 export default function PTWorkoutViewPage() {
@@ -27,7 +27,7 @@ export default function PTWorkoutViewPage() {
   const { user } = useAuth()
   const [workout, setWorkout] = useState<LibraryWorkout | null>(null)
   const [loading, setLoading] = useState(true)
-  const [assignments, setAssignments] = useState<any[]>([])
+  const [assignments, setAssignments] = useState<unknown[]>([])
 
   const userId = user?._id
 
@@ -41,8 +41,9 @@ export default function PTWorkoutViewPage() {
 
       const assignRes = await workoutService.getWorkoutAssignments(id)
       setAssignments(assignRes.data?.assignments || [])
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Không thể tải chi tiết giáo án')
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } } }
+      message.error(e?.response?.data?.message || 'Không thể tải chi tiết giáo án')
     } finally {
       setLoading(false)
     }
@@ -81,8 +82,8 @@ export default function PTWorkoutViewPage() {
   return (
     <DashboardLayout>
       <div className="mb-6">
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/pt/workouts')}>
-          Quay lại thư viện
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(isOwner() ? '/pt/my-workouts' : '/pt/workouts')}>
+          Quay lại
         </Button>
       </div>
 

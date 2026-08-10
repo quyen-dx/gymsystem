@@ -4,7 +4,8 @@ import {
   EditOutlined,
   ExclamationCircleOutlined,
   EyeOutlined,
-  PlusOutlined,
+  GlobalOutlined,
+  LockOutlined,
   ReloadOutlined,
   SearchOutlined,
   SendOutlined,
@@ -35,7 +36,9 @@ import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { getUserDisplayName } from '../../../utils/userDisplay'
 import {
   workoutService,
+  type LibraryQuery,
   type LibraryWorkout,
+  type WorkoutPlanPayload,
 } from '../../../services/workoutService'
 import { useAuth } from '../../../hooks/useAuth'
 import { SPECIALIZATION_OPTIONS } from '../../../services/trainingGroupService'
@@ -162,36 +165,10 @@ function ReportModal({
   )
 }
 
-function AssignModal({
-  open,
-  workout,
-  onClose,
-  onSelectMember,
-}: {
-  open: boolean
-  workout: LibraryWorkout | null
-  onClose: () => void
-  onSelectMember: (memberId: string) => void
-}) {
-  return (
-    <Modal
-      title={`Gán giáo án cho hội viên`}
-      open={open}
-      onCancel={onClose}
-      footer={null}
-    >
-      <p className="mb-3 text-sm text-[var(--gs-text-muted)]">
-        Chọn hội viên để gán giáo án <strong>{workout?.workoutName || workout?.name}</strong>.
-        Vui lòng vào mục Khách hàng để chọn hội viên và gán giáo án.
-      </p>
-    </Modal>
-  )
-}
-
 const getName = (v: unknown): string => {
   if (!v) return '-'
   if (typeof v === 'string') return v
-  return getUserDisplayName(v as any, '-')
+  return getUserDisplayName(v as { fullName?: string | null; displayName?: string | null; name?: string | null; username?: string | null; email?: string | null }, '-')
 }
 
 export default function PTWorkoutsPage() {
@@ -218,14 +195,12 @@ export default function PTWorkoutsPage() {
 
   const [improvementModal, setImprovementModal] = useState<{ open: boolean; workout: LibraryWorkout | null }>({ open: false, workout: null })
   const [reportModal, setReportModal] = useState<{ open: boolean; workout: LibraryWorkout | null }>({ open: false, workout: null })
-  const [assignModal, setAssignModal] = useState<{ open: boolean; workout: LibraryWorkout | null }>({ open: false, workout: null })
-
-  const [saving, setSaving] = useState(false)
+  const [, setSaving] = useState(false)
 
   const loadWorkouts = useCallback(async (page = 1) => {
     setLoading(true)
     try {
-      const params: any = { page, limit: 20 }
+      const params: LibraryQuery = { page, limit: 20 }
       if (search) params.search = search
       if (filters.specializationId) params.specializationId = filters.specializationId
       if (filters.goal) params.goal = filters.goal
@@ -236,8 +211,9 @@ export default function PTWorkoutsPage() {
       const { data } = await workoutService.getSharedTemplates(params)
       setWorkouts(data.workouts || [])
       setPagination(data.pagination)
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Không thể tải thư viện giáo án')
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } } }
+      message.error(e?.response?.data?.message || 'Không thể tải thư viện giáo án')
     } finally {
       setLoading(false)
     }
@@ -252,7 +228,9 @@ export default function PTWorkoutsPage() {
       setSpecializations(specRes.data?.specializations || [])
       const allTrainers = trainerRes.data?.trainers || []
       setTrainers(allTrainers.filter((t) => String(t._id) !== String(userId)))
-    } catch {}
+    } catch {
+      // silent
+    }
   }, [userId])
 
   useEffect(() => {
@@ -284,8 +262,9 @@ export default function PTWorkoutsPage() {
       await workoutService.deleteWorkout(id)
       message.success('Đã xóa giáo án')
       loadWorkouts()
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Không thể xóa giáo án')
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } } }
+      message.error(e?.response?.data?.message || 'Không thể xóa giáo án')
     }
   }
 
@@ -294,8 +273,9 @@ export default function PTWorkoutsPage() {
       await workoutService.hideWorkout(id, 'Admin ẩn giáo án')
       message.success('Đã ẩn giáo án')
       loadWorkouts()
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Không thể ẩn giáo án')
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } } }
+      message.error(e?.response?.data?.message || 'Không thể ẩn giáo án')
     }
   }
 
@@ -304,8 +284,21 @@ export default function PTWorkoutsPage() {
       await workoutService.restoreWorkout(id)
       message.success('Đã khôi phục giáo án')
       loadWorkouts()
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Không thể khôi phục giáo án')
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } } }
+      message.error(e?.response?.data?.message || 'Không thể khôi phục giáo án')
+    }
+  }
+
+  const handleToggleVisibility = async (record: LibraryWorkout) => {
+    const next = record.visibility === 'private' ? 'public' : 'private'
+    try {
+      await workoutService.updateWorkout(record._id, { visibility: next } as WorkoutPlanPayload)
+      message.success(next === 'public' ? 'Đã công khai giáo án — mọi PT đều xem được' : 'Giáo án giờ chỉ mình bạn xem được')
+      loadWorkouts()
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } } }
+      message.error(e?.response?.data?.message || 'Không thể đổi chế độ hiển thị')
     }
   }
 
@@ -320,8 +313,9 @@ export default function PTWorkoutsPage() {
       })
       message.success('Đã gửi đề xuất cải tiến')
       setImprovementModal({ open: false, workout: null })
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Không thể gửi đề xuất')
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } } }
+      message.error(e?.response?.data?.message || 'Không thể gửi đề xuất')
     } finally {
       setSaving(false)
     }
@@ -338,8 +332,9 @@ export default function PTWorkoutsPage() {
       })
       message.success('Đã gửi báo cáo vi phạm')
       setReportModal({ open: false, workout: null })
-    } catch (error: any) {
-      message.error(error?.response?.data?.message || 'Không thể gửi báo cáo')
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } } }
+      message.error(e?.response?.data?.message || 'Không thể gửi báo cáo')
     } finally {
       setSaving(false)
     }
@@ -470,6 +465,18 @@ export default function PTWorkoutsPage() {
 
         if (isOwner(record)) {
           actions.push(
+            <Tooltip key="visibility" title={record.visibility === 'private' ? 'Công khai giáo án' : 'Chuyển về chỉ mình tôi'}>
+              <Popconfirm
+                title={record.visibility === 'private' ? 'Công khai giáo án này cho mọi PT?' : 'Chuyển giáo án về chế độ chỉ mình tôi?'}
+                onConfirm={() => handleToggleVisibility(record)}
+                okText="Xác nhận"
+                cancelText="Hủy"
+              >
+                <Button size="small" icon={record.visibility === 'private' ? <GlobalOutlined /> : <LockOutlined />} />
+              </Popconfirm>
+            </Tooltip>,
+          )
+          actions.push(
             <Tooltip key="edit" title="Chỉnh sửa">
               <Button
                 size="small"
@@ -535,7 +542,7 @@ export default function PTWorkoutsPage() {
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Bảng điều khiển</p>
         <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[767px]:text-2xl">Thư viện giáo án</h1>
         <p className="mt-2 text-sm text-[var(--gs-text-muted)]">
-          Tìm kiếm, xem và sử dụng giáo án dùng chung trong toàn hệ thống.
+          Giáo án công khai từ tất cả PT trong hệ thống. Giáo án riêng của bạn nằm ở trang "Giáo án của tôi".
         </p>
       </div>
 
@@ -574,30 +581,15 @@ export default function PTWorkoutsPage() {
 
           <Select
             placeholder="Người tạo"
-            value={
-              filters.mine === 'true'
-                ? '__mine__'
-                : filters.trainerId || undefined
-            }
-            onChange={(v) => {
-              if (v === '__mine__') {
-                setFilters((f) => ({ ...f, trainerId: undefined, mine: 'true' }))
-              } else if (!v) {
-                setFilters((f) => ({ ...f, trainerId: undefined, mine: undefined }))
-              } else {
-                setFilters((f) => ({ ...f, trainerId: v, mine: undefined }))
-              }
-            }}
+            value={filters.trainerId || undefined}
+            onChange={(v) => setFilters((f) => ({ ...f, trainerId: v || undefined, mine: undefined }))}
             allowClear
             className="max-[767px]:!w-full"
             style={{ width: 200 }}
-            options={[
-              { value: '__mine__', label: 'Giáo án của tôi' },
-              ...trainers.map((t) => ({
-                value: t._id,
-                label: getUserDisplayName(t, t._id),
-              })),
-            ]}
+            options={trainers.map((t) => ({
+              value: t._id,
+              label: getUserDisplayName(t, t._id),
+            }))}
           />
 
           <Select
@@ -617,8 +609,8 @@ export default function PTWorkoutsPage() {
             Tải lại
           </Button>
 
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/pt/workouts/create')} className="max-[767px]:w-full max-[767px]:min-h-[44px] max-[767px]:text-[15px]">
-            Tạo giáo án mới
+          <Button onClick={() => navigate('/pt/my-workouts')} className="max-[767px]:w-full max-[767px]:min-h-[44px] max-[767px]:text-[15px]">
+            Giáo án của tôi
           </Button>
         </div>
 
@@ -655,6 +647,9 @@ export default function PTWorkoutsPage() {
                   <Tag color="blue" className="m-0 text-[11px]">{spec?.label || record.specializationId || '-'}</Tag>
                   <Tag color="purple" className="m-0 text-[11px]">{record.goal || '-'}</Tag>
                   <Tag color={st.color} className="m-0 text-[11px]">{st.label}</Tag>
+                  <Tag color={record.visibility === 'private' ? 'default' : 'green'} className="m-0 text-[11px]">
+                    {record.visibility === 'private' ? '🔒 Chỉ mình tôi' : '🌐 Công khai'}
+                  </Tag>
                 </div>
                 <div className="pt-workout-detail">
                   <span className="pt-label">Số buổi</span>
@@ -672,7 +667,12 @@ export default function PTWorkoutsPage() {
                   <Button size="small" onClick={() => navigate(`/pt/workouts/view/${record._id}`)}>Xem</Button>
                   <Button size="small" onClick={() => navigate(`/pt/clients?assignWorkout=${record._id}`)}>Sử dụng</Button>
                   {isOwner(record) && <Button size="small" onClick={() => navigate(`/pt/workouts/edit/${record._id}`)}>Sửa</Button>}
-                  <Button size="small" onClick={() => navigate(`/pt/workouts/progress/${record._id}`)}>Thống kê</Button>
+                  {isOwner(record) && (
+                    <Button size="small" onClick={() => handleToggleVisibility(record)}>
+                      {record.visibility === 'private' ? 'Công khai' : 'Chỉ mình tôi'}
+                    </Button>
+                  )}
+                  <Button size="small" onClick={() => navigate(`/pt/workouts/view/${record._id}`)}>Thống kê</Button>
                 </div>
               </div>
             )
@@ -692,16 +692,6 @@ export default function PTWorkoutsPage() {
         workout={reportModal.workout}
         onClose={() => setReportModal({ open: false, workout: null })}
         onSubmit={handleReport}
-      />
-
-      <AssignModal
-        open={assignModal.open}
-        workout={assignModal.workout}
-        onClose={() => setAssignModal({ open: false, workout: null })}
-        onSelectMember={(memberId) => {
-          console.log('Selected member:', memberId)
-          setAssignModal({ open: false, workout: null })
-        }}
       />
     </DashboardLayout>
   )

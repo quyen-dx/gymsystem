@@ -14,7 +14,7 @@ export interface EnrollmentStatus {
   assignmentType?: 'group' | 'private' | null
   pendingRequest: { _id: string; specialization?: string; timeSlots: string[]; daysOfWeek: number[] } | null
   pt: { ptId: string; name: string } | null
-  class: { classId: string; name: string; code: string; specialization: string; daysOfWeek: number[]; time: string } | null
+  class: { classId: string; name: string; code: string; specialization: string; daysOfWeek: number[]; time: string; ptName?: string | null } | null
   workout: { name: string; goal?: string } | null
 }
 
@@ -55,8 +55,8 @@ export const memberService = {
   getOfflinePlanPayment: (paymentId: string) =>
     api.get(`/members/plan-payments/${paymentId}`),
 
-  confirmOfflinePlanPayment: (paymentId: string) =>
-    api.post(`/members/plan-payments/${paymentId}/confirm`),
+  confirmOfflinePlanPayment: (paymentId: string, token: string) =>
+    api.post(`/members/plan-payments/${paymentId}/confirm`, { token }),
 
   registerPlan: (id: string, planId: string, paymentId?: string) =>
     api.post(`/members/${id}/register-plan`, { planId, paymentId }),

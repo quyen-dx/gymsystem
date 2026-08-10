@@ -29,6 +29,8 @@ const TIME_PRESETS = [
   { label: '20:00-22:00', shift: 'evening' as const },
 ]
 
+const WEEKS_OPTIONS = [1, 2, 3, 4, 8, 12]
+
 function toMinutes(t: string): number {
   if (!t) return 0
   const [h, m] = t.split(':').map(Number)
@@ -66,13 +68,61 @@ function presetFitsWindow(presetStart: string, presetEnd: string, window: Schedu
   return toMinutes(presetStart) >= toMinutes(window.start) && toMinutes(presetEnd) <= toMinutes(window.end)
 }
 
+function slotsOverlap(a: string, b: string): boolean {
+  const parse = (s: string) => {
+    const [start, end] = String(s || '').split('-')
+    return [toMinutes(start), toMinutes(end)]
+  }
+  const [as, ae] = parse(a)
+  const [bs, be] = parse(b)
+  if (!ae || !be) return true
+  return as < be && bs < ae
+}
+
+function toLocalDateKey(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function nextDatesForDay(dayOfWeek: number, weeks: number): Date[] {
+  const now = new Date()
+  const today = new Date(now)
+  today.setHours(0, 0, 0, 0)
+  const currentDay = today.getDay()
+  let diff = dayOfWeek - currentDay
+  if (diff < 0) diff += 7
+  const dates: Date[] = []
+  for (let w = 0; w < weeks; w++) {
+    const target = new Date(today)
+    target.setDate(today.getDate() + diff + w * 7)
+    dates.push(target)
+  }
+  return dates
+}
+
+function isSlotBusyForDay(pt: PT, day: number, slot: string, weeks: number): boolean {
+  const busy = pt.busyBookings || []
+  if (!busy.length) return false
+  const keys = new Set(nextDatesForDay(day, weeks).map(toLocalDateKey))
+  return busy.some((b) => {
+    try {
+      return keys.has(toLocalDateKey(new Date(b.date))) && slotsOverlap(slot, b.slot)
+    } catch {
+      return false
+    }
+  })
+}
+
 export default function BookingDetailPage() {
   const { ptId } = useParams()
   const navigate = useNavigate()
 
   const [pt, setPt] = useState<PT | null>(null)
-  const [selectedDays, setSelectedDays] = useState<number[]>([])
-  const [timeSlot, setTimeSlot] = useState('')
+  // Mỗi ngày chọn 1 khung giờ riêng { day -> slot }
+  const [daySlots, setDaySlots] = useState<Record<number, string>>({})
+  const [weeks, setWeeks] = useState(1)
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -88,25 +138,41 @@ export default function BookingDetailPage() {
 
   const workingDays = useMemo(() => new Set(dayWindows.keys()), [dayWindows])
 
-  const availableTimeSlots = useMemo(() => {
-    const isEnabled = (preset: { start: string; end: string }) => {
-      if (selectedDays.length === 0) {
-        for (const windows of dayWindows.values()) {
-          if (windows.some((w) => presetFitsWindow(preset.start, preset.end, w))) return true
-        }
-        return false
-      }
-      return selectedDays.every((day) => {
-        const windows = dayWindows.get(day)
-        return !!windows && windows.some((w) => presetFitsWindow(preset.start, preset.end, w))
-      })
-    }
+  const selectedDays = Object.keys(daySlots).map(Number).sort((a, b) => a - b)
 
-    return TIME_PRESETS.map((t) => {
-      const [start, end] = t.label.split('-')
-      return { ...t, disabled: !isEnabled({ start, end }) }
+  // 1 cặp (ngày, khung giờ) cụ thể có khả dụng không
+  const slotEnabledForDay = (day: number, slot: string): boolean => {
+    const [start, end] = slot.split('-')
+    const windows = dayWindows.get(day)
+    const fitsSchedule = !windows || windows.some((w) => presetFitsWindow(start, end, w))
+    if (!fitsSchedule) return false
+    return !isSlotBusyForDay(pt, day, slot, weeks)
+  }
+
+  const slotDisabledReasonForDay = (day: number, slot: string): string | null => {
+    if (!pt) return null
+    const [start, end] = slot.split('-')
+    const windows = dayWindows.get(day)
+    const fitsSchedule = !windows || windows.some((w) => presetFitsWindow(start, end, w))
+    if (!fitsSchedule) return 'Không nằm trong lịch làm việc của PT'
+    if (isSlotBusyForDay(pt, day, slot, weeks)) return 'PT đã có lịch bận vào ngày này'
+    return null
+  }
+
+  // Khi đổi PT/số tuần → bỏ các cặp ngày/giờ không còn khả dụng
+  useEffect(() => {
+    setDaySlots((prev) => {
+      let changed = false
+      const next: Record<number, string> = {}
+      for (const [dayStr, slot] of Object.entries(prev)) {
+        const day = Number(dayStr)
+        if (!slotEnabledForDay(day, slot)) changed = true
+        else next[day] = slot
+      }
+      return changed ? next : prev
     })
-  }, [selectedDays, dayWindows])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pt, weeks, dayWindows])
 
   const loadPT = async () => {
     if (!ptId) return
@@ -136,9 +202,29 @@ export default function BookingDetailPage() {
 
   const handleDayToggle = (day: number) => {
     if (!workingDays.has(day)) return
-    setSelectedDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
-    )
+    setDaySlots((prev) => {
+      if (prev[day]) {
+        const next = { ...prev }
+        delete next[day]
+        return next
+      }
+      return prev
+    })
+  }
+
+  const toggleDaySlot = (day: number, slot: string) => {
+    if (!slotEnabledForDay(day, slot)) {
+      antdMessage.warning(slotDisabledReasonForDay(day, slot) || 'Khung giờ này không khả dụng cho ngày đã chọn.')
+      return
+    }
+    setDaySlots((prev) => {
+      if (prev[day] === slot) {
+        const next = { ...prev }
+        delete next[day]
+        return next
+      }
+      return { ...prev, [day]: slot }
+    })
   }
 
   const handleCreateBooking = async () => {
@@ -148,8 +234,8 @@ export default function BookingDetailPage() {
       antdMessage.error('Vui lòng chọn ít nhất 1 thứ trong tuần')
       return
     }
-    if (!timeSlot) {
-      antdMessage.error('Vui lòng chọn khung giờ tập')
+    if (!Object.values(daySlots).some(Boolean)) {
+      antdMessage.error('Vui lòng chọn khung giờ cho các ngày đã chọn')
       return
     }
 
@@ -157,14 +243,14 @@ export default function BookingDetailPage() {
       setLoading(true)
       const res = await bookingService.scheduleWeekly({
         ptId,
-        daysOfWeek: selectedDays,
-        time: timeSlot,
+        daySlots: selectedDays.map((day) => ({ day, slot: daySlots[day] })),
+        weeks,
         note,
       })
 
       const created = res.data.createdCount || 0
       const errors = res.data.errors || []
-      let msg = `Gửi yêu cầu đăng ký lịch tập thành công (${created} buổi)`
+      let msg = `Gửi yêu cầu đăng ký lịch tập thành công (${created} buổi trong ${weeks} tuần)`
       if (errors.length > 0) msg += `. ${errors.length} buổi bị trùng lịch`
       antdMessage.success(msg)
       setTimeout(() => navigate('/booking'), 1500)
@@ -279,7 +365,7 @@ export default function BookingDetailPage() {
               {/* Days of week */}
               <div>
                 <label className="mb-2 block text-sm text-[var(--theme-muted)]">
-                  Chọn thứ trong tuần
+                  Chọn thứ trong tuần — sau đó chọn khung giờ cho từng ngày
                 </label>
                 <div className="flex flex-wrap gap-3">
                   {DAY_OPTIONS.map((day) => {
@@ -306,34 +392,84 @@ export default function BookingDetailPage() {
                 </div>
               </div>
 
-              {/* Time slot */}
+              {/* Per-day time slot */}
+              {selectedDays.length > 0 && (
+                <div>
+                  <label className="mb-2 block text-sm text-[var(--theme-muted)]">
+                    Khung giờ cho từng ngày đã chọn <span className="text-xs">(chọn 1 khung giờ mỗi ngày)</span>
+                  </label>
+                  <div className="space-y-4">
+                    {selectedDays.map((day) => {
+                      const dayLabel = DAY_OPTIONS.find((x) => x.value === day)?.label || `Ngày ${day}`
+                      return (
+                        <div key={day} className="rounded-xl border border-[var(--theme-border)] bg-white/[0.03] p-3">
+                          <p className="mb-2 text-xs font-semibold text-[var(--theme-accent)]">{dayLabel}</p>
+                          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                            {TIME_PRESETS.map((t) => {
+                              const disabled = !slotEnabledForDay(day, t.label)
+                              const selected = daySlots[day] === t.label
+                              const reason = disabled ? slotDisabledReasonForDay(day, t.label) : null
+                              return (
+                                <button
+                                  key={t.label}
+                                  type="button"
+                                  disabled={disabled}
+                                  title={reason || undefined}
+                                  onClick={() => toggleDaySlot(day, t.label)}
+                                  className={`rounded-lg border px-2 py-2 text-xs transition ${
+                                    disabled
+                                      ? 'cursor-not-allowed border-gray-700 bg-gray-800/50 text-gray-500 line-through'
+                                      : selected
+                                        ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                                        : 'border-[var(--theme-border)] text-[var(--theme-muted)] hover:bg-white/10'
+                                  }`}
+                                >
+                                  {t.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {selectedDays.length > 0 && (
+                    <p className="mt-2 text-xs text-[var(--theme-muted)]">
+                      Lịch đã chọn: {selectedDays.map((day) => `${DAY_OPTIONS.find((x) => x.value === day)?.label || day} ${daySlots[day] || '—'}`).join(', ')}
+                    </p>
+                  )}
+                  {pt && (pt.busyBookings?.length || 0) > 0 && (
+                    <p className="mt-2 text-xs text-[var(--theme-muted)]">
+                      PT này có một số khung giờ đã được đặt trong thời gian bạn chọn — các khung đó đã bị khóa.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Weeks */}
               <div>
                 <label className="mb-2 block text-sm text-[var(--theme-muted)]">
-                  Khung giờ tập cố định
+                  Thời lượng đăng ký (lặp lại hàng tuần)
                 </label>
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                  {availableTimeSlots.map((t) => (
+                <div className="flex flex-wrap gap-2">
+                  {WEEKS_OPTIONS.map((w) => (
                     <button
-                      key={t.label}
+                      key={w}
                       type="button"
-                      disabled={t.disabled}
-                      onClick={() => {
-                        if (!t.disabled) {
-                          if (timeSlot === t.label) setTimeSlot(''); else setTimeSlot(t.label)
-                        }
-                      }}
-                      className={`rounded-xl border p-3 text-sm transition ${
-                        t.disabled
-                          ? 'cursor-not-allowed border-gray-700 bg-gray-800/50 text-gray-500 line-through'
-                          : timeSlot === t.label
-                            ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
-                            : 'border-[var(--theme-border)] text-[var(--theme-muted)] hover:bg-white/10'
+                      onClick={() => setWeeks(w)}
+                      className={`rounded-xl border px-4 py-2 text-sm transition ${
+                        weeks === w
+                          ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                          : 'border-[var(--theme-border)] text-[var(--theme-muted)] hover:bg-white/10'
                       }`}
                     >
-                      {t.label}
+                      {w} tuần
                     </button>
                   ))}
                 </div>
+                <p className="mt-2 text-xs text-[var(--theme-muted)]">
+                  VD: chọn T2, T3 + 3 tuần → tạo lịch lặp lại T2, T3 mỗi tuần trong 3 tuần (6 buổi).
+                </p>
               </div>
 
               {/* Note */}
@@ -353,7 +489,7 @@ export default function BookingDetailPage() {
               <button
                 type="button"
                 onClick={handleCreateBooking}
-                disabled={loading || selectedDays.length === 0 || !timeSlot}
+                disabled={loading || selectedDays.length === 0 || !Object.values(daySlots).some(Boolean)}
                 className="w-full rounded-xl bg-[var(--theme-button-bg)] px-5 py-3 font-semibold text-white transition hover:bg-[var(--theme-accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? 'Đang xử lý...' : 'Xác nhận đăng ký lịch tập'}

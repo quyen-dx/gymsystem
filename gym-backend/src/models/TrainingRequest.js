@@ -10,6 +10,7 @@ export const ACTIVE_TRAINING_REQUEST_STATUSES = [
   'waiting_member',
   'waiting_assignment',
   'waiting_reassign', // legacy alias; normalized by the reconciliation flow
+  'awaiting_payment',
 ]
 
 const trainingRequestSchema = new mongoose.Schema({
@@ -22,9 +23,17 @@ const trainingRequestSchema = new mongoose.Schema({
   },
   specialization: { type: String, trim: true, default: 'GYM' },
   goals: [{ type: String, trim: true }],
-  desiredSessions: { type: Number, min: 3, max: 5, default: 3 },
+  desiredSessions: { type: Number, min: 1, max: 5 },
   timeSlots: [{ type: String, trim: true }],
   daysOfWeek: [{ type: Number, min: 0, max: 6 }],
+  // Cặp ngày -> khung giờ (PT 1-1): [{ day: 0..6, slot: 'HH:mm-HH:mm' }]
+  // daysOfWeek/timeSlots vẫn được lưu dạng gộp để tương thích hiển thị cũ.
+  daySlots: [{
+    day: { type: Number, min: 0, max: 6 },
+    slot: { type: String, trim: true },
+    _id: false,
+  }],
+  weeks: { type: Number, min: 1, max: 12, default: 1 },
   healthNotes: { type: String, default: '', trim: true },
   isNewToGym: { type: Boolean, default: false },
   note: { type: String, default: '', trim: true },
@@ -33,7 +42,7 @@ const trainingRequestSchema = new mongoose.Schema({
   preferredTrainerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   status: {
     type: String,
-    enum: [...ACTIVE_TRAINING_REQUEST_STATUSES, 'declined_by_member', 'assigned', 'class_assigned', 'active', 'completed', 'ended', 'cancelled'],
+    enum: [...ACTIVE_TRAINING_REQUEST_STATUSES, 'declined_by_member', 'assigned', 'class_assigned', 'confirmed', 'payment_expired', 'expired', 'active', 'completed', 'ended', 'cancelled'],
     default: 'pending',
     index: true,
   },
@@ -52,10 +61,25 @@ const trainingRequestSchema = new mongoose.Schema({
   assignedTrainerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   // PTs who explicitly declined this member; Admin must choose another PT.
   rejectedPtIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  // Lịch sử từ chối chi tiết: [{ ptId, reason, rejectedAt }] — giúp Admin thấy
+  // lý do PT/member từ chối để tránh gán lại cùng PT.
+  rejectHistory: [{
+    ptId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reason: { type: String, default: '' },
+    rejectedAt: { type: Date, default: Date.now },
+    _id: false,
+  }],
   assignedAt: Date,
   assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  adminDeadline: { type: Date, default: null },
+  ptConfirmationDeadline: { type: Date, default: null },
+  ptConfirmationExpiredAt: { type: Date, default: null },
+  paymentDeadline: { type: Date, default: null },
+  priceSnapshot: { type: Number, default: 0, min: 0 },
+  paymentExpiredAt: { type: Date, default: null },
   cancelledAt: Date,
   cancelReason: { type: String, default: '' },
+  cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true })
 
 trainingRequestSchema.index({ memberId: 1, status: 1 })

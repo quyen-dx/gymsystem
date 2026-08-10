@@ -17,6 +17,7 @@ import { assertFeatureEnabled, getSystemSettingsValue } from '../services/system
 import AppError from '../utils/appError.js'
 import sendError from '../utils/sendError.js'
 import {
+  decodeAccessTokenIdentity,
   generateAccessToken,
   generateRefreshToken,
   generateResetToken,
@@ -99,6 +100,7 @@ const buildAuthResponse = async (user, res) => {
   return {
     message: 'Đăng nhập thành công',
     accessToken,
+    refreshToken,
     user: sanitizeUser(user),
   }
 }
@@ -409,7 +411,9 @@ export const login = async (req, res) => {
 }
 export const refreshToken = async (req, res) => {
   try {
-    const token = req.cookies?.[refreshCookieName] || req.body?.refreshToken
+    // Ưu tiên refresh token gửi trong body (tách biệt từng tab, lưu ở sessionStorage)
+    // Cookie là fallback cho luồng cũ / OAuth — cookie dùng chung mọi tab nên phải đối chiếu identity
+    const token = req.body?.refreshToken || req.cookies?.[refreshCookieName]
 
     if (!token) {
       throw new AppError('Refresh token là bắt buộc', 401)
@@ -418,6 +422,17 @@ export const refreshToken = async (req, res) => {
     const decoded = verifyRefreshToken(token)
     if (!decoded) {
       throw new AppError('Refresh token không hợp lệ hoặc đã hết hạn', 401)
+    }
+
+    // Chống chiếm session chéo tab: access token gửi kèm phải thuộc CÙNG user với refresh token.
+    // Ví dụ tab member refresh trong khi cookie đã bị tab admin ghi đè → từ chối thay vì trả token admin.
+    // (Không xóa cookie ở trường hợp này để không phá phiên tab đang dùng cookie hợp lệ.)
+    const providedAccess = req.body?.accessToken
+    if (providedAccess) {
+      const decodedAccess = decodeAccessTokenIdentity(providedAccess)
+      if (!decodedAccess || String(decodedAccess.id) !== String(decoded.id)) {
+        return sendError(res, new AppError('Phiên đăng nhập không khớp, vui lòng đăng nhập lại', 401))
+      }
     }
 
     const user = await User.findById(decoded.id).select('+refreshToken')
@@ -442,6 +457,7 @@ export const refreshToken = async (req, res) => {
 
     return res.json({
       accessToken,
+      refreshToken: refreshTokenValue,
       user: sanitizeUser(user),
     })
   } catch (error) {
@@ -452,7 +468,8 @@ export const refreshToken = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    const token = req.cookies?.[refreshCookieName] || req.body?.refreshToken
+    // Ưu tiên refresh token từ body (per-tab); cookie là fallback
+    const token = req.body?.refreshToken || req.cookies?.[refreshCookieName]
     if (token) {
       const decoded = verifyRefreshToken(token)
       if (decoded?.id) {

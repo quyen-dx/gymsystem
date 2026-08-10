@@ -54,14 +54,14 @@ const bookingSchema = new mongoose.Schema(
 
     paymentStatus: {
       type: String,
-      enum: ['unpaid', 'paid', 'refunded'],
+      enum: ['unpaid', 'pending', 'paid', 'failed', 'expired', 'refunded'],
       default: 'unpaid',
       index: true,
     },
 
     paymentMethod: {
       type: String,
-      enum: ['wallet'],
+      enum: ['wallet', 'vnpay'],
       default: 'wallet',
     },
 
@@ -70,10 +70,20 @@ const bookingSchema = new mongoose.Schema(
       ref: 'Transaction',
       default: null,
     },
+    paymentDeadline: { type: Date, default: null, index: true },
+    paymentFailedAt: { type: Date, default: null },
+    paymentExpiredAt: { type: Date, default: null },
+
+    requestId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TrainingRequest',
+      default: null,
+      index: true,
+    },
 
     status: {
       type: String,
-      enum: ['pending', 'awaiting_payment', 'confirmed', 'cancelled', 'completed'],
+      enum: ['pending', 'awaiting_payment', 'confirmed', 'cancelled', 'completed', 'member_no_show', 'pt_no_show'],
       default: 'pending',
       index: true,
     },
@@ -91,6 +101,29 @@ const bookingSchema = new mongoose.Schema(
     isViolation: {
       type: Boolean,
       default: false,
+    },
+
+    rescheduledFrom: {
+      date: {
+        type: Date,
+        default: null,
+      },
+      slot: {
+        type: String,
+        default: '',
+      },
+    },
+
+    rescheduledAt: {
+      type: Date,
+      default: null,
+    },
+
+    rescheduleReason: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: 500,
     },
 
     rating: {

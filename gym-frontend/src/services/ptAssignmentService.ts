@@ -103,9 +103,26 @@ export interface PTAssignment {
   membershipStatus?: 'active' | 'expired' | null
   membershipStartAt?: string | null
   membershipExpiresAt?: string | null
+  requestTimeSlots?: string[]
+  requestDaysOfWeek?: number[]
+  requestDaySlots?: Array<{ day: number; slot: string }>
+  requestWeeks?: number
   requestNote?: string
   requestContactPhone?: string
   requestContactEmail?: string
+  trainingRequest?: {
+    _id: string
+    timeSlots?: string[]
+    daysOfWeek?: number[]
+    daySlots?: Array<{ day: number; slot: string }>
+    weeks?: number
+    specialization?: string
+    goals?: string[]
+    note?: string
+    healthNotes?: string
+    assignedAt?: string
+    createdAt?: string
+  } | null
   createdAt?: string
   updatedAt?: string
 }
@@ -165,7 +182,7 @@ export const ptAssignmentService = {
     api.get<{ slots: SuggestedSlot[] }>('/pt-assignments/suggest-slots'),
 
   getMemberPreferences: (memberId: string) =>
-    api.get<{ timeSlots: string[]; daysOfWeek: number[]; specialization: string; goals: string[]; desiredSessions: number; healthNotes: string; isNewToGym: boolean; note: string }>(`/pt-assignments/member-preferences/${memberId}`),
+    api.get<{ timeSlots: string[]; daysOfWeek: number[]; weeks: number; specialization: string; goals: string[]; desiredSessions: number; healthNotes: string; isNewToGym: boolean; note: string }>(`/pt-assignments/member-preferences/${memberId}`),
 
   getMatchedClasses: (memberId: string) =>
     api.get<{ matched: MatchedClass[]; preferences: { timeSlots: string[]; daysOfWeek: number[]; specialization: string } }>(`/pt-assignments/matched-classes/${memberId}`),

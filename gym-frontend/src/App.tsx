@@ -75,6 +75,7 @@ import AdminTrainingClassesPage from './pages/dashboard/admin/TrainingClassesPag
 import AdminFloorsZonesPage from './pages/dashboard/admin/FloorsZonesPage'
 import AdminTrainerSchedulesPage from './pages/dashboard/admin/AdminTrainerSchedulesPage'
 import AdminShiftChangeRequestsPage from './pages/dashboard/admin/AdminShiftChangeRequestsPage'
+import AdminPTAssignmentEndRequestsPage from './pages/dashboard/admin/AdminPTAssignmentEndRequestsPage'
 import PTClientsPage from './pages/dashboard/pt/PTClientsPage'
 import CreateSchedulePage from './pages/dashboard/pt/CreateSchedulePage'
 import PTWorkoutProgressPage from './pages/dashboard/pt/PTWorkoutProgressPage'
@@ -82,10 +83,9 @@ import PTSchedulePage from './pages/dashboard/pt/PTSchedulePage'
 import PTNotificationsPage from './pages/dashboard/pt/PTNotificationsPage'
 import PTWorkoutFormPage from './pages/dashboard/pt/PTWorkoutFormPage'
 import PTWorkoutsPage from './pages/dashboard/pt/PTWorkoutsPage'
+import PTMyWorkoutsPage from './pages/dashboard/pt/PTMyWorkoutsPage'
 import PTWorkoutViewPage from './pages/dashboard/pt/PTWorkoutViewPage'
 import AdminWorkoutReportsPage from './pages/dashboard/admin/AdminWorkoutReportsPage'
-import AdminPTAssignmentEndRequestsPage from './pages/dashboard/admin/AdminPTAssignmentEndRequestsPage'
-import AdminNotificationsPage from './pages/dashboard/admin/AdminNotificationsPage'
 import SellerOrdersPage from './pages/dashboard/seller/SellerOrdersPage'
 import SellerProductCreatePage from './pages/dashboard/seller/SellerProductCreatePage'
 import SellerProductEditPage from './pages/dashboard/seller/SellerProductEditPage'
@@ -94,7 +94,6 @@ import SellerRevenuePage from './pages/dashboard/seller/SellerRevenuePage'
 import SellerShopPage from './pages/dashboard/seller/SellerShopPage'
 import StaffCheckinPage from './pages/dashboard/staff/StaffCheckinPage'
 import StaffMemberPage from './pages/dashboard/staff/StaffMemberPage'
-import StaffNotificationsPage from './pages/dashboard/staff/StaffNotificationsPage'
 import StaffMemberNewPage from './pages/dashboard/staff/StaffMemberNewPage'
 import StaffPlanCounterPage from './pages/dashboard/staff/StaffPlanCounterPage'
 import StaffPaymentsPage from './pages/dashboard/staff/StaffPaymentsPage'
@@ -130,6 +129,7 @@ function LoadingScreen() {
 function PrivateRoute({ children, feature }: { children: React.ReactNode; feature?: string | string[] }) {
   const { user, loading } = useAuth()
   const { settings, loading: settingsLoading, isEnabled } = useSystemSettings()
+  const location = useLocation()
 
   if (loading || settingsLoading) {
     return <LoadingScreen />
@@ -137,6 +137,21 @@ function PrivateRoute({ children, feature }: { children: React.ReactNode; featur
 
   if (!user) return <Navigate to="/login" />
   if (settings.general.maintenanceMode && user.role !== 'admin') return <Navigate to="/maintenance" replace />
+
+  // Role guard (defense-in-depth; backend vẫn enforce ở mọi endpoint)
+  const path = location.pathname
+  const roleAllowed =
+    path.startsWith('/admin')
+      ? ['admin', 'super_admin'].includes(user.role)
+      : path.startsWith('/staff')
+        ? ['staff', 'admin', 'super_admin'].includes(user.role)
+        : path.startsWith('/pt')
+          ? ['pt', 'admin', 'super_admin'].includes(user.role)
+          : path.startsWith('/seller')
+            ? Boolean(user.isSeller) || ['admin', 'super_admin'].includes(user.role)
+            : true
+  if (!roleAllowed) return <Navigate to="/" replace />
+
   const requiredFeatures = Array.isArray(feature) ? feature : feature ? [feature] : []
   if (requiredFeatures.some((featurePath) => !isEnabled(featurePath))) return <FeatureDisabled />
   return <>{children}</>
@@ -450,6 +465,7 @@ function AppWithTheme() {
         <Route path="/admin/workout-reports" element={<PrivateRoute feature="pt.moduleEnabled"><AdminWorkoutReportsPage /></PrivateRoute>} />
         <Route path="/admin/pt-assignment-end-requests" element={<PrivateRoute><AdminPTAssignmentEndRequestsPage /></PrivateRoute>} />
         <Route path="/admin/trainer-end-requests" element={<PrivateRoute><AdminPTAssignmentEndRequestsPage /></PrivateRoute>} />
+        <Route path="/admin/pt-prices" element={<PrivateRoute feature="pt.moduleEnabled"><Navigate to="/admin/trainers?tab=prices" replace /></PrivateRoute>} />
         {/* SELLER */}
         <Route path="/seller" element={<Navigate to="/seller/products" />} />
         <Route path="/seller/products" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerProductsPage /></PrivateRoute>} />
@@ -468,8 +484,10 @@ function AppWithTheme() {
         <Route path="/staff/payments" element={<PrivateRoute><StaffPaymentsPage /></PrivateRoute>} />
 
         {/* PT */}
-        <Route path="/pt" element={<Navigate to="/pt/schedule" replace />} />
+        <Route path="/pt" element={<Navigate to="/pt/clients" replace />} />
         <Route path="/pt/schedule" element={<PrivateRoute feature="pt.scheduleEnabled"><PTSchedulePage /></PrivateRoute>} />
+        <Route path="/pt/teaching" element={<Navigate to="/pt/clients" replace />} />
+        <Route path="/pt/schedules/:scheduleId/session/:dayOrder/plan" element={<Navigate to="/pt/clients" replace />} />
 
 
         <Route path="/pt/clients" element={<PrivateRoute feature="pt.moduleEnabled"><PTClientsPage /></PrivateRoute>} />
@@ -477,6 +495,7 @@ function AppWithTheme() {
         <Route path="/pt/clients/:memberId/progress" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutProgressPage /></PrivateRoute>} />
         <Route path="/pt/student" element={<Navigate to="/pt/clients" replace />} />
         <Route path="/pt/workouts" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutsPage /></PrivateRoute>} />
+        <Route path="/pt/my-workouts" element={<PrivateRoute feature="pt.moduleEnabled"><PTMyWorkoutsPage /></PrivateRoute>} />
         <Route path="/pt/workouts/create" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutFormPage /></PrivateRoute>} />
         <Route path="/pt/workouts/edit/:id" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutFormPage /></PrivateRoute>} />
         <Route path="/pt/workouts/view/:id" element={<PrivateRoute feature="pt.moduleEnabled"><PTWorkoutViewPage /></PrivateRoute>} />

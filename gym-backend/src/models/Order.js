@@ -128,6 +128,11 @@ const orderSchema = new mongoose.Schema(
             type: String,
             trim: true,
         },
+        idempotencyKey: {
+            type: String,
+            trim: true,
+            default: null,
+        },
         inventoryDeducted: {
             type: Boolean,
             default: false,
@@ -145,5 +150,7 @@ const orderSchema = new mongoose.Schema(
     },
     { timestamps: true },
 )
+
+orderSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true })
 
 export default mongoose.model('Order', orderSchema)

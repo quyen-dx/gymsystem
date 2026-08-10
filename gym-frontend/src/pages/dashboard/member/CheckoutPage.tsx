@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Col, Form, Input, message, Modal, Radio, Row, Space, Tag, Typography } from 'antd'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import CartItemRow from '../../../components/checkout/CartItemRow'
@@ -34,6 +34,9 @@ export default function CheckoutPage() {
   const [discountInput, setDiscountInput] = useState('')
   const [appliedDiscountCode, setAppliedDiscountCode] = useState('')
   const [discountAmount, setDiscountAmount] = useState(0)
+  // Khóa idempotent cho lần thanh toán này: nếu bấm 2 lần/bị timeout và thử lại,
+  // server chỉ trừ tiền 1 lần
+  const checkoutKeyRef = useRef(`checkout_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`)
 
   const subtotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
@@ -173,6 +176,7 @@ export default function CheckoutPage() {
         },
         paymentReference: `wallet_checkout_${Date.now()}`,
         discountCode: appliedDiscountCode || undefined,
+        idempotencyKey: checkoutKeyRef.current,
       }
 
       await createOrder(orderPayload)

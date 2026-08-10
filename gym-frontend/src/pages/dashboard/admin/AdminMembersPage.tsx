@@ -2,13 +2,13 @@ import {
   EditOutlined,
   EyeOutlined,
   LockOutlined,
-  MailOutlined,
   PlusOutlined,
   SendOutlined,
   TeamOutlined,
   UnlockOutlined,
   UserOutlined,
   PhoneOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons'
 import {
   Badge,
@@ -29,7 +29,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import api from '../../../services/api'
-import { trainingRequestService, type TrainingRequest } from '../../../services/trainingRequestService'
+import { trainingRequestService, type TrainingRequest, type PtSuggestion } from '../../../services/trainingRequestService'
 import { trainingClassService, type TrainingClass } from '../../../services/trainingGroupService'
 import { trainerService } from '../../../services/trainerService'
 import { socketService } from '../../../services/socketService'
@@ -125,16 +125,19 @@ export default function AdminMembersPage() {
 
   // PT 1-1 request modal
   const [pt1on1ModalOpen, setPt1on1ModalOpen] = useState(false)
-  const [pt1on1Tab, setPt1on1Tab] = useState<'pending' | 'waiting_assignment'>('pending')
+  const [pt1on1Tab, setPt1on1Tab] = useState<'pending' | 'waiting_assignment' | 'assigned'>('pending')
 
   // Store realtime PT 1-1 + group (admin/staff)
-  const { requests: allPt1on1Requests, countsByStatus: pt1on1Counts, badgeCount: pt1on1BadgeCount, groupBadgeCount, loading: pt1on1Loading, latestRequestForMember } = usePtRequests()
+  const { requests: allPt1on1Requests, countsByStatus: pt1on1Counts, badgeCount: pt1on1BadgeCount, groupBadgeCount, loading: pt1on1Loading, latestRequestForMember, reload: reloadPtRequests } = usePtRequests()
+
+  // Hủy yêu cầu (admin)
+  const [cancelModal, setCancelModal] = useState<{ open: boolean; request: TrainingRequest | null; reason: string; submitting: boolean }>({ open: false, request: null, reason: '', submitting: false })
 
   // Assign PT modal
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [assignRequest, setAssignRequest] = useState<TrainingRequest | null>(null)
   const [assignSearch, setAssignSearch] = useState('')
-  const [assignTrainers, setAssignTrainers] = useState<PT[]>([])
+  const [assignTrainers, setAssignTrainers] = useState<PtSuggestion[]>([])
   const [assignLoading, setAssignLoading] = useState(false)
   const [selectedTrainerId, setSelectedTrainerId] = useState<string | null>(null)
   const [assignSubmitting, setAssignSubmitting] = useState(false)
@@ -194,8 +197,8 @@ export default function AdminMembersPage() {
   useEffect(() => {
     if (searchParams.get('pt1on1')) {
       const status = searchParams.get('pt1on1Status')
-      if (status === 'pending' || status === 'waiting_assignment' || status === 'waiting_reassign') {
-        setPt1on1Tab(status)
+      if (status === 'pending' || status === 'waiting_assignment' || status === 'waiting_reassign' || status === 'assigned') {
+        setPt1on1Tab(status === 'waiting_reassign' ? 'waiting_assignment' : status)
         setPt1on1ModalOpen(true)
       } else if (status) {
         // Trạng thái đã đóng → mở lịch sử PT 1-1
@@ -255,7 +258,7 @@ export default function AdminMembersPage() {
 
   // Danh sách PT 1-1 hiển thị trong modal = store realtime, lọc theo tab đang chọn
   const visiblePt1on1Requests = useMemo(
-    () => allPt1on1Requests.filter((r) => pt1on1Tab === 'pending' ? ['pending', 'processing', 'message_sent', 'waiting_member'].includes(r.status) : (r.status === 'waiting_assignment' || r.status === 'waiting_reassign')),
+    () => allPt1on1Requests.filter((r) => pt1on1Tab === 'pending' ? ['pending', 'processing', 'message_sent', 'waiting_member'].includes(r.status) : pt1on1Tab === 'assigned' ? r.status === 'assigned' : (r.status === 'waiting_assignment' || r.status === 'waiting_reassign')),
     [allPt1on1Requests, pt1on1Tab],
   )
 
@@ -355,17 +358,23 @@ export default function AdminMembersPage() {
     setAssignRequest(r)
     setAssignSearch('')
     setSelectedTrainerId(null)
-    loadAssignTrainers(r.specialization)
+    loadAssignTrainers(r)
     setAssignModalOpen(true)
   }
 
-  const loadAssignTrainers = async (specialization?: string) => {
+  const loadAssignTrainers = async (request: TrainingRequest) => {
     setAssignLoading(true)
     try {
-      const res = await trainerService.getPTs({ isActive: true, limit: 100, specialty: specialization })
-      setAssignTrainers(res.data.pts || [])
+      const res = await trainingRequestService.getPtSuggestions(request._id)
+      const suggestions = res.data.suggestions || []
+      setAssignTrainers(suggestions)
+      // Ưu tiên PT hội viên đã chọn nếu PT này vẫn có thể nhận lịch.
+      const preferred = suggestions.find((s) => s.isPreferred && !s.rejected && (s.conflicts || []).length === 0)
+      // Nếu hội viên không chọn PT cụ thể hoặc PT đó không khả dụng, chọn PT phù hợp nhất.
+      const best = suggestions.find((s) => !s.rejected && (s.conflicts || []).length === 0)
+      setSelectedTrainerId(preferred ? preferred.id || preferred._id : best ? best.id || best._id : null)
     } catch {
-      message.error('Không thể tải danh sách PT')
+      message.error('Không thể tải danh sách PT gợi ý')
     } finally {
       setAssignLoading(false)
     }
@@ -383,6 +392,31 @@ export default function AdminMembersPage() {
       message.error(err?.response?.data?.message || 'Phân công thất bại')
     } finally {
       setAssignSubmitting(false)
+    }
+  }
+
+  const openCancelRequestModal = (r: TrainingRequest) => {
+    setCancelModal({ open: true, request: r, reason: '', submitting: false })
+  }
+
+  const handleCancelRequest = async () => {
+    const request = cancelModal.request
+    if (!request) return
+    const reason = cancelModal.reason.trim()
+    if (!reason) {
+      message.warning('Vui lòng nhập lý do hủy yêu cầu')
+      return
+    }
+    setCancelModal((prev) => ({ ...prev, submitting: true }))
+    try {
+      await trainingRequestService.cancelRequestByAdmin(request._id, reason)
+      message.success('Đã hủy yêu cầu')
+      setCancelModal({ open: false, request: null, reason: '', submitting: false })
+      reloadPtRequests()
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Hủy yêu cầu thất bại')
+    } finally {
+      setCancelModal((prev) => ({ ...prev, submitting: false }))
     }
   }
 
@@ -707,18 +741,32 @@ export default function AdminMembersPage() {
       ),
     },
     {
-      title: 'Liên hệ',
-      width: 200,
+      title: 'Lịch mong muốn',
+      width: 230,
       render: (_: any, r: TrainingRequest) => (
-        <div className="text-xs space-y-0.5">
-          <div className="flex items-center gap-1">
-            <PhoneOutlined style={{ fontSize: 11, color: 'var(--gs-text-muted)' }} />
-            <span>{r.contactPhone || '—'}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <MailOutlined style={{ fontSize: 11, color: 'var(--gs-text-muted)' }} />
-            <span className="truncate block max-w-[140px]">{r.contactEmail || '—'}</span>
-          </div>
+        <div className="text-xs space-y-1 text-[var(--gs-text)]">
+          {r.desiredSessions && <div>{r.desiredSessions} buổi/tuần</div>}
+          {r.daySlots?.length > 0 ? (
+            <div className="space-y-0.5">
+              {r.daySlots.map((p, i) => (
+                <div key={i}>
+                  <Tag className="m-0 text-[11px]">{['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][p.day] || p.day}</Tag>
+                  <span className="ml-1 text-[var(--gs-text-muted)]">{p.slot.replace('-', ' - ')}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-1">
+                {(r.daysOfWeek || []).length > 0
+                  ? r.daysOfWeek.map((d) => <Tag key={d} className="m-0 text-[11px]">{['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d] || d}</Tag>)
+                  : <span className="text-[var(--gs-text-muted)]">Chưa chọn ngày</span>}
+              </div>
+              <div className="text-[var(--gs-text-muted)] line-clamp-2">
+                {(r.timeSlots || []).length > 0 ? r.timeSlots.join(', ') : 'Chưa chọn giờ'}
+              </div>
+            </>
+          )}
         </div>
       ),
     },
@@ -767,7 +815,7 @@ export default function AdminMembersPage() {
     },
     {
       title: 'Thao tác',
-      width: 260,
+      width: 300,
       render: (_: any, r: TrainingRequest) => {
         if (r.status === 'pending') {
           return (
@@ -779,19 +827,47 @@ export default function AdminMembersPage() {
               <Button size="small" icon={<SendOutlined />} onClick={() => openProposalModal(r)}>
                 Gửi đề xuất
               </Button>
+              <Button size="small" danger onClick={() => openCancelRequestModal(r)}>
+                Hủy
+              </Button>
             </Space>
           )
         }
         if (r.status === 'waiting_assignment' || r.status === 'waiting_reassign') {
           return (
-            <Button type="primary" size="small" icon={<UserOutlined />}
-              onClick={() => openAssignTrainer(r)}>
-              Phân công PT
-            </Button>
+            <Space size={4}>
+              <Button type="primary" size="small" icon={<UserOutlined />}
+                onClick={() => openAssignTrainer(r)}>
+                Phân công PT
+              </Button>
+              <Button size="small" danger onClick={() => openCancelRequestModal(r)}>
+                Hủy
+              </Button>
+            </Space>
           )
         }
         if (r.status === 'message_sent') {
-          return <span className="text-xs text-[var(--gs-text-muted)]">Chờ hội viên phản hồi</span>
+          return (
+            <Space size={4}>
+              <span className="text-xs text-[var(--gs-text-muted)]">Chờ hội viên phản hồi</span>
+              <Button size="small" danger onClick={() => openCancelRequestModal(r)}>
+                Hủy
+              </Button>
+            </Space>
+          )
+        }
+        if (r.status === 'assigned' && r.type === 'pt1on1') {
+          const pt = typeof r.assignedTrainerId === 'object' ? r.assignedTrainerId : null
+          return (
+            <Space size={4}>
+              <span className="text-xs text-[var(--gs-text-muted)]">
+                Chờ PT {pt ? getUserDisplayName(pt) : ''} phản hồi
+              </span>
+              <Button size="small" danger onClick={() => openCancelRequestModal(r)}>
+                Hủy
+              </Button>
+            </Space>
+          )
         }
         return <span className="text-xs text-[var(--gs-text-muted)]">Đã xử lý</span>
       },
@@ -799,16 +875,14 @@ export default function AdminMembersPage() {
   ]
 
   const filteredAssignTrainers = assignTrainers.filter((t) => {
-    const requestSpec = String(assignRequest?.specialization || '').trim().toUpperCase()
-    const ptSpecs = (t.specialties || []).map((s) => String(s || '').trim().toUpperCase())
-    if (requestSpec && ptSpecs.length > 0 && !ptSpecs.includes(requestSpec)) return false
     if (!assignSearch) return true
     const q = assignSearch.toLowerCase()
     return getUserDisplayName(t, '').toLowerCase().includes(q)
       || (t.email || '').toLowerCase().includes(q)
       || (t.specialties || []).some((s) => s.toLowerCase().includes(q))
   })
-  const rejectedPtIds = new Set((assignRequest?.rejectedPtIds || []).map((pt) => typeof pt === 'string' ? pt : pt._id))
+  const bestSuggestedTrainerId = assignTrainers.find((t) => !t.rejected && (t.conflicts || []).length === 0)
+  const bestSuggestedTrainerKey = bestSuggestedTrainerId ? (bestSuggestedTrainerId.id || bestSuggestedTrainerId._id) : null
 
   return (
     <DashboardLayout>
@@ -1009,9 +1083,18 @@ export default function AdminMembersPage() {
               className: '!whitespace-nowrap',
               render: (_: any, r: TrainingRequest) => (
                 <div className="text-xs text-[var(--gs-text)] space-y-1">
-                  <div><span className="text-[var(--gs-text-muted)]">Số buổi:</span> {r.desiredSessions} buổi/tuần</div>
-                  <div><span className="text-[var(--gs-text-muted)]">Ngày:</span> {r.daysOfWeek?.length > 0 ? r.daysOfWeek.map((d) => ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d]).join(', ') : 'Linh hoạt'}</div>
-                  <div><span className="text-[var(--gs-text-muted)]">Giờ:</span> {r.timeSlots?.length > 0 ? r.timeSlots.join(', ') : 'Linh hoạt'}</div>
+                  {r.desiredSessions && <div><span className="text-[var(--gs-text-muted)]">Số buổi:</span> {r.desiredSessions} buổi/tuần</div>}
+                  {r.daySlots?.length > 0 ? (
+                    <div>
+                      <span className="text-[var(--gs-text-muted)]">Lịch:</span>{' '}
+                      {r.daySlots.map((p) => `T${p.day === 0 ? 'CN' : p.day + 1} ${p.slot.replace('-', ' - ')}`).join(', ')}
+                    </div>
+                  ) : (
+                    <>
+                      <div><span className="text-[var(--gs-text-muted)]">Ngày:</span> {r.daysOfWeek?.length > 0 ? r.daysOfWeek.map((d) => ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d]).join(', ') : 'Linh hoạt'}</div>
+                      <div><span className="text-[var(--gs-text-muted)]">Giờ:</span> {r.timeSlots?.length > 0 ? r.timeSlots.join(', ') : 'Linh hoạt'}</div>
+                    </>
+                  )}
                   {r.status === 'pending' && r.lastMessage && (
                     <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 p-1.5 text-[11px] text-amber-800 dark:text-amber-200">
                       <span className="font-semibold">Hội viên đề xuất: </span>{r.lastMessage}
@@ -1094,13 +1177,25 @@ export default function AdminMembersPage() {
                 }
                 if (r.status === 'waiting_assignment' || r.status === 'waiting_reassign') {
                   return (
-                    <Button type="primary" size="small" icon={<TeamOutlined />} onClick={() => openClassAssignModal(r)}>
-                      Xếp lớp
-                    </Button>
+                    <div className="flex gap-1.5">
+                      <Button type="primary" size="small" icon={<TeamOutlined />} onClick={() => openClassAssignModal(r)}>
+                        Xếp lớp
+                      </Button>
+                      <Button size="small" danger onClick={() => openCancelRequestModal(r)}>
+                        Hủy
+                      </Button>
+                    </div>
                   )
                 }
                 if (r.status === 'message_sent') {
-                  return <span className="text-xs text-[var(--gs-text-muted)]">Chờ hội viên phản hồi đề xuất</span>
+                  return (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-[var(--gs-text-muted)]">Chờ hội viên phản hồi đề xuất</span>
+                      <Button size="small" danger onClick={() => openCancelRequestModal(r)}>
+                        Hủy
+                      </Button>
+                    </div>
+                  )
                 }
                 return <span className="text-xs text-[var(--gs-text-muted)]">Đã xử lý</span>
               },
@@ -1199,6 +1294,14 @@ export default function AdminMembersPage() {
                 </span>
               </Button>
             )}
+            <Button type={pt1on1Tab === 'assigned' ? 'primary' : 'default'} size="small" onClick={() => setPt1on1Tab('assigned')}>
+              Chờ PT xác nhận
+              {(pt1on1Counts.assigned || 0) > 0 && (
+                <span className="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none bg-blue-500 text-white">
+                  {pt1on1Counts.assigned > 99 ? '99+' : pt1on1Counts.assigned}
+                </span>
+              )}
+            </Button>
           </div>
         </div>
 
@@ -1440,12 +1543,48 @@ export default function AdminMembersPage() {
         />
       </Modal>
 
+      {/* Hủy yêu cầu (admin) */}
+      <Modal
+        title="Hủy yêu cầu"
+        open={cancelModal.open}
+        onCancel={() => setCancelModal({ open: false, request: null, reason: '', submitting: false })}
+        onOk={handleCancelRequest}
+        okText="Xác nhận hủy"
+        okButtonProps={{ danger: true, loading: cancelModal.submitting }}
+        cancelText="Đóng"
+        centered
+        destroyOnClose
+      >
+        <div className="space-y-3 py-2">
+          <p className="text-sm text-[var(--gs-text-muted)]">
+            Hủy yêu cầu {cancelModal.request?.type === 'pt1on1' ? 'PT 1-1' : 'tập luyện nhóm'} của hội viên{' '}
+            <span className="font-semibold text-[var(--gs-text)]">
+              {cancelModal.request && typeof cancelModal.request.memberId === 'object' ? getUserDisplayName(cancelModal.request.memberId) : '—'}
+            </span>
+            ? Hành động này không thể hoàn tác.
+          </p>
+          <Input.TextArea
+            placeholder="Nhập lý do hủy (bắt buộc, sẽ gửi thông báo cho hội viên)"
+            value={cancelModal.reason}
+            onChange={(e) => setCancelModal((prev) => ({ ...prev, reason: e.target.value }))}
+            rows={3}
+            maxLength={300}
+          />
+        </div>
+      </Modal>
+
       {/* Assign PT Modal */}
       <Modal title="Phân công PT" open={assignModalOpen} onCancel={() => { setAssignModalOpen(false); setAssignRequest(null) }}
         width={600} centered footer={null} destroyOnClose>
         <div className="py-2 space-y-4">
           {assignRequest && (() => {
             const m = typeof assignRequest.memberId === 'object' ? assignRequest.memberId : null
+            const daySlots = Array.isArray(assignRequest.daySlots) && assignRequest.daySlots.length
+              ? assignRequest.daySlots
+              : (assignRequest.daysOfWeek || []).map((d) => ({ day: d, slot: assignRequest.timeSlots?.[0] || '' }))
+            const scheduleText = daySlots
+              .map((p) => `${['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][p.day] || p.day} ${String(p.slot).replace('-', ' - ')}`)
+              .join(', ')
             return (
               <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 text-sm space-y-1">
                 <div className="font-semibold text-[var(--gs-text)]">
@@ -1458,6 +1597,12 @@ export default function AdminMembersPage() {
                 <div className="text-xs text-[var(--gs-text-muted)]">
                   <PhoneOutlined className="mr-1" />{assignRequest.contactPhone || '—'}
                 </div>
+                {scheduleText && (
+                  <div className="text-xs text-[var(--gs-text-muted)]">
+                    <CalendarOutlined className="mr-1" />{scheduleText}
+                    {assignRequest.weeks && <span className="ml-1">· {assignRequest.weeks} tuần</span>}
+                  </div>
+                )}
               </div>
             )
           })()}
@@ -1469,6 +1614,10 @@ export default function AdminMembersPage() {
             allowClear
           />
 
+          <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-3 text-xs text-[var(--gs-text-muted)]">
+            PT được gợi ý theo: đúng chuyên môn → ít xung đột lịch → ít hội viên đang phụ trách → đánh giá & lịch làm việc. PT hội viên chọn sẽ được đánh dấu và ưu tiên chọn sẵn nếu phù hợp. PT bị mờ không thể chọn.
+          </div>
+
           <div className="max-h-[300px] overflow-y-auto space-y-2">
             {assignLoading ? (
               <div className="text-center py-8 text-sm text-[var(--gs-text-muted)]">Đang tải...</div>
@@ -1476,13 +1625,22 @@ export default function AdminMembersPage() {
               <Empty description="Không tìm thấy PT" />
             ) : (
               filteredAssignTrainers.map((t) => {
-                const rejected = rejectedPtIds.has(t._id)
+                const rejected = t.rejected
+                const hasConflicts = (t.conflicts || []).length > 0
+                const disabled = rejected || hasConflicts
+                const isPreferred = Boolean(t.isPreferred)
+                const isBest = !disabled && !isPreferred && (t.id || t._id) === bestSuggestedTrainerKey
+                const tooltipTitle = rejected
+                  ? `PT này đã từ chối phụ trách hội viên này${t.rejectReason ? `: ${t.rejectReason}` : ''}.`
+                  : hasConflicts
+                    ? `PT bận vào: ${t.conflicts.join('; ')}`
+                    : undefined
                 return (
-                <Tooltip key={t._id} title={rejected ? 'PT này đã từ chối phụ trách hội viên này.' : undefined}>
+                <Tooltip key={t.id || t._id} title={tooltipTitle}>
                 <div
-                  onClick={() => { if (!rejected) setSelectedTrainerId(t._id) }}
-                  className={`flex items-center gap-3 rounded-xl border p-3 transition-all ${rejected ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${
-                    selectedTrainerId === t._id
+                  onClick={() => { if (!disabled) setSelectedTrainerId(t.id || t._id) }}
+                  className={`flex items-center gap-3 rounded-xl border p-3 transition-all ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${
+                    selectedTrainerId === (t.id || t._id)
                       ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
                       : 'border-[var(--gs-border)] hover:border-[var(--theme-accent)]'
                   }`}
@@ -1491,17 +1649,35 @@ export default function AdminMembersPage() {
                     {getUserDisplayName(t, 'PT').charAt(0)}
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm text-[var(--gs-text)]">{getUserDisplayName(t)}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-sm text-[var(--gs-text)]">{getUserDisplayName(t)}</span>
+                      {!t.specMatch && <Tag className="m-0 text-xs">Chuyên môn khác</Tag>}
+                      {rejected && <Tag color="red" className="m-0 text-xs">Đã từ chối</Tag>}
+                      {isPreferred && <Tag color="purple" className="m-0 text-xs font-semibold">PT hội viên muốn đặt lịch</Tag>}
+                      {isBest && <Tag color="green" className="m-0 text-xs font-semibold">Gợi ý tốt nhất</Tag>}
+                    </div>
                     <div className="flex flex-wrap gap-1 mt-0.5">
                       {t.specialties?.map((s, i) => (
                         <Tag key={i} className="m-0 text-xs">{s}</Tag>
                       ))}
+                      {!t.hasSchedule && <Tag color="orange" className="m-0 text-xs">Chưa cập nhật lịch làm việc</Tag>}
                     </div>
                     <div className="text-xs text-[var(--gs-text-muted)] mt-0.5">
                       {t.totalStudents || 0} hội viên đang phụ trách
+                      {t.waitingConfirmation > 0 && <span className="ml-1 text-[var(--gs-text-muted)]">· {t.waitingConfirmation} đang chờ xác nhận</span>}
                     </div>
+                    {(hasConflicts || rejected) && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {(t.conflicts || []).slice(0, 3).map((c, i) => (
+                          <Tag key={i} color="red" className="m-0 text-[11px] leading-none">{c}</Tag>
+                        ))}
+                        {(t.conflicts || []).length > 3 && (
+                          <Tag color="red" className="m-0 text-[11px] leading-none">+{(t.conflicts || []).length - 3} khác</Tag>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {selectedTrainerId === t._id && (
+                  {selectedTrainerId === (t.id || t._id) && (
                     <div className="h-5 w-5 rounded-full bg-[var(--theme-accent)] flex items-center justify-center">
                       <span className="text-white text-xs">✓</span>
                     </div>

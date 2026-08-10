@@ -1,5 +1,5 @@
 import type { AuthProviderType, LoginPayload } from '../context/auth.context'
-import api from './api'
+import api, { getRefreshToken } from './api'
 
 export const authService = {
   sendRegisterOtp: (data: {
@@ -25,7 +25,7 @@ export const authService = {
 
   login: (data: LoginPayload) => api.post('/auth/login', data),
 
-  logout: () => api.post('/auth/logout'),
+  logout: () => api.post('/auth/logout', { refreshToken: getRefreshToken() }),
 
   refresh: () => api.post('/auth/refresh', undefined, { skipAuthRefresh: true } as any),
 

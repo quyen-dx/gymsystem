@@ -4,6 +4,7 @@ import PTAssignment from '../models/PTAssignment.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
 import { endEnrollments as endClassEnrollments } from '../services/classEnrollmentService.js'
+import { recordAuditLog } from '../services/auditLogService.js'
 import sendError from '../utils/sendError.js'
 import { createNotification } from '../services/notificationService.js'
 import {
@@ -62,6 +63,15 @@ export const createEndRequest = async (req, res) => {
         { $set: { status: 'pending_end_approval' } },
       )
     }
+
+    recordAuditLog({
+      req,
+      module: 'pt_assignment',
+      action: 'create_end_request',
+      entity: doc,
+      entityName: `EndRequest ${doc._id}`,
+      details: `PT ${req.user.fullName || req.user.name} yêu cầu kết thúc phụ trách member ${memberId} - ${reasonType}`,
+    }).catch((err) => console.error('Audit createEndRequest failed:', err.message))
 
     // Thong bao cho Admin
     const ptName = req.user.fullName || req.user.name || 'PT'
@@ -173,23 +183,31 @@ export const approveEndRequest = async (req, res) => {
     const memberId = doc.memberId
     const ptId = doc.ptId
 
-    // Ket thuc PTAssignment
+    // Ket thuc PTAssignment (status 'ended' — phân biệt với 'completed' = hết giáo án)
     await PTAssignment.updateMany(
-      { memberId, ptId, status: 'active' },
+      { memberId, ptId, status: { $in: ['active', 'pending_end_approval'] } },
       {
         $set: {
-          status: 'cancelled',
+          status: 'ended',
           cancelledAt: new Date(),
-          cancelReason: 'pt_end_request',
+          cancelReason: `pt_end_request${doc.reasonType ? `_${doc.reasonType}` : ''}`,
+          endDate: new Date(),
         },
       },
     )
 
-    // Ket thuc moi giao an dang hoat dong
-    await WorkoutSchedule.updateMany(
-      { memberId, status: 'active' },
-      { $set: { status: 'archived' } },
-    )
+    // Ket thuc moi giao an dang hoat dong:
+    // - Giao an da hoan thanh toan bo buoi -> giu trang thai 'completed' (lich su, khong mat)
+    // - Giao an con buoi chua dien ra -> archived (khong con hien thi o lich dang hoat dong)
+    const activeSchedules = await WorkoutSchedule.find({ memberId, status: 'active' }).lean()
+    const terminalStatuses = ['completed', 'skipped', 'no_show', 'cancelled']
+    for (const sched of activeSchedules) {
+      const hasFutureOrPending = (sched.sessions || []).some((s) => !terminalStatuses.includes(s.status))
+      await WorkoutSchedule.updateOne(
+        { _id: sched._id },
+        { $set: { status: hasFutureOrPending ? 'archived' : 'completed' } },
+      )
+    }
 
     // Go khoi lop (TrainingAssignment) - legacy, kept for safety
     await TrainingAssignment.updateMany(
@@ -208,6 +226,15 @@ export const approveEndRequest = async (req, res) => {
     doc.processedBy = adminId
     doc.processedAt = new Date()
     await doc.save({ validateModifiedOnly: true })
+
+    recordAuditLog({
+      req,
+      module: 'pt_assignment',
+      action: 'approve_end_request',
+      entity: doc,
+      entityName: `EndRequest ${doc._id}`,
+      details: `Duyệt kết thúc phụ trách member ${memberId} bởi PT ${ptId} - ${doc.reasonType || ''}`,
+    }).catch((err) => console.error('Audit approveEndRequest failed:', err.message))
 
     // Thong bao cho PT
     const memberName = await getMemberInfo(memberId)
@@ -273,6 +300,15 @@ export const rejectEndRequest = async (req, res) => {
     doc.processedAt = new Date()
     doc.rejectReason = rejectReason || ''
     await doc.save({ validateModifiedOnly: true })
+
+    recordAuditLog({
+      req,
+      module: 'pt_assignment',
+      action: 'reject_end_request',
+      entity: doc,
+      entityName: `EndRequest ${doc._id}`,
+      details: `Từ chối kết thúc phụ trách${rejectReason ? ` - Lý do: ${rejectReason}` : ''}`,
+    }).catch((err) => console.error('Audit rejectEndRequest failed:', err.message))
 
     // Tra lai trang thai active cho PTAssignment
     if (doc.assignmentId) {

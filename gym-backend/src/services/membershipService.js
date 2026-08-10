@@ -1345,13 +1345,12 @@ const handleMembershipStripeWebhook = async ({ rawBody, signature }) => {
   }
 
   const webhookSecret = process.env.STRIPE_MEMBERSHIP_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET
-  let event
-  if (webhookSecret) {
-    event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
-  } else {
-    const body = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : JSON.stringify(rawBody)
-    event = JSON.parse(body)
+  if (!webhookSecret) {
+    const error = new Error('STRIPE_WEBHOOK_SECRET chưa được cấu hình, từ chối xử lý webhook')
+    error.statusCode = 503
+    throw error
   }
+  const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
 
   if (event.type === 'checkout.session.completed') {
     await completeStripeCheckoutSession(event.data.object)
@@ -1784,6 +1783,50 @@ const cancelRenewal = async ({ userId, renewalId }) => {
       }], { session })
     }
 
+    // === Rollback hạn sử dụng ===
+    // Khi hủy gia hạn: hủy period PENDING tương ứng và rút lại expiresAt/durationDays
+    // của cycle (nếu không member vừa được hoàn tiền vừa giữ nguyên số ngày đã gia hạn).
+    const linkedPeriod = await MembershipPeriod.findOne({
+      membershipId: renewal.membershipId,
+      endDate: renewal.newEndDate,
+    }).session(session)
+
+    if (linkedPeriod && linkedPeriod.status !== 'PENDING') {
+      const error = new Error('Lần gia hạn này đã bắt đầu sử dụng, không thể hủy. Vui lòng liên hệ nhân viên để xử lý theo chính sách hoàn tiền.')
+      error.statusCode = 400
+      throw error
+    }
+
+    if (linkedPeriod) {
+      linkedPeriod.status = 'CANCELLED'
+      linkedPeriod.refundStatus = 'refunded'
+      linkedPeriod.refundAmount = refundAmount
+      linkedPeriod.refundAt = new Date()
+      linkedPeriod.refundMethod = 'WALLET'
+      await linkedPeriod.save({ session })
+    }
+
+    const activeCycle = await MembershipCycle.findOne({
+      memberId, status: 'active',
+    }).session(session)
+
+    if (activeCycle) {
+      const rolledBackExpires = new Date(activeCycle.expiresAt || new Date())
+      rolledBackExpires.setDate(rolledBackExpires.getDate() - Number(renewal.days || 0))
+      const rolledBackEndDate = endOfDayVN(rolledBackExpires)
+
+      await MembershipCycle.updateOne(
+        { _id: activeCycle._id },
+        {
+          $inc: { durationDays: -Number(renewal.days || 0) },
+          $set: { expiresAt: rolledBackEndDate, endDate: rolledBackEndDate },
+        },
+      ).session(session)
+    }
+
+    // Đồng bộ lại timeline các period còn lại sau khi hủy period của lần gia hạn này
+    await rebuildMembershipTimeline({ membershipId: renewal.membershipId, session })
+
     await recordUserActivity({
       userId: memberId,
       type: 'membership',
@@ -1890,7 +1933,7 @@ const rebuildMembershipTimeline = async ({ membershipId, session = null }) => {
 
 }
 
-const lazyActivatePendingPeriods = async ({ memberId, session = null }) => {
+export const lazyActivatePendingPeriods = async ({ memberId, session = null }) => {
   const now = new Date()
 
   // 1. Tìm membership hiện tại của member

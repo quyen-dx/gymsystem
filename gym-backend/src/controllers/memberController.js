@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import mongoose from 'mongoose'
 import User from '../models/User.js'
 import Membership from '../models/Membership.js'
@@ -454,6 +455,7 @@ export const createOfflinePlanPayment = async (req, res) => {
 
     const transferContent = buildTransferContent(member, plan)
     const status = paymentMethod === 'BANK_TRANSFER' ? 'PENDING' : 'PAID'
+    const confirmToken = crypto.randomBytes(24).toString('hex')
     const payment = await Payment.create({
       userId: member._id,
       planId: plan._id,
@@ -472,11 +474,12 @@ export const createOfflinePlanPayment = async (req, res) => {
         flow,
         transferContent,
         bankInfo: BANK_INFO,
+        confirmToken: status === 'PENDING' ? confirmToken : null,
       },
     })
 
     const paymentUrl = paymentMethod === 'BANK_TRANSFER'
-      ? buildClientUrl(`/bank-transfer/${payment._id}`)
+      ? buildClientUrl(`/bank-transfer/${payment._id}`, { token: confirmToken })
       : ''
 
     res.status(201).json({
@@ -503,7 +506,6 @@ export const getOfflinePlanPayment = async (req, res) => {
       _id: req.params.paymentId,
       type: PLAN_OFFLINE_PAYMENT_TYPE,
     })
-      .populate('userId', 'name fullName email phone memberCode memberNumber avatar')
       .populate('planId', 'nameVi nameEn price durationDays')
       .lean()
 
@@ -517,7 +519,6 @@ export const getOfflinePlanPayment = async (req, res) => {
         type: payment.type,
         amount: payment.amount,
         method: payment.paymentMethod || payment.method,
-        member: payment.userId,
         plan: payment.planId,
         bankInfo: payment.metadata?.bankInfo || BANK_INFO,
         transferContent: payment.metadata?.transferContent || payment.txnRef || String(payment._id),
@@ -530,21 +531,38 @@ export const getOfflinePlanPayment = async (req, res) => {
 
 export const confirmOfflinePlanPayment = async (req, res) => {
   try {
+    const { token } = req.body
+    if (!token || typeof token !== 'string') {
+      throw new AppError('Mã xác nhận chuyển khoản là bắt buộc', 400)
+    }
+
     const payment = await Payment.findOne({
       _id: req.params.paymentId,
       type: PLAN_OFFLINE_PAYMENT_TYPE,
     })
 
     if (!payment) throw new AppError('Không tìm thấy payment mua gói', 404)
-    if (payment.status !== 'PAID') {
-      payment.status = 'PAID'
-      payment.paidAt = new Date()
-      payment.metadata = {
-        ...(payment.metadata || {}),
-        customerConfirmedAt: new Date(),
-      }
-      await payment.save()
+
+    const storedToken = payment.metadata?.confirmToken
+    if (!storedToken) throw new AppError('Payment không có mã xác nhận', 400)
+
+    const a = Buffer.from(String(token))
+    const b = Buffer.from(String(storedToken))
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      throw new AppError('Mã xác nhận không hợp lệ', 403)
     }
+
+    if (payment.status !== 'PENDING') {
+      throw new AppError('Payment đã được xử lý trước đó', 400)
+    }
+
+    payment.status = 'PAID'
+    payment.paidAt = new Date()
+    payment.metadata = {
+      ...(payment.metadata || {}),
+      customerConfirmedAt: new Date(),
+    }
+    await payment.save()
 
     res.json({
       success: true,
@@ -1374,10 +1392,10 @@ export const getMyEnrollmentStatus = async (req, res) => {
         .populate('classId')
         .lean(),
       ClassEnrollment.findOne({ memberId, status: 'active' })
-        .populate('classId', 'name code specialization daysOfWeek startTime endTime')
+        .populate('classId', 'name code specialization daysOfWeek startTime endTime ptId')
         .lean(),
       TrainingRequest.findOne({ memberId, status: 'pending' })
-        .select('_id specialization timeSlots daysOfWeek')
+        .select('_id specialization timeSlots daysOfWeek daySlots')
         .lean(),
       WorkoutSchedule.countDocuments({ memberId, status: 'active' }),
     ])
@@ -1390,9 +1408,20 @@ export const getMyEnrollmentStatus = async (req, res) => {
       const cls = typeof classSource === 'object'
         ? classSource
         : await TrainingClass.findById(classSource)
-            .select('name code specialization daysOfWeek startTime endTime')
+            .select('name code specialization daysOfWeek startTime endTime ptId')
             .lean()
       if (cls) {
+        let classPtName = null
+        const clsPt = cls.ptId
+        if (clsPt) {
+          if (typeof clsPt === 'object' && (clsPt.fullName || clsPt.name)) {
+            classPtName = clsPt.fullName || clsPt.name
+          } else {
+            const ptId = typeof clsPt === 'object' ? String(clsPt) : clsPt
+            const ptUser = await User.findById(ptId).select('name fullName').lean()
+            classPtName = ptUser?.fullName || ptUser?.name || null
+          }
+        }
         classInfo = {
           classId: cls._id,
           name: cls.name,
@@ -1400,6 +1429,7 @@ export const getMyEnrollmentStatus = async (req, res) => {
           specialization: cls.specialization,
           daysOfWeek: cls.daysOfWeek,
           time: `${cls.startTime} - ${cls.endTime}`,
+          ptName: classPtName,
         }
       }
     }
@@ -1427,7 +1457,7 @@ export const getMyEnrollmentStatus = async (req, res) => {
       hasActiveSchedules: activeSchedules > 0,
       hasPendingRequest: !!pendingRequest,
       pendingRequest: pendingRequest
-        ? { _id: pendingRequest._id, specialization: pendingRequest.specialization, timeSlots: pendingRequest.timeSlots, daysOfWeek: pendingRequest.daysOfWeek }
+        ? { _id: pendingRequest._id, specialization: pendingRequest.specialization, timeSlots: pendingRequest.timeSlots, daysOfWeek: pendingRequest.daysOfWeek, daySlots: pendingRequest.daySlots || [] }
         : null,
       pt: ptInfo,
       class: classInfo,

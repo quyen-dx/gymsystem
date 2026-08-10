@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Modal, Tag, message } from 'antd'
-import { CalendarOutlined, CloseCircleOutlined, ExclamationCircleOutlined, MessageOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons'
+import { CalendarOutlined, CloseCircleOutlined, ExclamationCircleOutlined, MessageOutlined, TeamOutlined, UserOutlined, WalletOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { trainingRequestService, type TrainingRequest } from '../../services/trainingRequestService'
+import { bookingService, type Booking } from '../../services/bookingService'
+import { getWallet } from '../../services/walletService'
 import { getUserDisplayName } from '../../utils/userDisplay'
 
 const DAY_LABELS = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7']
+const DAY_SHORT_LABELS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
 
 const STATUS_META: Record<string, { color: string; label: string }> = {
   pending: { color: 'orange', label: 'Chờ xử lý' },
@@ -17,7 +20,14 @@ const STATUS_META: Record<string, { color: string; label: string }> = {
   cancelled: { color: 'red', label: 'Đã hủy' },
 }
 
-const CANCELABLE = ['pending', 'waiting_assignment']
+Object.assign(STATUS_META, {
+  awaiting_payment: { color: 'gold', label: 'Chờ thanh toán' },
+  confirmed: { color: 'green', label: 'Đã xác nhận' },
+  payment_expired: { color: 'red', label: 'Hết hạn thanh toán' },
+  expired: { color: 'red', label: 'Đã hết hạn xử lý' },
+})
+
+const CANCELABLE = ['pending', 'waiting_assignment', 'assigned', 'awaiting_payment']
 
 const STATUS_DESCRIPTIONS: Record<string, string> = {
   pending: 'Admin đã tiếp nhận yêu cầu và đang xem xét.',
@@ -62,6 +72,23 @@ function classNameOf(c?: TrainingRequest['assignedClassId']) {
   return c.name || ''
 }
 
+function formatDays(days?: number[]) {
+  if (!days?.length) return 'Linh hoạt (Admin sắp xếp)'
+  return days
+    .map((d) => {
+      const label = DAY_LABELS[d]
+      const short = DAY_SHORT_LABELS[d]
+      if (!label) return ''
+      return short ? `${label} (${short})` : label
+    })
+    .filter(Boolean)
+    .join(', ')
+}
+
+function formatTimeSlots(slots?: string[]) {
+  return slots?.length ? slots.join(', ') : 'Linh hoạt (Admin sắp xếp)'
+}
+
 interface Props {
   request: TrainingRequest
   onReload: () => void
@@ -70,10 +97,21 @@ interface Props {
 export default function YourRequestPanel({ request, onReload }: Props) {
   const navigate = useNavigate()
   const [processing, setProcessing] = useState(false)
+  const [paymentBookings, setPaymentBookings] = useState<Booking[]>([])
   const isPt1on1 = request.type === 'pt1on1'
   const meta = STATUS_META[request.status] || { color: 'default', label: request.status }
   const timeline = timelineFor(request)
   const assignedPtId = idOf(request.assignedTrainerId)
+
+  useEffect(() => {
+    if (request.status !== 'awaiting_payment') {
+      setPaymentBookings([])
+      return
+    }
+    bookingService.getMyBookings()
+      .then(({ data }) => setPaymentBookings((data.bookings || []).filter((booking: Booking) => String(booking.requestId || '') === String(request._id) && booking.status === 'awaiting_payment')))
+      .catch(() => setPaymentBookings([]))
+  }, [request._id, request.status])
 
   const handleCancel = async () => {
     setProcessing(true)
@@ -122,6 +160,34 @@ export default function YourRequestPanel({ request, onReload }: Props) {
   }
 
   const goalText = request.goals?.length ? request.goals.join(', ') : '—'
+  const payAllPendingBookings = async () => {
+    if (!paymentBookings.length) return
+    setProcessing(true)
+    try {
+      const total = paymentBookings.reduce((sum, b) => sum + Number(b.totalAmount || 0), 0)
+      const walletRes = await getWallet()
+      const balance = Number(walletRes?.data?.data?.balance || 0)
+      if (balance < total) {
+        const res = await bookingService.payBooking(paymentBookings[0]._id, { useVnpay: true })
+        if (res.data?.paymentUrl) {
+          window.location.href = res.data.paymentUrl
+          return
+        }
+        message.error('Không thể tạo phiên thanh toán VNPay. Vui lòng thử lại.')
+        return
+      }
+      for (const booking of paymentBookings) {
+        await bookingService.payBooking(booking._id)
+      }
+      message.success('Thanh toán các buổi PT thành công')
+      onReload()
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Thanh toán chưa hoàn tất')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   const note = request.note || request.healthNotes || ''
   const sentAt = request.createdAt ? dayjs(request.createdAt).format('DD/MM/YYYY HH:mm') : '—'
   const preferred = nameOf(request.preferredTrainerId)
@@ -131,14 +197,23 @@ export default function YourRequestPanel({ request, onReload }: Props) {
   const rows: Array<{ label: string; value: string }> = []
   rows.push({ label: 'Chuyên môn', value: specLabel(request.specialization).toUpperCase() })
   rows.push({ label: 'Mục tiêu', value: goalText })
+  if (request.daySlots?.length) {
+    rows.push({
+      label: 'Lịch mong muốn',
+      value: request.daySlots
+        .map((p) => `${DAY_LABELS[p.day]} (${DAY_SHORT_LABELS[p.day]}) ${p.slot.replace('-', ' - ')}`)
+        .join(', '),
+    })
+  } else {
+    rows.push({ label: 'Ngày muốn book', value: formatDays(request.daysOfWeek) })
+    rows.push({ label: 'Khung giờ muốn book', value: formatTimeSlots(request.timeSlots) })
+  }
   if (isPt1on1) {
     rows.push({ label: 'PT mong muốn', value: preferred || 'Không yêu cầu' })
     rows.push({ label: 'Số điện thoại', value: request.contactPhone || '—' })
     rows.push({ label: 'Email', value: request.contactEmail || '—' })
   } else {
     rows.push({ label: 'Số buổi/tuần', value: request.desiredSessions ? `${request.desiredSessions} buổi` : '—' })
-    rows.push({ label: 'Khung giờ', value: request.timeSlots?.length ? request.timeSlots.join(', ') : '—' })
-    rows.push({ label: 'Ngày trong tuần', value: request.daysOfWeek?.length ? request.daysOfWeek.map(d => DAY_LABELS[d]).filter(Boolean).join(', ') : 'Linh hoạt (Admin sắp xếp)' })
   }
   if (request.status === 'assigned') {
     if (isPt1on1 && assignedPtName) rows.push({ label: 'PT được phân công', value: assignedPtName })
@@ -178,6 +253,23 @@ export default function YourRequestPanel({ request, onReload }: Props) {
           </div>
         ))}
       </div>
+
+      {request.status === 'awaiting_payment' && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-[var(--gs-text)]">Thanh toán để xác nhận lịch PT</p>
+              <p className="mt-1 text-sm text-[var(--gs-text-muted)]">
+                {paymentBookings.length} buổi đang được giữ chỗ, tổng cộng {paymentBookings.reduce((sum, booking) => sum + Number(booking.totalAmount || 0), 0).toLocaleString('vi-VN')}đ.
+                {paymentBookings.reduce((sum, booking) => sum + Number(booking.totalAmount || 0), 0) > 0 && ' Nếu số dư ví không đủ, phần còn thiếu sẽ được thanh toán trực tiếp qua VNPay.'}
+              </p>
+            </div>
+            <Button type="primary" icon={<WalletOutlined />} loading={processing} disabled={!paymentBookings.length} onClick={payAllPendingBookings}>
+              Thanh toán {paymentBookings.reduce((sum, booking) => sum + Number(booking.totalAmount || 0), 0).toLocaleString('vi-VN')}đ
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Timeline */}
       <div>

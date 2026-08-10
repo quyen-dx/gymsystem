@@ -1,4 +1,5 @@
 import TrainingRequest, { ACTIVE_TRAINING_REQUEST_STATUSES } from '../models/TrainingRequest.js'
+import TrainerSchedule from '../models/TrainerSchedule.js'
 import TrainingClass from '../models/TrainingClass.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
 import PTAssignment from '../models/PTAssignment.js'
@@ -6,6 +7,8 @@ import ClassEnrollment from '../models/ClassEnrollment.js'
 import MembershipCycle from '../models/MembershipCycle.js'
 import MembershipPeriod from '../models/MembershipPeriod.js'
 import Plan from '../models/Plan.js'
+import Booking from '../models/Booking.js'
+import PT from '../models/PT.js'
 import { ensureEnrollment as ensureClassEnrollment } from './classEnrollmentService.js'
 import { notifyPtMemberChanged } from './notificationService.js'
 import { calculateRemainingDays } from '../utils/dateUtils.js'
@@ -30,6 +33,272 @@ function normalizeSpecialization(value) {
     throw err
   }
   return specialization
+}
+
+const DAY_NAMES = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7']
+
+// Định dạng tên ngày: day 0 = "Chủ nhật" (không thêm "Thứ"), còn lại "Thứ 2".."Thứ 7"
+const formatDayName = (day) => (Number(day) === 0 ? 'Chủ nhật' : `Thứ ${Number(day) + 1}`)
+
+const SHIFT_FALLBACK = {
+  morning: ['06:00', '12:00'],
+  afternoon: ['12:00', '18:00'],
+  evening: ['18:00', '22:00'],
+}
+
+const ACTIVE_BOOKING_STATUSES = ['pending', 'awaiting_payment', 'confirmed']
+
+const ALLOWED_TIME_SLOTS = new Set([
+  '06:00-08:00',
+  '08:00-10:00',
+  '10:00-12:00',
+  '12:00-14:00',
+  '14:00-16:00',
+  '16:00-18:00',
+  '18:00-20:00',
+  '20:00-22:00',
+])
+
+// Chuẩn hóa dữ liệu ngày -> khung giờ của PT 1-1 thành [{ day, slot }], mỗi ngày 1 khung giờ.
+// Vẫn hỗ trợ dữ liệu cũ (daysOfWeek + 1 timeSlot áp dụng cho mọi ngày).
+const normalizeDaySlots = (data) => {
+  let raw = Array.isArray(data.daySlots) && data.daySlots.length
+    ? data.daySlots
+    : null
+
+  if (!raw && Array.isArray(data.daysOfWeek) && data.daysOfWeek.length) {
+    const slots = Array.isArray(data.timeSlots) ? data.timeSlots.filter(Boolean) : []
+    if (slots.length === 1) {
+      raw = data.daysOfWeek.map((day) => ({ day: Number(day), slot: slots[0] }))
+    }
+  }
+  if (!raw) return []
+
+  const seen = new Set()
+  const result = []
+  for (const item of raw) {
+    const day = Number(item?.day)
+    const slot = String(item?.slot || '').trim()
+    if (!Number.isInteger(day) || day < 0 || day > 6) {
+      const err = new Error('Ngày tập không hợp lệ')
+      err.statusCode = 400
+      throw err
+    }
+    if (!ALLOWED_TIME_SLOTS.has(slot)) {
+      const err = new Error(`Khung giờ "${slot}" không hợp lệ`)
+      err.statusCode = 400
+      throw err
+    }
+    if (seen.has(day)) {
+      const err = new Error(`Ngày ${DAY_NAMES[day]} chỉ được chọn 1 khung giờ`)
+      err.statusCode = 400
+      throw err
+    }
+    seen.add(day)
+    result.push({ day, slot })
+  }
+  return result.sort((a, b) => a.day - b.day)
+}
+
+// Lấy cặp ngày->giờ hiệu lực của 1 request (hỗ trợ dữ liệu cũ lưu daysOfWeek/timeSlots)
+const requestDaySlots = (request) => {
+  const daySlots = Array.isArray(request.daySlots) && request.daySlots.length
+    ? request.daySlots
+    : null
+  if (daySlots) return daySlots
+  const days = Array.isArray(request.daysOfWeek) ? request.daysOfWeek : []
+  const slots = Array.isArray(request.timeSlots) ? request.timeSlots.filter(Boolean) : []
+  if (!days.length) return []
+  // Legacy: 1 slot áp dụng cho mọi ngày
+  if (slots.length === 1) return days.map((day) => ({ day: Number(day), slot: slots[0] }))
+  return []
+}
+
+function toMinutes(t) {
+  if (!t) return 0
+  const [h, m] = String(t).split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
+function slotsOverlap(a, b) {
+  const parse = (s) => {
+    const [start, end] = String(s || '').split('-')
+    return [toMinutes(start), toMinutes(end)]
+  }
+  const [as, ae] = parse(a)
+  const [bs, be] = parse(b)
+  if (!ae || !be) return true
+  return as < be && bs < ae
+}
+
+function normalizeDayMs(date) {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
+function nextDateForDay(dayOfWeek, weekOffset = 0) {
+  const now = new Date()
+  const today = new Date(now)
+  today.setHours(0, 0, 0, 0)
+  const currentDay = today.getDay()
+  let diff = Number(dayOfWeek) - currentDay
+  if (diff < 0) diff += 7
+  const target = new Date(today)
+  target.setDate(today.getDate() + diff + weekOffset * 7)
+  return target
+}
+
+// Chặn 2 hội viên đặt cùng 1 PT trùng ngày + trùng khung giờ (kiểm tra cả booking đang hoạt động
+// lẫn request đang xử lý của member khác). Kiểm tra theo từng cặp (day, slot) của yêu cầu,
+// so sánh overlap theo thời gian thực. Trả về danh sách xung đột hoặc null.
+const findCrossMemberConflict = async ({ trainerId, daySlots, weeks = 1, excludeMemberId, excludeRequestId }) => {
+  const weekCount = Math.min(Math.max(Number(weeks) || 1, 1), 12)
+  const pairs = (Array.isArray(daySlots) ? daySlots : []).filter((p) => p && p.day !== undefined && p.slot)
+  if (!pairs.length) return null
+
+  const from = normalizeDayMs(new Date())
+  const to = from + (weekCount * 7 + 7) * 24 * 60 * 60 * 1000
+
+  // 1) Trùng với booking đang hoạt động của PT (do hội viên khác đặt)
+  const bookings = await Booking.find({
+    ptId: trainerId,
+    date: { $gte: new Date(from), $lt: new Date(to) },
+    status: { $in: ACTIVE_BOOKING_STATUSES },
+  })
+    .select('date slot memberId')
+    .lean()
+
+  const conflicts = new Map() // `${day}|${slot}` -> { day, slot }
+
+  const addConflict = (day, slot) => {
+    const key = `${Number(day)}|${slot}`
+    if (!conflicts.has(key)) conflicts.set(key, { day: Number(day), slot })
+  }
+
+  for (const pair of pairs) {
+    for (const b of bookings) {
+      if (excludeMemberId && String(b.memberId) === String(excludeMemberId)) continue
+      if (b.date.getDay() !== pair.day) continue
+      const weekDiff = Math.round((normalizeDayMs(b.date) - from) / (7 * 24 * 60 * 60 * 1000))
+      if (weekDiff < 0 || weekDiff >= weekCount) continue
+      if (slotsOverlap(pair.slot, b.slot)) addConflict(pair.day, pair.slot)
+    }
+  }
+
+  // 2) Trùng với lịch của chính member này (bất kỳ PT nào)
+  const memberBookings = await Booking.find({
+    memberId: excludeMemberId,
+    date: { $gte: new Date(from), $lt: new Date(to) },
+    status: { $in: ACTIVE_BOOKING_STATUSES },
+  })
+    .select('date slot')
+    .lean()
+
+  for (const pair of pairs) {
+    for (const b of memberBookings) {
+      if (b.date.getDay() !== pair.day) continue
+      const weekDiff = Math.round((normalizeDayMs(b.date) - from) / (7 * 24 * 60 * 60 * 1000))
+      if (weekDiff < 0 || weekDiff >= weekCount) continue
+      if (slotsOverlap(pair.slot, b.slot)) addConflict(pair.day, pair.slot)
+    }
+  }
+
+  // 3) Trùng với request PT 1-1 đang xử lý của member khác cùng chọn PT này
+  const requests = await TrainingRequest.find({
+    _id: { $ne: excludeRequestId },
+    type: 'pt1on1',
+    status: { $in: ACTIVE_TRAINING_REQUEST_STATUSES },
+    memberId: { $ne: excludeMemberId },
+    $or: [
+      { preferredTrainerId: trainerId },
+      { assignedTrainerId: trainerId },
+    ],
+  })
+    .select('daysOfWeek timeSlots daySlots')
+    .lean()
+
+  for (const r of requests) {
+    const rPairs = requestDaySlots(r)
+    if (rPairs.length) {
+      for (const rp of rPairs) {
+        for (const pair of pairs) {
+          if (rp.day === pair.day && slotsOverlap(pair.slot, rp.slot)) addConflict(pair.day, pair.slot)
+        }
+      }
+      continue
+    }
+    // Legacy không xác định được cặp → so ngày chung với mọi khung giờ của request kia
+    const rDays = Array.isArray(r.daysOfWeek) ? r.daysOfWeek : []
+    const rSlots = Array.isArray(r.timeSlots) ? r.timeSlots.filter(Boolean) : []
+    for (const pair of pairs) {
+      const sameDay = rDays.find((d) => d === pair.day)
+      if (sameDay === undefined) continue
+      if (rSlots.some((rs) => slotsOverlap(pair.slot, rs))) addConflict(pair.day, pair.slot)
+    }
+  }
+
+  return conflicts.size ? [...conflicts.values()] : null
+}
+
+// Kiểm tra ngày/giờ member chọn có nằm trong lịch làm việc (TrainerSchedule) của PT mong muốn.
+// Trả về danh sách lỗi theo từng cặp (day, slot) hoặc null. PT chưa có lịch → không validate.
+const findScheduleConflict = async ({ trainerId, daySlots, ptLabel = 'PT mong muốn' }) => {
+  const schedules = await TrainerSchedule.find({ trainerId, status: 'active' }).lean()
+  if (!schedules.length) return null
+
+  const windowsByDay = new Map()
+  for (const s of schedules) {
+    const [fallbackStart, fallbackEnd] = SHIFT_FALLBACK[s.shift] || ['', '']
+    if (!windowsByDay.has(s.dayOfWeek)) windowsByDay.set(s.dayOfWeek, [])
+    windowsByDay.get(s.dayOfWeek).push({
+      start: s.startTime || fallbackStart,
+      end: s.endTime || fallbackEnd,
+    })
+  }
+
+  const errors = []
+  for (const pair of (daySlots || [])) {
+    const windows = windowsByDay.get(pair.day)
+    const [start, end] = String(pair.slot).split('-').map((x) => x.trim())
+    const fits = windows && windows.some(
+      (w) => toMinutes(start) >= toMinutes(w.start) && toMinutes(end) <= toMinutes(w.end),
+    )
+    if (!fits) {
+      errors.push(`${formatDayName(pair.day)} lúc ${pair.slot} không nằm trong lịch làm việc của ${ptLabel}`)
+    }
+  }
+  return errors.length ? errors : null
+}
+
+// Trùng với lớp nhóm đang hoạt động do PT phụ trách (cùng ngày, khung giờ overlap).
+// Trả về danh sách lỗi theo từng cặp (day, slot) hoặc null.
+const findClassConflict = async ({ trainerId, daySlots }) => {
+  const pairs = (Array.isArray(daySlots) ? daySlots : []).filter((p) => p && p.day !== undefined && p.slot)
+  if (!pairs.length) return null
+  const days = [...new Set(pairs.map((p) => p.day))]
+
+  const classes = await TrainingClass.find({
+    ptId: trainerId,
+    status: { $nin: ['closed', 'inactive'] },
+    daysOfWeek: { $elemMatch: { $in: days } },
+  })
+    .select('name daysOfWeek startTime endTime')
+    .lean()
+
+  if (!classes.length) return null
+
+  const errors = []
+  for (const pair of pairs) {
+    for (const c of classes) {
+      if (!(c.daysOfWeek || []).includes(pair.day)) continue
+      if (!c.startTime || !c.endTime) continue
+      if (slotsOverlap(pair.slot, `${c.startTime}-${c.endTime}`)) {
+        errors.push(`${formatDayName(pair.day)} lúc ${pair.slot} trùng với lớp nhóm "${c.name}" của PT này`)
+      }
+    }
+  }
+  return errors.length ? errors : null
 }
 
 export const reconcileStaleRequests = async ({ memberId } = {}) => {
@@ -124,25 +393,127 @@ export const createRequest = async ({ memberId, data }) => {
     throw err
   }
 
+  // Chặn đăng ký PT 1-1 khi hội viên đã có PT phụ trách đang hoạt động
+  // (tránh tạo yêu cầu "treo" mà Admin không thể phân công PT)
+  if (type === 'pt1on1') {
+    const activeAssignment = await PTAssignment.exists({ memberId, status: 'active' })
+    if (activeAssignment) {
+      const err = new Error('Bạn đã có PT phụ trách đang hoạt động. Vui lòng rời dịch vụ PT hiện tại trước khi đăng ký PT khác.')
+      err.statusCode = 409
+      throw err
+    }
+  }
+
+  const weeks = Math.min(Math.max(Number(data.weeks) || 1, 1), 12)
+
+  // Hội viên chọn PT cụ thể mà không chọn chuyên môn → lấy chuyên môn đầu tiên của PT đó
+  // (để Admin vẫn phân công được đúng PT đã chọn, không bị chặn do lệch chuyên môn).
+  let specValue = data.specialization
+  if (type === 'pt1on1' && !specValue && data.preferredTrainerId) {
+    const preferredPt = await (await import('../models/User.js')).default.findById(data.preferredTrainerId).select('specialties').lean()
+    const firstSpec = (preferredPt?.specialties || []).find((s) => ALLOWED_SPECIALIZATIONS.has(String(s).trim().toUpperCase()))
+    if (firstSpec) specValue = firstSpec
+  }
+
   const base = {
     memberId,
     type,
-    specialization: normalizeSpecialization(data.specialization),
+    specialization: normalizeSpecialization(specValue),
     goals: data.goals || [],
     note: data.note || '',
+    weeks,
     status: 'pending',
   }
+  base.timeSlots = data.timeSlots || []
+  base.daysOfWeek = data.daysOfWeek || []
+  base.healthNotes = data.healthNotes || ''
+  base.preferredTrainerId = data.preferredTrainerId || null
   if (type === 'pt1on1') {
     base.contactPhone = data.contactPhone || ''
     base.contactEmail = data.contactEmail || ''
-    base.preferredTrainerId = data.preferredTrainerId || null
-    base.healthNotes = data.healthNotes || ''
+
+    // Mỗi ngày chọn 1 khung giờ riêng (daySlots); giữ daysOfWeek/timeSlots gộp để tương thích hiển thị cũ
+    base.daySlots = normalizeDaySlots(data)
+    if (!base.daySlots.length) {
+      const err = new Error('Vui lòng chọn ít nhất 1 ngày và khung giờ tập')
+      err.statusCode = 400
+      throw err
+    }
+    if (base.daySlots.length) {
+      base.daysOfWeek = [...new Set(base.daySlots.map((p) => p.day))].sort((a, b) => a - b)
+      base.timeSlots = [...new Set(base.daySlots.map((p) => p.slot))]
+    } else if (base.timeSlots.length > 1) {
+      const err = new Error('Mỗi ngày chỉ được chọn 1 khung giờ tập. Vui lòng chọn 1 khung giờ cho từng ngày.')
+      err.statusCode = 400
+      throw err
+    }
   } else {
-    base.desiredSessions = data.desiredSessions || 3
-    base.timeSlots = data.timeSlots || []
-    base.daysOfWeek = data.daysOfWeek || []
-    base.healthNotes = data.healthNotes || ''
     base.isNewToGym = data.isNewToGym || false
+  }
+
+  // A request cannot wait for Admin beyond the first requested session.
+  if (type === 'pt1on1' && base.daySlots.length) {
+    const now = new Date()
+    const starts = base.daySlots.map(({ day, slot }) => {
+      const target = new Date(now)
+      target.setHours(0, 0, 0, 0)
+      let offset = Number(day) - target.getDay()
+      if (offset < 0) offset += 7
+      target.setDate(target.getDate() + offset)
+      const [hour = 0, minute = 0] = String(slot || '').split('-')[0].trim().split(':').map(Number)
+      target.setHours(hour, minute, 0, 0)
+      if (target <= now) target.setDate(target.getDate() + 7)
+      return target
+    })
+    base.adminDeadline = new Date(Math.min(...starts.map((date) => date.getTime())))
+  }
+
+  if (base.preferredTrainerId) {
+    const daySlots = requestDaySlots(base)
+
+    const scheduleConflicts = await findScheduleConflict({
+      trainerId: base.preferredTrainerId,
+      daySlots,
+    })
+    if (scheduleConflicts) {
+      const err = new Error(`${scheduleConflicts.join('; ')}. Vui lòng chọn lại từng ngày theo lịch làm việc của PT.`)
+      err.statusCode = 400
+      throw err
+    }
+
+    const classConflicts = await findClassConflict({
+      trainerId: base.preferredTrainerId,
+      daySlots,
+    })
+    if (classConflicts) {
+      const err = new Error(`${classConflicts.join('; ')}. Vui lòng chọn ngày/giờ khác.`)
+      err.statusCode = 409
+      throw err
+    }
+
+    const crossConflicts = await findCrossMemberConflict({
+      trainerId: base.preferredTrainerId,
+      daySlots,
+      weeks,
+      excludeMemberId: memberId,
+    })
+    if (crossConflicts) {
+      const list = crossConflicts.map((c) => `${formatDayName(c.day)} lúc ${c.slot}`).join(', ')
+      const err = new Error(`PT này đã có lịch không trống vào: ${list}. Vui lòng chọn ngày/giờ khác cho các ngày này.`)
+      err.statusCode = 409
+      throw err
+    }
+
+    // BR-04: PT được chọn phải đã được Admin cấu hình giá cho loại dịch vụ tương ứng
+    const ptProfile = await PT.findOne({ userId: base.preferredTrainerId }).lean()
+    const requiredPrice = type === 'pt1on1' ? (ptProfile?.oneToOnePrice || 0) : (ptProfile?.groupPrice || 0)
+    if (!requiredPrice || requiredPrice <= 0) {
+      const err = new Error(type === 'pt1on1'
+        ? 'PT hiện chưa được cấu hình giá đặt lịch 1-1. Vui lòng chọn PT khác.'
+        : 'PT hiện chưa được cấu hình giá đặt lịch nhóm. Vui lòng chọn PT khác.')
+      err.statusCode = 403
+      throw err
+    }
   }
   const request = await TrainingRequest.create(base)
   return request
@@ -413,7 +784,21 @@ export const assignTrainer = async ({ requestId, trainerId, assignedBy }) => {
 
   const activeAssignment = await PTAssignment.exists({ memberId: existing.memberId, status: 'active' })
   if (activeAssignment) {
-    const err = new Error('Hoi vien da co PT 1-1 dang hoat dong')
+    const err = new Error('Hội viên đã có PT 1-1 đang hoạt động. Vui lòng hủy yêu cầu hoặc yêu cầu hội viên rời dịch vụ PT hiện tại trước khi phân công.')
+    err.statusCode = 409
+    throw err
+  }
+
+  const crossConflict = await findCrossMemberConflict({
+    trainerId,
+    daySlots: requestDaySlots(existing),
+    weeks: existing.weeks,
+    excludeMemberId: existing.memberId,
+    excludeRequestId: requestId,
+  })
+  if (crossConflict) {
+    const list = crossConflict.map((c) => `${formatDayName(c.day)} lúc ${c.slot}`).join(', ')
+    const err = new Error(`PT nay da co lich ban trung vao: ${list}. Vui long chon PT khac hoac dieu chinh ngay/gio cua yeu cau.`)
     err.statusCode = 409
     throw err
   }
@@ -424,6 +809,7 @@ export const assignTrainer = async ({ requestId, trainerId, assignedBy }) => {
       status: 'assigned',
       assignedTrainerId: trainerId,
       assignedAt: new Date(),
+      ptConfirmationDeadline: new Date(Date.now() + (Number(process.env.PT_CONFIRM_TIMEOUT_HOURS) || 48) * 60 * 60 * 1000),
       assignedBy: assignedBy || undefined,
     },
     { new: true },
@@ -486,20 +872,169 @@ export const assignTrainer = async ({ requestId, trainerId, assignedBy }) => {
   return request
 }
 
+// Gợi ý PT cho yêu cầu PT 1-1 (admin): sắp xếp theo
+// đúng chuyên môn → ít xung đột lịch → ít học viên đang phụ trách → chưa từng bị từ chối
+// → ít yêu cầu đang chờ xác nhận. Mỗi PT kèm danh sách xung đột cụ thể để admin thấy
+// trước khi gán (thay vì chỉ nhận 409 sau khi submit).
+export const getPtSuggestions = async ({ requestId }) => {
+  const request = await TrainingRequest.findById(requestId).lean()
+  if (!request) return null
+  if (request.type !== 'pt1on1') {
+    const err = new Error('Yeu cau nay khong phai yeu cau PT 1-1')
+    err.statusCode = 400
+    throw err
+  }
+
+  const daySlots = requestDaySlots(request)
+  const requestSpec = normalizeSpecialization(request.specialization)
+  const preferredTrainerId = request.preferredTrainerId ? String(request.preferredTrainerId) : null
+  const rejectedSet = new Set((request.rejectedPtIds || []).map((id) => String(id && id._id ? id._id : id)))
+  const rejectReasonMap = new Map(
+    (request.rejectHistory || []).map((h) => [String(h.ptId && h.ptId._id ? h.ptId._id : h.ptId), h.reason || '']),
+  )
+
+  const User = (await import('../models/User.js')).default
+  const pts = await User.find({ role: 'pt', isActive: true })
+    .select('fullName name avatar email contactEmail specialties rating experienceYears')
+    .lean()
+
+  const ptModelMap = new Map()
+  let waitingMap = new Map()
+  let studentCountMap = new Map()
+  let scheduleCountMap = new Map()
+  if (pts.length) {
+    const ptIds = pts.map((p) => p._id)
+
+    const studentCounts = await PTAssignment.aggregate([
+      { $match: { ptId: { $in: ptIds }, status: 'active' } },
+      { $group: { _id: '$ptId', count: { $sum: 1 } } },
+    ])
+    studentCountMap = new Map(studentCounts.map((s) => [String(s._id), s.count]))
+
+    const scheduleCounts = await TrainerSchedule.aggregate([
+      { $match: { trainerId: { $in: ptIds }, status: 'active' } },
+      { $group: { _id: '$trainerId', count: { $sum: 1 } } },
+    ])
+    scheduleCountMap = new Map(scheduleCounts.map((s) => [String(s._id), s.count]))
+
+    const waitingRequests = await TrainingRequest.find({
+      type: 'pt1on1',
+      status: 'assigned',
+      assignedTrainerId: { $in: ptIds },
+    }).select('assignedTrainerId memberId').lean()
+    // Loại trừ request đã được PT accept: cặp (ptId, memberId) có PTAssignment active
+    const acceptedPairs = new Set(
+      (await PTAssignment.find({ ptId: { $in: ptIds }, status: 'active' })
+        .select('ptId memberId').lean())
+        .map((a) => `${String(a.ptId)}|${String(a.memberId)}`),
+    )
+    const tempWaitingMap = new Map()
+    for (const r of waitingRequests) {
+      const key = `${String(r.assignedTrainerId)}|${String(r.memberId)}`
+      if (acceptedPairs.has(key)) continue
+      const pid = String(r.assignedTrainerId)
+      tempWaitingMap.set(pid, (tempWaitingMap.get(pid) || 0) + 1)
+    }
+    waitingMap = tempWaitingMap
+  }
+
+  const results = []
+  for (const pt of pts) {
+    const ptId = pt._id
+    const specs = (pt.specialties || []).map((s) => String(s || '').trim().toUpperCase())
+    const specMatch = specs.length === 0 || specs.includes(requestSpec)
+
+    const [scheduleConflicts, classConflicts, crossConflicts] = await Promise.all([
+      findScheduleConflict({ trainerId: ptId, daySlots, ptLabel: 'PT này' }),
+      findClassConflict({ trainerId: ptId, daySlots }),
+      findCrossMemberConflict({
+        trainerId: ptId,
+        daySlots,
+        weeks: request.weeks,
+        excludeMemberId: request.memberId,
+        excludeRequestId: request._id,
+      }),
+    ])
+
+    const conflicts = []
+    for (const c of scheduleConflicts || []) conflicts.push(c)
+    for (const c of classConflicts || []) conflicts.push(c)
+    for (const c of crossConflicts || []) {
+      conflicts.push(`${formatDayName(c.day)} lúc ${c.slot} — PT đang có lịch trùng`)
+    }
+
+    const rejected = rejectedSet.has(String(ptId))
+    const suggestion = {
+      id: ptId,
+      name: pt.fullName || pt.name,
+      fullName: pt.fullName || pt.name,
+      avatar: pt.avatar || '',
+      email: pt.email || pt.contactEmail || '',
+      specialties: pt.specialties || [],
+      rating: pt.rating || 0,
+      experienceYears: pt.experienceYears || 0,
+      specMatch,
+      rejected,
+      rejectReason: rejectReasonMap.get(String(ptId)) || '',
+      totalStudents: studentCountMap.get(String(ptId)) || 0,
+      waitingConfirmation: waitingMap.get(String(ptId)) || 0,
+      hasSchedule: (scheduleCountMap.get(String(ptId)) || 0) > 0,
+      conflicts,
+      // PT do hội viên chủ động chọn. Vẫn giữ thứ tự gợi ý theo độ phù hợp
+      // để Admin có thể so sánh, nhưng UI cần nhận diện rõ lựa chọn này.
+      isPreferred: preferredTrainerId === String(ptId),
+    }
+    suggestion.matchScore = computeMatchScore(suggestion)
+    results.push(suggestion)
+  }
+
+  // Sắp xếp: điểm phù hợp → ít xung đột → ít học viên → chưa từng bị từ chối → ít đang chờ xác nhận
+  results.sort((a, b) => {
+    if (a.matchScore !== b.matchScore) return b.matchScore - a.matchScore
+    if (a.conflicts.length !== b.conflicts.length) return a.conflicts.length - b.conflicts.length
+    if (a.totalStudents !== b.totalStudents) return a.totalStudents - b.totalStudents
+    if (a.rejected !== b.rejected) return a.rejected ? 1 : -1
+    return a.waitingConfirmation - b.waitingConfirmation
+  })
+
+  return results
+}
+
+// Điểm phù hợp 0-100 cho đề xuất PT (đã chọn PT) — ẩn lý do chi tiết để admin
+// thấy ngay mức độ phù hợp mà không cần đọc hết các yếu tố:
+// chuyên môn 40đ, không xung đột lịch 25đ, ít hội viên 15đ, ít chờ xác nhận 10đ,
+// rating 5★=10đ, có lịch làm việc ±5đ. PT đã từ chối = 0đ.
+const computeMatchScore = (pt) => {
+  if (pt.rejected) return 0
+  let score = 0
+  score += pt.specMatch ? 40 : 10
+  score += Math.max(0, 25 - pt.conflicts.length * 12)
+  score += Math.max(0, 15 - pt.totalStudents * 2)
+  score += Math.max(0, 10 - pt.waitingConfirmation * 4)
+  score += Math.min(10, (pt.rating || 0) * 2)
+  score += pt.hasSchedule ? 5 : -5
+  return Math.max(0, Math.min(100, Math.round(score)))
+}
+
 // Admin rút lại phân công khi PT từ chối nhận hội viên → đưa yêu cầu về trạng thái chờ phân công lại
-export const unassignTrainer = async ({ requestId, rejectedPtId }) => {
+export const unassignTrainer = async ({ requestId, rejectedPtId, reason = '' }) => {
   return TrainingRequest.findByIdAndUpdate(
     requestId,
     {
       $set: { status: 'waiting_assignment', assignedTrainerId: null, assignedAt: null },
-      ...(rejectedPtId ? { $addToSet: { rejectedPtIds: rejectedPtId } } : {}),
+      ...(rejectedPtId
+        ? {
+          $addToSet: { rejectedPtIds: rejectedPtId },
+          $push: { rejectHistory: { ptId: rejectedPtId, reason, rejectedAt: new Date() } },
+        }
+        : {}),
     },
     { new: true },
   )
 }
 
-export const cancelRequest = async ({ requestId, reason = '' }) => {
-  const requestBeforeCancel = await TrainingRequest.findById(requestId).select('_id status').lean()
+export const cancelRequest = async ({ requestId, memberId, reason = '' }) => {
+  const requestBeforeCancel = await TrainingRequest.findOne({ _id: requestId, memberId }).select('_id status').lean()
   if (requestBeforeCancel) {
     console.log('[REQUEST CANCELLED]', {
       file: import.meta.url,
@@ -510,9 +1045,38 @@ export const cancelRequest = async ({ requestId, reason = '' }) => {
       stack: new Error().stack,
     })
   }
+  if (!requestBeforeCancel) return null
+  if (!ACTIVE_TRAINING_REQUEST_STATUSES.includes(requestBeforeCancel.status)) {
+    const err = new Error('Request cannot be cancelled in its current status')
+    err.statusCode = 400
+    throw err
+  }
+  const request = await TrainingRequest.findOneAndUpdate(
+    { _id: requestId, memberId },
+    { status: 'cancelled', cancelledAt: new Date(), cancelReason: reason },
+    { new: true },
+  )
+  return request
+}
+
+// Admin/staff hủy yêu cầu (PT 1-1 hoặc nhóm) kèm lý do — cho phép xử lý các
+// yêu cầu treo mà member không thể tự hủy (vd: member đã có PT active).
+export const adminCancelRequest = async ({ requestId, reason = '', adminId }) => {
+  const existing = await TrainingRequest.findById(requestId)
+  if (!existing) return null
+  if (['cancelled', 'declined_by_member'].includes(existing.status)) {
+    const err = new Error('Yêu cầu đã kết thúc, không thể hủy')
+    err.statusCode = 400
+    throw err
+  }
   const request = await TrainingRequest.findByIdAndUpdate(
     requestId,
-    { status: 'cancelled', cancelledAt: new Date(), cancelReason: reason },
+    {
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      cancelReason: reason,
+      cancelledBy: adminId || undefined,
+    },
     { new: true },
   )
   return request
@@ -593,3 +1157,22 @@ export const respondToMessage = async ({ requestId, action, memberId, suggestion
   )
   return request
 }
+
+export const getPtOneToOnePrice = async (trainerId) => {
+  const profile = await PT.findOne({ userId: trainerId }).select('oneToOnePrice').lean()
+  return Number(profile?.oneToOnePrice || 0)
+}
+
+export const updateRequestPaymentState = async ({ requestId, priceSnapshot, paymentDeadline }) =>
+  TrainingRequest.findByIdAndUpdate(
+    requestId,
+    {
+      status: 'awaiting_payment',
+      priceSnapshot: Number(priceSnapshot || 0),
+      paymentDeadline,
+    },
+    { new: true },
+  )
+
+export const updateRequestStatus = async ({ requestId, status }) =>
+  TrainingRequest.findByIdAndUpdate(requestId, { status }, { new: true })

@@ -1,6 +1,6 @@
 import { Button, Card, Result, Skeleton, Tag, message } from 'antd'
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { memberService } from '../../services/memberService'
 import BankTransferSimulator, { SIMULATED_BANK_ACCOUNT } from './BankTransferSimulator'
 
@@ -18,6 +18,8 @@ type PaymentInfo = {
 
 export default function BankTransferPage() {
   const { paymentId = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const token = searchParams.get('token') || ''
   const navigate = useNavigate()
   const [info, setInfo] = useState<PaymentInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -32,10 +34,13 @@ export default function BankTransferPage() {
   }, [paymentId])
 
   const handleConfirm = async () => {
-    if (!paymentId) return
+    if (!paymentId || !token) {
+      message.error('Liên kết xác nhận không hợp lệ, vui lòng dùng lại đường dẫn từ nhân viên')
+      return
+    }
     setConfirming(true)
     try {
-      const res = await memberService.confirmOfflinePlanPayment(paymentId)
+      const res = await memberService.confirmOfflinePlanPayment(paymentId, token)
       setInfo((current) => current ? { ...current, status: res.data?.data?.status || 'PAID' } : current)
       message.success('Đã xác nhận chuyển khoản')
     } catch (err: any) {

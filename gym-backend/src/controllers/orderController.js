@@ -3,7 +3,7 @@ import { calculateCheckoutDiscount, calculateOrderShipping, createOrder, getOrde
 
 export const checkoutOrder = async (req, res, next) => {
     try {
-        const { items, address: requestAddress, paymentReference, discountCode } = req.body
+        const { items, address: requestAddress, paymentReference, discountCode, idempotencyKey } = req.body
         let address = requestAddress
 
         if (!address) {
@@ -20,6 +20,7 @@ export const checkoutOrder = async (req, res, next) => {
             address,
             paymentReference,
             discountCode,
+            idempotencyKey: String(idempotencyKey || '').trim() || undefined,
         })
         return res.status(201).json({ success: true, data: orders, order: orders[0] })
     } catch (error) {

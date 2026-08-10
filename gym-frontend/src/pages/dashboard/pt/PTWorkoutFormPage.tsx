@@ -11,6 +11,7 @@ import {
   Input,
   List,
   Modal,
+  Radio,
   Select,
   Space,
   Spin,
@@ -34,6 +35,7 @@ type FormValues = {
   specializationId: string
   goal: string
   days: TemplateDay[]
+  visibility: 'private' | 'public'
 }
 
 const emptyExercise = () => ({ name: '', note: '' })
@@ -45,8 +47,11 @@ const emptyDay = (): TemplateDay => ({
   exercises: [emptyExercise()],
 })
 
-const normalizeWorkoutDetail = (data: any): WorkoutPlan | null =>
-  data?.workout || data?.data || data || null
+const normalizeWorkoutDetail = (data: unknown): WorkoutPlan | null => {
+  if (!data || typeof data !== 'object') return null
+  const d = data as { workout?: WorkoutPlan; data?: WorkoutPlan }
+  return d.workout || d.data || (data as WorkoutPlan)
+}
 
 const sanitizePayload = (values: FormValues): WorkoutPlanPayload => ({
   workoutName: values.workoutName.trim(),
@@ -60,12 +65,13 @@ const sanitizePayload = (values: FormValues): WorkoutPlanPayload => ({
     dayOfWeek: 0,
     muscleGroup: (day.muscleGroup || '').trim(),
     description: (day.description || '').trim(),
-    exercises: (day.exercises || []).map((ex: any) => ({
+    exercises: (day.exercises || []).map((ex: { name?: string; note?: string }) => ({
       name: (ex.name || '').trim(),
       note: (ex.note || '').trim(),
     })),
   })),
   isTemplate: true,
+  visibility: values.visibility === 'public' ? 'public' : 'private',
 })
 
 export default function PTWorkoutFormPage() {
@@ -127,7 +133,7 @@ export default function PTWorkoutFormPage() {
       || currentValues.specializationId
       || currentValues.goal
       || currentValues.days?.some(
-          (d: TemplateDay) => d.muscleGroup?.trim() || d.exercises?.some((e: any) => e.name?.trim()),
+          (d: TemplateDay) => d.muscleGroup?.trim() || d.exercises?.some((e: { name?: string }) => e.name?.trim()),
         )
 
     if (hasData) {
@@ -155,23 +161,23 @@ export default function PTWorkoutFormPage() {
       }
 
       const days: TemplateDay[] = detail.days?.length
-        ? detail.days.map((d: any) => ({
+        ? detail.days.map((d: { muscleGroup?: string; description?: string; exercises?: Array<{ name?: string; note?: string }> }) => ({
             dayOfWeek: 0,
             muscleGroup: d.muscleGroup || '',
             description: d.description || '',
-            exercises: (d.exercises || []).map((e: any) => ({ name: e.name || '', note: e.note || '' })),
+            exercises: (d.exercises || []).map((e: { name?: string; note?: string }) => ({ name: e.name || '', note: e.note || '' })),
           }))
         : detail.weeks?.length
-          ? detail.weeks[0].sessions.map((s: any) => ({
+          ? detail.weeks[0].sessions.map((s: { sessionName?: string; feedback?: string; exercises: Array<{ name: string; sets?: number; reps?: number; restTime?: number }> }) => ({
               dayOfWeek: 0,
               muscleGroup: s.sessionName || '',
               description: s.feedback || '',
-              exercises: s.exercises.map((e: any) => ({ name: e.name, note: `${e.sets}x${e.reps} - nghỉ ${e.restTime}s` })),
+              exercises: s.exercises.map((e: { name: string; sets?: number; reps?: number; restTime?: number }) => ({ name: e.name, note: `${e.sets}x${e.reps} - nghỉ ${e.restTime}s` })),
             }))
           : [emptyDay()]
 
       // Clear then set specialization to trigger goal options load
-      const specId = detail.specializationId || ''
+      const specId = (detail as { specializationId?: string }).specializationId || ''
       form.resetFields()
       await loadGoalsForSpecialization(specId)
 
@@ -180,6 +186,7 @@ export default function PTWorkoutFormPage() {
         specializationId: specId,
         goal: detail.goal || '',
         days,
+        visibility: 'private',
       })
     } catch {
       message.error('Không thể tải chi tiết giáo án để sao chép')
@@ -225,7 +232,7 @@ export default function PTWorkoutFormPage() {
                   }))
                 : [emptyDay()]
 
-            const specId = (detail as any).specializationId || ''
+            const specId = (detail as { specializationId?: string }).specializationId || ''
             // 1. Set chuyên môn trước
             form.setFieldsValue({
               workoutName: detail.workoutName || detail.name || '',
@@ -236,6 +243,8 @@ export default function PTWorkoutFormPage() {
             await loadGoalsForSpecialization(specId)
             // 3. Set mục tiêu sau khi options đã sẵn sàng (tránh race condition)
             form.setFieldValue('goal', detail.goal || '')
+            // 4. Chế độ hiển thị
+            form.setFieldValue('visibility', (detail as { visibility?: string }).visibility === 'public' ? 'public' : 'private')
           }
         } catch {
           message.error('Không thể tải chi tiết giáo án')
@@ -252,6 +261,7 @@ export default function PTWorkoutFormPage() {
       specializationId: '',
       goal: '',
       days: [emptyDay()],
+      visibility: 'private',
     })
     setInitialized(true)
   }, [id, form])
@@ -268,12 +278,13 @@ export default function PTWorkoutFormPage() {
         await workoutService.createWorkout(payload)
         message.success('Đã tạo giáo án mẫu')
       }
-      navigate('/pt/workouts')
-    } catch (error: any) {
-      if (error?.errorFields) return
-      const msg = error?.response?.data?.error
-        ? `${error.response.data.message}: ${error.response.data.error}`
-        : error?.response?.data?.message || error?.message || 'Không thể lưu giáo án'
+      navigate('/pt/my-workouts')
+    } catch (error: unknown) {
+      const e = error as { errorFields?: unknown; response?: { data?: { message?: string; error?: string } }; message?: string }
+      if (e?.errorFields) return
+      const msg = e?.response?.data?.error
+        ? `${e.response.data.message}: ${e.response.data.error}`
+        : e?.response?.data?.message || e?.message || 'Không thể lưu giáo án'
       message.error(msg)
     } finally {
       setSaving(false)
@@ -326,6 +337,24 @@ export default function PTWorkoutFormPage() {
                   />
                 </Form.Item>
               </div>
+              <Form.Item
+                label="Chế độ hiển thị"
+                name="visibility"
+                extra={form.getFieldValue('visibility') === 'public'
+                  ? 'Tất cả PT trong hệ thống đều nhìn thấy và sử dụng được giáo án này.'
+                  : 'Chỉ mình bạn (và admin) nhìn thấy giáo án này.'}
+              >
+                <Radio.Group>
+                  <Space direction="vertical" className="w-full">
+                    <Radio value="private" className="rounded-lg border border-[var(--gs-border)] px-3 py-2 w-full !mr-0">
+                      🔒 Chỉ mình tôi — chỉ PT tạo được xem
+                    </Radio>
+                    <Radio value="public" className="rounded-lg border border-[var(--gs-border)] px-3 py-2 w-full !mr-0">
+                      🌐 Công khai — mọi PT đều xem và sử dụng được
+                    </Radio>
+                  </Space>
+                </Radio.Group>
+              </Form.Item>
 
               <Divider>Các buổi tập trong giáo án</Divider>
 
@@ -405,7 +434,7 @@ export default function PTWorkoutFormPage() {
               <Divider />
 
               <div className="mt-6 flex items-center justify-end gap-3">
-                <Button onClick={() => navigate('/pt/workouts')}>Huỷ</Button>
+                <Button onClick={() => navigate('/pt/my-workouts')}>Huỷ</Button>
                 <Button type="primary" onClick={handleSubmit} loading={saving}>
                   {isEdit ? 'Lưu' : 'Tạo mẫu'}
                 </Button>

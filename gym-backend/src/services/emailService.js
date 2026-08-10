@@ -153,21 +153,31 @@ export const sendMailWithLog = async (mailOptions) => {
 }
 
 const logTransportStartup = () => {
-  const summary = getEmailTransportSummary()
-  if (summary.transportType === 'mock (jsonTransport)') {
-    console.warn(
-      '[EmailService] WARNING: EMAIL_USER/EMAIL_PASS missing -> using jsonTransport, emails will NOT be sent!'
-    )
+  try {
+    const summary = getEmailTransportSummary()
+    if (summary.transportType === 'mock (jsonTransport)') {
+      console.warn(
+        '[EmailService] WARNING: EMAIL_USER/EMAIL_PASS missing -> using jsonTransport, emails will NOT be sent!'
+      )
+      return
+    }
+    // jsonTransport/some transports không có verify() → bỏ qua kiểm tra SMTP
+    if (typeof transporter.verify !== 'function') {
+      console.warn('[EmailService] Transport không hỗ trợ verify, bỏ qua kiểm tra SMTP')
+      return
+    }
+    transporter
+      .verify()
+      .then(() => {
+        console.log('[EmailService] SMTP verify success (transport=' + summary.transportType + ')')
+      })
+      .catch((err) => {
+        console.error('[EmailService] SMTP verify failed:', err?.message || err)
+        console.error('[EmailService] SMTP verify stack:', err?.stack || err)
+      })
+  } catch (err) {
+    console.error('[EmailService] Không thể kiểm tra SMTP:', err?.message || err)
   }
-  transporter
-    .verify()
-    .then(() => {
-      console.log('[EmailService] SMTP verify success (transport=' + summary.transportType + ')')
-    })
-    .catch((err) => {
-      console.error('[EmailService] SMTP verify failed:', err?.message || err)
-      console.error('[EmailService] SMTP verify stack:', err?.stack || err)
-    })
 }
 
 logTransportStartup()

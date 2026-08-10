@@ -73,7 +73,7 @@ export default function RegisterPage() {
       message.success({ key: registerVerifyMessageKey, content: 'Đăng ký thành công' })
 
       if (data?.accessToken && data?.user) {
-        setAuthToken(data.accessToken)
+        setAuthToken(data.accessToken, data.refreshToken)
         updateUser(data.user)
         navigate('/dashboard', { replace: true })
         return

@@ -297,7 +297,10 @@ export default function NotificationCenter({ role }: Props) {
       await notificationService.markAsRead(item._id)
       const actionStatus = action === 'accept' ? 'accepted' : 'rejected'
       setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true, readAt: new Date().toISOString(), actionStatus, actionAt: new Date().toISOString() } : n))
-    } catch { /* ignore */ }
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      message.error(msg || 'Phản hồi thất bại, vui lòng thử lại')
+    }
     setProcessingIds(prev => { const next = new Set(prev); next.delete(item._id); return next })
   }
 
@@ -312,7 +315,10 @@ export default function NotificationCenter({ role }: Props) {
         ? 'Bạn đã chấp nhận hội viên này.'
         : `Bạn đã từ chối nhận hội viên.${reason ? ` Lý do: ${reason}` : ''}`
       setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, isRead: true, readAt: new Date().toISOString(), actionStatus, actionAt: new Date().toISOString(), requiresAction: false, content } : n))
-    } catch { /* ignore */ }
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      message.error(msg || 'Phản hồi thất bại, vui lòng thử lại')
+    }
     setProcessingIds(prev => { const next = new Set(prev); next.delete(item._id); return next })
   }
 
@@ -404,7 +410,7 @@ export default function NotificationCenter({ role }: Props) {
       const isAccepted = actionStatus === 'accepted' || (!actionStatus && (requestStatus === 'waiting_assignment' || requestStatus === 'assigned'))
       const isCountered = actionStatus === 'countered' || (!actionStatus && requestStatus === 'pending')
       const isRejected = actionStatus === 'rejected' || (!actionStatus && requestStatus === 'declined_by_member')
-      const isDone = isAccepted || isCountered || isRejected
+      const isDone = isAccepted || isCountered || isRejected || !item.requiresAction
       const isLoading = processingIds.has(item._id)
       return (
         <div key={item._id} className="group relative flex gap-3.5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 transition-all cursor-pointer"
@@ -450,7 +456,7 @@ export default function NotificationCenter({ role }: Props) {
       const actionStatus = item.actionStatus
       const isAccepted = actionStatus === 'accepted'
       const isRejected = actionStatus === 'rejected'
-      const isDone = isAccepted || isRejected
+      const isDone = isAccepted || isRejected || !item.requiresAction
       const isLoading = processingIds.has(item._id)
       return (
         <div key={item._id} className="group relative flex gap-3.5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 transition-all cursor-pointer"
@@ -471,7 +477,7 @@ export default function NotificationCenter({ role }: Props) {
                 <span className="text-xs text-[var(--gs-text-muted)] self-center">Đang xử lý...</span>
               ) : isDone ? (
                 <span className={`self-center text-xs font-semibold ${isAccepted ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
-                  {isAccepted ? '✓ Bạn đã chấp nhận hội viên này.' : '✕ Bạn đã từ chối'}
+                  {isAccepted ? '✓ Bạn đã chấp nhận hội viên này.' : isRejected ? '✕ Bạn đã từ chối' : 'Đã xử lý'}
                 </span>
               ) : (
                 <>
@@ -495,7 +501,7 @@ export default function NotificationCenter({ role }: Props) {
       const actionStatus = item.actionStatus
       const isAccepted = actionStatus === 'accepted'
       const isRejected = actionStatus === 'rejected'
-      const isDone = isAccepted || isRejected
+      const isDone = isAccepted || isRejected || !item.requiresAction
       const isLoading = processingIds.has(item._id)
       return (
         <div key={item._id} className="group relative flex gap-3.5 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] p-4 transition-all cursor-pointer"
@@ -516,7 +522,7 @@ export default function NotificationCenter({ role }: Props) {
                 <span className="text-xs text-[var(--gs-text-muted)] self-center">Đang xử lý...</span>
               ) : isDone ? (
                 <span className={`self-center text-xs font-semibold ${isAccepted ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
-                  {isAccepted ? '✓ Bạn đã chấp nhận nhận thay ca' : '✕ Bạn đã từ chối'}
+                  {isAccepted ? '✓ Bạn đã chấp nhận nhận thay ca' : isRejected ? '✕ Bạn đã từ chối' : 'Đã xử lý'}
                 </span>
               ) : (
                 <>

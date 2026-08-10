@@ -27,8 +27,11 @@ export interface PT {
   introVideoUrl: string
   totalSessions: number
   totalStudents: number
+  oneToOnePrice?: number | null
+  groupPrice?: number | null
   ptId: string | null
   schedules: PTSchedule[]
+  busyBookings?: Array<{ date: string; slot: string }>
   bookingCount: number
   createdAt: string
 }

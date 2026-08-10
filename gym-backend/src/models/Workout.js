@@ -225,6 +225,13 @@ const workoutSchema = new mongoose.Schema(
       default: 'published',
     },
 
+    // Chế độ hiển thị của giáo án mẫu: public = mọi PT xem được, private = chỉ PT tạo (và admin) xem
+    visibility: {
+      type: String,
+      enum: ['private', 'public'],
+      default: 'private',
+    },
+
     // Phiên bản
     version: {
       type: Number,

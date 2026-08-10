@@ -31,6 +31,20 @@ export const verifyAccessToken = (token) => {
   }
 }
 
+// Chỉ lấy identity của access token để đối chiếu khi refresh (chấp nhận token đã hết hạn,
+// nhưng vẫn kiểm tra chữ ký — token giả mạo sẽ bị từ chối)
+export const decodeAccessTokenIdentity = (token) => {
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET, {
+      ignoreExpiration: true,
+      issuer: 'gym-system',
+      audience: 'user',
+    })
+  } catch {
+    return null
+  }
+}
+
 export const verifyRefreshToken = (token) => {
   try {
     return jwt.verify(token, process.env.JWT_REFRESH_SECRET, {

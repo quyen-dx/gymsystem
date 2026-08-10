@@ -22,7 +22,7 @@ router.get('/goals', authorize('pt', 'admin', 'super_admin'), getDistinctGoals)
 router.get('/goals-by-specialization', authorize('pt', 'admin', 'super_admin'), getDistinctGoalsBySpecialization)
 router.get('/trainers-with-workouts', authorize('pt', 'admin', 'super_admin'), getDistinctTrainersWithWorkouts)
 router.post('/assign', authorize('pt', 'admin', 'super_admin'), assignWorkoutToMember)
-router.get('/:id/assignments', getWorkoutAssignments)
+router.get('/:id/assignments', authorize('pt', 'admin', 'super_admin'), getWorkoutAssignments)
 router.put('/:id/hide', authorize('admin', 'super_admin'), hideWorkout)
 router.put('/:id/restore', authorize('admin', 'super_admin'), restoreWorkout)
 

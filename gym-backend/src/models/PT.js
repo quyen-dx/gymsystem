@@ -45,6 +45,30 @@ const ptSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+
+    // Cấu hình giá đặt lịch (chỉ Admin được sửa) — null = chưa cấu hình
+    oneToOnePrice: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+
+    groupPrice: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+
+    priceUpdatedAt: {
+      type: Date,
+      default: null,
+    },
+
+    priceUpdatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
   },
   { timestamps: true },
 )

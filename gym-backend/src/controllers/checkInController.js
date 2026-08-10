@@ -9,13 +9,39 @@ import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import AppError from '../utils/appError.js'
 import sendError from '../utils/sendError.js'
+import { resolveCheckinSession } from '../services/checkinSessionResolver.js'
 
 const getUserDisplayName = (user, fallback = '') =>
   String(user?.fullName || user?.displayName || user?.name || fallback || '').trim()
 
 const QR_TOKEN_TTL = Number(process.env.QR_TOKEN_TTL) || 30
-const DUPLICATE_WINDOW_MS = 60 * 60 * 1000
 const VIETNAM_UTC_OFFSET = '+07:00'
+
+// Quy tắc nghiệp vụ: check-in sau 23:00 (giờ Việt Nam) sẽ không được tính
+export const isAfterCheckinCutoff = () => {
+  const vnTime = new Date(Date.now() + 7 * 60 * 60 * 1000)
+  return vnTime.getUTCHours() >= 23
+}
+
+export const CHECKIN_CUTOFF_MESSAGE = 'Đã quá 23:00 — check-in lúc này sẽ không được tính. Vui lòng quay lại vào ngày hôm sau.'
+
+// Ghi nhận lượt check-in thất bại (hết hạn gói / tài khoản khóa) phục vụ báo cáo của lễ tân
+const recordFailedCheckin = async ({ memberId, staffId, errorNote, checkInMethod = 'STAFF', checkinSource = 'staff_qr', qrToken }) => {
+  try {
+    await CheckIn.create({
+      memberId,
+      staffId: staffId || null,
+      checkinTime: new Date(),
+      status: 'failed',
+      errorNote,
+      checkInMethod,
+      checkinSource,
+      qrToken: qrToken || undefined,
+    })
+  } catch (err) {
+    console.error('Record failed checkin error:', err.message)
+  }
+}
 
 const getVietnamDateString = () => {
   const now = new Date()
@@ -143,11 +169,14 @@ const formatHistoryItem = (checkin, membershipByMemberId = {}) => {
     errorNote: checkin.errorNote || '',
     streakDay: checkin.streakDay || 0,
     checkinSource: checkin.checkinSource || 'staff_qr',
-    sessionType: checkin.sessionType || null,
+    sessionType: checkin.sessionType || 'FREE_TRAINING',
     sessionTitle: checkin.sessionTitle || null,
     sessionTime: checkin.sessionTime || null,
     classCode: checkin.classCode || null,
     scheduleId: checkin.scheduleId || null,
+    bookingId: checkin.bookingId || null,
+    ptId: checkin.ptId || null,
+    classId: checkin.classId || null,
     dailyQRDate: dailyQR.date || null,
     dailyQRCreatedAt: dailyQR.createdAt || null,
     checkInMethod: checkin.checkInMethod || 'QR_SELF',
@@ -157,7 +186,7 @@ const formatHistoryItem = (checkin, membershipByMemberId = {}) => {
   }
 }
 
-const calculateStreak = async (memberId) => {
+export const calculateStreak = async (memberId) => {
   const checkins = await CheckIn.find({ memberId, status: 'success' })
     .sort({ checkinTime: -1 })
     .lean()
@@ -202,6 +231,10 @@ export const generateQRToken = async (req, res) => {
 
     if (!activeMembership) {
       throw new AppError('Gói tập của bạn đã hết hạn hoặc không còn hiệu lực', 403)
+    }
+
+    if (isAfterCheckinCutoff()) {
+      throw new AppError(CHECKIN_CUTOFF_MESSAGE, 400)
     }
 
     const today = getVietnamDateString()
@@ -342,12 +375,28 @@ export const staffVerifyCheckin = async (req, res) => {
     }
 
     if (!member.isActive || member.status === 'locked') {
+      await recordFailedCheckin({
+        memberId: member._id,
+        staffId,
+        errorNote: 'Tài khoản hội viên đã bị khóa',
+        checkInMethod,
+      })
       throw new AppError('Tài khoản hội viên đã bị khóa', 403)
     }
 
     const activeMembership = await getActiveMembership(member._id).lean()
     if (!activeMembership) {
+      await recordFailedCheckin({
+        memberId: member._id,
+        staffId,
+        errorNote: 'Gói tập đã hết hạn',
+        checkInMethod,
+      })
       throw new AppError('Gói tập đã hết hạn. Vui lòng gia hạn để tiếp tục.', 403)
+    }
+
+    if (isAfterCheckinCutoff()) {
+      throw new AppError(CHECKIN_CUTOFF_MESSAGE, 400)
     }
 
     // FIX: Wrapped activation + checkin creation + activity recording in a transaction
@@ -372,7 +421,10 @@ export const staffVerifyCheckin = async (req, res) => {
 
     const activePlan = activeMembership.currentPlanId || {}
     const streakDay = (await calculateStreak(member._id)) + 1
-    const [checkin] = await CheckIn.create([{
+
+    // Backend quyết định check-in này là SCHEDULED hay FREE_TRAINING
+    const resolvedSession = await resolveCheckinSession({ memberId: member._id, now: new Date() })
+    const checkinPayload = {
       memberId: member._id,
       staffId,
       checkinTime: new Date(),
@@ -382,11 +434,14 @@ export const staffVerifyCheckin = async (req, res) => {
       planPrice: Number(activePlan.price || 0),
       qrToken: token || undefined,
       streakDay,
+      sessionType: resolvedSession ? 'SCHEDULED' : 'FREE_TRAINING',
       checkInMethod: checkInMethod || 'STAFF',
       manualReason: manualReason || undefined,
       performedBy: staffId,
       performedByName: getUserDisplayName(req.user, 'Staff'),
-    }], { session: mongoSession })
+      ...(resolvedSession || {}),
+    }
+    const [checkin] = await CheckIn.create([checkinPayload], { session: mongoSession })
 
     await recordUserActivity({
       userId: member._id,
@@ -431,6 +486,13 @@ export const staffVerifyCheckin = async (req, res) => {
         status: checkin.status,
         errorNote: '',
         streakDay: checkin.streakDay,
+        sessionType: checkin.sessionType,
+        sessionTitle: checkin.sessionTitle || null,
+        sessionTime: checkin.sessionTime || null,
+        classCode: checkin.classCode || null,
+        scheduleId: checkin.scheduleId || null,
+        bookingId: checkin.bookingId || null,
+        ptId: checkin.ptId || null,
         checkInMethod: checkInMethod || 'STAFF',
         manualReason: manualReason || undefined,
         performedByName: getUserDisplayName(req.user, 'Staff'),
@@ -522,8 +584,6 @@ export const getStaffCheckinHistory = async (req, res) => {
       sessionType,
     } = req.query
 
-    console.log('[staff-checkin-history] query:', req.query)
-
     const selectedMode = ['today', 'yesterday', 'last7days', 'last30days', 'all', 'custom'].includes(String(mode))
       ? String(mode)
       : 'today'
@@ -559,8 +619,11 @@ export const getStaffCheckinHistory = async (req, res) => {
       filter.memberId = { $in: members.map((member) => member._id) }
     }
 
-    if (sessionType === 'scheduled' || sessionType === 'free_workout') {
-      filter.sessionType = sessionType
+    // Chấp nhận cả giá trị cũ (scheduled/free_workout) lẫn mới (SCHEDULED/FREE_TRAINING)
+    if (sessionType === 'scheduled' || sessionType === 'SCHEDULED') {
+      filter.sessionType = 'SCHEDULED'
+    } else if (sessionType === 'free_workout' || sessionType === 'free_training' || sessionType === 'FREE_TRAINING') {
+      filter.sessionType = 'FREE_TRAINING'
     }
 
     const pageNumber = Math.max(1, Number(page) || 1)
@@ -618,6 +681,10 @@ export const getStaffCheckinHistory = async (req, res) => {
 export const getMemberStreak = async (req, res) => {
   try {
     const { memberId } = req.params
+    // Member chỉ xem streak của chính mình; staff/admin xem được mọi member
+    if (req.user?.role === 'member' && String(req.user._id) !== String(memberId)) {
+      return res.status(403).json({ message: 'Không có quyền xem streak này' })
+    }
     const streak = await calculateStreak(memberId)
     res.json({ memberId, streak })
   } catch (error) {

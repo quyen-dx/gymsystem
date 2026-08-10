@@ -38,25 +38,51 @@ function parseSpecialties(value) {
   )]
 }
 
+// Lịch bận do PT phụ trách lớp nhóm (TrainingClass active) — expand theo từng ngày trong khoảng thời gian
+const buildClassBusyEntries = async ({ trainerIds, from, to }) => {
+  const classes = await TrainingClass.find({
+    ptId: { $in: trainerIds },
+    status: { $nin: ['closed', 'inactive'] },
+    daysOfWeek: { $ne: [] },
+  })
+    .select('ptId name daysOfWeek startTime endTime')
+    .lean()
+
+  const entries = []
+  for (const c of classes) {
+    if (!c.startTime || !c.endTime) continue
+    const slot = `${String(c.startTime).slice(0, 5)}-${String(c.endTime).slice(0, 5)}`
+    for (let t = from.getTime(); t < to.getTime(); t += 24 * 60 * 60 * 1000) {
+      const d = new Date(t)
+      if ((c.daysOfWeek || []).includes(d.getDay())) {
+        entries.push({ ptId: c.ptId, date: d, slot })
+      }
+    }
+  }
+  return entries
+}
+
 export const getPTs = async (req, res) => {
   try {
-    const { page = 1, limit = 20, search = '', specialty, minRating, status, sortBy = 'createdAt', sortOrder = 'desc' } = req.query
+    const { page = 1, limit = 20, search = '', specialty, minRating, status, isActive, sortBy = 'createdAt', sortOrder = 'desc' } = req.query
 
     const userFilter = { role: 'pt' }
 
     if (search) {
-      const normalized = search.trim().replace(/\s+/g, '')
-      const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const isEmailSearch = /^.+@.+\..+$/.test(normalized)
-      if (isEmailSearch) {
-        userFilter.email = { $regex: escaped, $options: 'i' }
-      } else {
-        userFilter.phone = { $regex: escaped, $options: 'i' }
-      }
+      const keyword = String(search).trim()
+      const compactKeyword = keyword.replace(/\s+/g, '')
+      const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const escapedCompact = compactKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      userFilter.$or = [
+        { fullName: { $regex: escapedKeyword, $options: 'i' } },
+        { name: { $regex: escapedKeyword, $options: 'i' } },
+        { email: { $regex: escapedCompact, $options: 'i' } },
+        { phone: { $regex: escapedCompact, $options: 'i' } },
+      ]
     }
 
-    if (status === 'active') userFilter.isActive = true
-    else if (status === 'locked') userFilter.isActive = false
+    if (status === 'active' || isActive === 'true' || isActive === true) userFilter.isActive = true
+    else if (status === 'locked' || isActive === 'false' || isActive === false) userFilter.isActive = false
 
     const allUsers = await User.find(userFilter)
       .sort({ [sortBy]: sortOrder === 'asc' ? 1 : -1 })
@@ -87,6 +113,35 @@ export const getPTs = async (req, res) => {
     ])
     const bookingCountMap = {}
     stats.forEach((s) => { bookingCountMap[s._id.toString()] = s.count })
+
+    // Lịch bận của từng PT (booking đang hoạt động trong 12 tuần tới) — để member
+    // thấy ngay khung nào bị khóa khi chọn ngày/giờ trong form đặt lịch
+    const busyMap = {}
+    if (userIds.length > 0) {
+      const busyStart = new Date()
+      busyStart.setHours(0, 0, 0, 0)
+      const busyEnd = new Date(busyStart.getTime() + 12 * 7 * 24 * 60 * 60 * 1000)
+      const busyBookings = await Booking.find({
+        ptId: { $in: userIds },
+        date: { $gte: busyStart, $lt: busyEnd },
+        status: { $in: ['pending', 'awaiting_payment', 'confirmed'] },
+      })
+        .select('ptId date slot')
+        .lean()
+      busyBookings.forEach((b) => {
+        const key = b.ptId.toString()
+        if (!busyMap[key]) busyMap[key] = []
+        busyMap[key].push({ date: b.date, slot: b.slot })
+      })
+
+      // Lịch bận do phụ trách lớp nhóm (hiển thị khóa giờ trong form đặt lịch)
+      const classBusy = await buildClassBusyEntries({ trainerIds: userIds, from: busyStart, to: busyEnd })
+      classBusy.forEach((e) => {
+        const key = e.ptId.toString()
+        if (!busyMap[key]) busyMap[key] = []
+        busyMap[key].push({ date: e.date, slot: e.slot })
+      })
+    }
 
     let specialtyFilter = null
     if (specialty) {
@@ -131,7 +186,10 @@ export const getPTs = async (req, res) => {
           totalSessions: pt?.totalSessions || 0,
           totalStudents: pt?.totalStudents || 0,
           ptId: ptId,
+          oneToOnePrice: pt?.oneToOnePrice || null,
+          groupPrice: pt?.groupPrice || null,
           schedules: scheduleMap[u._id.toString()] || [],
+          busyBookings: busyMap[u._id.toString()] || [],
           bookingCount: bookingCountMap[u._id.toString()] || 0,
         }
       })
@@ -165,6 +223,22 @@ export const getPTById = async (req, res) => {
     const weekEnd = new Date(weekStart)
     weekEnd.setDate(weekEnd.getDate() + 7)
 
+    // Lịch bận 12 tuần tới — để member thấy khung giờ bị khóa ngay trong form đặt lịch
+    const busyStart = new Date()
+    busyStart.setHours(0, 0, 0, 0)
+    const busyEnd = new Date(busyStart.getTime() + 12 * 7 * 24 * 60 * 60 * 1000)
+    const busyBookings = await Booking.find({
+      ptId: user._id,
+      date: { $gte: busyStart, $lt: busyEnd },
+      status: { $in: ['pending', 'awaiting_payment', 'confirmed'] },
+    })
+      .select('date slot')
+      .lean()
+
+    // Lịch bận do phụ trách lớp nhóm (hiển thị khóa giờ trong form đặt lịch)
+    const classBusy = await buildClassBusyEntries({ trainerIds: [user._id], from: busyStart, to: busyEnd })
+    busyBookings.push(...classBusy.map((e) => ({ date: e.date, slot: e.slot })))
+
     // Booking.ptId tham chiếu User
     const bookings = await Booking.find({
       ptId: user._id,
@@ -196,7 +270,10 @@ export const getPTById = async (req, res) => {
         introVideoUrl: pt?.introVideoUrl || '',
         totalSessions: pt?.totalSessions || 0,
         totalStudents: pt?.totalStudents || 0,
+        oneToOnePrice: pt?.oneToOnePrice || null,
+        groupPrice: pt?.groupPrice || null,
         schedules,
+        busyBookings,
       },
       bookings,
     })

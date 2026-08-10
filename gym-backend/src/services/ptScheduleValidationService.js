@@ -1,6 +1,7 @@
 import TrainerSchedule from '../models/TrainerSchedule.js'
 import User from '../models/User.js'
 import Booking from '../models/Booking.js'
+import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
 import ScheduleReplacement from '../models/ScheduleReplacement.js'
 
@@ -214,6 +215,76 @@ export const getAvailabilitySlots = async ({ trainerId, date, session }) => {
     windows: windows.map((w) => ({ shift: w.shift, start: w.start, end: w.end })),
     schedules: windows.map((w) => w.shift),
   }
+}
+
+/**
+ * Kiểm tra trùng khung giờ của PT với member KHÁC (cả Booking lẫn WorkoutSchedule).
+ * Dùng chung cho: tạo lịch tập (PT tự gán), đổi lịch (member), để không tạo
+ * tình trạng 1 PT có 2 buổi 1-1 cùng thời điểm.
+ * Returns: [{ source: 'booking'|'schedule', memberName, memberId, date, slot, className }]
+ */
+export const findPTMemberConflicts = async ({ ptId, date, slot, excludeScheduleId, excludeMemberId }) => {
+  const conflicts = []
+  const dayStart = new Date(date)
+  dayStart.setHours(0, 0, 0, 0)
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
+  const slotRange = normalizeSlot(slot)
+
+  const bookings = await Booking.find({
+    ptId,
+    date: { $gte: dayStart, $lt: dayEnd },
+    status: { $in: ['pending', 'awaiting_payment', 'confirmed'] },
+  })
+    .populate('memberId', 'name fullName')
+    .lean()
+
+  for (const b of bookings) {
+    if (excludeMemberId && String(b.memberId?._id || b.memberId) === String(excludeMemberId)) continue
+    const bRange = normalizeSlot(b.slot)
+    if (timesOverlap(slotRange.start, slotRange.end, bRange.start, bRange.end)) {
+      const m = b.memberId && typeof b.memberId === 'object' ? b.memberId : null
+      conflicts.push({
+        source: 'booking',
+        memberId: String(b.memberId?._id || b.memberId),
+        memberName: m?.fullName || m?.name || 'hội viên khác',
+        date: b.date,
+        slot: b.slot,
+      })
+    }
+  }
+
+  const schedules = await WorkoutSchedule.find({
+    assignedBy: ptId,
+    status: 'active',
+    deletedAt: null,
+    ...(excludeScheduleId ? { _id: { $ne: excludeScheduleId } } : {}),
+  })
+    .populate('memberId', 'name fullName')
+    .lean()
+
+  for (const s of schedules) {
+    if (excludeMemberId && String(s.memberId?._id || s.memberId) === String(excludeMemberId)) continue
+    for (const sess of s.sessions || []) {
+      if (sess.status !== 'pending') continue
+      if (!sess.date || !sess.time) continue
+      const sDate = new Date(sess.date)
+      sDate.setHours(0, 0, 0, 0)
+      if (sDate.getTime() !== dayStart.getTime()) continue
+      const sRange = normalizeSlot(sess.time.split('-')[0].trim())
+      if (timesOverlap(slotRange.start, slotRange.end, sRange.start, sRange.end)) {
+        const m = s.memberId && typeof s.memberId === 'object' ? s.memberId : null
+        conflicts.push({
+          source: 'schedule',
+          memberId: String(s.memberId?._id || s.memberId),
+          memberName: m?.fullName || m?.name || 'hội viên khác',
+          date: sess.date,
+          slot: sess.time,
+        })
+      }
+    }
+  }
+
+  return conflicts
 }
 
 /**

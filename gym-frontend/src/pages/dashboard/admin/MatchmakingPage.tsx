@@ -43,6 +43,7 @@ export default function MatchmakingPage() {
   const [filterSpecialization, setFilterSpecialization] = useState<string>('')
   const [filterTimeGroup, setFilterTimeGroup] = useState<string>('')
   const [filterPtId, setFilterPtId] = useState<string>('')
+  const [showNearMatches, setShowNearMatches] = useState(false)
 
   useEffect(() => {
     if (!requestId) return
@@ -91,33 +92,66 @@ export default function MatchmakingPage() {
   const proposalZoneId = acceptedProposal?.zoneId ? String(acceptedProposal.zoneId) : ''
   const requestSlots = (effectiveRequest?.timeSlots || []).map((s) => s.replace(/\s/g, ''))
 
-  const matchesEffectiveRequest = (c: TrainingClass) => {
-    const spec = (c.specialization || '').toLowerCase()
-    const reqSpec = (effectiveRequest?.specialization || '').toLowerCase()
-    if (reqSpec && spec !== reqSpec) return false
-    const classSlot = c.startTime && c.endTime ? `${c.startTime.slice(0, 5)}-${c.endTime.slice(0, 5)}` : ''
-    if (requestSlots.length > 0 && (!classSlot || !requestSlots.includes(classSlot))) return false
-    const reqDays = effectiveRequest?.daysOfWeek || []
-    const classDays = c.daysOfWeek || []
-    if (reqDays.length > 0 && !classDays.some((d) => reqDays.includes(d))) return false
-    if (proposalPtId) {
-      const pt = c.ptId as any
-      const ptId = pt?._id || pt
-      if (String(ptId) !== proposalPtId) return false
-    }
-    if (proposalZoneId) {
-      const zone = c.zoneId as any
-      const zoneId = zone?._id || zone
-      if (String(zoneId) !== proposalZoneId) return false
-    }
-    if (acceptedProposal) {
-      const zone = c.zoneId as any
-      if (zone?.maxCapacity && (c.currentActiveCount ?? 0) >= zone.maxCapacity) return false
-    }
-    return true
+  const getCapacityInfo = (c: TrainingClass) => {
+    const zone = c.zoneId as any
+    const maxCap = zone?.maxCapacity
+    const current = c.currentActiveCount ?? 0
+    const remaining = maxCap ? Math.max(maxCap - current, 0) : 99
+    const isFull = maxCap ? current >= maxCap : false
+    const percent = maxCap ? Math.round((current / maxCap) * 100) : 0
+    return { maxCap, current, remaining, isFull, percent }
   }
 
-  const filteredClasses = classes.filter((c) => {
+  const getClassMatchInfo = (c: TrainingClass) => {
+    const reqSpec = (effectiveRequest?.specialization || '').trim().toLowerCase()
+    const classSpec = (c.specialization || '').trim().toLowerCase()
+    const specMatch = !reqSpec || classSpec === reqSpec
+
+    const classSlot = c.startTime && c.endTime ? `${c.startTime.slice(0, 5)}-${c.endTime.slice(0, 5)}` : ''
+    const timeMatch = requestSlots.length === 0 || (!!classSlot && requestSlots.includes(classSlot))
+
+    const reqDays = effectiveRequest?.daysOfWeek || []
+    const classDays = c.daysOfWeek || []
+    const sharedDays = reqDays.filter((d) => classDays.includes(d))
+    const dayMatch = reqDays.length === 0 || sharedDays.length > 0
+
+    const pt = c.ptId as any
+    const ptId = pt?._id || pt
+    const ptMatch = !proposalPtId || String(ptId) === proposalPtId
+
+    const zone = c.zoneId as any
+    const zoneId = zone?._id || zone
+    const zoneMatch = !proposalZoneId || String(zoneId) === proposalZoneId
+
+    const capacity = getCapacityInfo(c)
+    const isAssignable = specMatch && timeMatch && dayMatch && ptMatch && zoneMatch && !capacity.isFull
+    const dayScore = reqDays.length === 0 ? 25 : Math.round((sharedDays.length / reqDays.length) * 25)
+    const rawScore =
+      (specMatch ? 35 : 0) +
+      (timeMatch ? 25 : 0) +
+      dayScore +
+      (ptMatch ? 5 : 0) +
+      (zoneMatch ? 5 : 0) +
+      (!capacity.isFull ? 5 : 0) +
+      (c.status === 'active' ? 5 : 0)
+    const score = Math.min(rawScore, 100)
+
+    const reasons: string[] = []
+    if (!specMatch) reasons.push('Lệch chuyên môn')
+    if (!timeMatch) reasons.push('Lệch giờ')
+    if (!dayMatch) reasons.push('Lệch ngày')
+    if (!ptMatch) reasons.push('Lệch PT đã đề xuất')
+    if (!zoneMatch) reasons.push('Lệch khu vực đã đề xuất')
+    if (capacity.isFull) reasons.push('Lớp đã đầy')
+
+    return { ...capacity, specMatch, timeMatch, dayMatch, ptMatch, zoneMatch, sharedDays, isAssignable, score, reasons }
+  }
+
+  const matchesEffectiveRequest = (c: TrainingClass) => {
+    return getClassMatchInfo(c).isAssignable
+  }
+
+  const filteredClasses = classes.map((c) => ({ classItem: c, match: getClassMatchInfo(c) })).filter(({ classItem: c, match }) => {
     if (acceptedProposal && !matchesEffectiveRequest(c)) return false
     if (filterSpecialization) {
       const spec = (c.specialization || '').toLowerCase()
@@ -143,8 +177,14 @@ export default function MatchmakingPage() {
       const zoneId = zone?._id || zone
       if (String(zoneId) !== proposalZoneId) return false
     }
+    if (!showNearMatches && !match.isAssignable) return false
     return true
-  })
+  }).sort((a, b) => {
+    if (a.match.isAssignable !== b.match.isAssignable) return a.match.isAssignable ? -1 : 1
+    if (b.match.score !== a.match.score) return b.match.score - a.match.score
+    if (b.match.sharedDays.length !== a.match.sharedDays.length) return b.match.sharedDays.length - a.match.sharedDays.length
+    return (a.classItem.currentActiveCount ?? 0) - (b.classItem.currentActiveCount ?? 0)
+  }).map((item) => item.classItem)
 
   const handleAssign = async (classId: string) => {
     if (!requestId) return
@@ -158,12 +198,6 @@ export default function MatchmakingPage() {
     } finally {
       setAssigningId(null)
     }
-  }
-
-  // Lớp chỉ được phân công trực tiếp khi khớp 100% (chuyên môn + lịch + giờ).
-  // Không khớp → bắt buộc dùng "Gửi đề xuất" để hội viên xác nhận.
-  const isPerfectMatch = (c: TrainingClass) => {
-    return matchesEffectiveRequest(c)
   }
 
   if (!requestId) {
@@ -238,10 +272,12 @@ export default function MatchmakingPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <div className="text-xs text-[var(--gs-text-muted)] mb-1 uppercase tracking-wider">Số buổi / tuần</div>
-                    <span className="text-sm font-medium text-[var(--gs-text)]">{request.desiredSessions} buổi</span>
-                  </div>
+                  {request.desiredSessions && (
+                    <div>
+                      <div className="text-xs text-[var(--gs-text-muted)] mb-1 uppercase tracking-wider">Số buổi / tuần</div>
+                      <span className="text-sm font-medium text-[var(--gs-text)]">{request.desiredSessions} buổi</span>
+                    </div>
+                  )}
 
                   {effectiveRequest?.daysOfWeek?.length > 0 && (
                     <div>
@@ -302,6 +338,9 @@ export default function MatchmakingPage() {
                       value: t._id,
                       label: getUserDisplayName(t, 'PT'),
                     }))} />
+                  <Button onClick={() => setShowNearMatches((v) => !v)}>
+                    {showNearMatches ? 'Chỉ hiện lớp có thể xếp' : 'Hiện lớp gần khớp'}
+                  </Button>
                 </div>
 
                 {/* Class List */}
@@ -317,29 +356,21 @@ export default function MatchmakingPage() {
                     {filteredClasses.map((c) => {
                       const pt = c.ptId as any
                       const ptName = pt ? getUserDisplayName(pt) : '—'
-                      const zone = c.zoneId as any
-                      const maxCap = zone?.maxCapacity
-                      const current = c.currentActiveCount ?? 0
-                      const remaining = maxCap ? maxCap - current : 99
-                      const isFull = maxCap ? current >= maxCap : false
-                      const percent = maxCap ? Math.round((current / maxCap) * 100) : 0
+                      const match = getClassMatchInfo(c)
+                      const { maxCap, current, remaining, isFull, percent } = match
                       const timeLabel = c.startTime && c.endTime ? `${c.startTime.slice(0, 5)} - ${c.endTime.slice(0, 5)}` : '—'
                       const dayLabel = c.daysLabel || ''
                       const specLabel = c.specializationLabel || c.specialization || ''
-
-                      const matchesRequest = requestSlots.length === 0 || (() => {
-                        const slot = c.startTime && c.endTime ? `${c.startTime.slice(0, 5)}-${c.endTime.slice(0, 5)}` : ''
-                        return requestSlots.includes(slot)
-                      })()
+                      const perfect = match.isAssignable
 
                       return (
-                        <div key={c._id} className={`rounded-xl border p-4 transition-all hover:shadow-md ${isPerfectMatch(c) ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]' : 'border-[var(--gs-border)] bg-[var(--gs-card)]'}`}>
+                        <div key={c._id} className={`rounded-xl border p-4 transition-all hover:shadow-md ${perfect ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]' : 'border-[var(--gs-border)] bg-[var(--gs-card)]'}`}>
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="text-sm font-bold text-[var(--gs-text)]">{c.name}</span>
-                                {isPerfectMatch(c) && <Tag color="green" className="m-0 text-xs leading-none px-1 py-0.5">Khớp 100%</Tag>}
-                                {!isPerfectMatch(c) && matchesRequest && <Tag color="orange" className="m-0 text-xs leading-none px-1 py-0.5">Lệch lịch</Tag>}
+                                {perfect && <Tag color="green" className="m-0 text-xs leading-none px-1 py-0.5">Phù hợp nhất</Tag>}
+                                {!perfect && <Tag color="orange" className="m-0 text-xs leading-none px-1 py-0.5">{match.score}% phù hợp</Tag>}
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-[var(--gs-text)]">
                                 <div className="flex items-center gap-1.5">
@@ -365,8 +396,15 @@ export default function MatchmakingPage() {
                                   {isFull ? 'Đã đầy' : `Còn ${remaining} chỗ`}
                                 </span>
                               </div>
+                              {!perfect && match.reasons.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {match.reasons.map((reason) => (
+                                    <Tag key={reason} className="m-0 text-xs">{reason}</Tag>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                            {isPerfectMatch(c) ? (
+                            {perfect ? (
                               <Button type="primary" size="middle"
                                 disabled={isFull || !['pending', 'waiting_assignment', 'waiting_reassign'].includes(request.status)} loading={assigningId === c._id}
                                 onClick={() => handleAssign(c._id)}
@@ -374,7 +412,7 @@ export default function MatchmakingPage() {
                                 Xếp vào lớp này
                               </Button>
                             ) : (
-                              <Tooltip title="Lớp chưa khớp 100% với yêu cầu hội viên. Hãy quay lại và dùng nút 'Gửi đề xuất' để hội viên xác nhận.">
+                              <Tooltip title={`Chưa thể xếp ngay: ${match.reasons.join(', ') || 'lớp chưa đủ điều kiện'}.`}>
                                 <Button size="middle" disabled className="shrink-0">
                                   Chưa khớp
                                 </Button>
