@@ -48,7 +48,6 @@ const GOALS = [
 
 const TIME_SLOTS = ['06:00-08:00', '08:00-10:00', '10:00-12:00', '12:00-14:00', '14:00-16:00', '16:00-18:00', '18:00-20:00', '20:00-22:00']
 const WEEKS_OPTIONS = [1, 2, 3, 4, 8, 12]
-const formatMoney = (value?: number | null) => value ? `${Number(value).toLocaleString('vi-VN')}đ` : ''
 const DAYS = [
   { value: 0, label: 'Chủ nhật', short: 'CN' },
   { value: 1, label: 'Thứ 2', short: 'T2' },
@@ -70,6 +69,23 @@ function toMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number)
   return (h || 0) * 60 + (m || 0)
 }
+
+// Ngày tới gần nhất của thứ (khớp logic nextRequestDate phía backend khi tạo booking)
+function nextBookingDate(day: number, slot: string): Date {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let diff = day - today.getDay()
+  if (diff < 0) diff += 7
+  const target = new Date(today)
+  target.setDate(today.getDate() + diff)
+  const [h = 0, m = 0] = String(slot || '').split('-')[0].trim().split(':').map(Number)
+  const slotStart = new Date(target)
+  slotStart.setHours(h, m, 0, 0)
+  if (slotStart <= now) target.setDate(target.getDate() + 7)
+  return target
+}
+
+const formatShortDate = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
 
 // Chuyển lịch làm việc cố định của PT (TrainerSchedule) thành cửa sổ giờ làm theo từng ngày
 function getDayWindows(schedules: { dayOfWeek: number; shift: string; startTime?: string; endTime?: string }[]): Map<number, ScheduleWindow[]> {
@@ -443,10 +459,14 @@ export default function BookingPage() {
     'waiting_reassign',
   ])
 
-  // PT 1-1: sau khi Admin phân công PT, yêu cầu ở trạng thái 'assigned' và chờ PT xác nhận
+  // PT 1-1: sau khi Admin phân công PT, yêu cầu ở trạng thái 'assigned' và chờ PT xác nhận;
+  // sau khi PT xác nhận → 'confirmed' — panel giữ nguyên đến khi PT kết thúc phụ trách
+  // (request bị đóng) thì mới mở lại đặt lịch
   const PT1ON1_ACTIVE_STATUSES = new Set([
     ...REQUEST_IN_PROGRESS_STATUSES,
     'assigned',
+    'confirmed',
+    'active',
   ])
 
   const isRequestInProgress = (request: TrainingRequest) =>
@@ -526,10 +546,6 @@ export default function BookingPage() {
     if (!specialization) { message.warning('Chọn chuyên môn muốn tập'); return }
     if (timeSlots.length === 0) { message.warning('Chọn ít nhất 1 khung giờ mong muốn'); return }
     if (daysOfWeek.length === 0) { message.warning('Chọn ít nhất 1 ngày có thể tập'); return }
-    if (groupPreferredTrainer && !groupPreferredTrainer.groupPrice) {
-      message.warning('PT hiện chưa được cấu hình giá đặt lịch nhóm. Vui lòng chọn PT khác.')
-      return
-    }
     const groupInvalid = validateAgainstTrainer(groupPreferredTrainer, groupLock.ptDayWindows, daysOfWeek, timeSlots)
     if (groupPreferredTrainer && groupInvalid.length > 0) {
       message.warning(`Ngày/giờ (${groupInvalid.join(', ')}) không nằm trong lịch làm việc của PT ${getUserDisplayName(groupPreferredTrainer, '')}. Vui lòng chọn lại theo lịch của PT.`)
@@ -569,10 +585,6 @@ export default function BookingPage() {
     if (ptPickMode === 'specific') {
       if (!preferredTrainer) {
         message.warning('Vui lòng chọn PT bạn muốn theo học')
-        return false
-      }
-      if (!preferredTrainer.oneToOnePrice) {
-        message.warning('PT hiện chưa được cấu hình giá đặt lịch 1-1. Vui lòng chọn PT khác.')
         return false
       }
     } else if (!ptSpecialization) {
@@ -700,7 +712,7 @@ export default function BookingPage() {
           <MembershipRequired planName={planName} featureLabel="đăng ký tập luyện" />
         ) : enrollmentLoading ? (
           <div className="flex min-h-[200px] items-center justify-center"><Spin size="large" /></div>
-        ) : enrollment?.hasActiveEnrollment && !showBookingOptions ? (
+        ) : enrollment?.hasActiveEnrollment && !showBookingOptions && !activePt1on1Request ? (
           <div className="max-w-2xl mx-auto pt-8 space-y-4">
             <div className="text-center mb-4">
               <div className="text-5xl mb-3">✅</div>
@@ -766,10 +778,10 @@ export default function BookingPage() {
               <p className="text-sm text-[var(--gs-text-muted)] mt-2">Chọn hình thức tập luyện phù hợp với bạn</p>
             </div>
             {activeGroupRequest && (
-              <YourRequestPanel request={activeGroupRequest} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} />
+              <YourRequestPanel request={activeGroupRequest} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} onLeaveService={confirmLeaveCurrentTraining} />
             )}
             {activePt1on1Request && (
-              <YourRequestPanel request={activePt1on1Request} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} />
+              <YourRequestPanel request={activePt1on1Request} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} onLeaveService={confirmLeaveCurrentTraining} />
             )}
             {(!activeGroupRequest || !activePt1on1Request) && (
               hasVisibleBookingOption ? (
@@ -811,7 +823,7 @@ export default function BookingPage() {
           <>
             {activeGroupRequest && (
               <>
-                <YourRequestPanel request={activeGroupRequest} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} />
+                <YourRequestPanel request={activeGroupRequest} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} onLeaveService={confirmLeaveCurrentTraining} />
                 <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setBookingType(null)}
                   className="text-[var(--gs-text-muted)] hover:text-[var(--gs-text)] !px-1">
                   Quay lại lựa chọn dịch vụ
@@ -877,15 +889,9 @@ export default function BookingPage() {
                     />
                     {groupPreferredTrainer && (
                       <div className="mt-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm">
-                        {groupPreferredTrainer.groupPrice ? (
-                          <span className="text-[var(--gs-text)]">
-                            Giá PT nhóm: <b className="text-[var(--theme-accent)]">{formatMoney(groupPreferredTrainer.groupPrice)}</b> / người / buổi
-                          </span>
-                        ) : (
-                          <span className="text-[var(--gs-warning)]">
-                            PT này chưa được cấu hình giá đặt lịch nhóm. Vui lòng chọn PT khác.
-                          </span>
-                        )}
+                        <span className="text-[var(--gs-text)]">
+                          PT mong muốn: <b className="text-[var(--theme-accent)]">{getUserDisplayName(groupPreferredTrainer, '')}</b>
+                        </span>
                       </div>
                     )}
                   </div>
@@ -1074,7 +1080,7 @@ export default function BookingPage() {
           <>
             {activePt1on1Request && (
               <>
-                <YourRequestPanel request={activePt1on1Request} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} />
+                <YourRequestPanel request={activePt1on1Request} onReload={() => { setSubmitted(false); setPtSubmitted(false); loadGroupRequests(); loadPt1on1Requests() }} onLeaveService={confirmLeaveCurrentTraining} />
                 <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setBookingType(null)}
                   className="text-[var(--gs-text-muted)] hover:text-[var(--gs-text)] !px-1">
                   Quay lại lựa chọn dịch vụ
@@ -1103,7 +1109,7 @@ export default function BookingPage() {
                     return (
                       <div key={r._id} className="rounded-xl border border-[var(--theme-border)] bg-[var(--gs-card)] p-3 flex items-center gap-3">
                         <span className="text-sm text-[var(--gs-text)] uppercase">{displayText}</span>
-                        {trainer && r.status === 'assigned' && (
+                        {trainer && (r.status === 'assigned' || r.status === 'confirmed') && (
                           <span className="text-xs text-[var(--gs-text-muted)]">
                             PT: <span className="font-medium text-[var(--gs-text)]">{getUserDisplayName(trainer, '')}</span>
                           </span>
@@ -1302,15 +1308,9 @@ export default function BookingPage() {
                     </h3>
                     {ptPickMode === 'specific' && preferredTrainer && (
                       <div className="mb-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm">
-                        {preferredTrainer.oneToOnePrice ? (
-                          <span className="text-[var(--gs-text)]">
-                            Giá PT 1-1: <b className="text-[var(--theme-accent)]">{formatMoney(preferredTrainer.oneToOnePrice)}</b> / buổi
-                          </span>
-                        ) : (
-                          <span className="text-[var(--gs-warning)]">
-                            PT này chưa được cấu hình giá đặt lịch 1-1. Vui lòng chọn PT khác.
-                          </span>
-                        )}
+                        <span className="text-[var(--gs-text)]">
+                          PT mong muốn: <b className="text-[var(--theme-accent)]">{getUserDisplayName(preferredTrainer, '')}</b>
+                        </span>
                       </div>
                     )}
                     <div className="space-y-5">
@@ -1385,7 +1385,7 @@ export default function BookingPage() {
                           )}
                           <p className="text-xs">
                             {Object.keys(ptDaySlotMap).length > 0 ? (
-                              <>Lịch mong muốn đã chọn: <span className="font-medium text-[var(--theme-accent)]">{Object.entries(ptDaySlotMap).map(([day, slot]) => `${DAYS.find((x) => x.value === Number(day))?.short || day} ${slot.replace('-', ' - ')}`).join(', ')}</span></>
+                              <>Lịch mong muốn đã chọn: <span className="font-medium text-[var(--theme-accent)]">{Object.entries(ptDaySlotMap).map(([day, slot]) => `${DAYS.find((x) => x.value === Number(day))?.short || day} (${formatShortDate(nextBookingDate(Number(day), slot))}) ${slot.replace('-', ' - ')}`).join(', ')}</span></>
                             ) : (
                               <span className="text-[var(--gs-text-muted)]">Chưa chọn ngày/khung giờ nào.</span>
                             )}

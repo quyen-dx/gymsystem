@@ -11,9 +11,10 @@ const dailyQRCodeSchema = new mongoose.Schema({
     required: true,
   },
   createdBy: {
+    // null = hệ thống tự tạo (job 00:00), không phải do admin/staff bấm tạo
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    default: null,
   },
   isActive: {
     type: Boolean,

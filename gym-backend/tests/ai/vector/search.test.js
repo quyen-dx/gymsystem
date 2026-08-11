@@ -26,7 +26,17 @@ describe('vectorTool', () => {
   })
 
   it('searches successfully', async () => {
-    const r = await vectorQuery('Chính sách hoàn tiền')
+    const r = await vectorQuery('Chinh sach hoan tien', {
+      isAvailable: async () => true,
+      searchDocuments: async () => ([{
+        title: 'Chinh sach hoan tien',
+        category: 'membership',
+        content: 'Noi dung chinh sach hoan tien',
+        source: 'test',
+        updatedAt: '2026-08-10',
+        score: 0.91,
+      }]),
+    })
     assert.equal(r.success, true)
     assert.ok(r.documents.length > 0)
     assert.ok(r.documents[0].title)

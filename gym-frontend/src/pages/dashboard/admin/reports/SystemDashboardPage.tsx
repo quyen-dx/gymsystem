@@ -9,7 +9,7 @@ export default function SystemDashboardPage() {
         title="Dashboard Hệ thống"
         subtitle="Người dùng, vai trò, đăng ký & hoạt động hệ thống"
         drawerType="system"
-        chartOrder={['userByRole', 'signupByDay']}
+        chartOrder={['userByRole', 'signupByDay', 'activityByDay', 'activityByType']}
         topOrder={['roles']}
         chartPointToFilter={(chartKey, pointKey) => {
           if (chartKey === 'signupByDay') return pointKey ? { date: String(pointKey) } : null

@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Modal, Tag, message } from 'antd'
-import { CalendarOutlined, CloseCircleOutlined, ExclamationCircleOutlined, MessageOutlined, TeamOutlined, UserOutlined, WalletOutlined } from '@ant-design/icons'
+import { CalendarOutlined, CloseCircleOutlined, ExclamationCircleOutlined, MessageOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { trainingRequestService, type TrainingRequest } from '../../services/trainingRequestService'
-import { bookingService, type Booking } from '../../services/bookingService'
-import { getWallet } from '../../services/walletService'
 import { getUserDisplayName } from '../../utils/userDisplay'
 
 const DAY_LABELS = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7']
@@ -21,27 +20,42 @@ const STATUS_META: Record<string, { color: string; label: string }> = {
 }
 
 Object.assign(STATUS_META, {
-  awaiting_payment: { color: 'gold', label: 'Chờ thanh toán' },
+  awaiting_payment: { color: 'gold', label: 'Đã xác nhận' },
   confirmed: { color: 'green', label: 'Đã xác nhận' },
+  active: { color: 'green', label: 'Đang tập luyện' },
   payment_expired: { color: 'red', label: 'Hết hạn thanh toán' },
   expired: { color: 'red', label: 'Đã hết hạn xử lý' },
 })
 
-const CANCELABLE = ['pending', 'waiting_assignment', 'assigned', 'awaiting_payment']
+const CANCELABLE = ['pending', 'waiting_assignment', 'assigned']
 
 const STATUS_DESCRIPTIONS: Record<string, string> = {
   pending: 'Admin đã tiếp nhận yêu cầu và đang xem xét.',
   message_sent: 'Admin đã gửi đề xuất. Vui lòng chọn Đồng ý hoặc Từ chối.',
   waiting_assignment: 'Bạn đã đồng ý đề xuất. Admin đang sắp xếp lớp/PT cho bạn. Bạn vẫn có thể hủy yêu cầu trước khi hoàn tất.',
-  assigned: 'Đã phân công thành công. Bạn có thể bắt đầu đặt lịch.',
+  assigned: 'Đã phân công thành công. PT sẽ sớm xác nhận lịch cho bạn.',
+  awaiting_payment: 'PT đã xác nhận phụ trách. Lịch tập chi tiết xem tại mục Lịch tập.',
+  confirmed: 'Lịch tập đã được PT xác nhận. PT sẽ liên hệ với bạn theo SĐT/Email ở trên. Lịch tập chi tiết xem tại mục Lịch tập.',
+  active: 'PT đang phụ trách bạn. Lịch tập chi tiết xem tại mục Lịch tập.',
+  payment_expired: 'Yêu cầu đã hết hạn và lịch đã được giải phóng. Bạn có thể gửi yêu cầu mới.',
 }
 
 function timelineFor(request: TrainingRequest): { steps: string[]; current: number } {
   if (request.type === 'group') {
     return { steps: ['Đã gửi yêu cầu', 'Admin tiếp nhận', 'Đang xử lý', 'Đã xếp lớp'], current: request.status === 'assigned' ? 3 : 0 }
   }
-  const steps = ['Đã gửi yêu cầu', 'Admin tiếp nhận', 'Đang xử lý', 'Chờ phản hồi hội viên', 'Chờ phân công', 'Đã phân công PT']
-  const idx: Record<string, number> = { pending: 0, message_sent: 3, waiting_assignment: 4, assigned: 5 }
+  const steps = ['Đã gửi yêu cầu', 'Admin tiếp nhận', 'Đã phân công PT', 'Hoàn tất']
+  const idx: Record<string, number> = {
+    pending: 0,
+    message_sent: 1,
+    waiting_member: 1,
+    waiting_assignment: 2,
+    waiting_reassign: 2,
+    assigned: 2,
+    awaiting_payment: 3,
+    confirmed: 3,
+    active: 3,
+  }
   return { steps, current: idx[request.status] ?? 0 }
 }
 
@@ -92,26 +106,17 @@ function formatTimeSlots(slots?: string[]) {
 interface Props {
   request: TrainingRequest
   onReload: () => void
+  onLeaveService?: () => void
 }
 
-export default function YourRequestPanel({ request, onReload }: Props) {
+export default function YourRequestPanel({ request, onReload, onLeaveService }: Props) {
   const navigate = useNavigate()
   const [processing, setProcessing] = useState(false)
-  const [paymentBookings, setPaymentBookings] = useState<Booking[]>([])
   const isPt1on1 = request.type === 'pt1on1'
   const meta = STATUS_META[request.status] || { color: 'default', label: request.status }
   const timeline = timelineFor(request)
   const assignedPtId = idOf(request.assignedTrainerId)
-
-  useEffect(() => {
-    if (request.status !== 'awaiting_payment') {
-      setPaymentBookings([])
-      return
-    }
-    bookingService.getMyBookings()
-      .then(({ data }) => setPaymentBookings((data.bookings || []).filter((booking: Booking) => String(booking.requestId || '') === String(request._id) && booking.status === 'awaiting_payment')))
-      .catch(() => setPaymentBookings([]))
-  }, [request._id, request.status])
+  const isPaidState = request.status === 'confirmed' || request.status === 'active'
 
   const handleCancel = async () => {
     setProcessing(true)
@@ -159,42 +164,16 @@ export default function YourRequestPanel({ request, onReload }: Props) {
     message.info('Tính năng chat với PT đang được phát triển. Vui lòng liên hệ PT qua số điện thoại hoặc email.')
   }
 
-  const goalText = request.goals?.length ? request.goals.join(', ') : '—'
-  const payAllPendingBookings = async () => {
-    if (!paymentBookings.length) return
-    setProcessing(true)
-    try {
-      const total = paymentBookings.reduce((sum, b) => sum + Number(b.totalAmount || 0), 0)
-      const walletRes = await getWallet()
-      const balance = Number(walletRes?.data?.data?.balance || 0)
-      if (balance < total) {
-        const res = await bookingService.payBooking(paymentBookings[0]._id, { useVnpay: true })
-        if (res.data?.paymentUrl) {
-          window.location.href = res.data.paymentUrl
-          return
-        }
-        message.error('Không thể tạo phiên thanh toán VNPay. Vui lòng thử lại.')
-        return
-      }
-      for (const booking of paymentBookings) {
-        await bookingService.payBooking(booking._id)
-      }
-      message.success('Thanh toán các buổi PT thành công')
-      onReload()
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Thanh toán chưa hoàn tất')
-    } finally {
-      setProcessing(false)
-    }
-  }
+const goalText = request.goals?.length ? request.goals.join(', ') : '—'
 
   const note = request.note || request.healthNotes || ''
   const sentAt = request.createdAt ? dayjs(request.createdAt).format('DD/MM/YYYY HH:mm') : '—'
   const preferred = nameOf(request.preferredTrainerId)
   const assignedPtName = nameOf(request.assignedTrainerId)
   const assignedClassName = classNameOf(request.assignedClassId)
+  const assignedPtUser = request.assignedTrainerId && typeof request.assignedTrainerId !== 'string' ? request.assignedTrainerId : null
 
-  const rows: Array<{ label: string; value: string }> = []
+  const rows: Array<{ label: string; value: ReactNode }> = []
   rows.push({ label: 'Chuyên môn', value: specLabel(request.specialization).toUpperCase() })
   rows.push({ label: 'Mục tiêu', value: goalText })
   if (request.daySlots?.length) {
@@ -215,14 +194,30 @@ export default function YourRequestPanel({ request, onReload }: Props) {
   } else {
     rows.push({ label: 'Số buổi/tuần', value: request.desiredSessions ? `${request.desiredSessions} buổi` : '—' })
   }
+  if (request.weeks) rows.push({ label: 'Số tuần lặp lại', value: `${request.weeks} tuần` })
   if (request.status === 'assigned') {
     if (isPt1on1 && assignedPtName) rows.push({ label: 'PT được phân công', value: assignedPtName })
     if (!isPt1on1 && assignedClassName) rows.push({ label: 'Lớp được xếp', value: assignedClassName })
   }
+  if (isPt1on1 && isPaidState && assignedPtName) {
+    rows.push({
+      label: 'PT phụ trách',
+      value: (
+        <span className="inline-flex flex-col gap-0.5">
+          <span className="font-medium text-[var(--gs-text)]">{assignedPtName}</span>
+          {(assignedPtUser?.phone || assignedPtUser?.email) && (
+            <span className="text-xs text-[var(--gs-text-muted)]">
+              {[assignedPtUser?.phone, assignedPtUser?.email].filter(Boolean).join(' · ')}
+            </span>
+          )}
+        </span>
+      ),
+    })
+  }
   rows.push({ label: 'Ngày gửi', value: sentAt })
   if (note) rows.push({ label: 'Ghi chú', value: note })
 
-  const showActions = CANCELABLE.includes(request.status) || request.status === 'assigned'
+  const showActions = CANCELABLE.includes(request.status) || request.status === 'assigned' || isPaidState
 
   return (
     <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-card)] p-6 sm:p-8 space-y-6">
@@ -258,15 +253,11 @@ export default function YourRequestPanel({ request, onReload }: Props) {
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="font-semibold text-[var(--gs-text)]">Thanh toán để xác nhận lịch PT</p>
+              <p className="font-semibold text-[var(--gs-text)]">PT đã xác nhận phụ trách</p>
               <p className="mt-1 text-sm text-[var(--gs-text-muted)]">
-                {paymentBookings.length} buổi đang được giữ chỗ, tổng cộng {paymentBookings.reduce((sum, booking) => sum + Number(booking.totalAmount || 0), 0).toLocaleString('vi-VN')}đ.
-                {paymentBookings.reduce((sum, booking) => sum + Number(booking.totalAmount || 0), 0) > 0 && ' Nếu số dư ví không đủ, phần còn thiếu sẽ được thanh toán trực tiếp qua VNPay.'}
+                Lịch tập PT 1-1 của bạn đã được xác nhận. Chi tiết lịch xem tại mục Lịch tập.
               </p>
             </div>
-            <Button type="primary" icon={<WalletOutlined />} loading={processing} disabled={!paymentBookings.length} onClick={payAllPendingBookings}>
-              Thanh toán {paymentBookings.reduce((sum, booking) => sum + Number(booking.totalAmount || 0), 0).toLocaleString('vi-VN')}đ
-            </Button>
           </div>
         </div>
       )}
@@ -360,6 +351,27 @@ export default function YourRequestPanel({ request, onReload }: Props) {
               >
                 Nhắn tin
               </Button>
+            </div>
+          ) : isPaidState && isPt1on1 ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="primary"
+                icon={<CalendarOutlined />}
+                onClick={() => navigate('/workout')}
+                className="min-w-[130px]"
+              >
+                Xem lịch tập
+              </Button>
+              {onLeaveService && (
+                <Button
+                  danger
+                  icon={<CloseCircleOutlined />}
+                  onClick={onLeaveService}
+                  className="min-w-[130px]"
+                >
+                  Rời dịch vụ PT
+                </Button>
+              )}
             </div>
           ) : request.status === 'assigned' && !isPt1on1 ? (
             <p className="flex items-start gap-2 text-sm text-[var(--gs-text-muted)]">

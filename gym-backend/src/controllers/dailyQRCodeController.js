@@ -113,25 +113,8 @@ export const verifyDailyQRAndGetSessions = async (req, res) => {
 
     const memberId = req.user._id
 
-    // Check if any check-in exists today (QR_SELF, STAFF, RECEPTION, or AUTO)
-    const todayCheckin = await CheckIn.findOne({
-      memberId,
-      checkinTime: { $gte: today, $lte: eod },
-      status: 'success',
-    }).sort({ checkinTime: -1 }).lean()
-
-    if (todayCheckin) {
-      return res.json({
-        valid: true,
-        message: 'Bạn đã check-in hôm nay.',
-        memberId,
-        qrToken: token,
-        enrollment: null,
-        sessionDate: today,
-        sessions: [],
-        freeWorkoutCheckedIn: { checkedInAt: todayCheckin.checkinTime },
-      })
-    }
+    // P7: member được check-in nhiều buổi/ngày → không chặn khi đã check-in 1 buổi.
+    // Vẫn trả sessions (buổi chưa diễn ra + chưa check-in) để member chọn buổi tiếp theo.
 
     // Find active class enrollment
     const enrollment = await ClassEnrollment.findOne({ memberId, status: 'active' })
@@ -268,23 +251,8 @@ export const submitDailyQRCheckin = async (req, res) => {
       return res.status(400).json({ message: CHECKIN_CUTOFF_MESSAGE })
     }
 
-    // Check-in toàn cục 1 lần/ngày (mọi phương thức) — check BÊN TRONG transaction (chống bấm đúp song song)
-    const todayCheckin = await CheckIn.findOne({
-      memberId,
-      checkinTime: { $gte: today, $lte: eod },
-      status: 'success',
-    }).session(mongoSession).lean()
-
-    if (todayCheckin) {
-      const checkinTime = new Date(todayCheckin.checkinTime).toLocaleTimeString('vi-VN', {
-        hour: '2-digit', minute: '2-digit',
-      })
-      await mongoSession.abortTransaction()
-      return res.status(400).json({
-        message: `Bạn đã check-in hôm nay lúc ${checkinTime}.`,
-        alreadyCheckedIn: true,
-      })
-    }
+    // P7: bỏ chặn toàn cục 1 lần/ngày — chống trùng theo thực thể ở bên dưới
+    // (1 check-in/booking, 1 check-in/schedule session, FREE_TRAINING 1 lần/ngày).
 
     // Validate QR token
     const qrCode = await DailyQRCode.findOne({ token }).lean()

@@ -1,4 +1,4 @@
-import { CheckCircleFilled, CloseOutlined, EnvironmentOutlined, ReloadOutlined, SwapOutlined, WalletOutlined } from '@ant-design/icons'
+import { CheckCircleFilled, CloseOutlined, EnvironmentOutlined, ReloadOutlined, SwapOutlined } from '@ant-design/icons'
 import { Button, DatePicker, Empty, Input, message, Modal, Select, Spin, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -15,7 +15,6 @@ import { ptAssignmentService } from '../../../services/ptAssignmentService'
 import type { PTAssignment } from '../../../services/ptAssignmentService'
 import { trainerService } from '../../../services/trainerService'
 import { trainingRequestService } from '../../../services/trainingRequestService'
-import { getWallet } from '../../../services/walletService'
 import type { TrainingRequest } from '../../../services/trainingRequestService'
 import { getUserDisplayName } from '../../../utils/userDisplay'
 import type { WorkoutSchedule, ScheduleSession } from '../../../services/workoutService'
@@ -26,8 +25,6 @@ const badgeForDate = (date: dayjs.Dayjs): { label: string; color: string } => {
   if (date.isAfter(today)) return { label: 'Sắp tới', color: 'default' }
   return { label: 'Đã qua', color: 'default' }
 }
-
-const formatMoney = (value?: number) => value ? `${Number(value || 0).toLocaleString('vi-VN')}đ` : ''
 
 const PERFORMANCE_LABEL: Record<string, string> = {
   excellent: 'Xuất sắc',
@@ -307,7 +304,6 @@ export default function WorkoutPage() {
   const [rescheduleReason, setRescheduleReason] = useState('')
   const [cancelReason, setCancelReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
-  const [payingId, setPayingId] = useState<string | null>(null)
   const [ptWindows, setPtWindows] = useState<Map<number, ScheduleWindow[]>>(new Map())
   const [ptBusy, setPtBusy] = useState<Array<{ date: string; slot: string }>>([])
 
@@ -705,44 +701,6 @@ export default function WorkoutPage() {
     setCancelTarget(row)
   }
 
-  const handlePayBooking = (row: ScheduleRow) => {
-    if (!row.booking) return
-    const amount = Number(row.booking.totalAmount || 0)
-    if (amount <= 0) {
-      message.error('Không có số tiền cần thanh toán')
-      return
-    }
-    Modal.confirm({
-      title: 'Thanh toán lịch PT 1-1',
-      content: `Xác nhận thanh toán ${formatMoney(amount)} qua ví của bạn? Nếu số dư ví không đủ, phần còn thiếu sẽ được thanh toán trực tiếp qua VNPay.`,
-      okText: 'Thanh toán',
-      cancelText: 'Hủy',
-      centered: true,
-      onOk: async () => {
-        setPayingId(row.key)
-        try {
-          const walletRes = await getWallet()
-          const balance = Number(walletRes?.data?.data?.balance || 0)
-          if (balance < amount) {
-            const res = await bookingService.payBooking(row.booking!._id, { useVnpay: true })
-            if (res.data?.paymentUrl) {
-              window.location.href = res.data.paymentUrl
-              return
-            }
-            throw new Error('Không thể tạo phiên thanh toán VNPay')
-          }
-          await bookingService.payBooking(row.booking!._id)
-          message.success('Thanh toán thành công')
-          loadSchedules()
-        } catch (error: any) {
-          message.error(error?.response?.data?.message || error?.message || 'Thanh toán thất bại')
-        } finally {
-          setPayingId(null)
-        }
-      },
-    })
-  }
-
   const submitReschedule = async () => {
     if (!rescheduleTarget || !rescheduleDate || !rescheduleSlot) return
     const start = rescheduleSlot.split('-')[0].trim()
@@ -757,11 +715,16 @@ export default function WorkoutPage() {
           { date: dateStr, time: start, endTime: end, reason: rescheduleReason.trim() || undefined },
         )
       } else if (rescheduleTarget.booking) {
-        await bookingService.rescheduleBooking(rescheduleTarget.booking._id, {
+        // Booking đã được PT xác nhận → member đổi lịch phải qua PT duyệt
+        await bookingService.requestRescheduleBooking(rescheduleTarget.booking._id, {
           date: dateStr,
           slot: rescheduleSlot,
           reason: rescheduleReason.trim() || undefined,
         })
+        message.success('Đã gửi yêu cầu đổi lịch. PT sẽ xác nhận trước khi lịch mới được áp dụng.')
+        setRescheduleTarget(null)
+        loadSchedules()
+        return
       }
       message.success('Đổi lịch tập thành công')
       setRescheduleTarget(null)
@@ -858,19 +821,7 @@ export default function WorkoutPage() {
     },
     {
       title: 'Thao tác', width: 200, align: 'center',
-      render: (_, r) => r.source === 'booking' && r.booking?.status === 'awaiting_payment' ? (
-        <div className="flex items-center justify-center gap-1.5">
-          <Button
-            type="primary"
-            size="small"
-            icon={<WalletOutlined />}
-            loading={payingId === r.key}
-            onClick={() => handlePayBooking(r)}
-          >
-            Thanh toán {formatMoney(r.booking.totalAmount)}
-          </Button>
-        </div>
-      ) : isRowModifiable(r) ? (
+      render: (_, r) => isRowModifiable(r) ? (
         <div className="flex items-center justify-center gap-1.5">
           <Button size="small" icon={<SwapOutlined />} onClick={() => openReschedule(r)}>Đổi lịch</Button>
           <Button size="small" danger icon={<CloseOutlined />} onClick={() => openCancel(r)}>Hủy</Button>

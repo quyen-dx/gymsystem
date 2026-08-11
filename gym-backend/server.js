@@ -62,6 +62,7 @@ import { startPtPaymentTimeoutJob } from './src/jobs/ptPaymentTimeout.js'
 import { startPtAdminTimeoutJob } from './src/jobs/ptAdminTimeout.js'
 import { startPaymentExpiryJob } from './src/jobs/paymentExpiry.js'
 import { startNoShowSweeperJob } from './src/jobs/noShowSweeper.js'
+import { startDailyQrGeneratorJob } from './src/jobs/dailyQrGenerator.js'
 import { startMembershipCron } from './src/jobs/membershipCron.js'
 
 const app = express()
@@ -199,6 +200,8 @@ connectDB()
     startPaymentExpiryJob()
     // Chốt kết quả buổi PT (completed / member_no_show) khi PT không ghi nhận
     startNoShowSweeperJob()
+    // Tự tạo mã QR hằng ngày lúc 00:00 (admin không cần bấm tạo nữa)
+    startDailyQrGeneratorJob()
     // Membership: kích hoạt kỳ gia hạn đúng ngày + nhắc hết hạn 7D/1D
     startMembershipCron()
     httpServer.listen(PORT, () => {

@@ -1,8 +1,13 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { after } from 'node:test'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+after(() => {
+  setImmediate(() => process.exit(process.exitCode || 0))
+})
 
 const TEST_DIRS = [
   'cards', 'database', 'web', 'vision', 'vector',

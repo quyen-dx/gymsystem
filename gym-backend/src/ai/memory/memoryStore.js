@@ -46,6 +46,7 @@ if (!StoreClass) throw new Error(`Unknown MEMORY_PROVIDER: ${providerName}. Supp
 
 const instance = new StoreClass()
 
-setInterval(() => instance.cleanup(), 60_000)
+const cleanupTimer = setInterval(() => instance.cleanup(), 60_000)
+cleanupTimer.unref?.()
 
 export default instance

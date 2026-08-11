@@ -241,7 +241,8 @@ export default function StaffCheckinPage() {
     },
   ]
 
-  const canCheckin = searchedMember?.membership && searchedMember.membership.status !== 'expired' && !searchedMember.checkedInToday
+  // P7: member được check-in nhiều buổi/ngày → không chặn dựa trên checkedInToday
+  const canCheckin = searchedMember?.membership && searchedMember.membership.status !== 'expired'
 
   return (
     <DashboardLayout>
@@ -329,19 +330,18 @@ export default function StaffCheckinPage() {
                   </Descriptions>
 
                   <div className="mt-4">
-                    {searchedMember.checkedInToday ? (
-                      <Alert type="success" showIcon message="Hội viên đã check-in hôm nay." />
-                    ) : (
-                      <Button
-                        type="primary"
-                        size="large"
-                        block
-                        disabled={!canCheckin}
-                        onClick={() => setModalOpen(true)}
-                      >
-                        Điểm danh tại quầy
-                      </Button>
+                    {searchedMember.checkedInToday && (
+                      <Alert className="mb-3" type="info" showIcon message="Hội viên đã check-in hôm nay. Vẫn có thể điểm danh thêm buổi khác." />
                     )}
+                    <Button
+                      type="primary"
+                      size="large"
+                      block
+                      disabled={!canCheckin}
+                      onClick={() => setModalOpen(true)}
+                    >
+                      Điểm danh tại quầy
+                    </Button>
                     {!searchedMember.membership && (
                       <div className="mt-2 text-xs text-[var(--gs-text-muted)]">Hội viên cần có gói tập hợp lệ trước khi check-in.</div>
                     )}

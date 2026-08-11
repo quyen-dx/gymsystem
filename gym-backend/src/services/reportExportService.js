@@ -24,10 +24,10 @@ const moduleLoaders = {
 
 const ROW_LIMIT = 2000
 
-const getModuleData = async (module, range) => {
+const getModuleData = async (module, { range = '30d', from, to } = {}) => {
   const loader = moduleLoaders[module]
   if (!loader) throw new Error('Module không hợp lệ')
-  return loader({ range })
+  return loader({ range, from, to })
 }
 
 const fetchTransactions = async (range) => {
@@ -80,7 +80,7 @@ const kpiToRow = (kpi) => {
 }
 
 export const buildXlsx = async ({ module = 'finance', range = '30d', from, to }) => {
-  const data = await getModuleData(module, range)
+  const data = await getModuleData(module, { range, from, to })
   const txRows = await fetchTransactions({ range, from, to })
   const r = data.range
   const workbook = new ExcelJS.Workbook()
@@ -173,7 +173,7 @@ export const buildXlsx = async ({ module = 'finance', range = '30d', from, to })
 }
 
 export const buildPdf = async ({ module = 'finance', range = '30d', from, to, actorName = 'Admin' }) => {
-  const data = await getModuleData(module, range)
+  const data = await getModuleData(module, { range, from, to })
   const txRows = (await fetchTransactions({ range, from, to })).slice(0, 300)
   const r = data.range
   const doc = new PDFDocument({ size: 'A4', margin: 48, bufferPages: true })

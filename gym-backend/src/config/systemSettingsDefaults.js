@@ -64,6 +64,10 @@ export const SYSTEM_SETTINGS_DEFAULTS = {
     weeklyRecurringBookingEnabled: true,
     waitlistEnabled: true,
     reviewAfterSessionEnabled: true,
+    // Đặt lịch PT phải trước giờ tập ít nhất X giờ (chặn đặt sát giờ)
+    minBookingLeadHours: 2,
+    // Thời gian tối đa member được thanh toán sau khi PT xác nhận (phút)
+    paymentHoldMinutes: 30,
   },
   workout: {
     workoutPlanEnabled: true,
@@ -160,6 +164,8 @@ export const normalizeSystemSettings = (settings = {}) => {
   }
   merged.auth.otpExpiresInSeconds = Math.max(30, Number(merged.auth.otpExpiresInSeconds) || 300)
   merged.checkin.qrTokenTtlSeconds = Math.max(5, Number(merged.checkin.qrTokenTtlSeconds) || 30)
+  merged.pt.minBookingLeadHours = Math.max(0.5, Number(merged.pt.minBookingLeadHours) || 2)
+  merged.pt.paymentHoldMinutes = Math.max(5, Number(merged.pt.paymentHoldMinutes) || 30)
   return merged
 }
 

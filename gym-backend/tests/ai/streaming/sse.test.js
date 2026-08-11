@@ -8,15 +8,11 @@ describe('streaming events', () => {
   })
 
   it('emits events with correct shape when unavailable', async () => {
-    // isAvailable() returns false in test env (no GEMINI_API_KEY in non-env-loaded context)
     const user = { _id: 'test-stream', role: 'member', fullName: 'Test' }
     const events = []
-    for await (const ev of processStream('Xin chào', user)) {
+    for await (const ev of processStream('Xin chao', user, { chatAvailable: () => false })) {
       events.push(ev)
     }
-    // Should emit at least a done event
-    if (events.length > 0) {
-      assert.ok(events.some(e => e.event === 'done' || e.event === 'error'))
-    }
+    assert.ok(events.some(e => e.event === 'done' || e.event === 'error'))
   })
 })

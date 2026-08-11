@@ -11,6 +11,9 @@ const STATUS_COLORS: Record<string, string> = {
   confirmed: 'processing',
   completed: 'success',
   cancelled: 'error',
+  member_no_show: 'error',
+  pt_no_show: 'magenta',
+  needs_review: 'warning',
 }
 
 interface Props {

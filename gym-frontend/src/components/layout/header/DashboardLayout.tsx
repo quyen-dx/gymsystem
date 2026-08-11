@@ -12,6 +12,7 @@ import {
   MenuOutlined,
   MoneyCollectOutlined,
   QuestionCircleOutlined,
+  SettingOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
   TeamOutlined,
@@ -260,10 +261,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { key: '/admin/policies', label: 'Chính sách', icon: <FileTextOutlined /> },
       ...(isEnabled('pt.moduleEnabled') ? [] : []),
       // { key: '/admin/notifications', label: 'Thông báo', icon: <BellOutlined /> },
-      // { key: '/admin/system-settings', label: 'Cài đặt hệ thống', icon: <SettingOutlined /> },
+      { key: '/admin/system-settings', label: 'Cài đặt hệ thống', icon: <SettingOutlined /> },
     ],
     staff: [
-      { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
       ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/staff/checkin', label: 'Check-in', icon: <DashboardOutlined /> }] : []),
       { key: '/staff/members', label: 'Hội viên', icon: <TeamOutlined /> },
       {
@@ -287,7 +287,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       },
     ],
     pt: [
-      { key: '/', label: 'Trang chủ', icon: <HomeOutlined /> },
       ...(isEnabled('pt.scheduleEnabled') ? [
         { key: '/pt/schedule', label: 'Lịch làm việc', icon: <CalendarOutlined /> },
 

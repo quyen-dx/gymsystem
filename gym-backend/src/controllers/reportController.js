@@ -107,6 +107,7 @@ export const getOrdersHandler = async (req, res) => {
       ...parseRange(req),
       date: req.query.date || undefined,
       shopId: req.query.shopId || undefined,
+      sellerId: req.query.sellerId || undefined,
       status: req.query.status || undefined,
       search: req.query.search || undefined,
       page: Number(req.query.page) || 1,
@@ -166,6 +167,11 @@ export const exportReport = async (req, res) => {
 }
 
 export const getRevenueReport = async (req, res) => {
-  const data = await getFinance(parseRange(req))
-  res.status(200).json(data)
+  try {
+    const period = ['month', 'quarter', 'year'].includes(req.query.period) ? req.query.period : 'month'
+    const data = await getFinance({ ...parseRange(req), range: period })
+    res.status(200).json(data)
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Lỗi khi lấy báo cáo doanh thu', error: error.message })
+  }
 }

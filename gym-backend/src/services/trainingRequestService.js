@@ -11,6 +11,7 @@ import Booking from '../models/Booking.js'
 import PT from '../models/PT.js'
 import { ensureEnrollment as ensureClassEnrollment } from './classEnrollmentService.js'
 import { notifyPtMemberChanged } from './notificationService.js'
+import { applyWalletTransaction } from './walletService.js'
 import { calculateRemainingDays } from '../utils/dateUtils.js'
 import { getActivePeriodEndDate } from '../utils/membershipDays.js'
 
@@ -528,10 +529,11 @@ export const getMyRequests = async ({ memberId, type, status, activeOnly = false
   return TrainingRequest.find(filter)
     .populate('memberId', 'name fullName email phone avatar memberCode')
     .populate('assignedClassId', 'name trainerId schedule')
-    .populate('assignedTrainerId', 'name fullName avatar specialties')
+    .populate('assignedTrainerId', 'name fullName avatar specialties phone email')
     .populate('preferredTrainerId', 'name fullName avatar')
     .sort({ createdAt: -1 })
-}
+  }
+
 
 const getMemberMembershipInfo = async (memberId) => {
   // Cycle active là nguồn sự thật duy nhất (kích hoạt ngay sau thanh toán)
@@ -586,7 +588,7 @@ export const getAllRequests = async ({ type, status, activeOnly = false, page = 
     TrainingRequest.find(filter)
       .populate('memberId', 'name fullName email phone avatar memberCode')
       .populate('assignedClassId', 'name trainerId schedule')
-      .populate('assignedTrainerId', 'name fullName avatar specialties')
+      .populate('assignedTrainerId', 'name fullName avatar specialties phone email')
       .populate('preferredTrainerId', 'name fullName avatar')
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -644,9 +646,10 @@ export const getRequestById = async (requestId) => {
   return TrainingRequest.findById(requestId)
     .populate('memberId', 'name fullName email phone avatar memberCode')
     .populate('assignedClassId', 'name trainerId schedule')
-    .populate('assignedTrainerId', 'name fullName avatar specialties')
+    .populate('assignedTrainerId', 'name fullName avatar specialties phone email')
     .populate('preferredTrainerId', 'name fullName avatar')
-}
+  }
+
 
 export const assignToClass = async ({ requestId, classId, assignedBy }) => {
   const existing = await TrainingRequest.findById(requestId)
@@ -1031,6 +1034,65 @@ export const unassignTrainer = async ({ requestId, rejectedPtId, reason = '' }) 
     },
     { new: true },
   )
+}
+
+/**
+ * Hủy toàn bộ booking của 1 yêu cầu PT (kể cả booking đã xác nhận/thanh toán).
+ * - pending/awaiting_payment: hủy trực tiếp.
+ * - confirmed & đã thanh toán: hoàn tiền về ví nếu hủy trước 24h giờ tập (cùng chính sách cancelBooking);
+ *   hủy trong 24h → giữ tiền phạt (isViolation) để không bao giờ để sót booking chặn slot PT.
+ * Returns { cancelled, refunded }
+ */
+export const cancelRequestBookings = async ({ requestId, ptId = null, reason = '' }) => {
+  const filter = { requestId, status: { $in: ['pending', 'awaiting_payment', 'confirmed'] } }
+  if (ptId) filter.ptId = ptId
+  const bookings = await Booking.find(filter)
+
+  let refunded = 0
+  const now = new Date()
+  for (const booking of bookings) {
+    const bookingDate = new Date(booking.date)
+    const start = String(booking.slot || '').split('-')[0].trim()
+    const [hour = 0, minute = 0] = start.split(':').map(Number)
+    bookingDate.setHours(hour || 0, minute || 0, 0, 0)
+    const diffHours = (bookingDate - now) / (1000 * 60 * 60)
+
+    if (
+      booking.status === 'confirmed' &&
+      booking.paymentStatus === 'paid' &&
+      Number(booking.totalAmount || 0) > 0 &&
+      diffHours >= 24
+    ) {
+      try {
+        await applyWalletTransaction({
+          userId: booking.memberId,
+          amount: Number(booking.totalAmount),
+          type: 'refund',
+          provider: 'wallet',
+          source: 'pt_booking_refund',
+          description: `Hoàn tiền hủy lịch PT ${new Date(booking.date).toLocaleDateString('vi-VN')} ${booking.slot} (hủy yêu cầu trước 24h)`,
+          referenceId: booking._id.toString(),
+          status: 'completed',
+          metadata: { bookingId: booking._id.toString(), ptId: booking.ptId, reason: 'request_cancel' },
+          idempotencyKey: `pt_booking_refund_${booking._id}`,
+        })
+        booking.paymentStatus = 'refunded'
+        refunded++
+      } catch (err) {
+        console.error('[cancelRequestBookings] refund failed:', booking._id, err.message)
+      }
+    }
+
+    const wasConfirmedPaid = booking.status === 'confirmed' && booking.paymentStatus === 'paid' && Number(booking.totalAmount || 0) > 0
+    if (wasConfirmedPaid && diffHours < 24) {
+      booking.isViolation = true
+    }
+    booking.status = 'cancelled'
+    booking.cancelReason = reason || 'Hủy yêu cầu'
+    await booking.save()
+  }
+
+  return { cancelled: bookings.length, refunded }
 }
 
 export const cancelRequest = async ({ requestId, memberId, reason = '' }) => {

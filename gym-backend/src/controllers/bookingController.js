@@ -6,6 +6,7 @@ import User from '../models/User.js'
 import TrainingRequest from '../models/TrainingRequest.js'
 import Payment from '../models/Payment.js'
 import CheckIn from '../models/CheckIn.js'
+import PTSessionAttendance from '../models/PTSessionAttendance.js'
 import mongoose from 'mongoose'
 import { applyWalletTransaction, getWalletByUser } from '../services/walletService.js'
 import { finalizeWalletDeposit } from '../services/walletDepositService.js'
@@ -14,7 +15,8 @@ import { recordAuditLog } from '../services/auditLogService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import { checkMemberFeature } from '../utils/featureCheck.js'
-import { validatePTAssignment } from '../services/ptScheduleValidationService.js'
+import { validatePTAssignment, findPTMemberConflicts, normalizeSlot, timesOverlap } from '../services/ptScheduleValidationService.js'
+import { getSystemSettingsValue } from '../services/systemSettingsService.js'
 
 const activeStatus = ['pending', 'awaiting_payment', 'confirmed']
 
@@ -38,12 +40,33 @@ const getBookingStartDateTime = (date, slot) => {
   return bookingDate
 }
 
+// Thời điểm KẾT THÚC buổi theo slot ("HH:mm-HH:mm"). Slot thiếu giờ kết thúc → mặc định 60 phút.
 const getBookingEndDateTime = (date, slot) => {
   const bookingDate = normalizeDate(date)
   const end = String(slot || '').split('-')[1]?.trim()
-  const [hour = 0, minute = 0] = end ? end.split(':').map(Number) : [23, 59]
+  if (!end) {
+    bookingDate.setHours(bookingDate.getHours() + 1)
+    return bookingDate
+  }
+  const [hour = 0, minute = 0] = end.split(':').map(Number)
   bookingDate.setHours(hour || 0, minute || 0, 0, 0)
   return bookingDate
+}
+
+// Chặn đặt lịch quá sát giờ tập (lead time tối thiểu theo cấu hình) hoặc slot đã qua.
+const assertBookingLeadTime = (date, slot, leadHours, res) => {
+  const start = getBookingStartDateTime(date, slot)
+  if (start <= new Date()) {
+    res.status(400).json({ message: 'Khung giờ này đã qua. Vui lòng chọn thời gian khác.' })
+    return false
+  }
+  if (start - new Date() < leadHours * 60 * 60 * 1000) {
+    res.status(400).json({
+      message: `Phải đặt lịch trước giờ tập ít nhất ${leadHours} giờ. Khung giờ này quá sát, vui lòng chọn thời gian khác.`,
+    })
+    return false
+  }
+  return true
 }
 
 const makeSlotId = (ptId, date, slot) => {
@@ -51,18 +74,23 @@ const makeSlotId = (ptId, date, slot) => {
   return `${ptId}_${bookingDate}_${slot}`
 }
 
-const hasActiveMembershipForDate = async (memberId, date) => {
+// Gói tập phải BAO PHỦ ngày buổi tập: từ lúc kích hoạt (hoặc startDate) đến expiresAt.
+// KHÔNG chấp nhận ngày trước khi gói bắt đầu, và không chấp nhận ngày trong khe hở giữa 2 gói.
+export const hasActiveMembershipForDate = async (memberId, date) => {
   const bookingDate = normalizeDate(date)
 
-  // Active cycle (kích hoạt ngay sau thanh toán): cần expiresAt >= ngày đặt
-  const activeCycle = await MembershipCycle.findOne({
+  const cycles = await MembershipCycle.find({
     memberId,
     status: 'active',
     expiresAt: { $gte: bookingDate },
   }).lean()
-  if (activeCycle) return true
 
-  return false
+  return cycles.some((cycle) => {
+    if (!cycle.expiresAt || cycle.expiresAt < bookingDate) return false
+    const start = cycle.activatedAt || cycle.startDate || null
+    // Không có thông tin ngày bắt đầu (dữ liệu cũ) → chấp nhận theo expiresAt như trước đây
+    return !start || start <= bookingDate
+  })
 }
 
 const requireActiveMembershipForDate = async (memberId, date, res) => {
@@ -146,6 +174,10 @@ export const createBooking = async (req, res) => {
 
     const bookingDate = normalizeDate(date)
 
+    // Chặn đặt lịch sát giờ: lead time tối thiểu + slot đã qua (cấu hình pt.minBookingLeadHours)
+    const settings = await getSystemSettingsValue()
+    if (!assertBookingLeadTime(bookingDate, slot, settings?.pt?.minBookingLeadHours || 2, res)) return
+
     // Validate plan feature for booking type
     if (finalTrainingType === 'one_to_one') {
       const featureCheck = await checkMemberFeature(req.user._id, 'BOOK_PT_PRIVATE')
@@ -174,38 +206,40 @@ export const createBooking = async (req, res) => {
       return res.status(400).json({ message: scheduleCheck.message })
     }
 
-    // Giá đặt lịch lấy từ cấu hình giá PT (backend là nguồn quyết định — không tin giá từ Frontend).
-    // Snapshot giá vào booking để giá cũ không đổi khi Admin thay đổi cấu hình sau này.
+    // Giá đặt lịch lấy từ cấu hình giá PT (nếu có) — chỉ để hiển thị, không bắt buộc thanh toán.
     const sessionPrice =
       finalTrainingType === 'one_to_one' ? pt?.oneToOnePrice || 0 : pt?.groupPrice || 0
-    if (!sessionPrice || sessionPrice <= 0) {
-      return res.status(403).json({
-        message: finalTrainingType === 'one_to_one'
-          ? 'PT hiện chưa được cấu hình giá đặt lịch 1-1. Vui lòng chọn PT khác.'
-          : 'PT hiện chưa được cấu hình giá đặt lịch nhóm. Vui lòng chọn PT khác.',
-      })
-    }
     const priceAtBooking = sessionPrice
 
     const session = await mongoose.startSession()
     try {
       session.startTransaction()
 
-      // Re-check conflicts inside transaction to prevent race condition (TOCTOU)
-      const [memberConflict, ptConflict] = await Promise.all([
-        Booking.findOne({
+      // Re-check conflicts inside transaction to prevent race condition (TOCTOU).
+      // So trùng theo OVERLAP thời gian (không chỉ so chuỗi slot): chặn đè giờ bán phần.
+      const slotRange = normalizeSlot(slot)
+      const [memberBookings, ptBookings] = await Promise.all([
+        Booking.find({
           memberId: req.user._id,
           date: bookingDate,
-          slot,
           status: { $in: activeStatus },
-        }).session(session),
-        Booking.findOne({
+        }).session(session).lean(),
+        Booking.find({
           ptId,
           date: bookingDate,
-          slot,
           status: { $in: activeStatus },
-        }).session(session),
+        }).session(session).lean(),
       ])
+
+      const memberConflict = memberBookings.find((b) => {
+        const r = normalizeSlot(b.slot)
+        return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+      })
+
+      const ptConflict = ptBookings.find((b) => {
+        const r = normalizeSlot(b.slot)
+        return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+      })
 
       if (memberConflict) {
         await session.abortTransaction()
@@ -218,6 +252,20 @@ export const createBooking = async (req, res) => {
         await session.abortTransaction()
         return res.status(400).json({
           message: 'PT đã có người đặt khung giờ này',
+        })
+      }
+
+      // PT đã có buổi 1-1 khác (booking/workout schedule) đè giờ hoặc trùng giờ → chặn
+      const ptScheduleConflicts = await findPTMemberConflicts({
+        ptId,
+        date: bookingDate,
+        slot,
+        session,
+      }).then((list) => list.filter((c) => c.source === 'schedule'))
+      if (ptScheduleConflicts.length > 0) {
+        await session.abortTransaction()
+        return res.status(400).json({
+          message: `PT đã có buổi tập khác trùng khung giờ này (${ptScheduleConflicts[0].memberName}). Vui lòng chọn khung giờ khác.`,
         })
       }
 
@@ -294,17 +342,12 @@ export const createRecurringBooking = async (req, res) => {
       return res.status(403).json({ message: featureCheck.reason })
     }
 
-    // Snapshot giá buổi từ cấu hình giá PT (chỉ 1-1; backend là nguồn quyết định)
+    // Snapshot giá buổi từ cấu hình giá PT (nếu có) — chỉ để hiển thị, không bắt buộc thanh toán.
     const ptProfile = await PT.findOne({ userId: ptId }).lean()
     if (!ptProfile) {
       return res.status(404).json({ message: 'Không tìm thấy PT' })
     }
     const sessionPrice = ptProfile.oneToOnePrice || 0
-    if (!sessionPrice || sessionPrice <= 0) {
-      return res.status(403).json({
-        message: 'PT hiện chưa được cấu hình giá đặt lịch 1-1. Vui lòng chọn PT khác.',
-      })
-    }
 
     const session = await mongoose.startSession()
     const createdBookings = []
@@ -317,6 +360,16 @@ export const createRecurringBooking = async (req, res) => {
         const bookingDate = normalizeDate(date)
         bookingDate.setDate(bookingDate.getDate() + i * 7)
 
+        // Gói tập phải còn hiệu lực tại từng ngày trong chuỗi
+        if (!(await hasActiveMembershipForDate(req.user._id, bookingDate))) {
+          conflicts.push({
+            date: bookingDate,
+            slot,
+            reason: 'Ngày này nằm ngoài thời gian hiệu lực gói tập',
+          })
+          continue
+        }
+
         // Kiểm tra lịch làm việc của PT cho từng ngày trong chuỗi lặp
         const scheduleCheck = await validatePTAssignment({ trainerId: ptId, date: bookingDate, slot })
         if (!scheduleCheck.ok) {
@@ -328,28 +381,49 @@ export const createRecurringBooking = async (req, res) => {
           continue
         }
 
-        const conflict = await Booking.findOne({
-          $or: [
-            {
-              memberId: req.user._id,
-              date: bookingDate,
-              slot,
-              status: { $in: activeStatus },
-            },
-            {
-              ptId,
-              date: bookingDate,
-              slot,
-              status: { $in: activeStatus },
-            },
-          ],
-        }).session(session)
+        const slotRange = normalizeSlot(slot)
+        const [memberBookings, ptBookings] = await Promise.all([
+          Booking.find({
+            memberId: req.user._id,
+            date: bookingDate,
+            status: { $in: activeStatus },
+          }).session(session).lean(),
+          Booking.find({
+            ptId,
+            date: bookingDate,
+            status: { $in: activeStatus },
+          }).session(session).lean(),
+        ])
 
-        if (conflict) {
+        const memberConflict = memberBookings.find((b) => {
+          const r = normalizeSlot(b.slot)
+          return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+        })
+        const ptConflict = ptBookings.find((b) => {
+          const r = normalizeSlot(b.slot)
+          return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+        })
+
+        if (memberConflict || ptConflict) {
           conflicts.push({
             date: bookingDate,
             slot,
             reason: 'Trùng lịch member hoặc PT',
+          })
+          continue
+        }
+
+        const ptScheduleConflicts = await findPTMemberConflicts({
+          ptId,
+          date: bookingDate,
+          slot,
+          session,
+        }).then((list) => list.filter((c) => c.source === 'schedule'))
+        if (ptScheduleConflicts.length > 0) {
+          conflicts.push({
+            date: bookingDate,
+            slot,
+            reason: 'PT có buổi tập khác trùng khung giờ này',
           })
           continue
         }
@@ -447,17 +521,12 @@ export const scheduleWeeklyBooking = async (req, res) => {
       return res.status(403).json({ message: featureCheck.reason })
     }
 
-    // Snapshot giá buổi từ cấu hình giá PT (chỉ 1-1; backend là nguồn quyết định)
+    // Snapshot giá buổi từ cấu hình giá PT (nếu có) — chỉ để hiển thị, không bắt buộc thanh toán.
     const ptProfile = await PT.findOne({ userId: ptId }).lean()
     if (!ptProfile) {
       return res.status(404).json({ message: 'Không tìm thấy PT' })
     }
     const sessionPrice = ptProfile.oneToOnePrice || 0
-    if (!sessionPrice || sessionPrice <= 0) {
-      return res.status(403).json({
-        message: 'PT hiện chưa được cấu hình giá đặt lịch 1-1. Vui lòng chọn PT khác.',
-      })
-    }
 
     const session = await mongoose.startSession()
     const results = []
@@ -487,19 +556,51 @@ export const scheduleWeeklyBooking = async (req, res) => {
           continue
         }
 
-        const conflict = await Booking.findOne({
-          $or: [
-            { memberId: req.user._id, date: bookingDate, slot, status: { $in: activeStatus } },
-            { ptId, date: bookingDate, slot, status: { $in: activeStatus } },
-          ],
-        }).session(session)
+        const slotRange = normalizeSlot(slot)
+        const [memberBookings, ptBookings] = await Promise.all([
+          Booking.find({
+            memberId: req.user._id,
+            date: bookingDate,
+            status: { $in: activeStatus },
+          }).session(session).lean(),
+          Booking.find({
+            ptId,
+            date: bookingDate,
+            status: { $in: activeStatus },
+          }).session(session).lean(),
+        ])
 
-        if (conflict) {
+        const memberConflict = memberBookings.find((b) => {
+          const r = normalizeSlot(b.slot)
+          return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+        })
+        const ptConflict = ptBookings.find((b) => {
+          const r = normalizeSlot(b.slot)
+          return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+        })
+
+        if (memberConflict || ptConflict) {
           errors.push({
             day,
             date: bookingDate,
             slot,
             reason: 'Trùng lịch, vui lòng chọn giờ khác',
+          })
+          continue
+        }
+
+        const ptScheduleConflicts = await findPTMemberConflicts({
+          ptId,
+          date: bookingDate,
+          slot,
+          session,
+        }).then((list) => list.filter((c) => c.source === 'schedule'))
+        if (ptScheduleConflicts.length > 0) {
+          errors.push({
+            day,
+            date: bookingDate,
+            slot,
+            reason: 'PT có buổi tập khác trùng khung giờ này',
           })
           continue
         }
@@ -669,8 +770,8 @@ export const confirmBooking = async (req, res) => {
       })
     }
 
-    // Chỉ xác nhận được booking đang chờ (pending/awaiting_payment).
-    // Chặn hồi sinh booking đã hủy/thất bại hoặc confirm lần 2.
+    // PT acceptance chỉ cần booking còn ở trạng thái chờ xác nhận.
+    // Không còn bước thanh toán: xác nhận xong là hoàn tất luôn.
     if (!['pending', 'awaiting_payment'].includes(booking.status)) {
       await session.abortTransaction()
       return res.status(409).json({
@@ -678,19 +779,25 @@ export const confirmBooking = async (req, res) => {
       })
     }
 
-    // PT acceptance only unlocks payment. An active PT assignment is created
-    // after payment succeeds. Booking không có giá snapshot (0đ) không được
-    // xác nhận — chặn bypass thanh toán tạo assignment miễn phí.
-    if (!booking.totalAmount || booking.totalAmount <= 0) {
+    // Sát giờ: không xác nhận buổi đã bắt đầu/đã qua — tránh member bị kẹt lịch đã trôi qua
+    if (getBookingStartDateTime(booking.date, booking.slot) <= new Date()) {
       await session.abortTransaction()
-      return res.status(400).json({
-        message: 'Lịch đặt chưa có giá hợp lệ, không thể xác nhận',
+      return res.status(409).json({
+        message: 'Buổi tập đã bắt đầu hoặc đã qua, không thể xác nhận lịch này nữa. Hội viên cần đặt lịch mới.',
       })
     }
 
-    booking.status = 'awaiting_payment'
-    booking.paymentStatus = 'pending'
-    booking.paymentDeadline = new Date(Date.now() + (Number(process.env.PT_PAYMENT_HOLD_MINUTES) || 30) * 60 * 1000)
+    // Gói tập của member phải còn hiệu lực tại ngày buổi tập
+    if (!(await hasActiveMembershipForDate(booking.memberId, booking.date))) {
+      await session.abortTransaction()
+      return res.status(409).json({
+        message: 'Hội viên không có gói tập còn hiệu lực tại thời điểm buổi tập này. Không thể xác nhận lịch.',
+      })
+    }
+
+    booking.status = 'confirmed'
+    booking.paymentStatus = booking.paymentStatus === 'paid' ? 'paid' : 'unpaid'
+    booking.paymentDeadline = null
     await booking.save({ session })
 
     await session.commitTransaction()
@@ -700,15 +807,15 @@ export const confirmBooking = async (req, res) => {
       receiverRole: 'member',
       notificationType: NOTIFICATION_TYPES.BOOKING_CONFIRMED,
       title: 'Lịch tập đã được PT xác nhận',
-      content: `Lịch tập của bạn đã được PT xác nhận. Vui lòng thanh toán để hoàn tất đặt lịch.`,
+      content: `Lịch tập của bạn đã được PT xác nhận. Chúc bạn tập luyện hiệu quả!`,
       relatedId: booking._id,
       relatedType: 'Booking',
-      redirectUrl: '/my-bookings',
+      redirectUrl: '/workout',
       createdBy: 'PT',
     })
 
     return res.json({
-      message: 'Đã xác nhận lịch. Chờ thành viên thanh toán',
+      message: 'Đã xác nhận lịch',
       booking,
     })
   } catch (error) {
@@ -775,7 +882,7 @@ export const rejectBooking = async (req, res) => {
       content: `Lịch tập của bạn đã bị PT từ chối${refunded ? '. Số tiền đã thanh toán sẽ được hoàn về ví.' : ''} Lý do: ${reason || 'Không có lý do.'}`,
       relatedId: booking._id,
       relatedType: 'Booking',
-      redirectUrl: '/my-bookings',
+      redirectUrl: '/booking',
       createdBy: 'PT',
     })
 
@@ -948,6 +1055,13 @@ export const rescheduleBooking = async (req, res) => {
   try {
     session.startTransaction()
 
+    // P10: member đổi lịch phải qua PT xác nhận (requestRescheduleBooking).
+    // Endpoint này chỉ còn dành cho staff/admin đổi lịch trực tiếp.
+    if (!['staff', 'admin', 'super_admin'].includes(req.user.role)) {
+      await session.abortTransaction()
+      return res.status(403).json({ message: 'Bạn không có quyền đổi lịch trực tiếp. Hội viên đổi lịch cần PT xác nhận.' })
+    }
+
     const { date, slot, reason } = req.body
 
     if (!date || !slot) {
@@ -959,7 +1073,7 @@ export const rescheduleBooking = async (req, res) => {
 
     const booking = await Booking.findOne({
       _id: req.params.id,
-      memberId: req.user._id,
+      ...(['staff', 'admin', 'super_admin'].includes(req.user.role) ? {} : { memberId: req.user._id }),
     }).session(session)
 
     if (!booking) {
@@ -987,9 +1101,12 @@ export const rescheduleBooking = async (req, res) => {
       })
     }
 
-    if (!(await requireActiveMembershipForDate(req.user._id, newDate, res))) {
+// Staff/admin đổi lịch phải kiểm tra gói tập của HỘI VIÊN (không phải staff)
+    if (!(await hasActiveMembershipForDate(booking.memberId, newDate))) {
       await session.abortTransaction()
-      return
+      return res.status(403).json({
+        message: 'Hội viên không có gói tập còn hiệu lực tại thời điểm ngày đổi mới. Không thể đổi lịch.',
+      })
     }
 
     const scheduleCheck = await validatePTAssignment({
@@ -1004,20 +1121,54 @@ export const rescheduleBooking = async (req, res) => {
       return res.status(400).json({ message: scheduleCheck.message })
     }
 
-    const conflict = await Booking.findOne({
-      _id: { $ne: booking._id },
-      $or: [
-        { memberId: req.user._id, date: newDate, slot, status: { $in: activeStatus } },
-        { ptId: booking.ptId, date: newDate, slot, status: { $in: activeStatus } },
-      ],
-    }).session(session)
+    // So trùng theo OVERLAP thời gian, loại trừ chính booking đang đổi
+    const slotRange = normalizeSlot(slot)
+    const [memberBookings, ptBookings] = await Promise.all([
+      Booking.find({
+        memberId: booking.memberId,
+        date: newDate,
+        status: { $in: activeStatus },
+        _id: { $ne: booking._id },
+      }).session(session).lean(),
+      Booking.find({
+        ptId: booking.ptId,
+        date: newDate,
+        status: { $in: activeStatus },
+        _id: { $ne: booking._id },
+      }).session(session).lean(),
+    ])
 
-    if (conflict) {
+    const memberConflict = memberBookings.find((b) => {
+      const r = normalizeSlot(b.slot)
+      return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+    })
+    const ptConflict = ptBookings.find((b) => {
+      const r = normalizeSlot(b.slot)
+      return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+    })
+
+    if (memberConflict || ptConflict) {
       await session.abortTransaction()
       return res.status(409).json({
-        message: conflict.memberId?.toString() === req.user._id.toString()
-          ? 'Bạn đã có lịch tập ở khung giờ này'
+        message: memberConflict
+          ? 'Hội viên đã có lịch tập ở khung giờ này'
           : 'PT đã có người đặt khung giờ này',
+      })
+    }
+
+    // PT đã có buổi 1-1 khác (workout schedule) đè giờ → chặn
+    const ptScheduleConflicts = await findPTMemberConflicts({
+      ptId: booking.ptId,
+      date: newDate,
+      slot,
+      excludeBookingId: booking._id,
+      excludeMemberId: booking.memberId,
+      session,
+    })
+    if (ptScheduleConflicts.some((c) => c.source === 'schedule')) {
+      await session.abortTransaction()
+      return res.status(409).json({
+        message: `PT đã có buổi tập khác trùng khung giờ này (${ptScheduleConflicts.find((c) => c.source === 'schedule')?.memberName}). Vui lòng chọn khung giờ khác.`,
       })
     }
 
@@ -1083,6 +1234,434 @@ export const rescheduleBooking = async (req, res) => {
   }
 }
 
+/**
+ * P10: Member gửi yêu cầu đổi lịch buổi PT đã xác nhận — PT phải duyệt mới áp dụng.
+ */
+export const requestRescheduleBooking = async (req, res) => {
+  try {
+    const { date, slot, reason } = req.body
+
+    if (!date || !slot) {
+      return res.status(400).json({ message: 'Thiếu ngày hoặc khung giờ mới' })
+    }
+
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      memberId: req.user._id,
+    })
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Không tìm thấy lịch đặt' })
+    }
+
+    if (booking.status !== 'confirmed') {
+      return res.status(409).json({ message: 'Chỉ có thể đổi lịch buổi đã được PT xác nhận' })
+    }
+
+    if (booking.rescheduleRequest?.status === 'pending') {
+      return res.status(409).json({ message: 'Đã có yêu cầu đổi lịch đang chờ PT duyệt. Vui lòng chờ phản hồi hoặc hủy yêu cầu hiện tại.' })
+    }
+
+    const oldDate = booking.date
+    const oldSlot = booking.slot
+    const newDate = normalizeDate(date)
+
+    if (newDate.getTime() === normalizeDate(oldDate).getTime() && slot === oldSlot) {
+      return res.status(400).json({ message: 'Thời gian mới trùng với thời gian hiện tại' })
+    }
+
+    if (getBookingStartDateTime(newDate, slot) <= new Date()) {
+      return res.status(400).json({ message: 'Không thể đổi sang thời gian đã qua' })
+    }
+
+    if (!(await requireActiveMembershipForDate(req.user._id, newDate, res))) {
+      return
+    }
+
+    const scheduleCheck = await validatePTAssignment({
+      trainerId: booking.ptId,
+      date: newDate,
+      slot,
+    })
+
+    if (!scheduleCheck.ok) {
+      return res.status(400).json({ message: scheduleCheck.message })
+    }
+
+    // So trùng theo OVERLAP thời gian, loại trừ chính booking đang đổi
+    const slotRange = normalizeSlot(slot)
+    const [memberBookings, ptBookings] = await Promise.all([
+      Booking.find({
+        memberId: req.user._id,
+        date: newDate,
+        status: { $in: activeStatus },
+        _id: { $ne: booking._id },
+      }).lean(),
+      Booking.find({
+        ptId: booking.ptId,
+        date: newDate,
+        status: { $in: activeStatus },
+        _id: { $ne: booking._id },
+      }).lean(),
+    ])
+
+    const memberConflict = memberBookings.find((b) => {
+      const r = normalizeSlot(b.slot)
+      return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+    })
+    const ptConflict = ptBookings.find((b) => {
+      const r = normalizeSlot(b.slot)
+      return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+    })
+
+    if (memberConflict || ptConflict) {
+      return res.status(409).json({
+        message: memberConflict
+          ? 'Bạn đã có lịch tập ở khung giờ này'
+          : 'PT đã có người đặt khung giờ này',
+      })
+    }
+
+    // PT đã có buổi 1-1 khác (workout schedule) đè giờ → chặn
+    const ptScheduleConflicts = await findPTMemberConflicts({
+      ptId: booking.ptId,
+      date: newDate,
+      slot,
+      excludeBookingId: booking._id,
+      excludeMemberId: req.user._id,
+    })
+    if (ptScheduleConflicts.some((c) => c.source === 'schedule')) {
+      return res.status(409).json({
+        message: `PT đã có buổi tập khác trùng khung giờ này (${ptScheduleConflicts.find((c) => c.source === 'schedule')?.memberName}). Vui lòng chọn khung giờ khác.`,
+      })
+    }
+
+    booking.rescheduleRequest = {
+      status: 'pending',
+      requestedBy: req.user._id,
+      requestedAt: new Date(),
+      oldDate,
+      oldSlot,
+      newDate,
+      newSlot: slot,
+      reason: reason || '',
+      decidedBy: null,
+      decidedAt: null,
+      decisionNote: '',
+    }
+    await booking.save()
+
+    const memberName = req.user?.fullName || req.user?.name || 'Hội viên'
+    const memberCode = req.user?.memberCode || ''
+    await createNotification({
+      receiverId: booking.ptId,
+      receiverRole: 'pt',
+      notificationType: NOTIFICATION_TYPES.BOOKING_RESCHEDULE_REQUEST,
+      title: 'Hội viên yêu cầu đổi lịch PT',
+      content: `Hội viên ${memberName}${memberCode ? ` (${memberCode})` : ''} muốn đổi buổi ${normalizeDate(oldDate).toLocaleDateString('vi-VN')} ${oldSlot} sang ${newDate.toLocaleDateString('vi-VN')} ${slot}${reason ? `. Lý do: ${reason}` : ''}. Vui lòng xác nhận.`,
+      relatedId: booking._id,
+      relatedType: 'Booking',
+      redirectUrl: '/pt/bookings',
+      createdBy: 'System',
+      requiresAction: true,
+      actions: ['approve', 'reject'],
+      priority: 'high',
+    }).catch((err) => console.error('Notify PT reschedule request failed:', err.message))
+
+    return res.json({
+      message: 'Đã gửi yêu cầu đổi lịch. PT sẽ xác nhận trước khi buổi mới được áp dụng.',
+      booking,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: 'Lỗi gửi yêu cầu đổi lịch', error: error.message })
+  }
+}
+
+/**
+ * P10: PT (hoặc staff/admin) duyệt yêu cầu đổi lịch → áp dụng đổi lịch.
+ * Re-check xung đột BÊN TRONG transaction để tránh TOCTOU (slot có thể bị lấy mất khi đang chờ duyệt).
+ */
+export const approveRescheduleBooking = async (req, res) => {
+  const session = await mongoose.startSession()
+  try {
+    session.startTransaction()
+
+    const isStaffAction = ['staff', 'admin', 'super_admin'].includes(req.user.role)
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      ...(isStaffAction ? {} : { ptId: req.user._id }),
+    }).session(session)
+
+    if (!booking) {
+      await session.abortTransaction()
+      return res.status(404).json({ message: 'Không tìm thấy lịch đặt' })
+    }
+
+    const request = booking.rescheduleRequest
+    if (!request || request.status !== 'pending') {
+      await session.abortTransaction()
+      return res.status(409).json({ message: 'Không có yêu cầu đổi lịch nào đang chờ duyệt' })
+    }
+
+    if (booking.status !== 'confirmed') {
+      await session.abortTransaction()
+      return res.status(409).json({ message: `Booking đang ở trạng thái ${booking.status}, không thể đổi lịch` })
+    }
+
+    // Re-check xung đột tại thời điểm duyệt (slot có thể đã bị chiếm trong lúc chờ)
+    // + gói tập của member phải còn hiệu lực tại ngày mới
+    if (!(await hasActiveMembershipForDate(booking.memberId, request.newDate))) {
+      booking.rescheduleRequest.status = 'rejected'
+      booking.rescheduleRequest.decidedBy = req.user._id
+      booking.rescheduleRequest.decidedAt = new Date()
+      booking.rescheduleRequest.decisionNote = 'Gói tập của hội viên không còn hiệu lực tại ngày đổi mới.'
+      await booking.save({ session })
+      await session.commitTransaction()
+      return res.status(409).json({ message: 'Gói tập của hội viên không còn hiệu lực tại ngày đổi mới. Yêu cầu đổi lịch đã bị từ chối tự động.' })
+    }
+
+    const scheduleCheck = await validatePTAssignment({
+      trainerId: booking.ptId,
+      date: request.newDate,
+      slot: request.newSlot,
+      session,
+    })
+    if (!scheduleCheck.ok) {
+      await session.abortTransaction()
+      return res.status(409).json({ message: scheduleCheck.message })
+    }
+
+    // So trùng theo OVERLAP thời gian, loại trừ chính booking đang đổi
+    const slotRange = normalizeSlot(request.newSlot)
+    const [memberBookings, ptBookings] = await Promise.all([
+      Booking.find({
+        memberId: booking.memberId,
+        date: request.newDate,
+        status: { $in: activeStatus },
+        _id: { $ne: booking._id },
+      }).session(session).lean(),
+      Booking.find({
+        ptId: booking.ptId,
+        date: request.newDate,
+        status: { $in: activeStatus },
+        _id: { $ne: booking._id },
+      }).session(session).lean(),
+    ])
+
+    const memberConflict = memberBookings.find((b) => {
+      const r = normalizeSlot(b.slot)
+      return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+    })
+    const ptConflict = ptBookings.find((b) => {
+      const r = normalizeSlot(b.slot)
+      return timesOverlap(slotRange.start, slotRange.end, r.start, r.end)
+    })
+
+    if (memberConflict || ptConflict) {
+      const conflict = memberConflict || ptConflict
+      // Slot đã bị chiếm → tự động từ chối, báo member chọn giờ khác
+      booking.rescheduleRequest.status = 'rejected'
+      booking.rescheduleRequest.decidedBy = req.user._id
+      booking.rescheduleRequest.decidedAt = new Date()
+      booking.rescheduleRequest.decisionNote = 'Khung giờ mới đã có người đặt khi đang chờ duyệt.'
+      await booking.save({ session })
+      await session.commitTransaction()
+
+      await createNotification({
+        receiverId: booking.memberId,
+        receiverRole: 'member',
+        notificationType: NOTIFICATION_TYPES.BOOKING_RESCHEDULE_REJECTED,
+        title: 'Yêu cầu đổi lịch bị từ chối',
+        content: `Khung giờ ${new Date(request.newDate).toLocaleDateString('vi-VN')} ${request.newSlot} đã có người đặt, yêu cầu đổi lịch không được áp dụng. Vui lòng chọn khung giờ khác.`,
+        relatedId: booking._id,
+        relatedType: 'Booking',
+        redirectUrl: '/booking',
+        createdBy: isStaffAction ? 'Staff' : 'PT',
+      }).catch((err) => console.error('Notify auto-reject reschedule failed:', err.message))
+
+      return res.status(409).json({ message: `Khung giờ mới đã bị chiếm (${memberConflict ? 'hội viên đã có lịch' : 'PT bận'}). Yêu cầu đổi lịch đã bị từ chối tự động.` })
+    }
+
+    // PT đã có buổi 1-1 khác (workout schedule) đè giờ → chặn
+    const ptScheduleConflicts = await findPTMemberConflicts({
+      ptId: booking.ptId,
+      date: request.newDate,
+      slot: request.newSlot,
+      excludeBookingId: booking._id,
+      excludeMemberId: booking.memberId,
+      session,
+    })
+    if (ptScheduleConflicts.some((c) => c.source === 'schedule')) {
+      booking.rescheduleRequest.status = 'rejected'
+      booking.rescheduleRequest.decidedBy = req.user._id
+      booking.rescheduleRequest.decidedAt = new Date()
+      booking.rescheduleRequest.decisionNote = 'Khung giờ mới trùng buổi tập khác của PT.'
+      await booking.save({ session })
+      await session.commitTransaction()
+
+      await createNotification({
+        receiverId: booking.memberId,
+        receiverRole: 'member',
+        notificationType: NOTIFICATION_TYPES.BOOKING_RESCHEDULE_REJECTED,
+        title: 'Yêu cầu đổi lịch bị từ chối',
+        content: `Khung giờ mới trùng với một buổi tập khác của PT. Vui lòng chọn khung giờ khác.`,
+        relatedId: booking._id,
+        relatedType: 'Booking',
+        redirectUrl: '/booking',
+        createdBy: isStaffAction ? 'Staff' : 'PT',
+      }).catch((err) => console.error('Notify auto-reject reschedule failed:', err.message))
+
+      return res.status(409).json({ message: 'Khung giờ mới trùng với buổi tập khác của PT. Yêu cầu đổi lịch đã bị từ chối tự động.' })
+    }
+
+    const oldDate = booking.date
+    const oldSlot = booking.slot
+
+    booking.date = request.newDate
+    booking.slot = request.newSlot
+    booking.rescheduleReason = request.reason || ''
+    booking.rescheduledAt = new Date()
+    booking.rescheduledFrom = { date: oldDate, slot: oldSlot }
+    booking.rescheduleRequest.status = 'approved'
+    booking.rescheduleRequest.decidedBy = req.user._id
+    booking.rescheduleRequest.decidedAt = new Date()
+
+    await booking.save({ session })
+    await session.commitTransaction()
+
+    const member = await User.findById(booking.memberId).select('fullName name memberCode').lean()
+    const ptName = req.user?.fullName || req.user?.name || 'PT'
+    await createNotification({
+      receiverId: booking.memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.BOOKING_RESCHEDULE_APPROVED,
+      title: 'Đổi lịch PT thành công',
+      content: `PT đã xác nhận đổi buổi ${normalizeDate(oldDate).toLocaleDateString('vi-VN')} ${oldSlot} sang ${new Date(booking.date).toLocaleDateString('vi-VN')} ${booking.slot}.`,
+      relatedId: booking._id,
+      relatedType: 'Booking',
+      redirectUrl: '/booking',
+      createdBy: isStaffAction ? 'Staff' : 'PT',
+    }).catch((err) => console.error('Notify member reschedule approved failed:', err.message))
+
+    await createNotification({
+      receiverId: null,
+      receiverRole: 'admin',
+      notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+      title: 'Đã đổi lịch buổi PT 1-1',
+      content: `Hội viên ${member?.fullName || member?.name || ''}${member?.memberCode ? ` (${member.memberCode})` : ''} đổi lịch từ ${normalizeDate(oldDate).toLocaleDateString('vi-VN')} ${oldSlot} sang ${new Date(booking.date).toLocaleDateString('vi-VN')} ${booking.slot} (duyệt bởi ${ptName}).`,
+      relatedId: booking._id,
+      relatedType: 'Booking',
+      redirectUrl: '/admin/members',
+      createdBy: 'System',
+    }).catch((err) => console.error('Notify admin reschedule failed:', err.message))
+
+    return res.json({
+      message: 'Đã duyệt yêu cầu đổi lịch. Buổi mới đã được áp dụng.',
+      booking,
+    })
+  } catch (error) {
+    await session.abortTransaction()
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'Khung giờ này đã có người đặt, vui lòng chọn giờ khác.' })
+    }
+    return res.status(500).json({ message: 'Lỗi duyệt đổi lịch', error: error.message })
+  } finally {
+    session.endSession()
+  }
+}
+
+/**
+ * P10: PT (hoặc staff/admin) từ chối yêu cầu đổi lịch của member.
+ */
+export const rejectRescheduleBooking = async (req, res) => {
+  try {
+    const isStaffAction = ['staff', 'admin', 'super_admin'].includes(req.user.role)
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      ...(isStaffAction ? {} : { ptId: req.user._id }),
+    })
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Không tìm thấy lịch đặt' })
+    }
+
+    const request = booking.rescheduleRequest
+    if (!request || request.status !== 'pending') {
+      return res.status(409).json({ message: 'Không có yêu cầu đổi lịch nào đang chờ duyệt' })
+    }
+
+    request.status = 'rejected'
+    request.decidedBy = req.user._id
+    request.decidedAt = new Date()
+    request.decisionNote = String(req.body?.note || '').trim()
+    booking.markModified('rescheduleRequest')
+    await booking.save()
+
+    await createNotification({
+      receiverId: booking.memberId,
+      receiverRole: 'member',
+      notificationType: NOTIFICATION_TYPES.BOOKING_RESCHEDULE_REJECTED,
+      title: 'Yêu cầu đổi lịch bị từ chối',
+      content: `PT từ chối đổi buổi ${normalizeDate(request.oldDate).toLocaleDateString('vi-VN')} ${request.oldSlot} sang ${new Date(request.newDate).toLocaleDateString('vi-VN')} ${request.newSlot}${request.decisionNote ? `. Lý do: ${request.decisionNote}` : ''}. Buổi tập giữ nguyên.`,
+      relatedId: booking._id,
+      relatedType: 'Booking',
+      redirectUrl: '/booking',
+      createdBy: isStaffAction ? 'Staff' : 'PT',
+    }).catch((err) => console.error('Notify member reschedule rejected failed:', err.message))
+
+    return res.json({
+      message: 'Đã từ chối yêu cầu đổi lịch. Buổi tập giữ nguyên.',
+      booking,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: 'Lỗi từ chối đổi lịch', error: error.message })
+  }
+}
+
+/**
+ * P10: Member hủy yêu cầu đổi lịch đang chờ duyệt.
+ */
+export const cancelRescheduleRequest = async (req, res) => {
+  try {
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      memberId: req.user._id,
+    })
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Không tìm thấy lịch đặt' })
+    }
+
+    const request = booking.rescheduleRequest
+    if (!request || request.status !== 'pending') {
+      return res.status(409).json({ message: 'Không có yêu cầu đổi lịch nào đang chờ duyệt' })
+    }
+
+    request.status = 'cancelled'
+    booking.markModified('rescheduleRequest')
+    await booking.save()
+
+    await createNotification({
+      receiverId: booking.ptId,
+      receiverRole: 'pt',
+      notificationType: NOTIFICATION_TYPES.SCHEDULE_CHANGED,
+      title: 'Yêu cầu đổi lịch đã được hủy',
+      content: `Hội viên đã hủy yêu cầu đổi lịch từ ${normalizeDate(request.oldDate).toLocaleDateString('vi-VN')} ${request.oldSlot} sang ${new Date(request.newDate).toLocaleDateString('vi-VN')} ${request.newSlot}. Buổi tập giữ nguyên.`,
+      relatedId: booking._id,
+      relatedType: 'Booking',
+      redirectUrl: '/pt/bookings',
+      createdBy: 'System',
+    }).catch((err) => console.error('Notify PT reschedule cancelled failed:', err.message))
+
+    return res.json({
+      message: 'Đã hủy yêu cầu đổi lịch. Buổi tập giữ nguyên.',
+      booking,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: 'Lỗi hủy yêu cầu đổi lịch', error: error.message })
+  }
+}
+
 export const completeBooking = async (req, res) => {
   try {
     const booking = await Booking.findOne({
@@ -1109,6 +1688,19 @@ export const completeBooking = async (req, res) => {
       })
     }
 
+    // P1: chỉ hoàn thành khi member ĐÃ check-in buổi này — check-in là nguồn xác thực sự có mặt.
+    // Không có check-in → member không đến: phải đi qua luồng no-show / điểm danh PT / needs_review.
+    const memberCheckedIn = await CheckIn.exists({
+      memberId: booking.memberId,
+      bookingId: booking._id,
+      status: 'success',
+    })
+    if (!memberCheckedIn) {
+      return res.status(409).json({
+        message: 'Hội viên chưa check-in buổi này, không thể hoàn thành. Hãy điểm danh PT hoặc đánh dấu no-show để hệ thống chốt đúng kết quả.',
+      })
+    }
+
     booking.status = 'completed'
     booking.completedAt = new Date()
 
@@ -1122,7 +1714,7 @@ export const completeBooking = async (req, res) => {
       content: `PT đã đánh dấu buổi tập của bạn là hoàn thành.`,
       relatedId: booking._id,
       relatedType: 'Booking',
-      redirectUrl: '/my-bookings',
+      redirectUrl: '/booking',
       createdBy: 'PT',
     })
 
@@ -1149,9 +1741,11 @@ const assertBookingSessionBegun = (booking, res) => {
 
 export const markBookingMemberNoShow = async (req, res) => {
   try {
+    // P1: PT chỉ xử lý được booking của mình; staff/admin xử lý được tất cả (quầy lễ tân)
+    const isStaffAction = ['staff', 'admin', 'super_admin'].includes(req.user.role)
     const booking = await Booking.findOne({
       _id: req.params.id,
-      ptId: req.user._id,
+      ...(isStaffAction ? {} : { ptId: req.user._id }),
     })
 
     if (!booking) {
@@ -1172,21 +1766,30 @@ export const markBookingMemberNoShow = async (req, res) => {
       return res.status(409).json({ message: 'Hội viên đã check-in buổi này. Không thể đánh dấu no-show.' })
     }
 
+    // PT đã được điểm danh VẮNG MẶT → buổi là lỗi của PT, không phải no-show member
+    const ptAttendance = await PTSessionAttendance.findOne({ bookingId: booking._id }).lean()
+    if (ptAttendance?.status === 'absent') {
+      return res.status(409).json({ message: 'PT được ghi nhận vắng mặt ở buổi này. Vui lòng đánh dấu PT no-show (hoàn tiền + đền bù).' })
+    }
+
     booking.status = 'member_no_show'
     booking.noShowMarkedAt = new Date()
     booking.noShowMarkedBy = req.user._id
+    booking.autoNoShow = false
+    booking.needsReview = false
+    booking.noShowReason = String(req.body?.reason || '').trim()
     await booking.save()
 
     createNotification({
       receiverId: booking.memberId,
       receiverRole: 'member',
-      notificationType: NOTIFICATION_TYPES.PAYMENT_FAILED,
+      notificationType: NOTIFICATION_TYPES.PT_SESSION_NO_SHOW,
       title: 'Vắng buổi tập PT',
       content: `Bạn đã vắng buổi PT ${new Date(booking.date).toLocaleDateString('vi-VN')} ${booking.slot} mà không hủy trước. Buổi tập đã được tính là no-show.`,
       relatedId: booking._id,
       relatedType: 'Booking',
-      redirectUrl: '/my-bookings',
-      createdBy: 'PT',
+      redirectUrl: '/booking',
+      createdBy: isStaffAction ? 'Staff' : 'PT',
     }).catch((err) => console.error('Notify member no-show failed:', err.message))
 
     return res.json({
@@ -1203,9 +1806,11 @@ export const markBookingPtNoShow = async (req, res) => {
   try {
     session.startTransaction()
 
+    // P1: PT chỉ xử lý được booking của mình; staff/admin xử lý được tất cả
+    const isStaffAction = ['staff', 'admin', 'super_admin'].includes(req.user.role)
     const booking = await Booking.findOne({
       _id: req.params.id,
-      ptId: req.user._id,
+      ...(isStaffAction ? {} : { ptId: req.user._id }),
     }).session(session)
 
     if (!booking) {
@@ -1219,6 +1824,13 @@ export const markBookingPtNoShow = async (req, res) => {
     if (getBookingStartDateTime(booking.date, booking.slot) > new Date()) {
       await session.abortTransaction()
       return res.status(400).json({ message: 'Buổi tập chưa diễn ra, chưa thể ghi nhận kết quả' })
+    }
+
+    // PT được điểm danh CÓ MẶT → không thể tự phủ nhận; dùng dữ liệu điểm danh làm nguồn chính
+    const ptAttendance = await PTSessionAttendance.findOne({ bookingId: booking._id }).lean()
+    if (ptAttendance?.status === 'present') {
+      await session.abortTransaction()
+      return res.status(409).json({ message: 'PT đã được điểm danh có mặt ở buổi này. Không thể đánh dấu PT no-show.' })
     }
 
     const amount = Number(booking.totalAmount || 0)
@@ -1260,6 +1872,9 @@ export const markBookingPtNoShow = async (req, res) => {
     booking.status = 'pt_no_show'
     booking.noShowMarkedAt = now
     booking.noShowMarkedBy = req.user._id
+    booking.autoNoShow = false
+    booking.needsReview = false
+    booking.noShowReason = String(req.body?.reason || '').trim()
     await booking.save({ session })
 
     await session.commitTransaction()
@@ -1272,8 +1887,8 @@ export const markBookingPtNoShow = async (req, res) => {
       content: `PT không đến buổi ${new Date(booking.date).toLocaleDateString('vi-VN')} ${booking.slot}. Đã hoàn ${amount.toLocaleString('vi-VN')}đ về ví và đền bù thêm 1 buổi tập.`,
       relatedId: booking._id,
       relatedType: 'Booking',
-      redirectUrl: '/my-bookings',
-      createdBy: 'PT',
+      redirectUrl: '/booking',
+      createdBy: isStaffAction ? 'Staff' : 'PT',
     }).catch((err) => console.error('Notify pt no-show failed:', err.message))
 
     return res.json({
@@ -1285,6 +1900,77 @@ export const markBookingPtNoShow = async (req, res) => {
     return res.status(500).json({ message: 'Lỗi đánh dấu PT no-show', error: error.message })
   } finally {
     session.endSession()
+  }
+}
+
+/**
+ * P1: Ghi nhận điểm danh sự có mặt của PT cho một buổi (present/absent).
+ * PT chỉ ghi được cho booking của mình; staff/admin ghi được cho tất cả.
+ * Đây là nguồn dữ liệu độc lập với check-in member để chốt kết quả buổi (xem noShowSweeper).
+ */
+export const markPtAttendance = async (req, res) => {
+  try {
+    const { status, note } = req.body
+    if (!['present', 'absent'].includes(status)) {
+      return res.status(400).json({ message: 'Trạng thái điểm danh không hợp lệ (present/absent).' })
+    }
+
+    const isStaffAction = ['staff', 'admin', 'super_admin'].includes(req.user.role)
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      ...(isStaffAction ? {} : { ptId: req.user._id }),
+    }).lean()
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Không tìm thấy lịch đặt' })
+    }
+    if (!['confirmed', 'completed', 'member_no_show', 'pt_no_show', 'needs_review'].includes(booking.status)) {
+      return res.status(409).json({ message: `Booking đang ở trạng thái ${booking.status}, không thể điểm danh` })
+    }
+    if (getBookingStartDateTime(booking.date, booking.slot) > new Date()) {
+      return res.status(400).json({ message: 'Buổi tập chưa diễn ra, chưa thể điểm danh' })
+    }
+
+    const attendance = await PTSessionAttendance.findOneAndUpdate(
+      { bookingId: booking._id },
+      {
+        $set: {
+          bookingId: booking._id,
+          ptId: booking.ptId,
+          memberId: booking.memberId,
+          status,
+          note: String(note || '').trim(),
+          markedBy: req.user._id,
+          markedAt: new Date(),
+        },
+      },
+      { new: true, upsert: true },
+    )
+
+    // Nếu buổi đang chờ xử lý (needs_review) và giờ đã có đủ dữ liệu → chốt ngay
+    if (booking.status === 'needs_review') {
+      const memberCheckedIn = await CheckIn.exists({
+        memberId: booking.memberId,
+        bookingId: booking._id,
+        status: 'success',
+      })
+      const nextStatus = memberCheckedIn ? 'completed' : status === 'present' ? 'member_no_show' : 'pt_no_show'
+      const updates = {
+        status: nextStatus,
+        needsReview: false,
+        noShowMarkedAt: new Date(),
+        noShowMarkedBy: req.user._id,
+      }
+      if (nextStatus === 'completed') updates.completedAt = new Date()
+      await Booking.updateOne({ _id: booking._id }, { $set: updates })
+    }
+
+    return res.json({
+      message: `Đã điểm danh PT ${status === 'present' ? 'có mặt' : 'vắng mặt'} cho buổi ${booking.slot}.`,
+      attendance,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: 'Lỗi điểm danh PT', error: error.message })
   }
 }
 
@@ -1392,6 +2078,13 @@ export const payBooking = async (req, res) => {
     if (booking.status !== 'awaiting_payment') {
       return res.status(400).json({
         message: 'Lịch này chưa được PT xác nhận hoặc không thể thanh toán',
+      })
+    }
+
+    // Sát giờ: buổi đã kết thúc thì không chấp nhận thanh toán nữa (không trả tiền sau giờ tập)
+    if (getBookingEndDateTime(booking.date, booking.slot) <= new Date()) {
+      return res.status(410).json({
+        message: 'Buổi tập đã kết thúc, không thể thanh toán lịch này. Slot đã được giải phóng, vui lòng đặt lịch mới.',
       })
     }
 

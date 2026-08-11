@@ -1,4 +1,5 @@
 import { DatePicker, Segmented } from 'antd'
+import dayjs from 'dayjs'
 import { useState } from 'react'
 import type { ReportRangeState } from '../../types/report'
 
@@ -37,6 +38,7 @@ export default function RangeSelector({ value, onChange }: RangeSelectorProps) {
       {customMode && (
         <DatePicker.RangePicker
           size="middle"
+          value={value.value === 'custom' && value.from && value.to ? [dayjs(value.from), dayjs(value.to)] : null}
           onChange={(dates) => {
             if (dates && dates[0] && dates[1]) {
               onChange({

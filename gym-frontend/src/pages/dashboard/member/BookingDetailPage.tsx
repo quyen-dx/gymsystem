@@ -37,6 +37,23 @@ function toMinutes(t: string): number {
   return (h || 0) * 60 + (m || 0)
 }
 
+// Ngày tới gần nhất của thứ (khớp logic nextRequestDate phía backend khi tạo booking)
+function nextBookingDate(day: number, slot: string): Date {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let diff = day - today.getDay()
+  if (diff < 0) diff += 7
+  const target = new Date(today)
+  target.setDate(today.getDate() + diff)
+  const [h = 0, m = 0] = String(slot || '').split('-')[0].trim().split(':').map(Number)
+  const slotStart = new Date(target)
+  slotStart.setHours(h, m, 0, 0)
+  if (slotStart <= now) target.setDate(target.getDate() + 7)
+  return target
+}
+
+const formatShortDate = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+
 interface ScheduleWindow {
   dayOfWeek: number
   start: string
@@ -435,7 +452,10 @@ export default function BookingDetailPage() {
                   </div>
                   {selectedDays.length > 0 && (
                     <p className="mt-2 text-xs text-[var(--theme-muted)]">
-                      Lịch đã chọn: {selectedDays.map((day) => `${DAY_OPTIONS.find((x) => x.value === day)?.label || day} ${daySlots[day] || '—'}`).join(', ')}
+                      Lịch đã chọn: {selectedDays.map((day) => {
+                        const slot = daySlots[day]
+                        return `${DAY_OPTIONS.find((x) => x.value === day)?.label || day}${slot ? ` (${formatShortDate(nextBookingDate(day, slot))}) ${slot}` : ' —'}`
+                      }).join(', ')}
                     </p>
                   )}
                   {pt && (pt.busyBookings?.length || 0) > 0 && (

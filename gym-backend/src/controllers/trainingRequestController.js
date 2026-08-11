@@ -1,5 +1,6 @@
 import * as trainingRequestService from '../services/trainingRequestService.js'
 import { recordAuditLog } from '../services/auditLogService.js'
+import { hasActiveMembershipForDate } from './bookingController.js'
 import { getIO, emitPtRequestEvent, emitNotificationUpdated, emitPtClientsUpdated } from '../services/socketService.js'
 import Booking from '../models/Booking.js'
 import PT from '../models/PT.js'
@@ -8,7 +9,6 @@ import { createNotification } from '../services/notificationService.js'
 import { validatePTAssignment } from '../services/ptScheduleValidationService.js'
 
 const ACTIVE_BOOKING_STATUSES = ['pending', 'awaiting_payment', 'confirmed']
-const PAYMENT_HOLD_MINUTES = Math.max(Number(process.env.PT_PAYMENT_HOLD_MINUTES) || 30, 5)
 
 const normalizeDate = (date) => {
   const d = new Date(date)
@@ -73,6 +73,13 @@ const syncPt1on1RequestBookings = async ({ request, trainerId, status = 'pending
     for (let weekOffset = 0; weekOffset < weeks; weekOffset++) {
       const bookingDate = nextRequestDate(day, slot, weekOffset)
 
+      // Gói tập của member phải còn hiệu lực tại từng ngày trong chuỗi —
+      // không tạo booking ngoài phạm vi gói (PT accept chỉ kích hoạt các ngày hợp lệ)
+      if (!(await hasActiveMembershipForDate(memberId, bookingDate))) {
+        skippedCount += 1
+        continue
+      }
+
     const existingFromRequest = await Booking.findOne({
       memberId,
       ptId: trainerId,
@@ -82,24 +89,16 @@ const syncPt1on1RequestBookings = async ({ request, trainerId, status = 'pending
       status: { $in: ACTIVE_BOOKING_STATUSES },
     })
 
-    if (existingFromRequest) {
-      // Booking đã xác nhận/thanh toán dứt điểm — không bao giờ chạm lại
-      // (tránh hạ cấp status đã paid xuống awaiting_payment khi PT accept lần sau)
-      if (existingFromRequest.status === 'confirmed' || existingFromRequest.paymentStatus === 'paid') {
+if (existingFromRequest) {
+      // Booking đã xác nhận dứt điểm — không bao giờ chạm lại
+      if (existingFromRequest.status === 'confirmed') {
         continue
       }
-      const shouldUpdateStatus = existingFromRequest.status !== 'confirmed' || status === 'awaiting_payment'
-      if (existingFromRequest.status !== status && shouldUpdateStatus) {
-        // Booking đã có giá snapshot > 0: xác nhận → chờ member thanh toán (không đổi giá cũ)
-        if (status === 'awaiting_payment') {
-          existingFromRequest.priceAtBooking = sessionPrice
-          existingFromRequest.totalAmount = sessionPrice
-          existingFromRequest.paymentStatus = sessionPrice > 0 ? 'pending' : 'paid'
-          existingFromRequest.paymentDeadline = new Date(Date.now() + PAYMENT_HOLD_MINUTES * 60 * 1000)
-          existingFromRequest.status = sessionPrice > 0 ? 'awaiting_payment' : 'confirmed'
-        } else {
-          existingFromRequest.status = status
-        }
+      if (existingFromRequest.status !== status) {
+        // Không còn bước thanh toán: PT xác nhận → booking chuyển thẳng sang confirmed.
+        existingFromRequest.status = status
+        existingFromRequest.paymentStatus = status === 'confirmed' ? 'unpaid' : existingFromRequest.paymentStatus
+        existingFromRequest.paymentDeadline = null
         await existingFromRequest.save()
         updatedCount += 1
       }
@@ -121,7 +120,7 @@ const syncPt1on1RequestBookings = async ({ request, trainerId, status = 'pending
       continue
     }
 
-    try {
+try {
       await Booking.create({
         memberId,
         ptId: trainerId,
@@ -130,12 +129,12 @@ const syncPt1on1RequestBookings = async ({ request, trainerId, status = 'pending
         slot,
         note: request.note || '',
         trainingType: 'one_to_one',
-        priceAtBooking: status === 'awaiting_payment' ? sessionPrice : 0,
-        totalAmount: status === 'awaiting_payment' ? sessionPrice : 0,
-        // Có giá > 0 → chờ member thanh toán (dùng số tiền đã snapshot, không lấy giá mới)
-        paymentStatus: status === 'awaiting_payment' ? (sessionPrice > 0 ? 'pending' : 'paid') : 'unpaid',
-        paymentDeadline: status === 'awaiting_payment' ? new Date(Date.now() + PAYMENT_HOLD_MINUTES * 60 * 1000) : null,
-        status: status === 'awaiting_payment' && sessionPrice <= 0 ? 'confirmed' : status,
+        priceAtBooking: sessionPrice,
+        totalAmount: 0,
+        paymentStatus: 'unpaid',
+        paymentDeadline: null,
+        // Không còn bước thanh toán: booking tạo ra đã confirmed ngay (nếu PT accept)
+        status: status === 'confirmed' ? 'confirmed' : 'pending',
       })
       createdCount += 1
     } catch (error) {
@@ -475,25 +474,20 @@ export const respondPtAssignment = async (req, res) => {
         details: `PT ${trainerId} chấp nhận phụ trách member ${memberUserId}`,
       }).catch((err) => console.error('Audit pt accept failed:', err.message))
 
-      const bookingSync = await syncPt1on1RequestBookings({
+const bookingSync = await syncPt1on1RequestBookings({
         request,
         trainerId,
-        status: 'awaiting_payment',
+        status: 'confirmed',
       })
 
-      const priceSnapshot = await trainingRequestService.getPtOneToOnePrice(trainerId)
-      if (priceSnapshot > 0) {
-        const paymentDeadline = new Date(Date.now() + PAYMENT_HOLD_MINUTES * 60 * 1000)
-        await trainingRequestService.updateRequestPaymentState({
-          requestId: request._id,
-          priceSnapshot,
-          paymentDeadline,
-        })
-      } else {
-        const { createAssignment } = await import('../services/ptAssignmentService.js')
-        await createAssignment({ memberId: memberUserId, ptId: trainerId })
-        await trainingRequestService.updateRequestStatus({ requestId: request._id, status: 'confirmed' })
-      }
+      // Không còn bước thanh toán: kích hoạt ngay quan hệ PT ↔ Member khi PT accept
+      const { createAssignment } = await import('../services/ptAssignmentService.js')
+      await createAssignment({ memberId: memberUserId, ptId: trainerId })
+      await trainingRequestService.updateRequestStatus({ requestId: request._id, status: 'confirmed' })
+
+      // Realtime: cập nhật ngay lịch làm việc của PT (booking 1-1 mới xuất hiện)
+      const popRequest = await trainingRequestService.getRequestById(request._id)
+      emitPtRequestEvent('pt_request_updated', { request: popRequest })
 
       // Realtime: yêu cầu trang "Học viên của tôi" của PT tải lại ngay (counter 0 → 1)
       createNotification({
@@ -517,24 +511,17 @@ export const respondPtAssignment = async (req, res) => {
           : `PT ${trainerName} đã xác nhận phụ trách bạn.\nPT sẽ chủ động liên hệ với bạn qua SĐT hoặc Email.`,
         relatedId: request._id,
         relatedType: 'TrainingRequest',
-        redirectUrl: priceSnapshot > 0 ? '/my-bookings' : '/workout',
+        redirectUrl: '/workout',
         createdBy: 'System',
       })
     } else {
       // Rút phân công → yêu cầu về chờ phân công để admin chọn PT khác
-      await Booking.updateMany(
-        {
-          requestId: request._id,
-          ptId: trainerId,
-          status: { $in: ['pending', 'awaiting_payment'] },
-        },
-        {
-          $set: {
-            status: 'cancelled',
-            rejectReason: reason || 'PT từ chối nhận hội viên',
-          },
-        },
-      )
+      // Hủy mọi booking của PT này (kể cả confirmed đã thanh toán — hoàn tiền nếu trước 24h)
+      await trainingRequestService.cancelRequestBookings({
+        requestId: request._id,
+        ptId: trainerId,
+        reason: reason || 'PT từ chối nhận hội viên',
+      })
 
       recordAuditLog({
         req,
@@ -728,10 +715,12 @@ export const cancelMyRequest = async (req, res) => {
     const request = await trainingRequestService.cancelRequest({ requestId: req.params.id, memberId: req.user._id, reason: req.body.reason || '' })
     if (!request) return res.status(404).json({ message: 'Không tìm thấy yêu cầu' })
 
-    await Booking.updateMany(
-      { requestId: request._id, status: { $in: ['pending', 'awaiting_payment'] } },
-      { $set: { status: 'cancelled', cancelReason: 'Member cancelled request' } },
-    )
+    // Hủy mọi booking của yêu cầu (kể cả confirmed đã thanh toán — hoàn tiền nếu hủy trước 24h)
+    // để không còn booking chặn slot PT sau khi member hủy lịch.
+    const cancelResult = await trainingRequestService.cancelRequestBookings({
+      requestId: request._id,
+      reason: req.body.reason || 'Member cancelled request',
+    })
 
     recordAuditLog({
       req,
@@ -812,21 +801,14 @@ export const cancelRequestByAdmin = async (req, res) => {
     const isPt1on1 = pop.type === 'pt1on1'
     const trainerId = typeof pop.assignedTrainerId === 'object' ? pop.assignedTrainerId?._id : pop.assignedTrainerId
 
-    // PT 1-1 đã phân công: hủy booking đang chờ + vô hiệu hóa phản hồi của PT
+    // PT 1-1 đã phân công: hủy mọi booking (kể cả confirmed đã thanh toán — hoàn tiền nếu trước 24h)
+    // + vô hiệu hóa phản hồi của PT
     if (isPt1on1 && trainerId) {
-      await Booking.updateMany(
-        {
-          requestId: request._id,
-          ptId: trainerId,
-          status: { $in: ['pending', 'awaiting_payment'] },
-        },
-        {
-          $set: {
-            status: 'cancelled',
-            rejectReason: reason || 'Hủy bởi Admin',
-          },
-        },
-      )
+      await trainingRequestService.cancelRequestBookings({
+        requestId: request._id,
+        ptId: trainerId,
+        reason: reason || 'Hủy bởi Admin',
+      })
 
       const ptNotifs = await Notification.find({
         receiverId: trainerId,

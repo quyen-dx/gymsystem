@@ -4,7 +4,7 @@ import { BookOutlined, CheckCircleFilled, ClockCircleOutlined, LeftOutlined, Rig
 import dayjs from 'dayjs'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { useAuth } from '../../../hooks/useAuth'
-import { trainerService, type WeekAttendee, type WeekAttendeeMember } from '../../../services/trainerService'
+import { trainerService, type PTWeekBooking, type WeekAttendee, type WeekAttendeeMember } from '../../../services/trainerService'
 import { shiftChangeService, type ScheduleReplacement, type ShiftChangeRequest } from '../../../services/shiftChangeService'
 import { socketService } from '../../../services/socketService'
 import { useTheme } from '../../../context/ThemeProvider'
@@ -19,6 +19,11 @@ function getFloorName(f: string | { _id: string; name: string } | undefined): st
 function getZoneName(z: string | { _id: string; name: string } | undefined): string {
   if (!z) return ''
   return typeof z === 'object' ? z.name : ''
+}
+
+function bookingMemberName(b: PTWeekBooking): string {
+  if (typeof b.memberId === 'object' && b.memberId) return b.memberId.name || 'Hội viên'
+  return 'Hội viên'
 }
 
 const DAY_LABEL_MAP_VN = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
@@ -63,6 +68,7 @@ export default function PTSchedulePage() {
   const [weekStart, setWeekStart] = useState(() => startOfVnWeek(dayjs()))
   const [attendees, setAttendees] = useState<WeekAttendee[]>([])
   const [replacements, setReplacements] = useState<ScheduleReplacement[]>([])
+  const [weekBookings, setWeekBookings] = useState<PTWeekBooking[]>([])
   const [myRequests, setMyRequests] = useState<ShiftChangeRequest[]>([])
   const [modalReplacements, setModalReplacements] = useState<ScheduleReplacement[]>([])
   const [memberModal, setMemberModal] = useState<{ open: boolean; title: string; members: WeekAttendeeMember[] }>({ open: false, title: '', members: [] })
@@ -97,14 +103,21 @@ export default function PTSchedulePage() {
 
   useEffect(() => { loadClasses() }, [])
 
-  // Fetch attendees for the selected week
+  // Fetch attendees + lịch PT 1-1 (booking) cho tuần được chọn
   const loadAttendees = useCallback(async () => {
+    const weekKey = weekStart.format('YYYY-MM-DD')
     try {
-      const res = await trainerService.getPTMyWeekAttendees(weekStart.format('YYYY-MM-DD'))
+      const res = await trainerService.getPTMyWeekAttendees(weekKey)
       setAttendees(res.data?.attendees || [])
       setReplacements(res.data?.replacements || [])
     } catch {
       // silent
+    }
+    try {
+      const res = await trainerService.getPTMyWeekBookings(weekKey)
+      setWeekBookings(res.data?.bookings || [])
+    } catch {
+      setWeekBookings([])
     }
   }, [weekStart])
 
@@ -115,7 +128,11 @@ export default function PTSchedulePage() {
     socketService.connect()
     const handler = () => { loadAttendees() }
     socketService.on('shift_change:my_updated', handler)
-    return () => { socketService.off('shift_change:my_updated', handler) }
+    socketService.on('pt_request_updated', handler)
+    return () => {
+      socketService.off('shift_change:my_updated', handler)
+      socketService.off('pt_request_updated', handler)
+    }
   }, [loadAttendees])
 
   // Yêu cầu thay ca của PT để khóa đúng ca đã gửi (PT + Class + Date)
@@ -393,7 +410,10 @@ export default function PTSchedulePage() {
                 }
                 return true
               })
-              const hasAny = dayClasses.length > 0 || myRepls.length > 0
+              const dayBookingList = weekBookings
+                .filter((b) => dayjs(b.date).format('YYYY-MM-DD') === dateKey)
+                .sort((a, b) => String(a.slot || '').localeCompare(String(b.slot || '')))
+              const hasAny = dayClasses.length > 0 || myRepls.length > 0 || dayBookingList.length > 0
               return (
                 <div key={idx} className="flex flex-col sm:flex-row gap-4 p-4 items-start rounded-lg border border-[var(--gs-border)]">
                   <div className="w-40 shrink-0">
@@ -529,6 +549,22 @@ export default function PTSchedulePage() {
                             </div>
                           )
                         })}
+                      {dayBookingList.map((b) => (
+                          <div key={`pt11-${b._id}`}>
+                            <div className="space-y-1.5 rounded-xl px-3 py-2 -mx-3 border border-blue-500/40 bg-blue-500/10">
+                              <div className="flex items-center justify-between">
+                                <p className="font-bold text-sky-400">{String(b.slot || '').replace('-', ' - ')}</p>
+                                <Tag className="m-0 text-[11px] font-medium bg-blue-500/20 text-sky-300 border-blue-500/40" color="blue">
+                                  Lịch PT 1-1
+                                </Tag>
+                              </div>
+                              <p className="font-medium text-[var(--gs-text)]">
+                                <UserOutlined className="mr-1.5 text-sky-400" />
+                                {bookingMemberName(b)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

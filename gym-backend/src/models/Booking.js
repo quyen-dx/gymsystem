@@ -83,9 +83,35 @@ const bookingSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ['pending', 'awaiting_payment', 'confirmed', 'cancelled', 'completed', 'member_no_show', 'pt_no_show'],
+      enum: ['pending', 'awaiting_payment', 'confirmed', 'cancelled', 'completed', 'member_no_show', 'pt_no_show', 'needs_review'],
       default: 'pending',
       index: true,
+    },
+
+    // P1: vết đánh dấu no-show (PT mark / staff mark / tự động từ sweeper)
+    noShowMarkedAt: {
+      type: Date,
+      default: null,
+    },
+    noShowMarkedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    autoNoShow: {
+      type: Boolean,
+      default: false,
+    },
+    noShowReason: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: 500,
+    },
+    // P1: thiếu dữ liệu (không check-in, không ghi nhận điểm danh PT) → cần lễ tân xử lý
+    needsReview: {
+      type: Boolean,
+      default: false,
     },
 
     cancelReason: {
@@ -124,6 +150,61 @@ const bookingSchema = new mongoose.Schema(
       default: '',
       trim: true,
       maxlength: 500,
+    },
+
+    // P10: yêu cầu đổi lịch của member — PT phải xác nhận (approved/rejected) trước khi áp dụng
+    rescheduleRequest: {
+      status: {
+        type: String,
+        enum: [null, 'pending', 'approved', 'rejected', 'cancelled'],
+        default: null,
+      },
+      requestedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+      },
+      requestedAt: {
+        type: Date,
+        default: null,
+      },
+      oldDate: {
+        type: Date,
+        default: null,
+      },
+      oldSlot: {
+        type: String,
+        default: '',
+      },
+      newDate: {
+        type: Date,
+        default: null,
+      },
+      newSlot: {
+        type: String,
+        default: '',
+      },
+      reason: {
+        type: String,
+        default: '',
+        trim: true,
+        maxlength: 500,
+      },
+      decidedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+      },
+      decidedAt: {
+        type: Date,
+        default: null,
+      },
+      decisionNote: {
+        type: String,
+        default: '',
+        trim: true,
+        maxlength: 500,
+      },
     },
 
     rating: {

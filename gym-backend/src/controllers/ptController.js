@@ -331,6 +331,39 @@ export const getPTSchedule = async (req, res) => {
   }
 }
 
+/**
+ * Lấy lịch PT 1-1 (Booking) của chính PT trong tuần được chọn.
+ * Query params: weekStart=YYYY-MM-DD (Monday). Mặc định: tuần hiện tại.
+ */
+export const getPTMySchedule = async (req, res) => {
+  try {
+    const { weekStart } = req.query
+    let start
+    if (weekStart && /^\d{4}-\d{2}-\d{2}$/.test(String(weekStart))) {
+      start = new Date(`${String(weekStart)}T00:00:00.000Z`)
+    } else {
+      start = new Date()
+      start.setHours(0, 0, 0, 0)
+      start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
+    }
+    const end = new Date(start)
+    end.setDate(end.getDate() + 7)
+
+    const bookings = await Booking.find({
+      ptId: req.user._id,
+      date: { $gte: start, $lt: end },
+      status: 'confirmed',
+    })
+      .populate('memberId', 'name avatar phone')
+      .sort({ date: 1, slot: 1 })
+      .lean()
+
+    res.json({ bookings })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
 export const getPTMyClasses = async (req, res) => {
   try {
     const assignments = await TrainingAssignment.find({ trainerId: req.user._id, status: 'active' })

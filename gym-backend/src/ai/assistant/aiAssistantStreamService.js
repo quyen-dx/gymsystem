@@ -36,8 +36,15 @@ function extractText(chunk) {
   return chunk?.candidates?.[0]?.content?.parts?.[0]?.text || null
 }
 
-export async function* processStream(message, user) {
-  if (!isAvailable()) {
+export async function* processStream(message, user, deps = {}) {
+  const {
+    chatAvailable = isAvailable,
+    generateContentFn = generateContent,
+    generateStreamFn = generateStream,
+    makeFunctionResponsePartFn = makeFunctionResponsePart,
+  } = deps
+
+  if (!chatAvailable()) {
     yield { event: 'done', reply: 'Trợ lý hiện không khả dụng. Vui lòng thử lại sau.' }
     return
   }
@@ -60,7 +67,7 @@ export async function* processStream(message, user) {
 
   try {
     // Step 1: Check for function call (non-streaming for speed)
-    const firstResponse = await generateContent({ contents, config: { temperature: 0.1, tools } })
+    const firstResponse = await generateContentFn({ contents, config: { temperature: 0.1, tools } })
     const part = getFirstPart(firstResponse)
 
     let fullText = ''
@@ -78,7 +85,7 @@ export async function* processStream(message, user) {
       const executed = await executeTool(name, args, user)
       toolResult = executed.result
 
-      const frPart = await makeFunctionResponsePart(id, name, toolResult);
+      const frPart = await makeFunctionResponsePartFn(id, name, toolResult);
       console.log('[ASSISTANT-STREAM] Request #2 PREP: toolResult=' + JSON.stringify(toolResult).substring(0, 200));
       console.log('[ASSISTANT-STREAM] Request #2 PREP: frPart=' + JSON.stringify(frPart));
       if (frPart && typeof frPart === 'object') {
@@ -93,7 +100,7 @@ export async function* processStream(message, user) {
       console.log('[ASSISTANT-STREAM] Request #2 PREP: frContent=' + JSON.stringify(frContent).substring(0, 300));
 
       // Stream the final response
-      const stream = generateStream({
+      const stream = generateStreamFn({
         contents: [...contents, frContent],
         config: { temperature: 0.1, tools },
       })
@@ -107,7 +114,7 @@ export async function* processStream(message, user) {
       }
     } else {
       // Direct response: stream it
-      const directStream = generateStream({
+      const directStream = generateStreamFn({
         contents,
         config: { temperature: 0.1, tools },
       })

@@ -12,9 +12,14 @@ import {
   rejectAllPendingBookings,
   cancelBooking,
   rescheduleBooking,
+  requestRescheduleBooking,
+  approveRescheduleBooking,
+  rejectRescheduleBooking,
+  cancelRescheduleRequest,
   completeBooking,
   markBookingMemberNoShow,
   markBookingPtNoShow,
+  markPtAttendance,
   joinWaitlist,
   reviewPT,
   payBooking,
@@ -44,13 +49,21 @@ router.patch('/:id/reject', protect, authorize('pt'), rejectBooking)
 
 router.patch('/:id/cancel', protect, authorize('member'), cancelBooking)
 
-router.patch('/:id/reschedule', protect, authorize('member'), rescheduleBooking)
+router.patch('/:id/reschedule', protect, authorize('staff', 'admin', 'super_admin'), rescheduleBooking)
+
+// P10: member đổi lịch phải qua PT duyệt
+router.post('/:id/reschedule-request', protect, authorize('member'), requestRescheduleBooking)
+router.patch('/:id/reschedule-approve', protect, authorize('pt', 'staff', 'admin', 'super_admin'), approveRescheduleBooking)
+router.patch('/:id/reschedule-reject', protect, authorize('pt', 'staff', 'admin', 'super_admin'), rejectRescheduleBooking)
+router.patch('/:id/reschedule-cancel', protect, authorize('member'), cancelRescheduleRequest)
 
 router.patch('/:id/complete', protect, authorize('pt'), completeBooking)
 
-router.patch('/:id/no-show', protect, authorize('pt'), markBookingMemberNoShow)
+router.patch('/:id/no-show', protect, authorize('pt', 'staff', 'admin', 'super_admin'), markBookingMemberNoShow)
 
-router.patch('/:id/pt-no-show', protect, authorize('pt'), markBookingPtNoShow)
+router.patch('/:id/pt-no-show', protect, authorize('pt', 'staff', 'admin', 'super_admin'), markBookingPtNoShow)
+
+router.patch('/:id/pt-attendance', protect, authorize('pt', 'staff', 'admin', 'super_admin'), markPtAttendance)
 
 router.post('/:id/pay', protect, authorize('member'), payBooking)
 

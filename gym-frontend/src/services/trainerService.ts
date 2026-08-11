@@ -19,6 +19,15 @@ export interface WeekAttendee {
   members: WeekAttendeeMember[]
 }
 
+export interface PTWeekBooking {
+  _id: string
+  date: string
+  slot: string
+  status: string
+  trainingType?: string
+  memberId?: { _id: string; name?: string; avatar?: string; phone?: string } | string
+}
+
 export const trainerService = {
   getPTs: (params?: Record<string, unknown>) =>
     api.get<{ pts: PT[]; pagination: { total: number; page: number; limit: number; totalPages: number } }>('/pts', { params }),
@@ -43,6 +52,9 @@ export const trainerService = {
 
   getPTMyWeekAttendees: (weekStart: string) =>
     api.get<{ attendees: WeekAttendee[]; replacements?: ScheduleReplacement[] }>('/pts/my-week-attendees', { params: { weekStart } }),
+
+  getPTMyWeekBookings: (weekStart: string) =>
+    api.get<{ bookings: PTWeekBooking[] }>('/pts/my-schedule', { params: { weekStart } }),
 
   createPT: (data: FormData | Record<string, unknown>) =>
     api.post('/pts', data, data instanceof FormData

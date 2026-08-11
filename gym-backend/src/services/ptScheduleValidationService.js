@@ -2,7 +2,7 @@ import TrainerSchedule from '../models/TrainerSchedule.js'
 import User from '../models/User.js'
 import Booking from '../models/Booking.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
-import TrainingAssignment from '../models/TrainingAssignment.js'
+import TrainingClass from '../models/TrainingClass.js'
 import ScheduleReplacement from '../models/ScheduleReplacement.js'
 
 export const SHIFT_RANGES = {
@@ -131,14 +131,17 @@ export const validatePTAssignment = async ({ trainerId, date, slot, session }) =
     }
   }
 
-  const assignments = await TrainingAssignment.find({ trainerId, status: 'active' })
-    .populate('classId', 'name daysOfWeek startTime endTime status')
+  const classes = await TrainingClass.find({
+    ptId: trainerId,
+    status: { $nin: ['closed', 'inactive'] },
+    daysOfWeek: { $ne: [] },
+  })
+    .select('name daysOfWeek startTime endTime status')
     .lean()
 
-  for (const a of assignments) {
-    const cls = a.classId
-    if (!cls || !(cls.daysOfWeek || []).includes(new Date(date).getDay())) continue
-    if (cls.status === 'closed') continue
+  for (const cls of classes) {
+    if (!cls.startTime || !cls.endTime) continue
+    if (!(cls.daysOfWeek || []).includes(new Date(date).getDay())) continue
     const clsStart = toMinutes(cls.startTime)
     const clsEnd = toMinutes(cls.endTime) || clsStart + 60
     if (timesOverlap(slotRange.start, slotRange.end, clsStart, clsEnd)) {
@@ -157,7 +160,7 @@ export const validatePTAssignment = async ({ trainerId, date, slot, session }) =
  * Chỉ hiển thị giờ nằm trong lịch làm việc của PT, loại trừ:
  *  - slot đã được đặt (Booking active)
  *  - thời gian PT đang cover lớp khác (ScheduleReplacement approved)
- *  - thời gian PT dạy lớp nhóm (TrainingAssignment -> TrainingClass)
+ *  - thời gian PT dạy lớp nhóm (TrainingClass.ptId)
  */
 export const getAvailabilitySlots = async ({ trainerId, date, session }) => {
   const windows = await getWorkingWindows({ trainerId, date, session })
@@ -165,6 +168,12 @@ export const getAvailabilitySlots = async ({ trainerId, date, session }) => {
   const d = new Date(date)
   d.setHours(0, 0, 0, 0)
   const dayEnd = new Date(d.getTime() + 24 * 60 * 60 * 1000)
+
+  // PT nghỉ phép/ốm/bị khóa → không có ca trống nào
+  const user = await User.findOne({ _id: trainerId, role: 'pt' }).select('availabilityStatus isActive status isLocked').lean()
+  if (user && (String(user.availabilityStatus || '').trim() !== 'ACTIVE' || user.isLocked || user.status === 'locked' || user.isActive === false)) {
+    return { availability, windows: [], schedules: [] }
+  }
 
   const busySlots = new Set()
 
@@ -186,14 +195,18 @@ export const getAvailabilitySlots = async ({ trainerId, date, session }) => {
     end: toMinutes(cov.endTime) || toMinutes(cov.startTime) + 60,
   }))
 
-  const assignments = await TrainingAssignment.find({ trainerId, status: 'active' })
-    .populate('classId', 'name daysOfWeek startTime endTime status')
+  const classes = await TrainingClass.find({
+    ptId: trainerId,
+    status: { $nin: ['closed', 'inactive'] },
+    daysOfWeek: { $ne: [] },
+  })
+    .select('name daysOfWeek startTime endTime status')
     .lean()
-  const classRanges = assignments
-    .filter((a) => a.classId && (a.classId.daysOfWeek || []).includes(d.getDay()) && a.classId.status !== 'closed')
-    .map((a) => ({
-      start: toMinutes(a.classId.startTime),
-      end: toMinutes(a.classId.endTime) || toMinutes(a.classId.startTime) + 60,
+  const classRanges = classes
+    .filter((c) => c.startTime && c.endTime && (c.daysOfWeek || []).includes(d.getDay()))
+    .map((c) => ({
+      start: toMinutes(c.startTime),
+      end: toMinutes(c.endTime) || toMinutes(c.startTime) + 60,
     }))
 
   for (const w of windows) {
@@ -223,20 +236,23 @@ export const getAvailabilitySlots = async ({ trainerId, date, session }) => {
  * tình trạng 1 PT có 2 buổi 1-1 cùng thời điểm.
  * Returns: [{ source: 'booking'|'schedule', memberName, memberId, date, slot, className }]
  */
-export const findPTMemberConflicts = async ({ ptId, date, slot, excludeScheduleId, excludeMemberId }) => {
+export const findPTMemberConflicts = async ({ ptId, date, slot, excludeScheduleId, excludeMemberId, excludeBookingId, session }) => {
   const conflicts = []
   const dayStart = new Date(date)
   dayStart.setHours(0, 0, 0, 0)
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
   const slotRange = normalizeSlot(slot)
 
-  const bookings = await Booking.find({
+  const bookingFilter = {
     ptId,
     date: { $gte: dayStart, $lt: dayEnd },
     status: { $in: ['pending', 'awaiting_payment', 'confirmed'] },
-  })
-    .populate('memberId', 'name fullName')
-    .lean()
+  }
+  if (excludeBookingId) bookingFilter._id = { $ne: excludeBookingId }
+
+  const bookings = session
+    ? await Booking.find(bookingFilter).session(session).populate('memberId', 'name fullName').lean()
+    : await Booking.find(bookingFilter).populate('memberId', 'name fullName').lean()
 
   for (const b of bookings) {
     if (excludeMemberId && String(b.memberId?._id || b.memberId) === String(excludeMemberId)) continue
@@ -253,14 +269,16 @@ export const findPTMemberConflicts = async ({ ptId, date, slot, excludeScheduleI
     }
   }
 
-  const schedules = await WorkoutSchedule.find({
+  const scheduleFilter = {
     assignedBy: ptId,
     status: 'active',
     deletedAt: null,
     ...(excludeScheduleId ? { _id: { $ne: excludeScheduleId } } : {}),
-  })
-    .populate('memberId', 'name fullName')
-    .lean()
+  }
+
+  const schedules = session
+    ? await WorkoutSchedule.find(scheduleFilter).session(session).populate('memberId', 'name fullName').lean()
+    : await WorkoutSchedule.find(scheduleFilter).populate('memberId', 'name fullName').lean()
 
   for (const s of schedules) {
     if (excludeMemberId && String(s.memberId?._id || s.memberId) === String(excludeMemberId)) continue

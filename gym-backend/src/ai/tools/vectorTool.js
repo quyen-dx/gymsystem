@@ -25,7 +25,12 @@ function formatDate(date) {
   return isNaN(d.getTime()) ? date : d.toISOString().split('T')[0]
 }
 
-async function search(query) {
+async function search(query, deps = {}) {
+  const {
+    isAvailable = isVectorAvailable,
+    searchDocuments = searchKnowledge,
+  } = deps
+
   if (!validateQuery(query)) {
     return {
       source: 'vector',
@@ -37,7 +42,7 @@ async function search(query) {
   }
 
   try {
-    const available = await isVectorAvailable()
+    const available = await isAvailable()
     if (!available) {
       return {
         source: 'vector',
@@ -48,7 +53,7 @@ async function search(query) {
       }
     }
 
-    const documents = await searchKnowledge(query.trim())
+    const documents = await searchDocuments(query.trim())
 
     if (!documents.length) {
       return {

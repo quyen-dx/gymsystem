@@ -18,10 +18,15 @@ export default function ShopDashboardPage() {
         chartPointToFilter={(chartKey, pointKey) => {
           if (chartKey === 'revenueByDay' || chartKey === 'revenueByMonth') return pointKey ? { date: String(pointKey) } : null
           if (chartKey === 'revenueByShop') return pointKey ? { shopId: String(pointKey) } : null
-          if (chartKey === 'revenueBySeller') return pointKey ? { shopId: String(pointKey) } : null
+          if (chartKey === 'revenueBySeller') return pointKey ? { sellerId: String(pointKey) } : null
           return null
         }}
-        topToFilter={(_topKey, itemId) => (itemId ? { shopId: itemId } : null)}
+        topToFilter={(topKey, itemId) => {
+          if (!itemId) return null
+          if (topKey === 'topSellers') return { sellerId: itemId }
+          if (topKey === 'topSellingShops' || topKey === 'topShops') return { shopId: itemId }
+          return null
+        }}
       />
     </DashboardLayout>
   )

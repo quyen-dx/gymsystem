@@ -237,25 +237,8 @@ export const generateQRToken = async (req, res) => {
       throw new AppError(CHECKIN_CUTOFF_MESSAGE, 400)
     }
 
-    const today = getVietnamDateString()
-    const todayStart = new Date(`${today}T00:00:00${VIETNAM_UTC_OFFSET}`)
-    const todayEnd = new Date(`${today}T23:59:59.999${VIETNAM_UTC_OFFSET}`)
-
-    const todayCheckin = await CheckIn.findOne({
-      memberId,
-      checkinTime: { $gte: todayStart, $lte: todayEnd },
-      status: 'success',
-    }).lean()
-
-    if (todayCheckin) {
-      const streak = await calculateStreak(memberId)
-      return res.json({
-        checkedInToday: true,
-        streak,
-        memberId: memberId.toString(),
-      })
-    }
-
+    // P7: member được check-in nhiều buổi/ngày → luôn cấp token mới (token dùng 1 lần).
+    // Việc chống trùng theo buổi diễn ra lúc quét QR bên phía staff (xem staffVerifyCheckin).
     const now = new Date()
     const expiredAt = new Date(now.getTime() + QR_TOKEN_TTL * 1000)
 
@@ -404,26 +387,48 @@ export const staffVerifyCheckin = async (req, res) => {
     mongoSession = await mongoose.startSession()
     mongoSession.startTransaction()
 
-    // Check duplicate INSIDE transaction so concurrent requests are serialized
+    // P7: cho phép check-in nhiều buổi trong ngày — chống trùng theo ĐÚNG THỰC THỂ:
+    //   - Có booking hợp lệ → 1 check-in/booking (không check-in lại cùng booking)
+    //   - Có lịch giáo án → 1 check-in/schedule session (scheduleId+sessionDate+sessionIndex)
+    //   - Không có lịch → FREE_TRAINING giới hạn 1 lần/ngày (chống spam)
+    const resolvedSession = await resolveCheckinSession({ memberId: member._id, now: new Date() })
+
     const today = getVietnamDateString()
     const todayStart = new Date(`${today}T00:00:00${VIETNAM_UTC_OFFSET}`)
     const todayEnd = new Date(`${today}T23:59:59.999${VIETNAM_UTC_OFFSET}`)
-    const recentCheckin = await CheckIn.findOne({
-      memberId: member._id,
-      checkinTime: { $gte: todayStart, $lte: todayEnd },
-      status: 'success',
-    }).session(mongoSession).lean()
+
+    const duplicateFilter = resolvedSession?.bookingId
+      ? { memberId: member._id, bookingId: resolvedSession.bookingId, status: 'success' }
+      : resolvedSession?.scheduleId
+        ? {
+            memberId: member._id,
+            scheduleId: resolvedSession.scheduleId,
+            sessionDate: resolvedSession.sessionDate,
+            sessionIndex: resolvedSession.sessionIndex,
+            status: 'success',
+          }
+        : {
+            memberId: member._id,
+            sessionType: 'FREE_TRAINING',
+            checkinTime: { $gte: todayStart, $lte: todayEnd },
+            status: 'success',
+          }
+
+    const recentCheckin = await CheckIn.findOne(duplicateFilter).session(mongoSession).lean()
 
     if (recentCheckin) {
       await mongoSession.abortTransaction()
-      throw new AppError('Hội viên này đã check-in thành công trước đó!', 429, 'ALREADY_CHECKED_IN')
+      throw new AppError(
+        resolvedSession
+          ? 'Hội viên đã check-in buổi này trước đó!'
+          : 'Hội viên đã check-in "Tập tự do" hôm nay!',
+        429,
+        'ALREADY_CHECKED_IN',
+      )
     }
 
     const activePlan = activeMembership.currentPlanId || {}
     const streakDay = (await calculateStreak(member._id)) + 1
-
-    // Backend quyết định check-in này là SCHEDULED hay FREE_TRAINING
-    const resolvedSession = await resolveCheckinSession({ memberId: member._id, now: new Date() })
     const checkinPayload = {
       memberId: member._id,
       staffId,

@@ -509,6 +509,9 @@ export default function PTClientsPage() {
         confirmed: { color: 'green', label: 'Đã xác nhận' },
         cancelled: { color: 'red', label: 'Đã hủy' },
         completed: { color: 'blue', label: 'Hoàn thành' },
+        member_no_show: { color: 'red', label: 'Member vắng mặt' },
+        pt_no_show: { color: 'magenta', label: 'PT vắng mặt' },
+        needs_review: { color: 'orange', label: 'Cần kiểm tra' },
       }
       const item = map[status] || { color: 'default', label: status }
       return <Tag color={item.color} className="m-0">{item.label}</Tag>

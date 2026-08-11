@@ -25,14 +25,30 @@ import { getDisplayName } from '../utils/displayName.js'
 
 const DAY_MS = 86400000
 const TZ = '+07:00'
+const TIME_ZONE_OFFSET_MS = 7 * 60 * 60 * 1000
 
 const PAID_PAYMENT_STATUSES = { $in: ['PAID', 'paid'] }
 const COMPLETED_TXN = { $in: ['completed', 'COMPLETED'] }
 
 const startOfDay = (ts) => {
-  const d = new Date(ts)
-  d.setHours(0, 0, 0, 0)
-  return d
+  const shifted = new Date(new Date(ts).getTime() + TIME_ZONE_OFFSET_MS)
+  return new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()) - TIME_ZONE_OFFSET_MS)
+}
+
+const startOfMonth = (year, month) => new Date(Date.UTC(year, month, 1) - TIME_ZONE_OFFSET_MS)
+
+const calendarParts = (ts) => {
+  const shifted = new Date(new Date(ts).getTime() + TIME_ZONE_OFFSET_MS)
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth(),
+    day: shifted.getUTCDate(),
+  }
+}
+
+const calendarDayKey = (ts) => {
+  const { year, month, day } = calendarParts(ts)
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
 export const resolveRange = ({ range = '30d', from, to } = {}) => {
@@ -44,24 +60,35 @@ export const resolveRange = ({ range = '30d', from, to } = {}) => {
       start = startOfDay(now).getTime()
       break
     case '7d':
-      start = now - 7 * DAY_MS
+      start = startOfDay(now - 6 * DAY_MS).getTime()
       break
     case '30d':
-      start = now - 30 * DAY_MS
+      start = startOfDay(now - 29 * DAY_MS).getTime()
       break
+    case 'month': {
+      const { year, month } = calendarParts(now)
+      start = startOfMonth(year, month).getTime()
+      break
+    }
     case 'quarter': {
-      const d = new Date()
-      const qm = Math.floor(d.getMonth() / 3) * 3
-      start = new Date(d.getFullYear(), qm, 1).getTime()
+      const { year, month } = calendarParts(now)
+      const qm = Math.floor(month / 3) * 3
+      start = startOfMonth(year, qm).getTime()
       break
     }
     case 'year':
-      start = new Date(new Date().getFullYear(), 0, 1).getTime()
+      start = startOfMonth(calendarParts(now).year, 0).getTime()
       break
     default:
       if (from && to) {
-        start = new Date(from).getTime()
-        end = new Date(to).getTime()
+        const parsedFrom = new Date(from).getTime()
+        const parsedTo = new Date(to).getTime()
+        if (Number.isFinite(parsedFrom) && Number.isFinite(parsedTo)) {
+          start = parsedFrom
+          end = parsedTo
+        } else {
+          start = now - 30 * DAY_MS
+        }
       } else {
         start = now - 30 * DAY_MS
       }
@@ -87,12 +114,12 @@ const applyDateFilter = (date, timestamp, r) => {
   let from
   let to
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    from = startOfDay(new Date(`${str}T00:00:00`))
+    from = new Date(`${str}T00:00:00${TZ}`)
     to = new Date(from.getTime() + DAY_MS)
   } else if (/^\d{4}-\d{2}$/.test(str)) {
     const [y, m] = str.split('-').map(Number)
-    from = new Date(y, m - 1, 1)
-    to = new Date(y, m, 1)
+    from = startOfMonth(y, m - 1)
+    to = startOfMonth(y, m)
   } else if (/^\d+$/.test(str)) {
     from = startOfDay(Number(str))
     to = new Date(from.getTime() + DAY_MS)
@@ -109,6 +136,7 @@ const RANGE_LABELS = {
   today: 'Hôm nay',
   '7d': '7 ngày',
   '30d': '30 ngày',
+  month: 'Tháng này',
   quarter: 'Quý này',
   year: 'Năm nay',
 }
@@ -122,15 +150,19 @@ const pct = (cur, prev) => {
   return Math.round(((cur - prev) / prev) * 1000) / 10
 }
 
-const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-
 const monthLabels = (from, to) => {
   const out = []
-  const cursor = new Date(from.getFullYear(), from.getMonth(), 1)
-  const endM = new Date(to.getFullYear(), to.getMonth(), 1)
-  while (cursor <= endM) {
-    out.push(monthKey(cursor))
-    cursor.setMonth(cursor.getMonth() + 1)
+  const startParts = calendarParts(from)
+  const endParts = calendarParts(new Date(to.getTime() - 1))
+  let year = startParts.year
+  let month = startParts.month
+  while (year < endParts.year || (year === endParts.year && month <= endParts.month)) {
+    out.push(`${year}-${String(month + 1).padStart(2, '0')}`)
+    month += 1
+    if (month === 12) {
+      month = 0
+      year += 1
+    }
   }
   return out
 }
@@ -138,7 +170,7 @@ const monthLabels = (from, to) => {
 const dayLabels = (from, to) => {
   const out = []
   let cursor = startOfDay(from)
-  const end = startOfDay(to)
+  const end = startOfDay(new Date(to.getTime() - 1))
   while (cursor <= end) {
     out.push(new Date(cursor))
     cursor = new Date(cursor.getTime() + DAY_MS)
@@ -146,7 +178,10 @@ const dayLabels = (from, to) => {
   return out
 }
 
-const fmtDay = (d) => d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+const fmtDay = (d) => {
+  const { day, month } = calendarParts(d)
+  return `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}`
+}
 
 const fmtMonthShort = (key) => {
   const [y, m] = key.split('-').map(Number)
@@ -165,7 +200,7 @@ const fillDaily = (rows, from, to, { valueKey = 'total', keyName = '_id' } = {})
   const data = []
   const keys = []
   for (const d of dayLabels(from, to)) {
-    const k = d.toISOString().slice(0, 10)
+    const k = calendarDayKey(d)
     labels.push(fmtDay(d))
     data.push(map.get(k) || 0)
     keys.push(k)
@@ -194,19 +229,21 @@ const dateStrKey = {
 // Series / KPI helpers
 // ---------------------------------------------------------------------------
 
-const dailySeries = async (Model, match, sumField, { from, to }) => {
+const dailySeries = async (Model, match, sumField, { from, to, dateField = 'createdAt' }) => {
+  const dateKey = { $dateToString: { format: '%Y-%m-%d', date: `$${dateField}`, timezone: TZ } }
   const rows = await Model.aggregate([
-    { $match: { ...match, createdAt: { $gte: from, $lt: to } } },
-    { $group: { _id: dateStrKey, total: { $sum: `$${sumField}` } } },
+    { $match: { ...match, [dateField]: { $gte: from, $lt: to } } },
+    { $group: { _id: dateKey, total: { $sum: `$${sumField}` } } },
     { $sort: { _id: 1 } },
   ])
   return fillDaily(rows, from, to)
 }
 
-const countSeries = async (Model, match, { from, to }) => {
+const countSeries = async (Model, match, { from, to, dateField = 'createdAt' }) => {
+  const dateKey = { $dateToString: { format: '%Y-%m-%d', date: `$${dateField}`, timezone: TZ } }
   const rows = await Model.aggregate([
-    { $match: { ...match, createdAt: { $gte: from, $lt: to } } },
-    { $group: { _id: dateStrKey, total: { $sum: 1 } } },
+    { $match: { ...match, [dateField]: { $gte: from, $lt: to } } },
+    { $group: { _id: dateKey, total: { $sum: 1 } } },
     { $sort: { _id: 1 } },
   ])
   return fillDaily(rows, from, to)
@@ -392,8 +429,9 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
   const revenueLabels = membershipDaily.labels
   const revenueByDay = revenueLabels.map((_, i) => membershipDaily.data[i] + shopDaily.data[i] + depositDaily.data[i])
 
-  // Monthly revenue (12 months)
-  const monthFrom = new Date(r.to.getTime() - 11 * 30 * DAY_MS)
+  // Monthly revenue (12 calendar months)
+  const endParts = calendarParts(new Date(r.to.getTime() - 1))
+  const monthFrom = startOfMonth(endParts.year, endParts.month - 11)
   const [mPay, mShop, mDep] = await Promise.all([
     Payment.aggregate([
       { $match: { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: monthFrom, $lt: r.to } } },
@@ -559,7 +597,7 @@ export const getMembers = async ({ range = '30d', from, to } = {}) => {
 
   const [signupDaily, checkInDaily, cancelDaily, renewDaily] = await Promise.all([
     countSeries(User, { role: 'member' }, { from: r.from, to: r.to }),
-    countSeries(CheckIn, { status: 'success' }, { from: r.from, to: r.to }),
+    countSeries(CheckIn, { status: 'success' }, { from: r.from, to: r.to, dateField: 'checkinTime' }),
     countSeries(MembershipCancellationRequest, { status: { $in: ['pending', 'approved'] } }, { from: r.from, to: r.to }),
     countSeries(MembershipPeriod, { status: 'ACTIVE' }, { from: r.from, to: r.to }),
   ])
@@ -936,7 +974,8 @@ export const getShop = async ({ range = '30d', from, to } = {}) => {
   ])
 
   // Doanh thu theo tháng (12 tháng gần nhất)
-  const monthFrom = new Date(r.to.getTime() - 11 * 30 * DAY_MS)
+  const endParts = calendarParts(new Date(r.to.getTime() - 1))
+  const monthFrom = startOfMonth(endParts.year, endParts.month - 11)
   const monthRows = await Order.aggregate([
     { $match: { paymentStatus: 'paid', createdAt: { $gte: monthFrom, $lt: r.to } } },
     { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: TZ } }, total: { $sum: '$totalAmount' } } },
@@ -945,10 +984,13 @@ export const getShop = async ({ range = '30d', from, to } = {}) => {
   const monthLabelsArr = monthLabels(monthFrom, r.to)
   const monthlyData = monthLabelsArr.map((k) => monthMap.get(k) || 0)
 
-  // Categories from products
-  const catAgg = await Product.aggregate([
-    { $match: { isActive: true } },
-    { $group: { _id: '$category', total: { $sum: '$stock' } } },
+  // Category revenue must come from paid order items, not current inventory.
+  const catAgg = await Order.aggregate([
+    { $match: { paymentStatus: 'paid', createdAt: { $gte: r.from, $lt: r.to } } },
+    { $unwind: '$items' },
+    { $lookup: { from: 'products', localField: 'items.productId', foreignField: '_id', as: 'product' } },
+    { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+    { $group: { _id: { $ifNull: ['$product.category', 'Khác'] }, total: { $sum: '$items.total' } } },
     { $sort: { total: -1 } },
     { $limit: 8 },
   ])
@@ -1050,8 +1092,9 @@ export const getSystem = async ({ range = '30d', from, to } = {}) => {
   }
   const total = sum(roleCounts.map((r) => r.total))
 
-  const [signupDaily, activitiesNow, activitiesPrev, activityTypes, lockedUsers, wallets, activeToday] = await Promise.all([
+  const [signupDaily, activityDaily, activitiesNow, activitiesPrev, activityTypes, lockedUsers, wallets, activeToday] = await Promise.all([
     countSeries(User, {}, { from: r.from, to: r.to }),
+    countSeries(UserActivity, {}, { from: r.from, to: r.to }),
     countInRange(UserActivity, {}, { from: r.from, to: r.to }),
     countInRange(UserActivity, {}, { from: r.prevFrom, to: r.prevTo }),
     UserActivity.aggregate([
@@ -1094,8 +1137,9 @@ export const getSystem = async ({ range = '30d', from, to } = {}) => {
       activityByDay: {
         type: 'area',
         title: 'Hoạt động hệ thống theo ngày',
-        labels: activitiesNow ? activityDailyFromTotal() : [],
-        series: [],
+        labels: activityDaily.labels,
+        pointKeys: activityDaily.keys,
+        series: [{ name: 'Lượt hoạt động', data: activityDaily.data }],
       },
       activityByType: {
         type: 'bar',
@@ -1114,8 +1158,6 @@ export const getSystem = async ({ range = '30d', from, to } = {}) => {
   }
 }
 
-const activityDailyFromTotal = () => []
-
 // ---------------------------------------------------------------------------
 // Transactions (drill-down ledger)
 // ---------------------------------------------------------------------------
@@ -1133,10 +1175,13 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
   const limit = Number(pageSize)
   const searchRegex = search ? new RegExp(String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : null
 
-  const userFilter = memberId ? { $in: [mongoose.Types.ObjectId.isValid(memberId) ? new mongoose.Types.ObjectId(memberId) : memberId] } : undefined
+  const memberObjectId = memberId && mongoose.Types.ObjectId.isValid(memberId)
+    ? new mongoose.Types.ObjectId(memberId)
+    : null
+  const memberMatch = memberId ? { userId: memberObjectId } : {}
 
   // Membership payments
-  const payMatch = { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: r.from, $lt: r.to } }
+  const payMatch = { ...memberMatch, status: PAID_PAYMENT_STATUSES, createdAt: { $gte: r.from, $lt: r.to } }
   if (planId) payMatch.planId = planId
   const payments = await Payment.aggregate([
     { $match: payMatch },
@@ -1166,7 +1211,7 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
 
   // Deposits & refunds
   const walletTxns = await Transaction.aggregate([
-    { $match: { status: COMPLETED_TXN, type: { $in: ['deposit', 'refund', 'REFUND_TO_WALLET'] }, createdAt: { $gte: r.from, $lt: r.to } } },
+    { $match: { ...memberMatch, status: COMPLETED_TXN, type: { $in: ['deposit', 'refund', 'REFUND_TO_WALLET'] }, createdAt: { $gte: r.from, $lt: r.to } } },
     { $sort: { createdAt: -1 } },
     { $limit: 500 },
   ])
@@ -1191,7 +1236,7 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
   })
 
   // Shop orders
-  const orderMatch = { createdAt: { $gte: r.from, $lt: r.to } }
+  const orderMatch = { ...memberMatch, createdAt: { $gte: r.from, $lt: r.to } }
   if (shopId) orderMatch.shopId = shopId
   const orders = await Order.find(orderMatch).sort({ createdAt: -1 }).limit(500).lean()
   const shopIds = [...new Set(orders.map((o) => o.shopId).filter(Boolean))]
@@ -1225,7 +1270,6 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
     ? await User.find({ _id: { $in: memberIds } }).select('fullName name username email phone memberCode').lean()
     : []
   const userMap = new Map(memberUsers.map((u) => [String(u._id), u]))
-  const ptMap = new Map(memberUsers.map((u) => [String(u._id), u]))
 
   let rows = txns.map((t) => {
     const member = userMap.get(String(t.memberId))
@@ -1243,6 +1287,7 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
   })
 
   if (type) rows = rows.filter((t) => t.type === type)
+  if (status) rows = rows.filter((t) => t.status === status)
   if (searchRegex) {
     rows = rows.filter((t) =>
       [t.code, t.memberName, t.memberEmail, t.memberPhone, t.plan, t.note].some((v) => searchRegex.test(String(v || ''))),
@@ -1463,13 +1508,29 @@ export const getBookings = async ({ range = '30d', from, to, date, ptId, status,
 // Order detail (Dashboard Shop)
 // ---------------------------------------------------------------------------
 
-export const getOrders = async ({ range = '30d', from, to, date, shopId, status, search, page = 1, pageSize = 20 } = {}) => {
+export const getOrders = async ({ range = '30d', from, to, date, shopId, sellerId, status, search, page = 1, pageSize = 20 } = {}) => {
   const r = applyDateFilter(date, null, resolveRange({ range, from, to }))
   const skip = (Number(page) - 1) * Number(pageSize)
   const limit = Number(pageSize)
   const match = { createdAt: { $gte: r.from, $lt: r.to } }
   if (shopId) match.shopId = shopId
-  if (status) match.paymentStatus = status
+  if (sellerId) match['items.sellerId'] = sellerId
+  if (status) {
+    if (['unpaid', 'paid', 'failed'].includes(status)) match.paymentStatus = status
+    else match.status = status
+  }
+  if (search) {
+    const searchRegex = new RegExp(String(search).trim().replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'), 'i')
+    const matchingMembers = await User.find({
+      $or: [{ name: searchRegex }, { fullName: searchRegex }, { email: searchRegex }, { memberCode: searchRegex }],
+    }).select('_id').lean()
+    match.$or = [
+      { paymentReference: searchRegex },
+      { 'items.name': searchRegex },
+      { 'items.productName': searchRegex },
+    ]
+    if (matchingMembers.length) match.$or.push({ userId: { $in: matchingMembers.map((u) => u._id) } })
+  }
 
   const [total, orders] = await Promise.all([
     Order.countDocuments(match),

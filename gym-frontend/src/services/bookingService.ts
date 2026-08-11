@@ -6,6 +6,9 @@ export type BookingStatus =
   | 'confirmed'
   | 'cancelled'
   | 'completed'
+  | 'member_no_show'
+  | 'pt_no_show'
+  | 'needs_review'
 
 export type BookingMember = {
   _id: string
@@ -126,8 +129,12 @@ export const bookingService = {
     return api.patch(`/bookings/${id}/cancel`, { reason })
   },
 
-  rescheduleBooking(id: string, data: RescheduleBookingPayload) {
+rescheduleBooking(id: string, data: RescheduleBookingPayload) {
     return api.patch(`/bookings/${id}/reschedule`, data)
+  },
+
+  requestRescheduleBooking(id: string, data: RescheduleBookingPayload) {
+    return api.post(`/bookings/${id}/reschedule-request`, data)
   },
 
   completeBooking(id: string) {
