@@ -59,7 +59,7 @@ const landingContentSchema = new mongoose.Schema(
     heroBadgeText: { type: localizedTextSchema, default: () => ({ vi: 'Hệ thống quản lý gym chuyên nghiệp', en: 'Professional Gym Management System' }) },
     heroImageUrl: { type: String, default: '', trim: true },
     ctaText: { type: localizedTextSchema, default: () => ({ vi: 'Bắt đầu ngay', en: 'Get Started' }) },
-    ctaLink: { type: String, default: '/register', trim: true },
+    ctaLink: { type: String, default: '/booking', trim: true },
     secondaryCtaText: { type: localizedTextSchema, default: () => ({ vi: 'Điểm danh ngay', en: 'Check-in Now' }) },
     secondaryCtaLink: { type: String, default: '/checkin', trim: true },
     stats: { type: [statSchema], default: [] },

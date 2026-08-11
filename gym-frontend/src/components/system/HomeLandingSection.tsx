@@ -14,6 +14,15 @@ const pickLocalizedSlogans = (slogans: Array<{ vi?: string; en?: string }> = [],
     .filter(Boolean)
 }
 
+const resolvePrimaryCtaLink = (link: string | undefined) => {
+  const target = link || '/booking'
+  return target === '/register' ? '/booking' : target
+}
+
+const resolveServiceLink = (link: string | undefined) => {
+  return link === '/health' ? '/account/profile' : link
+}
+
 type HomeLandingSectionProps = {
   landing?: any
   firstName?: string
@@ -104,7 +113,7 @@ function HomeHero({
         <p className={`${isPreview ? 'max-w-full text-[15px]' : 'max-w-[720px] text-[15px] md:text-[17px]'} mt-5 leading-7`} style={{ color: 'var(--hero-muted)' }}>{heroSubtitle}</p>
         {(showPrimaryCta || showSecondaryCta) && (
           <div className="mt-8 flex flex-col flex-wrap gap-3 min-[421px]:flex-row">
-            {showPrimaryCta && <Button size="large" className="!h-[46px] !rounded-full !px-6 !font-extrabold" type="primary" onClick={() => onNavigate?.(landing?.ctaLink || '/booking')}>{primaryText}</Button>}
+            {showPrimaryCta && <Button size="large" className="!h-[46px] !rounded-full !px-6 !font-extrabold" type="primary" onClick={() => onNavigate?.(resolvePrimaryCtaLink(landing?.ctaLink))}>{primaryText}</Button>}
             {showSecondaryCta && <Button size="large" className="!h-[46px] !rounded-full !bg-transparent !px-6 !font-extrabold hover:!bg-[var(--hero-outline-hover-bg)]" style={{ borderColor: 'var(--hero-outline-border)', color: 'var(--hero-text)' }} onClick={() => onNavigate?.(landing?.secondaryCtaLink || '/checkin')}>{secondaryText}</Button>}
           </div>
         )}
@@ -163,12 +172,17 @@ function HomeLandingSectionInner({
     { icon: '▣', title: 'Check-in QR', description: 'Điểm danh nhanh bằng mã QR', color: '#e05a30', link: '/checkin' },
     { icon: '◴', title: 'Đặt PT', description: 'Đặt lịch với huấn luyện viên', color: '#3d9dd0', link: '/booking' },
     { icon: '↗', title: 'Tập luyện', description: 'Giáo án tập luyện cá nhân hóa', color: '#5cb85c', link: '/workout' },
-    { icon: '♡', title: 'Sức khỏe', description: 'Theo dõi chỉ số sức khỏe', color: '#e6a317', link: '/health' },
-  ]).map((item: any) => ({
-    ...item,
-    title: pickLocalized(item.title, lang, ''),
-    description: pickLocalized(item.description, lang, ''),
-  }))
+    { icon: '👤', title: 'Hồ sơ cá nhân', description: 'Quản lý thông tin và hồ sơ cá nhân', color: '#e6a317', link: '/account/profile' },
+  ]).map((item: any) => {
+    const isProfileCard = resolveServiceLink(item.link) === '/account/profile'
+    return {
+      ...item,
+      link: resolveServiceLink(item.link),
+      icon: isProfileCard ? '👤' : item.icon,
+      title: isProfileCard ? 'Hồ sơ cá nhân' : pickLocalized(item.title, lang, ''),
+      description: isProfileCard ? 'Quản lý thông tin và hồ sơ cá nhân' : pickLocalized(item.description, lang, ''),
+    }
+  })
 
   const testimonials = [
     { rating: 5, content: 'Phòng tập hiện đại, sạch sẽ, nhân viên nhiệt tình. Tôi rất hài lòng!', userName: 'Nguyễn Văn A', userSubtitle: 'Hội viên 2 năm' },
@@ -228,7 +242,7 @@ function HomeLandingSectionInner({
               type="button"
               className="min-h-[168px] rounded-lg border p-[18px] text-left transition duration-200 md:min-h-[178px] md:p-[22px]"
               key={`${service.title}-${index}`}
-              onClick={() => service.link && onNavigate?.(service.link)}
+              onClick={() => { const target = resolveServiceLink(service.link); if (target) onNavigate?.(target) }}
               style={{ backgroundColor: token.colorBgContainer, borderColor: token.colorBorder, color: token.colorText }}
             >
               <span className="grid h-[42px] w-[42px] place-items-center rounded-full border text-[22px] font-black" style={{ color: service.color || '#e05a30' }}>{service.icon || '•'}</span>

@@ -637,7 +637,7 @@ export default function NotificationCenter({ role }: Props) {
 
           </div>
 
-          {/* Footer row: category + time + unread badge + menu */}
+          {/* Footer row: category + time + menu */}
           <div className="mt-2 flex items-center gap-2 max-sm:mt-2.5">
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight transition-colors duration-300
               ${isUnread ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]' : 'bg-[var(--gs-border)]/30 text-[var(--gs-text-muted)]/50'}
@@ -650,11 +650,6 @@ export default function NotificationCenter({ role }: Props) {
             `}>
               {formatTimeFull(item.createdAt)}
             </span>
-            {isUnread && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--theme-accent)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--theme-accent)] max-sm:text-[11px]">
-                UNREAD
-              </span>
-            )}
 
             <span className="ml-auto flex items-center gap-1">
               {safeRedirect(item) && (
