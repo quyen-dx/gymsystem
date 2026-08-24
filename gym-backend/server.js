@@ -20,6 +20,7 @@ import checkInRoutes from './src/routes/checkInRoutes.js'
 import cmsRoutes from './src/routes/cmsRoutes.js'
 import memberRoutes from './src/routes/memberRoutes.js'
 import membershipRoutes from './src/routes/membershipRoutes.js'
+import membershipTransferRoutes from './src/routes/membershipTransferRoutes.js'
 import ptRoutes from './src/routes/ptRoutes.js'
 import orderRoutes from './src/routes/orderRoutes.js'
 import partnershipRequestRoutes from './src/routes/partnershipRequestRoutes.js'
@@ -126,6 +127,7 @@ app.use('/api/addresses', addressRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/seller', sellerRoutes)
 app.use('/api/memberships', membershipRoutes)
+app.use('/api/membership-transfers', membershipTransferRoutes)
 app.use('/api/partnership-requests', partnershipRequestRoutes)
 app.use('/api/pts', ptRoutes)
 app.use('/api/system-experience', systemExperienceRoutes)

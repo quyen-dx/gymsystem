@@ -82,6 +82,7 @@ export const hasActiveMembershipForDate = async (memberId, date) => {
   const cycles = await MembershipCycle.find({
     memberId,
     status: 'active',
+    transferPending: { $ne: true },
     expiresAt: { $gte: bookingDate },
   }).lean()
 

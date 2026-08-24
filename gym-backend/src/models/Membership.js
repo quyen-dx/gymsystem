@@ -19,7 +19,7 @@ const membershipSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['manual', 'stripe', 'staff', 'wallet'],
+      enum: ['manual', 'stripe', 'staff', 'wallet', 'transfer'],
       default: 'manual',
     },
     paymentId: {

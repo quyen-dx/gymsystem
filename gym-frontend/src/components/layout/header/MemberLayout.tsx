@@ -10,7 +10,8 @@ import {
   MenuOutlined,
   QuestionCircleOutlined,
   ShopOutlined,
-  ShoppingCartOutlined
+  ShoppingCartOutlined,
+  SwapOutlined,
 } from '@ant-design/icons'
 import {
   Avatar,
@@ -119,6 +120,7 @@ export default function MemberLayout({
     ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/checkin', label: 'Check-in', icon: <CreditCardOutlined /> }] : []),
   ]
   const moreNavItems = [
+    { key: '/membership-transfers', label: 'Chuyển nhượng gói', icon: <SwapOutlined /> },
     { key: '/payouts', label: 'Rút tiền', icon: <CreditCardOutlined /> },
     { key: '/feedback', label: 'Phản hồi', icon: <CommentOutlined /> },
     { key: '/policies', label: 'Chính sách', icon: <FileTextOutlined /> },

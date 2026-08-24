@@ -67,6 +67,16 @@ const membershipCycleSchema = new mongoose.Schema({
     type: [Number],
     default: [],
   },
+  transferPending: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  transferRequestId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'MembershipTransferRequest',
+    default: null,
+  },
   previousCycleId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'MembershipCycle',

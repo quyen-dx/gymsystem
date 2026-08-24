@@ -323,7 +323,10 @@ export default function MyMembershipPage() {
             <h1 className="m-0 mt-2 text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Gói tập của tôi</h1>
           </div>
           {membership ? (
-            <Button href="/plans">Xem gói tập</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button icon={<SwapOutlined />} href="/membership-transfers">Chuyển nhượng</Button>
+              <Button href="/plans">Xem gói tập</Button>
+            </div>
           ) : (
             <Button href="/plans">Đăng ký gói mới</Button>
           )}

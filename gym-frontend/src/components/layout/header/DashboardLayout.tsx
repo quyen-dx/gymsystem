@@ -15,6 +15,7 @@ import {
   SettingOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
+  SwapOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons'
@@ -256,6 +257,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ] : []),
       { key: '/admin/floors-zones', label: 'Tầng & Khu vực', icon: <DashboardOutlined /> },
       { key: '/admin/payout-requests', label: 'Yêu cầu rút tiền', icon: <CreditCardOutlined /> },
+      { key: '/admin/membership-transfers', label: 'Chuyển nhượng gói', icon: <SwapOutlined /> },
       ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: 'Thống kê', icon: <BarChartOutlined /> }] : []),
       { key: '/admin/faqs', label: 'Quản lý FAQ', icon: <QuestionCircleOutlined /> },
       { key: '/admin/feedback', label: 'Quản lý phản hồi', icon: <CommentOutlined /> },
@@ -267,6 +269,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     staff: [
       ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/staff/checkin', label: 'Check-in', icon: <DashboardOutlined /> }] : []),
       { key: '/staff/members', label: 'Hội viên', icon: <TeamOutlined /> },
+      { key: '/staff/membership-transfers', label: 'Chuyển nhượng gói', icon: <SwapOutlined /> },
       {
         key: '/staff/payments',
         label: (

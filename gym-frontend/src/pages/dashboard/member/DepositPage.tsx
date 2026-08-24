@@ -5,7 +5,7 @@ import { loadStripe } from '@stripe/stripe-js'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useWallet } from '../../../context/WalletProvider'
-import { confirmStripeCardPayment, createStripePaymentIntent, createVnpayDeposit, getDepositPayments, getStripeExchangeRate } from '../../../services/walletService'
+import { confirmStripeCardPayment, createStripePaymentIntent, createVnpayDeposit, getDepositPayments, getStripeExchangeRate, getWalletTransactions } from '../../../services/walletService'
 import PolicyConsentCard from '../../../components/wallet/PolicyConsentCard'
 import { acceptMultiplePolicyConsent } from '../../../utils/policyConsent'
 import { PRESET_AMOUNTS } from '../../../types/member/wallet'
@@ -32,6 +32,10 @@ type DepositPayment = {
   paidAt?: string | null
   metadata?: Record<string, any>
   planId?: { _id?: string; nameVi?: string; nameEn?: string; durationDays?: number } | string | null
+  recordType?: 'payment' | 'payout'
+  description?: string
+  referenceId?: string
+  completedAt?: string | null
 }
 
 type PendingQrPayment = {
@@ -64,6 +68,7 @@ function formatUSD(amount: number) {
 }
 
 function getTransactionType(payment: DepositPayment) {
+  if (payment.recordType === 'payout') return 'Rút tiền về ngân hàng'
   const purpose = payment.metadata?.purpose
   if (purpose === 'PLAN_PURCHASE') return 'Thanh toán gói tập'
   if (purpose === 'PT_BOOKING_PAYMENT') return 'Thanh toán lịch PT'
@@ -78,6 +83,7 @@ function getChargedAmount(payment: DepositPayment) {
 }
 
 function getPaymentMethodInfo(payment: DepositPayment) {
+  if (payment.recordType === 'payout') return { label: 'Chuyển khoản ngân hàng' }
   const purpose = payment.metadata?.purpose
   const walletUsed = Number(payment.metadata?.walletUsed || 0)
   const vnpayAmount = Number(payment.metadata?.remainingAmount || 0)
@@ -103,7 +109,8 @@ function getDepositCredit(amount: number) {
 }
 
 function normalizeStatus(status?: string) {
-  return String(status || '').toUpperCase()
+  const normalized = String(status || '').toUpperCase()
+  return normalized === 'COMPLETED' ? 'PAID' : normalized
 }
 
 function formatMethod(method?: string) {
@@ -309,13 +316,30 @@ export default function DepositPage() {
     return payments.filter((payment) => normalizeStatus(payment.status) === paymentFilter)
   }, [paymentFilter, payments])
 
+  const fetchPaymentHistory = async (): Promise<DepositPayment[]> => {
+    const [paymentsResult, transactionsResult] = await Promise.all([getDepositPayments(), getWalletTransactions()])
+    const depositPayments = paymentsResult.data.data || []
+    const payouts = (transactionsResult.data.data || [])
+      .filter((transaction: any) => transaction.type === 'payout' && transaction.status === 'completed')
+      .map((transaction: any) => ({
+        ...transaction,
+        txnRef: transaction.referenceId || transaction._id,
+        paidAt: transaction.completedAt,
+        method: 'BANK_TRANSFER',
+        paymentMethod: 'BANK_TRANSFER',
+        recordType: 'payout' as const,
+      }))
+    return [...depositPayments, ...payouts].sort((a: DepositPayment, b: DepositPayment) => (
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    ))
+  }
+
   const refreshPayments = () => {
     setHistoryLoading(true)
-    return getDepositPayments()
-      .then((res) => {
-        const nextPayments = res.data.data || []
+    return fetchPaymentHistory()
+      .then((nextPayments) => {
         setPayments(nextPayments)
-        return nextPayments as DepositPayment[]
+        return nextPayments
       })
       .catch(() => message.error('Không thể tải lịch sử giao dịch'))
       .finally(() => setHistoryLoading(false))
@@ -340,9 +364,8 @@ export default function DepositPage() {
     setPaymentMethod('vnpay')
     if (amountParam > 0) setAmount(amountParam)
 
-    getDepositPayments()
-      .then((res) => {
-        const nextPayments = res.data.data || []
+    fetchPaymentHistory()
+      .then((nextPayments) => {
         setPayments(nextPayments)
         const payment = nextPayments.find((item: DepositPayment) => item.txnRef === txnRef)
         if (payment) {
@@ -366,9 +389,8 @@ export default function DepositPage() {
     if (!pendingPayment?.txnRef) return
 
     const intervalId = window.setInterval(() => {
-      getDepositPayments()
-        .then((res) => {
-          const nextPayments = res.data.data || []
+      fetchPaymentHistory()
+        .then((nextPayments) => {
           setPayments(nextPayments)
           const current = nextPayments.find((payment: DepositPayment) => payment.txnRef === pendingPayment.txnRef)
           const status = normalizeStatus(current?.status)
@@ -413,9 +435,8 @@ export default function DepositPage() {
     notifiedFromUrl.current = true
 
     if (txnRef) {
-      getDepositPayments()
-        .then((res) => {
-          const data = res.data.data || []
+      fetchPaymentHistory()
+        .then((data) => {
           setPayments(data)
           const payment = data.find((p: DepositPayment) => p.txnRef === txnRef)
           if (payment) {

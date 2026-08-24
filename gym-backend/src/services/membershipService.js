@@ -270,6 +270,11 @@ const subscribeWithWallet = async ({
       error.statusCode = 404
       throw error
     }
+    if (existingActiveCycle.transferPending) {
+      const error = new Error('Gói tập đang có yêu cầu chuyển nhượng, chưa thể gia hạn.')
+      error.statusCode = 409
+      throw error
+    }
     await assertRenewalAllowed(existingActiveCycle.expiresAt)
   }
 
@@ -751,6 +756,11 @@ export const createMembershipCheckout = async ({ userId, planId, mode = 'registe
     if (!existingActiveCycle) {
       const error = new Error('Bạn chưa có gói tập để gia hạn. Vui lòng đăng ký gói mới.')
       error.statusCode = 404
+      throw error
+    }
+    if (existingActiveCycle.transferPending) {
+      const error = new Error('Gói tập đang có yêu cầu chuyển nhượng, chưa thể gia hạn.')
+      error.statusCode = 409
       throw error
     }
     await assertRenewalAllowed(existingActiveCycle.expiresAt)
@@ -1662,7 +1672,7 @@ const getMyMembership = async ({ userId }) => {
 
   return {
     membership: serializeMembership(membership, displayCycle, activePeriodEndDate),
-    canRenew: isActive,
+    canRenew: isActive && !displayCycle?.transferPending,
     renewalThresholdDays: membership ? await getRenewalThresholdDays() : 7,
     pendingCancelRequest,
     cycle: displayCycle ? {
@@ -1674,6 +1684,7 @@ const getMyMembership = async ({ userId }) => {
       durationDays: displayCycle.durationDays,
       startDate: displayCycle.startDate,
       status: displayCycle.status,
+      transferPending: Boolean(displayCycle.transferPending),
       currentPlanId: displayCycle.currentPlanId?._id || displayCycle.currentPlanId,
     } : null,
     refundInfo,
@@ -1691,6 +1702,11 @@ const renewMembershipWithWallet = async ({ userId }) => {
     error.statusCode = 404
     throw error
   }
+  if (activeCycle.transferPending) {
+    const error = new Error('Gói tập đang có yêu cầu chuyển nhượng, chưa thể gia hạn.')
+    error.statusCode = 409
+    throw error
+  }
   await assertRenewalAllowed(activeCycle.expiresAt)
   const planId = activeCycle.currentPlanId?._id || activeCycle.currentPlanId
   return subscribeWithWallet({ userId, planId, mode: 'renew' })
@@ -1704,6 +1720,11 @@ const renewMembershipWithDuration = async ({ userId, durationMultiplier = 1 }) =
   if (!activeCycle) {
     const error = new Error('Bạn chưa có gói tập để gia hạn.')
     error.statusCode = 404
+    throw error
+  }
+  if (activeCycle.transferPending) {
+    const error = new Error('Gói tập đang có yêu cầu chuyển nhượng, chưa thể gia hạn.')
+    error.statusCode = 409
     throw error
   }
 

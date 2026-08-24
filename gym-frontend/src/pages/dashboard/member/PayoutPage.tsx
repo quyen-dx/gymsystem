@@ -46,16 +46,37 @@ export default function PayoutPage() {
   const submit = async () => {
     try {
       const values = await form.validateFields()
-      setLoading(true)
-      await payoutService.create(values)
-      message.success('Đã gửi yêu cầu rút tiền')
-      setOpen(false)
-      form.resetFields()
-      refresh()
+      Modal.confirm({
+        title: 'Xác nhận yêu cầu rút tiền',
+        width: 560,
+        okText: 'Xác nhận rút tiền',
+        cancelText: 'Quay lại kiểm tra',
+        content: <div className="pt-3"><Descriptions column={1} bordered size="small" items={[
+          { key: 'amount', label: 'Số tiền rút', children: <strong>{money(values.amount)}</strong> },
+          { key: 'available', label: 'Số tiền có thể rút', children: money(summary?.withdrawableBalance) },
+          { key: 'bank', label: 'Ngân hàng', children: `${values.bankName} (${values.bankCode})` },
+          { key: 'account', label: 'Số tài khoản', children: values.accountNumber },
+          { key: 'holder', label: 'Chủ tài khoản', children: values.accountHolder },
+          { key: 'note', label: 'Ghi chú', children: values.note || '—' },
+        ]} /><div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">Sau khi xác nhận, số tiền này sẽ được tạm khóa trong ví cho đến khi yêu cầu được xử lý hoặc bị hủy/từ chối.</div></div>,
+        onOk: async () => {
+          setLoading(true)
+          try {
+            await payoutService.create(values)
+            message.success('Đã gửi yêu cầu rút tiền')
+            setOpen(false)
+            form.resetFields()
+            await refresh()
+          } catch (error: any) {
+            message.error(error.response?.data?.message || 'Không thể tạo yêu cầu')
+            throw error
+          } finally {
+            setLoading(false)
+          }
+        },
+      })
     } catch (error: any) {
       if (error?.response) message.error(error.response.data?.message || 'Không thể tạo yêu cầu')
-    } finally {
-      setLoading(false)
     }
   }
 

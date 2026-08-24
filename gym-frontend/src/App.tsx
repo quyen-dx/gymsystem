@@ -59,12 +59,14 @@ import CheckoutPage from './pages/dashboard/member/CheckoutPage'
 import DepositPage from './pages/dashboard/member/DepositPage'
 import PayoutPage from './pages/dashboard/member/PayoutPage'
 import AdminPayoutRequestsPage from './pages/dashboard/admin/AdminPayoutRequestsPage'
+import AdminMembershipTransfersPage from './pages/dashboard/admin/AdminMembershipTransfersPage'
 import MemberDashboard from './pages/dashboard/member/MemberDashboard'
 import MemberStorePage from './pages/dashboard/member/MemberStorePage'
 import MyActivityPage from './pages/dashboard/member/MyActivityPage'
 import MyFeedbackPage from './pages/dashboard/member/MyFeedbackPage'
 import MemberNotificationsPage from './pages/dashboard/member/MemberNotificationsPage'
 import MyMembershipPage from './pages/dashboard/member/MyMembershipPage'
+import MembershipTransfersPage from './pages/dashboard/member/MembershipTransfersPage'
 import CancelMembershipPage from './pages/dashboard/member/CancelMembershipPage'
 import RenewMembershipPage from './pages/dashboard/member/RenewMembershipPage'
 import OrderHistoryPage from './pages/dashboard/member/OrderHistoryPage'
@@ -454,6 +456,8 @@ function AppWithTheme() {
         <Route path="/admin/daily-qr" element={<Navigate to="/admin/checkin?tab=qr" replace />} />
         <Route path="/admin/system-settings" element={<PrivateRoute><SystemSettingsPage /></PrivateRoute>} />
         <Route path="/admin/payout-requests" element={<PrivateRoute><AdminPayoutRequestsPage /></PrivateRoute>} />
+        <Route path="/admin/membership-transfers" element={<PrivateRoute><AdminMembershipTransfersPage /></PrivateRoute>} />
+        <Route path="/staff/membership-transfers" element={<PrivateRoute><AdminMembershipTransfersPage /></PrivateRoute>} />
         <Route path="/admin/faqs/create" element={<PrivateRoute><FAQCreatePage /></PrivateRoute>} />
         <Route path="/admin/faqs/:faqId/edit" element={<PrivateRoute><FAQCreatePage /></PrivateRoute>} />
         <Route path="/admin/faqs" element={<PrivateRoute><FAQManagerPage /></PrivateRoute>} />
@@ -518,6 +522,7 @@ function AppWithTheme() {
         <Route path="/store" element={<PrivateRoute feature="shop.productStoreEnabled"><MemberStorePage /></PrivateRoute>} />
         <Route path="/plans" element={<PrivateRoute feature="billing.allowPlanPurchase"><PlansPage /></PrivateRoute>} />
         <Route path="/my-membership" element={<PrivateRoute feature="billing.allowPlanPurchase"><MyMembershipPage /></PrivateRoute>} />
+        <Route path="/membership-transfers" element={<PrivateRoute feature="billing.allowPlanPurchase"><MembershipTransfersPage /></PrivateRoute>} />
         <Route path="/my-membership/cancel-request" element={<PrivateRoute feature="billing.allowPlanPurchase"><CancelMembershipPage /></PrivateRoute>} />
         <Route path="/my-membership/renew" element={<PrivateRoute feature="billing.allowPlanPurchase"><RenewMembershipPage /></PrivateRoute>} />
         <Route path="/store/:storeId" element={<PrivateRoute feature="shop.productStoreEnabled"><MemberStorePage /></PrivateRoute>} />
