@@ -459,14 +459,12 @@ export default function BookingPage() {
     'waiting_reassign',
   ])
 
-  // PT 1-1: sau khi Admin phân công PT, yêu cầu ở trạng thái 'assigned' và chờ PT xác nhận;
-  // sau khi PT xác nhận → 'confirmed' — panel giữ nguyên đến khi PT kết thúc phụ trách
-  // (request bị đóng) thì mới mở lại đặt lịch
+  // PT 1-1: 'assigned' vẫn chờ PT xác nhận nên tiếp tục chặn tạo yêu cầu mới.
+  // Khi đã 'confirmed', PTAssignment là nguồn sự thật cho quan hệ PT - hội viên.
+  // Không dùng request confirmed cũ để khóa form vì nó có thể thuộc gói đã hết hạn.
   const PT1ON1_ACTIVE_STATUSES = new Set([
     ...REQUEST_IN_PROGRESS_STATUSES,
     'assigned',
-    'confirmed',
-    'active',
   ])
 
   const isRequestInProgress = (request: TrainingRequest) =>
@@ -1089,12 +1087,12 @@ export default function BookingPage() {
             )}
             {!activePt1on1Request && (
             <>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 rounded-2xl border border-transparent py-1">
               <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setBookingType(null)}
                 className="text-[var(--gs-text-muted)] hover:text-[var(--gs-text)] !px-1" />
               <div>
-                <h2 className="text-lg font-semibold text-[var(--gs-text)]">Đăng ký PT riêng 1-1</h2>
-                <p className="text-sm text-[var(--gs-text-muted)]">Gửi yêu cầu, Admin sẽ phân công PT phù hợp cho bạn</p>
+                <h2 className="text-xl font-semibold tracking-tight text-[var(--gs-text)]">Đăng ký PT riêng 1-1</h2>
+                <p className="mt-0.5 text-sm text-[var(--gs-text-muted)]">Hoàn tất 2 bước ngắn để gửi yêu cầu đến phòng gym</p>
               </div>
             </div>
 
@@ -1144,19 +1142,28 @@ export default function BookingPage() {
                     </p>
                   </div>
                 )}
-                <div className={`rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-card)] p-6 space-y-6 ${hasActivePt1on1 ? 'pointer-events-none opacity-60' : ''}`}>
+                <div className={`rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-card)] p-4 shadow-sm sm:p-6 lg:p-7 space-y-7 ${hasActivePt1on1 ? 'pointer-events-none opacity-60' : ''}`}>
 
                   {/* Bước hiện tại */}
                   {ptFormStep === 1 ? (
-                    <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--gs-bg-subtle)] p-3">
-                      <div className="text-sm font-semibold text-[var(--gs-text)]">1. Thông tin tập luyện</div>
-                      <div className="mt-0.5 text-xs text-[var(--gs-text-muted)]">Bước 1/2</div>
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-bg-subtle)] p-4">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--theme-accent)] text-sm font-bold text-white">1</span>
+                        <div>
+                          <div className="text-sm font-semibold text-[var(--gs-text)]">Thông tin tập luyện</div>
+                          <div className="mt-0.5 text-xs text-[var(--gs-text-muted)]">Chọn PT, chuyên môn và mục tiêu của bạn</div>
+                        </div>
+                      </div>
+                      <span className="rounded-full border border-[var(--theme-border)] px-2.5 py-1 text-xs font-medium text-[var(--gs-text-muted)]">Bước 1/2</span>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between gap-2 rounded-xl border border-[var(--theme-border)] bg-[var(--gs-bg-subtle)] p-3">
-                      <div>
-                        <div className="text-sm font-semibold text-[var(--gs-text)]">2. PT & Lịch mong muốn</div>
-                        <div className="mt-0.5 text-xs text-[var(--gs-text-muted)]">Bước 2/2</div>
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-bg-subtle)] p-4">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--theme-accent)] text-sm font-bold text-white">2</span>
+                        <div>
+                          <div className="text-sm font-semibold text-[var(--gs-text)]">PT & Lịch mong muốn</div>
+                          <div className="mt-0.5 text-xs text-[var(--gs-text-muted)]">Chọn các buổi tập lặp lại hàng tuần</div>
+                        </div>
                       </div>
                       <Button size="small" icon={<ArrowLeftOutlined />} onClick={() => setPtFormStep(1)}>
                         Quay lại
@@ -1168,15 +1175,21 @@ export default function BookingPage() {
                     <>
                   {/* Section 1: Thong tin tap luyen */}
                   <div>
-                    <h3 className="text-base font-semibold text-[var(--gs-text)] mb-4">Thông tin tập luyện</h3>
-                    <div className="space-y-4">
+                    <div className="mb-5 flex items-end justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-semibold text-[var(--gs-text)]">Thông tin tập luyện</h3>
+                        <p className="mt-1 text-sm text-[var(--gs-text-muted)]">Ưu tiên lựa chọn phù hợp nhất với nhu cầu của bạn.</p>
+                      </div>
+                      <span className="hidden rounded-full bg-[var(--theme-accent-muted)] px-3 py-1 text-xs font-medium text-[var(--theme-accent)] sm:inline">Bước 1</span>
+                    </div>
+                    <div className="space-y-6">
                       <div>
                         <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Bạn muốn chọn PT như thế nào?</label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                           <button
                             type="button"
                             onClick={() => { setPtPickMode('gym_assign'); setPreferredTrainer(null) }}
-                            className={`rounded-xl border p-3 text-left text-sm transition-all ${
+                            className={`rounded-2xl border p-4 text-left text-sm transition-all ${
                               ptPickMode === 'gym_assign'
                                 ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
                                 : 'border-[var(--theme-border)] hover:border-[var(--theme-accent)]'
@@ -1188,7 +1201,7 @@ export default function BookingPage() {
                           <button
                             type="button"
                             onClick={() => setPtPickMode('specific')}
-                            className={`rounded-xl border p-3 text-left text-sm transition-all ${
+                            className={`rounded-2xl border p-4 text-left text-sm transition-all ${
                               ptPickMode === 'specific'
                                 ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
                                 : 'border-[var(--theme-border)] hover:border-[var(--theme-accent)]'
@@ -1204,6 +1217,7 @@ export default function BookingPage() {
                             <PreferredTrainerPicker
                               value={preferredTrainer}
                               onChange={setPreferredTrainer}
+                              showModeToggle={false}
                               hint="Admin sẽ xác nhận lịch tập với PT. Nếu PT không có lịch trống, bạn sẽ được gợi ý PT khác phù hợp."
                             />
                           </div>
@@ -1216,14 +1230,14 @@ export default function BookingPage() {
                             <span className="font-normal text-[var(--gs-text-muted)]">(không bắt buộc — gợi ý cho PT thiết kế giáo án)</span>
                           )}
                         </label>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
                           {SPECIALIZATIONS.map((s) => (
                             <button
                               key={s.value}
                               type="button"
                               disabled={s.disabled}
                               onClick={() => { setPtSpecialization(s.value); setPtSpecTouched(true) }}
-                              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-all ${
+                              className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-all ${
                                 s.disabled ? 'opacity-30 cursor-not-allowed' : ''
                               } ${
                                 ptSpecialization === s.value
@@ -1241,13 +1255,13 @@ export default function BookingPage() {
 
                       <div>
                         <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Mục tiêu tập luyện</label>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                           {GOALS.map((g) => (
                             <button
                               key={g.value}
                               type="button"
                               onClick={() => setPtGoals((prev) => prev.includes(g.value) ? prev.filter((x) => x !== g.value) : [...prev, g.value])}
-                              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-all ${
+                              className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-all ${
                                 ptGoals.includes(g.value)
                                   ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
                                   : 'border-[var(--theme-border)] text-[var(--gs-text)] hover:border-[var(--theme-accent)]'
@@ -1264,12 +1278,12 @@ export default function BookingPage() {
 
                   {/* Section 2: Thong tin bo sung */}
                   <div>
-                    <h3 className="text-base font-semibold text-[var(--gs-text)] mb-4">2. Thông tin bổ sung</h3>
-                    <div className="space-y-4">
+                    <h3 className="mb-4 text-lg font-semibold text-[var(--gs-text)]">Thông tin bổ sung <span className="text-sm font-normal text-[var(--gs-text-muted)]">(không bắt buộc)</span></h3>
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                       <div>
                         <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Lưu ý sức khỏe khi tập <span className="font-normal text-[var(--gs-text-muted)]">(không bắt buộc)</span></label>
                         <Input.TextArea
-                          rows={3}
+                          rows={4}
                           value={ptHealthNotes}
                           onChange={(e) => setPtHealthNotes(e.target.value)}
                           placeholder="Ví dụ: Đau đầu gối khi squat, cần hạn chế bài tập tác động mạnh..."
@@ -1279,7 +1293,7 @@ export default function BookingPage() {
                       <div>
                         <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Ghi chú khác <span className="font-normal text-[var(--gs-text-muted)]">(không bắt buộc)</span></label>
                         <Input.TextArea
-                          rows={3}
+                          rows={4}
                           value={ptNote}
                           onChange={(e) => setPtNote(e.target.value)}
                           placeholder="Ví dụ: Tôi muốn tập trung nhiều hơn vào tăng cơ..."
@@ -1289,7 +1303,8 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end">
+                  <div className="flex flex-col-reverse items-stretch justify-between gap-3 border-t border-[var(--theme-border)] pt-5 sm:flex-row sm:items-center">
+                    <p className="text-xs text-[var(--gs-text-muted)]">Bước tiếp theo: chọn ngày và khung giờ tập.</p>
                     <Button type="primary" size="large" icon={<ArrowRightOutlined />} onClick={() => goToPtStep(2)}>
                       Tiếp theo
                     </Button>
@@ -1299,7 +1314,7 @@ export default function BookingPage() {
                     <>
                   {/* Section 1: Lich mong muon */}
                   <div>
-                    <h3 className="text-base font-semibold text-[var(--gs-text)] mb-4">
+                    <h3 className="mb-5 text-lg font-semibold text-[var(--gs-text)]">
                       {ptPickMode === 'specific' && preferredTrainer ? (
                         <>Lịch mong muốn với PT <span className="text-[var(--theme-accent)]">{getUserDisplayName(preferredTrainer, '')}</span></>
                       ) : (
@@ -1307,22 +1322,22 @@ export default function BookingPage() {
                       )}
                     </h3>
                     {ptPickMode === 'specific' && preferredTrainer && (
-                      <div className="mb-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm">
+                      <div className="mb-5 flex items-center gap-2 rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-bg-subtle)] px-4 py-3 text-sm">
                         <span className="text-[var(--gs-text)]">
                           PT mong muốn: <b className="text-[var(--theme-accent)]">{getUserDisplayName(preferredTrainer, '')}</b>
                         </span>
                       </div>
                     )}
-                    <div className="space-y-5">
+                    <div className="space-y-6">
                       <div>
                         <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Ngày và khung giờ mong muốn * <span className="font-normal text-[var(--gs-text-muted)]">(chọn 1 khung giờ cho mỗi ngày bạn muốn tập)</span></label>
-                        <div className="overflow-x-auto rounded-xl border border-[var(--theme-border)]">
-                          <table className="w-full min-w-[760px] border-collapse text-sm">
+                        <div className="overflow-x-auto rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-bg-subtle)] p-1.5 shadow-sm">
+                          <table className="w-full min-w-[860px] border-separate border-spacing-0 text-sm">
                             <thead>
                               <tr className="bg-[var(--gs-bg-subtle)]">
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--gs-text-muted)] whitespace-nowrap">Ngày</th>
+                                <th className="px-3 py-3 text-left text-xs font-semibold text-[var(--gs-text-muted)] whitespace-nowrap">Ngày</th>
                                 {TIME_SLOTS.map((s) => (
-                                  <th key={s} className="px-1 py-2 text-center text-[11px] font-semibold text-[var(--gs-text-muted)] whitespace-nowrap">
+                                  <th key={s} className="px-1 py-3 text-center text-[11px] font-semibold text-[var(--gs-text-muted)] whitespace-nowrap">
                                     {s.replace('-', ' - ')}
                                   </th>
                                 ))}
@@ -1333,7 +1348,7 @@ export default function BookingPage() {
                                 const dayLocked = pt1on1Lock.isDayLocked(d.value)
                                 return (
                                   <tr key={d.value} className={dayLocked ? 'opacity-50' : ''}>
-                                    <td className="px-3 py-1.5 text-xs font-medium text-[var(--gs-text)] whitespace-nowrap border-t border-[var(--gs-border)]">
+                                    <td className="px-3 py-2 text-xs font-medium text-[var(--gs-text)] whitespace-nowrap border-t border-[var(--gs-border)]">
                                       {d.label}
                                     </td>
                                     {TIME_SLOTS.map((s) => {
@@ -1349,7 +1364,7 @@ export default function BookingPage() {
                                             disabled={disabled}
                                             title={title}
                                             onClick={() => togglePtDaySlot(d.value, s)}
-                                            className={`w-full rounded-md border px-1 py-1.5 text-[11px] leading-tight transition-all ${
+                                            className={`w-full rounded-lg border px-1 py-2 text-[11px] leading-tight transition-all ${
                                               selected
                                                 ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)] font-semibold'
                                                 : disabled
@@ -1368,7 +1383,7 @@ export default function BookingPage() {
                             </tbody>
                           </table>
                         </div>
-                        <div className="mt-2 space-y-1">
+                        <div className="mt-3 space-y-2">
                           <p className="text-xs text-[var(--gs-text-muted)]">
                             {preferredTrainer && pt1on1Lock.ptDayWindows.size > 0 ? (
                               <>PT <span className="font-medium text-[var(--gs-text)]">{getUserDisplayName(preferredTrainer, '')}</span> chỉ làm việc vào: <span className="font-medium text-[var(--gs-text)]">{DAYS.filter((d) => pt1on1Lock.ptWorkingDays.has(d.value)).map((d) => d.short).join(', ')}</span> — các ngày/khung giờ khác đã được khóa.</>
@@ -1383,7 +1398,7 @@ export default function BookingPage() {
                               PT này có một số khung giờ đã được đặt trong thời gian bạn chọn — các khung đó đã bị khóa.
                             </p>
                           )}
-                          <p className="text-xs">
+                          <p className="rounded-xl border border-[var(--theme-border)] bg-[var(--gs-bg-subtle)] px-3 py-2.5 text-xs leading-relaxed">
                             {Object.keys(ptDaySlotMap).length > 0 ? (
                               <>Lịch mong muốn đã chọn: <span className="font-medium text-[var(--theme-accent)]">{Object.entries(ptDaySlotMap).map(([day, slot]) => `${DAYS.find((x) => x.value === Number(day))?.short || day} (${formatShortDate(nextBookingDate(Number(day), slot))}) ${slot.replace('-', ' - ')}`).join(', ')}</span></>
                             ) : (
@@ -1395,13 +1410,13 @@ export default function BookingPage() {
 
                       <div>
                         <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Thời lượng đăng ký (lặp lại hàng tuần) *</label>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
                           {WEEKS_OPTIONS.map((w) => (
                             <button
                               key={w}
                               type="button"
                               onClick={() => setPtWeeks(w)}
-                              className={`rounded-lg border px-3 py-1.5 text-sm transition-all ${
+                              className={`rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
                                 ptWeeks === w
                                   ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
                                   : 'border-[var(--theme-border)] text-[var(--gs-text)] hover:border-[var(--theme-accent)]'
@@ -1419,8 +1434,8 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  <div className="flex gap-3">
-                    <Button size="large" icon={<ArrowLeftOutlined />} onClick={() => setPtFormStep(1)}>
+                  <div className="flex flex-col-reverse gap-3 border-t border-[var(--theme-border)] pt-5 sm:flex-row">
+                    <Button size="large" className="sm:min-w-32" icon={<ArrowLeftOutlined />} onClick={() => setPtFormStep(1)}>
                       Quay lại
                     </Button>
                     <Button type="primary" size="large" block onClick={() => { if (validatePt1on1Form()) setPtConfirmOpen(true) }}>

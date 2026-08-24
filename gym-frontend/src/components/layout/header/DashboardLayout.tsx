@@ -255,6 +255,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { key: '/admin/trainers', label: badgeLabel('Huấn luyện viên (PT)', pendingEndRequestCount + pendingWorkoutReportCount + pendingShiftChangeCount), icon: <UserOutlined /> },
       ] : []),
       { key: '/admin/floors-zones', label: 'Tầng & Khu vực', icon: <DashboardOutlined /> },
+      { key: '/admin/payout-requests', label: 'Yêu cầu rút tiền', icon: <CreditCardOutlined /> },
       ...(isEnabled('reports.revenueChartEnabled') ? [{ key: '/admin/reports', label: 'Thống kê', icon: <BarChartOutlined /> }] : []),
       { key: '/admin/faqs', label: 'Quản lý FAQ', icon: <QuestionCircleOutlined /> },
       { key: '/admin/feedback', label: 'Quản lý phản hồi', icon: <CommentOutlined /> },

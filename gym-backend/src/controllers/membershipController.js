@@ -73,7 +73,21 @@ export const subscribeMembership = async (req, res, next) => {
 
 export const checkoutMembership = async (req, res, next) => {
   try {
-    const { planId, mode = 'register', durationMultiplier = 1 } = req.body
+    const { mode = 'register', durationMultiplier = 1 } = req.body
+    let { planId } = req.body
+
+    // `/checkout-renew` only renews the member's active plan. Resolve it on
+    // the server as a safe fallback for an outdated client that omits planId.
+    if (!planId && mode === 'renew') {
+      const activeCycle = await MembershipCycle.findOne({
+        memberId: req.user._id,
+        status: 'active',
+      })
+        .select('currentPlanId')
+        .lean()
+      planId = activeCycle?.currentPlanId || null
+    }
+
     if (!planId) {
       return res.status(400).json({ message: 'planId là bắt buộc' })
     }

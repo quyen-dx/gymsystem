@@ -57,6 +57,8 @@ import MemberScanPage from './pages/dashboard/member/MemberScanPage'
 import MemberSessionSelectPage from './pages/dashboard/member/MemberSessionSelectPage'
 import CheckoutPage from './pages/dashboard/member/CheckoutPage'
 import DepositPage from './pages/dashboard/member/DepositPage'
+import PayoutPage from './pages/dashboard/member/PayoutPage'
+import AdminPayoutRequestsPage from './pages/dashboard/admin/AdminPayoutRequestsPage'
 import MemberDashboard from './pages/dashboard/member/MemberDashboard'
 import MemberStorePage from './pages/dashboard/member/MemberStorePage'
 import MyActivityPage from './pages/dashboard/member/MyActivityPage'
@@ -451,6 +453,7 @@ function AppWithTheme() {
         <Route path="/admin/checkin-history" element={<Navigate to="/admin/checkin?tab=history" replace />} />
         <Route path="/admin/daily-qr" element={<Navigate to="/admin/checkin?tab=qr" replace />} />
         <Route path="/admin/system-settings" element={<PrivateRoute><SystemSettingsPage /></PrivateRoute>} />
+        <Route path="/admin/payout-requests" element={<PrivateRoute><AdminPayoutRequestsPage /></PrivateRoute>} />
         <Route path="/admin/faqs/create" element={<PrivateRoute><FAQCreatePage /></PrivateRoute>} />
         <Route path="/admin/faqs/:faqId/edit" element={<PrivateRoute><FAQCreatePage /></PrivateRoute>} />
         <Route path="/admin/faqs" element={<PrivateRoute><FAQManagerPage /></PrivateRoute>} />
@@ -508,6 +511,7 @@ function AppWithTheme() {
         <Route path="/" element={<HomeRoute />} />
         <Route path="/dashboard" element={<PrivateRoute><MemberDashboard /></PrivateRoute>} />
         <Route path="/deposit" element={<PrivateRoute feature="billing.qrPaymentEnabled"><DepositPage /></PrivateRoute>} />
+        <Route path="/payouts" element={<PrivateRoute><PayoutPage /></PrivateRoute>} />
         <Route path="/checkout" element={<PrivateRoute feature="shop.cartEnabled"><CheckoutPage /></PrivateRoute>} />
         <Route path="/orders" element={<PrivateRoute><OrderHistoryPage /></PrivateRoute>} />
         <Route path="/track/:id" element={<PrivateRoute><OrderTrackingPage /></PrivateRoute>} />

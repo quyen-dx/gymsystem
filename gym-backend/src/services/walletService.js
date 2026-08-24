@@ -28,6 +28,42 @@ export const getWalletByUser = async (userId) => {
     return Wallet.findOne({ userId })
 }
 
+// Keeps the withdrawable ledger in sync when any normal wallet payment spends
+// available funds. Non-withdrawable credit is consumed first.
+export const buildSpendDebitUpdate = (amount) => [
+    {
+        $set: {
+            balance: { $subtract: ['$balance', amount] },
+            withdrawableBalance: {
+                $max: [
+                    0,
+                    {
+                        $subtract: [
+                            { $ifNull: ['$withdrawableBalance', 0] },
+                            {
+                                $max: [
+                                    0,
+                                    {
+                                        $subtract: [
+                                            amount,
+                                            {
+                                                $max: [
+                                                    0,
+                                                    { $subtract: ['$balance', { $ifNull: ['$withdrawableBalance', 0] }] },
+                                                ],
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            },
+        },
+    },
+]
+
 export const applyWalletTransaction = async ({
     userId,
     amount,
@@ -43,6 +79,7 @@ export const applyWalletTransaction = async ({
     currency = 'VND',
     exchangeRate = null,
     paymentMethod = null,
+    withdrawableAmount = 0,
     session = null,
 }) => {
     const transactionAmount = typeof amount === 'string' ? Number(amount) : amount
@@ -51,6 +88,9 @@ export const applyWalletTransaction = async ({
     if (!type) throw new AppError('Transaction type is required', 400)
     if (typeof transactionAmount !== 'number' || Number.isNaN(transactionAmount)) {
         throw new AppError('Transaction amount must be a number', 400)
+    }
+    if (typeof withdrawableAmount !== 'number' || Number.isNaN(withdrawableAmount) || withdrawableAmount < 0) {
+        throw new AppError('Withdrawable amount must be a non-negative number', 400)
     }
 
     if (idempotencyKey) {
@@ -74,12 +114,12 @@ export const applyWalletTransaction = async ({
         // Deposit: atomic increment, create wallet if not exists
         wallet = await Wallet.findOneAndUpdate(
             { userId },
-            { $inc: { balance: transactionAmount } },
+            { $inc: { balance: transactionAmount, ...(withdrawableAmount ? { withdrawableBalance: withdrawableAmount } : {}) } },
             { new: true, session },
         )
         if (!wallet) {
             // Wallet doesn't exist yet - create with initial balance directly (saves one round-trip)
-            [wallet] = await Wallet.create([{ userId, balance: transactionAmount }], { session })
+            [wallet] = await Wallet.create([{ userId, balance: transactionAmount, withdrawableBalance: withdrawableAmount }], { session })
             balanceBefore = 0
             balanceAfter = transactionAmount
         } else {
@@ -91,8 +131,12 @@ export const applyWalletTransaction = async ({
         const absAmount = -transactionAmount
         wallet = await Wallet.findOneAndUpdate(
             { userId, balance: { $gte: absAmount } },
-            { $inc: { balance: -absAmount } },
-            { new: true, session },
+            // Consume non-withdrawable credit (bonus/compensation) first.
+            // The aggregation update is evaluated by MongoDB on the same
+            // document as the balance guard, so concurrent payments cannot
+            // leave a withdrawable amount that has already been spent.
+            buildSpendDebitUpdate(absAmount),
+            { new: true, session, updatePipeline: true },
         )
         if (!wallet) {
             // Check if wallet exists but insufficient balance

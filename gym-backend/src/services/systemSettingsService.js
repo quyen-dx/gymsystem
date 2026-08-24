@@ -14,6 +14,14 @@ export const getSystemSettingsDocument = async () => {
   }
 
   const normalized = normalizeSystemSettings(doc.settings)
+  // Migrate the initial payout timeout defaults to the shorter policy currently in use.
+  if (
+    normalized?.billing?.payoutAdminReminderHours === 48
+    && normalized?.billing?.payoutAutoCancelHours === 168
+  ) {
+    normalized.billing.payoutAdminReminderHours = 24
+    normalized.billing.payoutAutoCancelHours = 48
+  }
   if (JSON.stringify(doc.settings) !== JSON.stringify(normalized)) {
     doc.settings = normalized
     await doc.save()

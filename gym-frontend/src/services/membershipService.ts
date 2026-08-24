@@ -291,7 +291,7 @@ export const membershipService = {
       message?: string
       paymentMethod?: string
     }>('/memberships/checkout', { planId }),
-  checkoutRenew: (durationMultiplier: number) =>
+  checkoutRenew: (planId: string, durationMultiplier: number) =>
     api.post<{
       status: 'PAID' | 'PARTIAL' | 'NO_BALANCE'
       totalAmount?: number
@@ -304,7 +304,7 @@ export const membershipService = {
       planName?: string
       message?: string
       paymentMethod?: string
-    }>('/memberships/checkout-renew', { mode: 'renew', durationMultiplier }),
+    }>('/memberships/checkout-renew', { planId, mode: 'renew', durationMultiplier }),
   changePlanCheckout: (newPlanId: string, cancelRenewals = false) =>
     api.post<{
       status: 'PAID' | 'PARTIAL' | 'NO_BALANCE'

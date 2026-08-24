@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Card, Grid, Select, Table, Tag, Tooltip, Typography, message } from 'antd'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { Button, Card, Grid, Modal, Select, Table, Tag, Tooltip, Typography, message } from 'antd'
 import { CardCvcElement, CardExpiryElement, CardNumberElement, Elements, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import MemberLayout from '../../../components/layout/header/MemberLayout'
 import { useWallet } from '../../../context/WalletProvider'
 import { confirmStripeCardPayment, createStripePaymentIntent, createVnpayDeposit, getDepositPayments, getStripeExchangeRate } from '../../../services/walletService'
@@ -31,6 +31,7 @@ type DepositPayment = {
   createdAt: string
   paidAt?: string | null
   metadata?: Record<string, any>
+  planId?: { _id?: string; nameVi?: string; nameEn?: string; durationDays?: number } | string | null
 }
 
 type PendingQrPayment = {
@@ -60,6 +61,39 @@ function formatUSD(amount: number) {
     style: 'currency',
     currency: 'USD',
   }).format(amount)
+}
+
+function getTransactionType(payment: DepositPayment) {
+  const purpose = payment.metadata?.purpose
+  if (purpose === 'PLAN_PURCHASE') return 'Thanh toán gói tập'
+  if (purpose === 'PT_BOOKING_PAYMENT') return 'Thanh toán lịch PT'
+  return 'Nạp tiền vào ví'
+}
+
+function getChargedAmount(payment: DepositPayment) {
+  const remainingAmount = Number(payment.metadata?.remainingAmount)
+  return Number.isFinite(remainingAmount) && remainingAmount > 0
+    ? remainingAmount
+    : Number(payment.amount || 0)
+}
+
+function getPaymentMethodInfo(payment: DepositPayment) {
+  const purpose = payment.metadata?.purpose
+  const walletUsed = Number(payment.metadata?.walletUsed || 0)
+  const vnpayAmount = Number(payment.metadata?.remainingAmount || 0)
+  const method = String(payment.method || payment.paymentMethod || '').toUpperCase()
+
+  if (purpose !== 'WALLET_DEPOSIT' && walletUsed > 0 && vnpayAmount > 0) {
+    return {
+      label: 'Ví GymPro + VNPay',
+      detail: `Ví ${formatVND(walletUsed)} · VNPay ${formatVND(vnpayAmount)}`,
+    }
+  }
+  if (method === 'WALLET' || (purpose === 'PLAN_PURCHASE' && walletUsed > 0)) {
+    return { label: 'Ví GymPro' }
+  }
+  if (method === 'STRIPE') return { label: 'Thẻ quốc tế' }
+  return { label: formatMethod(method) }
 }
 
 function getDepositCredit(amount: number) {
@@ -234,6 +268,7 @@ function StripeCardDepositForm({
 
 export default function DepositPage() {
   const screens = useBreakpoint()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { wallet, refreshWallet } = useWallet()
   const [amount, setAmount] = useState(PRESET_AMOUNTS[1])
@@ -242,6 +277,7 @@ export default function DepositPage() {
   const [customUsdInput, setCustomUsdInput] = useState('')
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
   const [payments, setPayments] = useState<DepositPayment[]>([])
+  const [selectedPayment, setSelectedPayment] = useState<DepositPayment | null>(null)
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'PENDING' | 'PAID' | 'FAILED'>('all')
   const [paymentMethod, setPaymentMethod] = useState<'vnpay' | 'card'>('vnpay')
   const [pendingPayment, setPendingPayment] = useState<PendingQrPayment | null>(null)
@@ -530,14 +566,17 @@ export default function DepositPage() {
     <MemberLayout>
       <div className="member-page">
         <div className="mx-auto max-w-5xl">
-          <div className="mb-6">
-            <h1 className="text-xl font-bold text-[var(--theme-text)]">Nạp tiền</h1>
-            {wallet && (
-              <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                {'Số dư hiện tại: '}
-                <span className="font-semibold text-[var(--theme-accent)]">{formatVND(wallet.balance)}</span>
-              </p>
-            )}
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-bold text-[var(--theme-text)]">Nạp tiền</h1>
+              {wallet && (
+                <p className="mt-1 text-sm text-[var(--theme-muted)]">
+                  {'Số dư hiện tại: '}
+                  <span className="font-semibold text-[var(--theme-accent)]">{formatVND(wallet.balance)}</span>
+                </p>
+              )}
+            </div>
+            <Button onClick={() => navigate('/payouts')}>Rút tiền</Button>
           </div>
 
           <div className="grid gap-6 md:grid-cols-[1fr_0.9fr]">
@@ -822,18 +861,39 @@ export default function DepositPage() {
                 loading={historyLoading}
                 dataSource={filteredPayments}
                 columns={[
+                  {
+                    title: 'Thao tác',
+                    key: 'action',
+                    render: (_: unknown, record: DepositPayment) => (
+                      <Button type="link" size="small" onClick={() => setSelectedPayment(record)}>
+                        Xem chi tiết
+                      </Button>
+                    ),
+                  },
+                  {
+                    title: 'Loại giao dịch',
+                    key: 'type',
+                    render: (_: unknown, record: DepositPayment) => getTransactionType(record),
+                  },
                   { title: 'Thời gian', dataIndex: 'createdAt', key: 'createdAt', render: (value: string) => new Date(value).toLocaleString() },
                   { title: 'Mã giao dịch', dataIndex: 'txnRef', key: 'txnRef' },
                   {
                     title: 'Số tiền',
-                    dataIndex: 'amount',
                     key: 'amount',
-                    render: (value: number) => formatVND(value),
+                    render: (_: unknown, record: DepositPayment) => formatVND(getChargedAmount(record)),
                   },
                   {
                     title: 'Phương thức',
                     key: 'method',
-                    render: (_: unknown, record: DepositPayment) => formatMethod(record.method || record.paymentMethod),
+                    render: (_: unknown, record: DepositPayment) => {
+                      const info = getPaymentMethodInfo(record)
+                      return (
+                        <div>
+                          <div className="font-medium text-[var(--theme-text)]">{info.label}</div>
+                          {info.detail && <div className="mt-0.5 text-xs text-[var(--theme-muted)]">{info.detail}</div>}
+                        </div>
+                      )
+                    },
                   },
                   { title: 'Trạng thái', dataIndex: 'status', key: 'status', render: renderStatus },
                 ]}
@@ -841,6 +901,62 @@ export default function DepositPage() {
                 scroll={{ x: 760 }}
               />
             </Card>
+
+            <Modal
+              title="Chi tiết giao dịch"
+              open={Boolean(selectedPayment)}
+              onCancel={() => setSelectedPayment(null)}
+              footer={<Button onClick={() => setSelectedPayment(null)}>Đóng</Button>}
+              width={640}
+              destroyOnClose
+            >
+              {selectedPayment && (() => {
+                const metadata = selectedPayment.metadata || {}
+                const methodInfo = getPaymentMethodInfo(selectedPayment)
+                const totalAmount = Number(metadata.totalAmount || selectedPayment.amount || 0)
+                const walletUsed = Number(metadata.walletUsed || 0)
+                const vnpayAmount = Number(metadata.remainingAmount || 0)
+                const plan = typeof selectedPayment.planId === 'object' ? selectedPayment.planId : null
+                const planName = metadata.planName || plan?.nameVi || plan?.nameEn
+                const providerRef = metadata.vnpTransactionNo || metadata.vnpayReturn?.vnp_TransactionNo || metadata.vnpayIpn?.vnp_TransactionNo
+                const bankCode = metadata.bankCode || metadata.vnpayReturn?.vnp_BankCode || metadata.vnpayIpn?.vnp_BankCode
+
+                const Row = ({ label, children }: { label: string; children: ReactNode }) => (
+                  <div className="flex items-start justify-between gap-5 py-2.5">
+                    <span className="text-sm text-[var(--theme-muted)]">{label}</span>
+                    <span className="max-w-[62%] break-all text-right text-sm font-medium text-[var(--theme-text)]">{children}</span>
+                  </div>
+                )
+
+                return (
+                  <div className="divide-y divide-[var(--theme-border)]">
+                    <div className="pb-2">
+                      <Row label="Loại giao dịch">{getTransactionType(selectedPayment)}</Row>
+                      <Row label="Trạng thái">{renderStatus(selectedPayment.status)}</Row>
+                      <Row label="Phương thức">{methodInfo.label}</Row>
+                      <Row label="Mã giao dịch">{selectedPayment.txnRef || '—'}</Row>
+                      <Row label="Thời điểm tạo">{new Date(selectedPayment.createdAt).toLocaleString('vi-VN')}</Row>
+                      {selectedPayment.paidAt && <Row label="Thời điểm thanh toán">{new Date(selectedPayment.paidAt).toLocaleString('vi-VN')}</Row>}
+                    </div>
+
+                    <div className="py-2">
+                      {totalAmount !== getChargedAmount(selectedPayment) && <Row label="Tổng giá trị">{formatVND(totalAmount)}</Row>}
+                      {walletUsed > 0 && <Row label="Thanh toán từ ví">{formatVND(walletUsed)}</Row>}
+                      {vnpayAmount > 0 && <Row label="Thanh toán qua VNPay">{formatVND(vnpayAmount)}</Row>}
+                      <Row label={vnpayAmount > 0 ? 'Số tiền VNPay thực thu' : 'Số tiền'}>{formatVND(getChargedAmount(selectedPayment))}</Row>
+                    </div>
+
+                    {(planName || providerRef || bankCode) && (
+                      <div className="pt-2">
+                        {planName && <Row label="Gói tập">{planName}</Row>}
+                        {providerRef && <Row label="Mã tham chiếu VNPay">{providerRef}</Row>}
+                        {bankCode && <Row label="Ngân hàng">{bankCode}</Row>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </Modal>
           </div>
         </div>
       </div>

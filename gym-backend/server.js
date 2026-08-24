@@ -31,6 +31,7 @@ import shopRoutes from './src/routes/shopRoutes.js'
 import systemExperienceRoutes from './src/routes/systemExperienceRoutes.js'
 import systemSettingsRoutes from './src/routes/systemSettingsRoutes.js'
 import walletRoutes from './src/routes/walletRoutes.js'
+import { adminRouter as payoutAdminRoutes } from './src/routes/payoutRequestRoutes.js'
 import bookingRoutes from './src/routes/bookingRoutes.js'
 import policyConsentRoutes from './src/routes/policyConsentRoutes.js'
 import healthRoutes from './src/routes/healthRoutes.js'
@@ -64,6 +65,7 @@ import { startPaymentExpiryJob } from './src/jobs/paymentExpiry.js'
 import { startNoShowSweeperJob } from './src/jobs/noShowSweeper.js'
 import { startDailyQrGeneratorJob } from './src/jobs/dailyQrGenerator.js'
 import { startMembershipCron } from './src/jobs/membershipCron.js'
+import { startPayoutAutoConfirmationJob } from './src/jobs/payoutAutoConfirmation.js'
 
 const app = express()
 const allowedOrigins = [...new Set([
@@ -119,6 +121,7 @@ app.use('/api/plan-features', planFeatureRoutes)
 app.use('/api/products', productRoutes)
 app.use('/api/shops', shopRoutes)
 app.use('/api/wallet', walletRoutes)
+app.use('/api/admin', payoutAdminRoutes)
 app.use('/api/addresses', addressRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/seller', sellerRoutes)
@@ -204,6 +207,7 @@ connectDB()
     startDailyQrGeneratorJob()
     // Membership: kích hoạt kỳ gia hạn đúng ngày + nhắc hết hạn 7D/1D
     startMembershipCron()
+    startPayoutAutoConfirmationJob()
     httpServer.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`)
     })

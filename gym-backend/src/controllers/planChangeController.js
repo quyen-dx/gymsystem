@@ -11,6 +11,7 @@ import { createNotification } from '../services/notificationService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createVnpayPaymentUrl } from '../services/vnpayService.js'
 import { cleanupMemberBenefitsOnPlanChange, resolvePlanFeatureCodes } from '../services/membershipService.js'
+import { buildSpendDebitUpdate } from '../services/walletService.js'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
@@ -138,6 +139,7 @@ const executePlanChangeCore = async ({ memberId, newPlanId, expectedDirection, c
         if ((p.price || 0) > 0) {
           const balanceBefore = Number(wallet.balance || 0)
           wallet.balance += p.price
+          wallet.withdrawableBalance = Number(wallet.withdrawableBalance || 0) + p.price
           await wallet.save({ session })
 
           await Transaction.create([{
@@ -178,8 +180,12 @@ const executePlanChangeCore = async ({ memberId, newPlanId, expectedDirection, c
       if (amountToPay > 0) {
         const balanceBefore = Number(wallet.balance || 0)
         if (walletPart > 0) {
-          wallet.balance -= walletPart
-          await wallet.save({ session })
+          wallet = await Wallet.findOneAndUpdate(
+            { _id: wallet._id, balance: { $gte: walletPart } },
+            buildSpendDebitUpdate(walletPart),
+            { new: true, session, updatePipeline: true },
+          )
+          if (!wallet) fail(400, 'Số dư ví không đủ')
         }
 
         if (externalPayment) {
@@ -229,6 +235,7 @@ const executePlanChangeCore = async ({ memberId, newPlanId, expectedDirection, c
       if (creditToWallet > 0) {
         const balanceBefore = Number(wallet.balance || 0)
         wallet.balance += creditToWallet
+        wallet.withdrawableBalance = Number(wallet.withdrawableBalance || 0) + creditToWallet
         await wallet.save({ session })
 
         await Transaction.create([{

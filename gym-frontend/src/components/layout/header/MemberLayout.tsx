@@ -40,6 +40,7 @@ const { Text } = Typography
 const MEMBER_INTERACTION_LOCK_ROUTES = [
   '/',
   '/deposit',
+  '/payouts',
   '/checkout',
   '/orders',
   '/cart',
@@ -118,6 +119,7 @@ export default function MemberLayout({
     ...(isEnabled('checkin.qrCheckinEnabled') ? [{ key: '/checkin', label: 'Check-in', icon: <CreditCardOutlined /> }] : []),
   ]
   const moreNavItems = [
+    { key: '/payouts', label: 'Rút tiền', icon: <CreditCardOutlined /> },
     { key: '/feedback', label: 'Phản hồi', icon: <CommentOutlined /> },
     { key: '/policies', label: 'Chính sách', icon: <FileTextOutlined /> },
     { key: '/help', label: 'Trợ giúp', icon: <QuestionCircleOutlined /> },

@@ -13,6 +13,8 @@ import { finalizePlanPurchase } from '../services/membershipService.js'
 import { finalizePlanChangePurchase } from './planChangeController.js'
 import { finalizePtBookingPayment } from './bookingController.js'
 import { createVnpayPaymentUrl, verifyVnpayReturn } from '../services/vnpayService.js'
+import { createNotification } from '../services/notificationService.js'
+import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import AppError from '../utils/appError.js'
 import { assertPolicyConsent } from '../utils/policyConsent.js'
 
@@ -36,6 +38,14 @@ const calculateDepositCredit = (amount) => {
         bonusRate,
         creditedAmount: depositAmount + bonusAmount,
     }
+}
+
+// Partial checkouts retain the order total on Payment, while VNPay charges
+// only the remaining amount after the wallet contribution.
+const getVnpayChargedAmount = (payment) => {
+    const remainingAmount = Number(payment?.metadata?.remainingAmount)
+    if (Number.isFinite(remainingAmount) && remainingAmount > 0) return remainingAmount
+    return Number(payment?.amount || 0)
 }
 
 const getUsdToVndRate = async () => {
@@ -116,6 +126,7 @@ export const fakeDeposit = async (req, res, next) => {
             status: 'completed',
             metadata: { source: 'system' },
             idempotencyKey: `fake_deposit_${userId}_${Date.now()}`,
+            withdrawableAmount: Number(amount),
         })
 
         return res.status(201).json({ success: true, data: result })
@@ -189,8 +200,13 @@ export const getMyDepositPayments = async (req, res, next) => {
     try {
         const payments = await Payment.find({
             userId: req.user._id,
-            'metadata.purpose': 'WALLET_DEPOSIT',
+            $or: [
+                { 'metadata.purpose': { $in: ['WALLET_DEPOSIT', 'PLAN_PURCHASE', 'PT_BOOKING_PAYMENT'] } },
+                // Older wallet-paid plan payments predate the purpose field.
+                { planId: { $ne: null } },
+            ],
         })
+            .populate('planId', 'nameVi nameEn durationDays')
             .sort({ createdAt: -1 })
             .limit(100)
 
@@ -467,17 +483,32 @@ export const handleVnpayReturn = async (req, res, next) => {
     const payment = await Payment.findOne({ txnRef }).lean()
     if (!payment) return redirectWithStatus('failed')
 
+    const paymentPurpose = payment.metadata?.purpose
+    const paymentRedirectTarget = paymentPurpose === 'PLAN_PURCHASE'
+      ? '/my-membership'
+      : paymentPurpose === 'PT_BOOKING_PAYMENT'
+        ? '/booking'
+        : '/deposit'
+
     // Chống lệch tiền: số tiền VNPay báo phải khớp số tiền giao dịch (vnp_Amount = tiền * 100)
     const vnpAmount = Number(req.query.vnp_Amount)
-    if (vnpAmount && Math.round(Number(payment.amount) * 100) !== vnpAmount) {
-      return redirectWithStatus('failed')
+    if (vnpAmount && Math.round(getVnpayChargedAmount(payment) * 100) !== vnpAmount) {
+      return redirectWithStatus('failed', txnRef, paymentRedirectTarget)
     }
 
     // === Thanh toán gói tập (đăng ký/gia hạn) ===
-    if (payment.metadata?.purpose === 'PLAN_PURCHASE') {
+    if (paymentPurpose === 'PLAN_PURCHASE') {
       const redirectTarget = '/my-membership'
       if (payment.status === 'PAID') return redirectWithStatus('success', txnRef, redirectTarget)
-      if (payment.status !== 'PENDING') return redirectWithStatus('failed', txnRef, redirectTarget)
+      if (payment.status !== 'PENDING') {
+        // Recover a payment that the previous amount check incorrectly marked
+        // FAILED, but only when VNPay now returns a valid success result.
+        if (isPaid && payment.status === 'FAILED') {
+          await Payment.updateOne({ _id: payment._id, status: 'FAILED' }, { $set: { status: 'PENDING' } })
+        } else {
+          return redirectWithStatus('failed', txnRef, redirectTarget)
+        }
+      }
 
       const metaPatch = {
         ...(payment.metadata || {}),
@@ -507,7 +538,7 @@ export const handleVnpayReturn = async (req, res, next) => {
     }
 
     // === Thanh toán đặt lịch PT (trả phần còn thiếu qua VNPay) ===
-    if (payment.metadata?.purpose === 'PT_BOOKING_PAYMENT') {
+    if (paymentPurpose === 'PT_BOOKING_PAYMENT') {
       const redirectTarget = '/booking'
       if (payment.status === 'PAID') return redirectWithStatus('success', txnRef, redirectTarget)
       if (payment.status !== 'PENDING') return redirectWithStatus('failed', txnRef, redirectTarget)
@@ -646,14 +677,14 @@ export const handleVnpayIpn = async (req, res, next) => {
     }
 
     const txnRef = req.query.vnp_TxnRef
-    const payment = await Payment.findOne({ txnRef }).lean()
+    const payment = await Payment.findOne({ txnRef })
     if (!payment) {
       return respond('01', 'Order Not Found')
     }
 
     // Chống lệch tiền: vnp_Amount (đơn vị *100) phải khớp số tiền giao dịch
     const vnpAmount = Number(req.query.vnp_Amount)
-    if (vnpAmount && Math.round(Number(payment.amount) * 100) !== vnpAmount) {
+    if (vnpAmount && Math.round(getVnpayChargedAmount(payment) * 100) !== vnpAmount) {
       return respond('04', 'Invalid Amount')
     }
 

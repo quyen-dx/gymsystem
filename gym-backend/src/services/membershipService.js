@@ -37,6 +37,7 @@ import {
   calcMembershipEndDate,
 } from '../utils/dateUtils.js'
 import { getActivePeriodEndDate } from '../utils/membershipDays.js'
+import { buildSpendDebitUpdate } from './walletService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification, notifyPtMemberChanged } from '../services/notificationService.js'
 import { emitPtClientsUpdated } from '../services/socketService.js'
@@ -179,6 +180,10 @@ const serializeMembership = (membership, cycle, activePeriodEndDate) => {
   const startDate = raw.startDate || cycle?.startDate || null
   const endDate = activePeriodEndDate || raw.endDate || cycle?.expiresAt || null
   const remainingDays = calculateRemainingDays(endDate)
+  // MembershipCycle được cập nhật ngay khi thanh toán/gia hạn thành công.
+  // Membership container có thể còn trạng thái "expired" cho đến khi kỳ PENDING
+  // được đồng bộ, nên không dùng trạng thái cũ đó để chặn quyền lợi hợp lệ.
+  const isActiveCycle = cycle?.status === 'active' && remainingDays > 0
   return {
     id: raw._id,
     _id: raw._id,
@@ -192,7 +197,7 @@ const serializeMembership = (membership, cycle, activePeriodEndDate) => {
     startDate,
     endDate,
     remainingDays,
-    status: remainingDays <= 0 ? 'expired' : raw.status,
+    status: remainingDays <= 0 ? 'expired' : isActiveCycle ? 'active' : raw.status,
     displayStatus: getMembershipDisplayStatus(raw, cycle),
     source: raw.source,
     createdAt: raw.createdAt,
@@ -288,8 +293,8 @@ const subscribeWithWallet = async ({
     if (walletPart > 0) {
       wallet = await Wallet.findOneAndUpdate(
         { userId: memberId, balance: { $gte: walletPart } },
-        { $inc: { balance: -walletPart } },
-        { new: false, session },
+        buildSpendDebitUpdate(walletPart),
+        { new: false, session, updatePipeline: true },
       )
 
       if (!wallet) {
@@ -420,6 +425,13 @@ const subscribeWithWallet = async ({
             source: 'ONLINE',
             paidAt: new Date(),
             metadata: {
+              purpose: 'PLAN_PURCHASE',
+              provider: 'WALLET',
+              mode,
+              durationMultiplier: multiplier,
+              totalAmount: amount,
+              walletUsed: walletPart,
+              remainingAmount: 0,
               walletBalanceBefore: balanceBefore,
               walletBalanceAfter: walletBalance,
             },
@@ -775,6 +787,7 @@ export const createMembershipCheckout = async ({ userId, planId, mode = 'registe
     metadata: {
       purpose: 'PLAN_PURCHASE',
       provider: 'VNPAY',
+      planId: planObjectId,
       mode,
       durationMultiplier: multiplier,
       totalAmount: amount,
@@ -831,7 +844,7 @@ export const finalizePlanPurchase = async ({ paymentId, vnpayQuery = null }) => 
       const meta = payment.metadata || {}
       return subscribeWithWallet({
         userId: payment.userId,
-        planId: meta.planId,
+        planId: meta.planId || payment.planId,
         mode: meta.mode || 'register',
         durationMultiplier: meta.durationMultiplier || 1,
         walletDeductAmount: meta.walletUsed || 0,
@@ -1581,6 +1594,20 @@ const listPayments = async ({ page = 1, limit = 20, status }) => {
 const getMyMembership = async ({ userId }) => {
   const memberId = toObjectId(userId, 'userId')
 
+  // Nếu hội viên gia hạn sau khi gói cũ đã hết hạn, kỳ mới được tạo PENDING
+  // và có ngày bắt đầu là hôm nay/đã qua. Đồng bộ trước khi trả dữ liệu để UI
+  // nhận ngay trạng thái active và quyền lợi của gói vừa gia hạn.
+  const activeCycleRef = await MembershipCycle.findOne({ memberId, status: 'active' })
+    .select('currentMembershipId')
+    .sort({ createdAt: -1 })
+    .lean()
+  if (activeCycleRef?.currentMembershipId) {
+    await lazyActivatePendingPeriods({
+      memberId,
+      membershipId: activeCycleRef.currentMembershipId,
+    })
+  }
+
   // Cycle active là nguồn sự thật duy nhất (kích hoạt ngay khi thanh toán thành công)
   const displayCycle = await MembershipCycle.findOne({ memberId, status: 'active' })
     .populate({ path: 'currentPlanId', populate: { path: 'featureIds', model: 'PlanFeature' } })
@@ -1758,6 +1785,7 @@ const cancelRenewal = async ({ userId, renewalId }) => {
 
       const balanceBefore = Number(wallet.balance || 0)
       wallet.balance = balanceBefore + refundAmount
+      wallet.withdrawableBalance = Number(wallet.withdrawableBalance || 0) + refundAmount
       await wallet.save({ session })
 
       await Transaction.create([{
@@ -1933,14 +1961,18 @@ const rebuildMembershipTimeline = async ({ membershipId, session = null }) => {
 
 }
 
-export const lazyActivatePendingPeriods = async ({ memberId, session = null }) => {
+export const lazyActivatePendingPeriods = async ({ memberId, membershipId = null, session = null }) => {
   const now = new Date()
 
   // 1. Tìm membership hiện tại của member
-  const membership = await Membership.findOne({
+  const membershipFilter = {
     memberId,
     status: { $in: ['active', 'expired'] },
-  }).populate('planId', 'nameVi nameEn')
+  }
+  if (membershipId) membershipFilter._id = membershipId
+
+  const membership = await Membership.findOne(membershipFilter)
+    .populate('planId', 'nameVi nameEn')
   if (!membership) return
 
   // 2. Tìm tất cả các periods thuộc membership này (ngoại trừ các kỳ bị hủy/hoàn tiền)
@@ -2103,6 +2135,7 @@ const refundPeriodToWallet = async ({ period, wallet, session }) => {
   if (!period.price || period.price <= 0) return 0
   const balanceBefore = Number(wallet.balance || 0)
   wallet.balance = balanceBefore + period.price
+  wallet.withdrawableBalance = Number(wallet.withdrawableBalance || 0) + period.price
   await wallet.save({ session })
 
   await Transaction.create([{
@@ -2183,6 +2216,7 @@ const autoCancelPendingPeriod = async ({ userId, periodId }) => {
 
       const balanceBefore = Number(wallet.balance || 0)
       wallet.balance = balanceBefore + refundAmount
+      wallet.withdrawableBalance = Number(wallet.withdrawableBalance || 0) + refundAmount
       await wallet.save({ session })
 
       await Transaction.create([{
@@ -2590,7 +2624,15 @@ export const cleanupMemberPTData = async ({ memberId, session, sourceReason = 'e
     opts,
   )
 
-  const requestCancelFilter = { memberId, status: { $in: ['pending', 'message_sent', 'waiting_assignment', 'assigned'] } }
+  const requestCancelFilter = {
+    memberId,
+    status: {
+      $in: [
+        'pending', 'processing', 'message_sent', 'waiting_member', 'waiting_assignment',
+        'waiting_reassign', 'awaiting_payment', 'assigned', 'class_assigned', 'confirmed', 'active',
+      ],
+    },
+  }
   const requestsBeforeCancel = await TrainingRequest.find(requestCancelFilter).select('_id status').session(session).lean()
   for (const requestBeforeCancel of requestsBeforeCancel) {
     console.log('[REQUEST CANCELLED]', {
@@ -2696,7 +2738,7 @@ function ptTypeFromCodes(codes) {
 
 const PT_TRANSITION_REQUEST_STATUSES = [
   'pending', 'processing', 'message_sent', 'waiting_member', 'waiting_assignment',
-  'waiting_reassign', 'assigned', 'class_assigned', 'active',
+  'waiting_reassign', 'awaiting_payment', 'assigned', 'class_assigned', 'confirmed', 'active',
 ]
 
 /**

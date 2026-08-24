@@ -1119,6 +1119,37 @@ body.policy-modal-open .ai-gympro-floating-chat {
   max-height: 100%;
 }
 
+/* The renewal dialog presents several financial choices.  On desktop it uses
+   a wider, card-based layout; the common modal scroll and action behaviour is
+   retained for smaller viewports. */
+.membership-renew-modal .policy-modal-content {
+  padding-right: 8px;
+}
+
+.membership-renew-modal .renewal-duration-options .renewal-duration-option.ant-radio-button-wrapper {
+  min-height: 102px;
+  border: 1px solid var(--theme-border, var(--gs-border)) !important;
+  border-radius: 10px !important;
+  background: var(--theme-card, var(--gs-card));
+  color: var(--theme-text, var(--gs-text));
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.membership-renew-modal .renewal-duration-options .renewal-duration-option.ant-radio-button-wrapper::before {
+  display: none;
+}
+
+.membership-renew-modal .renewal-duration-options .renewal-duration-option.ant-radio-button-wrapper:hover {
+  border-color: var(--theme-accent, var(--gs-accent)) !important;
+  transform: translateY(-1px);
+}
+
+.membership-renew-modal .renewal-duration-options .renewal-duration-option.ant-radio-button-wrapper-checked {
+  border-color: var(--theme-accent, var(--gs-accent)) !important;
+  background: color-mix(in srgb, var(--theme-accent, var(--gs-accent)) 12%, var(--theme-card, var(--gs-card))) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-accent, var(--gs-accent)) 40%, transparent);
+}
+
 @media (max-width: 640px) {
   :root {
     --header-height: 58px;
@@ -1215,6 +1246,14 @@ body.policy-modal-open .ai-gympro-floating-chat {
 
   .policy-ant-modal .ant-modal-content {
     max-height: calc(100dvh - var(--header-height, 64px) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px);
+  }
+
+  .membership-renew-modal .policy-modal-content {
+    padding-right: 2px;
+  }
+
+  .membership-renew-modal .renewal-duration-options .renewal-duration-option.ant-radio-button-wrapper {
+    min-height: 0;
   }
 }
 

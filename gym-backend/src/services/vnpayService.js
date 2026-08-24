@@ -24,6 +24,17 @@ const formatDate = (date) => {
 
 const encodeValue = (value) => encodeURIComponent(String(value)).replace(/%20/g, '+')
 
+// VNPay hash được tính trên chuỗi query RAW mà nó echo về. Phụ thuộc phiên bản VNPay,
+// dấu cách có thể được encode thành "+" hoặc "%20" → nếu orderInfo chứa ký tự cần
+// encode (khoảng trắng, ký tự đặc biệt), chữ ký bên gửi và bên nhận sẽ lệch nhau.
+// Chuẩn hóa orderInfo chỉ giữ ký tự ASCII an toàn (không cần encode) để chữ ký
+// không bị ảnh hưởng bởi cách VNPay encode.
+const sanitizeOrderInfo = (value) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^A-Za-z0-9_-]/g, '_')
+  .slice(0, 250)
+
 const sortParams = (params) => Object.keys(params)
   .filter((key) => params[key] !== undefined && params[key] !== null && params[key] !== '')
   .sort()
@@ -58,7 +69,6 @@ const getRequiredConfig = () => {
 export const createVnpayPaymentUrl = ({ amount, txnRef, orderInfo, ipAddr, locale = 'vn', bankCode }) => {
   const { tmnCode, hashSecret, paymentUrl } = getRequiredConfig()
   const returnUrl = process.env.VNPAY_RETURN_URL || `${getBackendUrl()}/api/wallet/vnpay-return`
-  const ipnUrl = process.env.VNPAY_IPN_URL || `${getBackendUrl()}/api/wallet/vnpay-ipn`
   const createDate = formatDate(new Date())
   const expireDate = formatDate(new Date(Date.now() + 15 * 60 * 1000))
 
@@ -69,17 +79,20 @@ export const createVnpayPaymentUrl = ({ amount, txnRef, orderInfo, ipAddr, local
     vnp_Amount: Math.round(Number(amount) * 100),
     vnp_CurrCode: 'VND',
     vnp_TxnRef: txnRef,
-    vnp_OrderInfo: orderInfo,
+    vnp_OrderInfo: sanitizeOrderInfo(orderInfo),
     vnp_OrderType: 'other',
     vnp_Locale: locale,
     vnp_ReturnUrl: returnUrl,
-    vnp_IpnUrl: ipnUrl,
     vnp_IpAddr: ipAddr || '127.0.0.1',
     vnp_CreateDate: createDate,
     vnp_ExpireDate: expireDate,
   }
 
   if (bankCode) params.vnp_BankCode = bankCode
+
+  // IPN is configured for the merchant with VNPay, not appended to a PAY
+  // request. `vnp_IpnUrl` is not in the official PAY parameter list and the
+  // sandbox returns Error code 99 when it is supplied for this merchant.
 
   const secureHash = signParams(params, hashSecret)
   return `${paymentUrl}?${stringifyParams({ ...params, vnp_SecureHash: secureHash })}`
@@ -93,5 +106,20 @@ export const verifyVnpayReturn = (query) => {
   delete params.vnp_SecureHashType
 
   if (!secureHash) return false
-  return secureHash.toLowerCase() === signParams(params, hashSecret).toLowerCase()
+  const expected = String(secureHash).toLowerCase()
+
+  // VNPay có thể encode dấu cách thành "+" hoặc "%20" khi echo query về.
+  // Kiểm tra cả 2 dạng để tránh false-negative signature dù giao dịch thật thành công.
+  if (expected === signParams(params, hashSecret).toLowerCase()) return true
+
+  const strictEncode = (value) => encodeURIComponent(String(value))
+  const stringifyStrict = (input) => Object.entries(sortParams(input))
+    .map(([key, value]) => `${strictEncode(key)}=${strictEncode(value)}`)
+    .join('&')
+  const signStrict = (input, secretKey) => crypto
+    .createHmac('sha512', secretKey)
+    .update(Buffer.from(stringifyStrict(input), 'utf-8'))
+    .digest('hex')
+
+  return expected === signStrict(params, hashSecret).toLowerCase()
 }

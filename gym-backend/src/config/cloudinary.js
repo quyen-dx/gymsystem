@@ -49,6 +49,14 @@ const healthPhotoStorage = new CloudinaryStorage({
     },
 });
 
+const payoutProofStorage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+        folder: 'gympro/payout-proofs',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    },
+});
+
 export const productImageUpload = multer({
     storage: productStorage,
     limits: { fileSize: 10 * 1024 * 1024 },
@@ -77,6 +85,17 @@ export const healthPhotoUpload = multer({
     fileFilter: (_req, file, cb) => {
         if (!['image/png', 'image/jpg', 'image/jpeg', 'image/webp'].includes(file.mimetype)) {
             return cb(new Error('Chi ho tro anh JPG, JPEG, PNG hoac WEBP'));
+        }
+        return cb(null, true);
+    },
+});
+
+export const payoutProofUpload = multer({
+    storage: payoutProofStorage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        if (!['image/png', 'image/jpg', 'image/jpeg', 'image/webp'].includes(file.mimetype)) {
+            return cb(new Error('Chỉ hỗ trợ bill ảnh JPG, JPEG, PNG hoặc WEBP'));
         }
         return cb(null, true);
     },

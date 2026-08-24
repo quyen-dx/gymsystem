@@ -91,6 +91,9 @@ export const finalizeWalletDeposit = async ({
             currency,
             exchangeRate,
             paymentMethod: method,
+            // Deposit bonuses remain usable in the wallet but cannot be paid
+            // out. The original customer-funded amount is withdrawable.
+            withdrawableAmount: Number(originalAmount ?? creditAmount),
             metadata: {
                 paymentId: payment ? payment._id : null,
                 txnRef: txnRef || null,

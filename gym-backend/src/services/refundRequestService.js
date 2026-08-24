@@ -261,6 +261,7 @@ export const approveRefundRequest = async ({ refundRequestId, staffId, staffNote
       }
       const balanceBefore = Number(wallet.balance || 0)
       wallet.balance = balanceBefore + amount
+      wallet.withdrawableBalance = Number(wallet.withdrawableBalance || 0) + amount
       await wallet.save({ session })
       await Transaction.create([{
         userId: period.memberId,

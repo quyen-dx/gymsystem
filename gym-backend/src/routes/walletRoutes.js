@@ -2,6 +2,7 @@ import express from 'express'
 import { cancelDeposit, confirmDeposit, confirmStripeCardPayment, createDepositTransaction, createManualQrDepositPayment, createStripePaymentIntent, createVnpayDepositPayment, fakeDeposit, getManualQrDepositInfo, getMyDepositPayments, getMyWallet, getMyWalletTransactions, getStripeExchangeRate, handleManualQrScan, handleVnpayIpn, handleVnpayReturn, simulateManualQrPayment, staffListAllPayments, staffListAllTransactions, transferWallet } from '../controllers/walletController.js'
 import { protect, adminOrStaff } from '../middlewares/authMiddleware.js'
 import { requireFeature } from '../middlewares/systemSettingsMiddleware.js'
+import { memberRouter as payoutMemberRoutes } from './payoutRequestRoutes.js'
 
 const router = express.Router()
 
@@ -29,5 +30,6 @@ router.post('/transfer', transferWallet)
 
 router.get('/staff/transactions', adminOrStaff, staffListAllTransactions)
 router.get('/staff/payments', adminOrStaff, staffListAllPayments)
+router.use('/', payoutMemberRoutes)
 
 export default router

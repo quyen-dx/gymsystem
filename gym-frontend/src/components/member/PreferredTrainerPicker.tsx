@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Avatar, Input, Radio, Spin } from 'antd'
-import { CloseCircleFilled, SearchOutlined } from '@ant-design/icons'
+import { CheckCircleFilled, CloseCircleFilled, SearchOutlined, StarFilled } from '@ant-design/icons'
 import { trainerService } from '../../services/trainerService'
 import { getUserDisplayName } from '../../utils/userDisplay'
 import type { PT } from '../../types/admin/trainer'
@@ -10,6 +10,7 @@ interface PreferredTrainerPickerProps {
   value: PT | null
   onChange: (trainer: PT | null) => void
   hint?: ReactNode
+  showModeToggle?: boolean
 }
 
 function contactOf(t: PT): string {
@@ -18,8 +19,8 @@ function contactOf(t: PT): string {
   return ''
 }
 
-export default function PreferredTrainerPicker({ value, onChange, hint }: PreferredTrainerPickerProps) {
-  const [mode, setMode] = useState<'none' | 'specific'>(value ? 'specific' : 'none')
+export default function PreferredTrainerPicker({ value, onChange, hint, showModeToggle = true }: PreferredTrainerPickerProps) {
+  const [mode, setMode] = useState<'none' | 'specific'>(value || !showModeToggle ? 'specific' : 'none')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<PT[]>([])
   const [loading, setLoading] = useState(false)
@@ -34,11 +35,11 @@ export default function PreferredTrainerPicker({ value, onChange, hint }: Prefer
     if (value) {
       setMode('specific')
       setQuery(getUserDisplayName(value, '') + contactOf(value))
-    } else if (!suppressResetRef.current) {
+    } else if (showModeToggle && !suppressResetRef.current) {
       setMode('none')
     }
     suppressResetRef.current = false
-  }, [value])
+  }, [value, showModeToggle])
 
   useEffect(() => {
     if (mode === 'specific') {
@@ -116,7 +117,7 @@ export default function PreferredTrainerPicker({ value, onChange, hint }: Prefer
 
   const clearSelection = () => {
     onChange(null)
-    setMode('none')
+    setMode(showModeToggle ? 'none' : 'specific')
     setQuery('')
     setResults([])
     setOpen(false)
@@ -124,26 +125,30 @@ export default function PreferredTrainerPicker({ value, onChange, hint }: Prefer
 
   return (
     <div className="space-y-3">
-      <Radio.Group value={mode} onChange={(e) => setMode(e.target.value)}>
-        <div className="flex flex-col gap-2">
-          <Radio value="none">
-            <span className="text-sm">Không yêu cầu PT cụ thể</span>
-          </Radio>
-          <Radio value="specific">
-            <span className="text-sm">Có PT mong muốn</span>
-          </Radio>
-        </div>
-      </Radio.Group>
+      {showModeToggle && (
+        <Radio.Group value={mode} onChange={(e) => setMode(e.target.value)}>
+          <div className="flex flex-col gap-2">
+            <Radio value="none">
+              <span className="text-sm">Không yêu cầu PT cụ thể</span>
+            </Radio>
+            <Radio value="specific">
+              <span className="text-sm">Có PT mong muốn</span>
+            </Radio>
+          </div>
+        </Radio.Group>
+      )}
 
       {mode === 'specific' && (
         <div ref={wrapRef} className="relative">
-          <div className="relative">
+          <div className={`relative rounded-2xl border bg-[var(--gs-card)] px-1.5 py-1 shadow-sm transition-colors ${
+            open ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent-muted)]' : 'border-[var(--theme-border)]'
+          }`}>
             <Input
               value={query}
               onChange={(e) => handleQueryChange(e.target.value)}
               onFocus={openList}
               onClick={openList}
-              placeholder="Tìm PT theo tên..."
+              placeholder="Nhập tên PT bạn muốn tập cùng..."
               prefix={<SearchOutlined style={{ color: 'var(--gs-text-muted)' }} />}
               suffix={
                 value && query ? (
@@ -155,12 +160,37 @@ export default function PreferredTrainerPicker({ value, onChange, hint }: Prefer
                   <Spin size="small" />
                 ) : null
               }
-              className="!rounded-xl"
+              className="!h-10 !border-0 !bg-transparent !shadow-none"
             />
           </div>
 
+          {value && !open && (
+            <div className="mt-3 flex items-center gap-3 rounded-xl border border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] px-3 py-2.5">
+              <Avatar src={value.avatar} size={34} className="shrink-0">
+                {getUserDisplayName(value, 'PT').charAt(0)}
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-[var(--gs-text)]">
+                  <CheckCircleFilled className="text-[var(--theme-accent)]" />
+                  <span className="truncate">Đã chọn {getUserDisplayName(value, 'PT')}</span>
+                </div>
+                {value.specialties?.length > 0 && (
+                  <p className="mt-0.5 truncate text-xs text-[var(--gs-text-muted)]">{value.specialties.slice(0, 3).join(' • ')}</p>
+                )}
+              </div>
+              <button type="button" onClick={openList} className="shrink-0 text-xs font-medium text-[var(--theme-accent)] hover:underline">
+                Đổi PT
+              </button>
+            </div>
+          )}
+
           {open && (
-            <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-[var(--gs-border)] bg-[var(--gs-card)] shadow-lg max-h-[280px] overflow-y-auto">
+            <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-card)] shadow-xl">
+              <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-4 py-3">
+                <span className="text-sm font-semibold text-[var(--gs-text)]">Chọn huấn luyện viên</span>
+                {!loading && <span className="text-xs text-[var(--gs-text-muted)]">{results.length} PT phù hợp</span>}
+              </div>
+              <div className="max-h-[320px] overflow-y-auto p-2">
               {loading && results.length === 0 ? (
                 <div className="flex items-center justify-center py-6">
                   <Spin size="small" />
@@ -171,29 +201,36 @@ export default function PreferredTrainerPicker({ value, onChange, hint }: Prefer
                 </div>
               ) : (
                 results.map((t) => (
-                  <div
+                  <button
                     key={t._id}
+                    type="button"
                     onClick={() => selectTrainer(t)}
-                    className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors hover:bg-[var(--gs-active-bg)] ${
-                      value?._id === t._id ? 'bg-[var(--theme-accent-muted)]' : ''
+                    className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors last:mb-0 hover:bg-[var(--gs-active-bg)] ${
+                      value?._id === t._id ? 'bg-[var(--theme-accent-muted)] ring-1 ring-[var(--theme-accent)]' : ''
                     }`}
                   >
-                    <Avatar src={t.avatar} size={36} className="shrink-0">
+                    <Avatar src={t.avatar} size={42} className="shrink-0">
                       {getUserDisplayName(t, 'PT').charAt(0)}
                     </Avatar>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-[var(--gs-text)] truncate">
-                        {getUserDisplayName(t)}
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-[var(--gs-text)]">{getUserDisplayName(t)}</span>
+                        {value?._id === t._id && <CheckCircleFilled className="shrink-0 text-[var(--theme-accent)]" />}
                       </div>
-                      <div className="flex flex-wrap items-center gap-x-2 text-xs text-[var(--gs-text-muted)]">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--gs-text-muted)]">
                         {t.specialties?.length > 0 && (
-                          <span>{t.specialties.join(' • ')}</span>
+                          <span className="max-w-[210px] truncate">{t.specialties.slice(0, 3).join(' • ')}</span>
                         )}
+                        {Number(t.rating || 0) > 0 && (
+                          <span className="inline-flex items-center gap-1"><StarFilled className="text-amber-400" />{Number(t.rating).toFixed(1)}</span>
+                        )}
+                        {Number(t.experienceYears || 0) > 0 && <span>{t.experienceYears} năm kinh nghiệm</span>}
                       </div>
                     </div>
-                  </div>
+                  </button>
                 ))
               )}
+              </div>
             </div>
           )}
 

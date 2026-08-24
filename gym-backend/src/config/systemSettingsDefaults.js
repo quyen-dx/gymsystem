@@ -48,6 +48,10 @@ export const SYSTEM_SETTINGS_DEFAULTS = {
     discountCodesEnabled: true,
     qrPaymentEnabled: true,
     planMemberCountEnabled: true,
+    payoutMinAmount: 10000,
+    payoutAutoConfirmHours: 72,
+    payoutAdminReminderHours: 24,
+    payoutAutoCancelHours: 48,
   },
   checkin: {
     qrCheckinEnabled: true,

@@ -499,6 +499,7 @@ export const approveCancellationRequest = async (req, res, next) => {
 
         const balanceBefore = Number(wallet.balance || 0);
         wallet.balance = balanceBefore + refundAmount;
+        wallet.withdrawableBalance = Number(wallet.withdrawableBalance || 0) + refundAmount;
         await wallet.save({ session });
 
         await Transaction.create(

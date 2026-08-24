@@ -49,7 +49,7 @@ export default function MyMembershipPage() {
   const [renewModalOpen, setRenewModalOpen] = useState(false)
   const [renewing, setRenewing] = useState(false)
   const [selectedMultiplier, setSelectedMultiplier] = useState(1)
-  const [, setRenewals] = useState<MembershipRenewal[]>([])
+  const [renewals, setRenewals] = useState<MembershipRenewal[]>([])
   const [periods, setPeriods] = useState<MembershipPeriod[]>([])
   const [cancelPeriodModal, setCancelPeriodModal] = useState<{ open: boolean; period: MembershipPeriod | null }>({ open: false, period: null })
   const [cancellingPeriod, setCancellingPeriod] = useState(false)
@@ -197,7 +197,12 @@ export default function MyMembershipPage() {
         )
         setConsentSubmitted(true)
       }
-      const res = await membershipService.checkoutRenew(selectedMultiplier)
+      const activePlanId = membership?.planId || membership?.plan?._id
+      if (!activePlanId) {
+        throw new Error('Không xác định được gói tập cần gia hạn. Vui lòng tải lại trang.')
+      }
+
+      const res = await membershipService.checkoutRenew(activePlanId, selectedMultiplier)
       if (res.data?.status === 'PAID') {
         setRenewResult({
           newEndDate: res.data.newEndDate,
@@ -698,6 +703,38 @@ export default function MyMembershipPage() {
                   ),
                 },
                 {
+                  key: 'payments',
+                  label: `Lịch sử thanh toán (${renewals.length})`,
+                  children: renewals.length === 0 ? (
+                    <Empty description="Chưa có giao dịch gia hạn nào" />
+                  ) : (
+                    <div className="space-y-3">
+                      {renewals.map((renewal) => {
+                        const renewalPlan = renewal.plan || (typeof renewal.planId === 'object' ? renewal.planId : null)
+                        const renewalPlanName = renewalPlan?.nameVi || planName
+                        return (
+                          <Card key={renewal._id} size="small" className="border-[var(--gs-border)] bg-[var(--gs-elevated)]" styles={{ body: { padding: '16px' } }}>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-semibold text-[var(--gs-text)]">Gia hạn {renewalPlanName}</span>
+                                  <Tag icon={<CheckCircleFilled />} color="success">Đã thanh toán</Tag>
+                                </div>
+                                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--gs-text-soft)]">
+                                  <span>{dayjs(renewal.renewedAt).format('DD/MM/YYYY HH:mm')}</span>
+                                  <span>+{renewal.days} ngày</span>
+                                  <span>{formatDate(renewal.oldEndDate)} → {formatDate(renewal.newEndDate)}</span>
+                                </div>
+                              </div>
+                              <span className="text-sm font-bold text-[var(--gs-accent)]">{formatMoney(renewal.price)}</span>
+                            </div>
+                          </Card>
+                        )
+                      })}
+                    </div>
+                  ),
+                },
+                {
                   key: 'cancelled',
                   label: `Đã hủy (${cancelledPeriods.length})`,
                   children: cancelledPeriods.length === 0 ? (
@@ -765,20 +802,20 @@ export default function MyMembershipPage() {
         onCancel={() => setRenewModalOpen(false)}
         destroyOnClose
         footer={null}
-        className="policy-ant-modal"
-        width={640}
+        className="policy-ant-modal membership-renew-modal"
+        width={760}
         centered
       >
         <div className="policy-modal-shell">
           <div className="policy-modal-content">
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="rounded-xl border border-[var(--gs-border)] bg-[var(--gs-elevated)] p-4 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm text-[var(--gs-text-soft)]">Gói tập</span>
                   <span className="text-sm font-semibold text-[var(--gs-text)]">{planName}</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-sm max-[480px]:grid-cols-1">
+                <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4 max-[480px]:grid-cols-1">
                   <div className="rounded-lg border border-[var(--gs-border)] p-3">
                     <div className="text-xs text-[var(--gs-text-muted)]">Thời hạn hiện tại</div>
                     <div className="mt-0.5 font-semibold">{planDays} ngày</div>
@@ -802,7 +839,7 @@ export default function MyMembershipPage() {
                 <div className="border-t border-[var(--gs-border)] pt-3">
                   <span className="text-sm font-medium text-[var(--gs-text-soft)]">Chọn thời gian gia hạn</span>
                   <Radio.Group
-                    className="mt-2 w-full"
+                    className="renewal-duration-options mt-2 grid w-full grid-cols-1 gap-2 sm:grid-cols-3"
                     value={selectedMultiplier}
                     onChange={(e) => setSelectedMultiplier(e.target.value)}
                   >
@@ -813,10 +850,9 @@ export default function MyMembershipPage() {
                           <Radio.Button
                             key={m}
                             value={m}
-                            className="!flex !h-auto !w-full !items-center !px-4 !py-3 [&:not(:first-child)]:!border-t-0"
-                            style={{ border: '1px solid var(--gs-border)', borderRadius: 0 }}
+                            className="renewal-duration-option !m-0 !flex !h-auto !w-full !items-stretch !px-3 !py-3"
                           >
-                            <div className="flex w-full items-center justify-between gap-4">
+                            <div className="flex w-full flex-col gap-1.5 text-left">
                               <div className="flex flex-col gap-1">
                                 <span className="text-sm font-semibold text-[var(--gs-success)]">
                                   + {days} ngày ({m} tháng)
@@ -825,7 +861,7 @@ export default function MyMembershipPage() {
                                   Hết hạn: {newEnd.format('DD/MM/YYYY')}
                                 </span>
                               </div>
-                              <span className="text-sm font-bold text-[var(--gs-text)]">
+                              <span className="mt-1 text-sm font-bold text-[var(--gs-text)]">
                                 {formatMoney(planPrice * m)}
                               </span>
                             </div>
