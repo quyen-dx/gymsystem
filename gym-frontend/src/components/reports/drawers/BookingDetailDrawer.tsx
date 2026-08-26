@@ -1,5 +1,5 @@
 import { Select, Space, Tag } from 'antd'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ColumnsType } from 'antd/es/table'
 import { reportService } from '../../../services/reportService'
 import type { BookingRow, ReportRangeState } from '../../../types/report'
@@ -28,11 +28,16 @@ export default function BookingDetailDrawer({ open, title, range, filters, onClo
   const [statusFilter, setStatusFilter] = useState<string | undefined>(filters?.status)
   const [types, setTypes] = useState<Array<{ key: string; label: string }>>([])
 
+  useEffect(() => {
+    if (open) setStatusFilter(filters?.status)
+  }, [open, filters?.status])
+
   const columns: ColumnsType<BookingRow> = [
     { title: 'Mã', dataIndex: 'code', width: 110, render: (v: string) => <span className="font-mono text-[11px] text-[var(--gs-text-soft)]">{String(v).substring(0, 10).toUpperCase()}</span> },
     { title: 'Hội viên', dataIndex: 'memberName', width: 150, render: (_: any, row: BookingRow) => <span className="text-xs text-[var(--gs-text)]">{row.memberName || '-'}</span> },
     { title: 'PT', dataIndex: 'ptName', width: 140, render: (v: string) => <span className="text-xs text-[var(--gs-text)]">{v || '-'}</span> },
     { title: 'Ngày', dataIndex: 'date', width: 110, render: (v?: string) => (v ? <span className="text-xs text-[var(--gs-text-soft)]">{new Date(v).toLocaleDateString('vi-VN')}</span> : '-') },
+    { title: 'Đặt lúc', dataIndex: 'createdAt', width: 130, render: (v?: string) => (v ? <span className="text-xs text-[var(--gs-text-soft)]">{new Date(v).toLocaleString('vi-VN')}</span> : '-') },
     { title: 'Giờ', dataIndex: 'slot', width: 90, render: (v: string) => <span className="text-xs text-[var(--gs-text)]">{v || '-'}</span> },
     { title: 'Loại', dataIndex: 'trainingType', width: 90, render: (v?: string) => <Tag color={v === 'group' ? 'purple' : 'blue'}>{v === 'group' ? 'Nhóm' : 'PT 1-1'}</Tag> },
     { title: 'Trạng thái', dataIndex: 'statusLabel', width: 120, render: (_: any, row: BookingRow) => <Tag color={STATUS_COLORS[row.status] || 'default'}>{row.statusLabel}</Tag> },
@@ -50,7 +55,7 @@ export default function BookingDetailDrawer({ open, title, range, filters, onClo
         if (!types.length && res.data.types) setTypes(res.data.types)
         return res.data
       }}
-      buildParams={() => ({ ...range, ...filters, status: statusFilter })}
+      buildParams={() => ({ ...range, ...filters, status: statusFilter ?? filters?.status })}
       filterBar={
         <Space className="mb-3 flex flex-wrap gap-2">
           <Select

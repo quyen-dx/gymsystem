@@ -677,7 +677,7 @@ export const getMyBookings = async (req, res) => {
 
 export const getPTBookings = async (req, res) => {
   try {
-    const { filter, memberId, status, from } = req.query
+    const { filter, memberId, status, from, activeOnly } = req.query
 
     const query = {
       ptId: req.user._id,
@@ -701,6 +701,8 @@ export const getPTBookings = async (req, res) => {
 
     if (status) {
       query.status = status
+    } else if (activeOnly === 'true') {
+      query.status = { $in: ['pending', 'awaiting_payment', 'confirmed'] }
     }
 
     if (from === 'today') {
@@ -797,7 +799,9 @@ export const confirmBooking = async (req, res) => {
     }
 
     booking.status = 'confirmed'
-    booking.paymentStatus = booking.paymentStatus === 'paid' ? 'paid' : 'unpaid'
+    // Đặt lịch PT không còn có bước thanh toán riêng. Giữ paid cho dữ liệu
+    // cũ đã thu tiền; các booking mới được đánh dấu rõ là không cần thanh toán.
+    booking.paymentStatus = booking.paymentStatus === 'paid' ? 'paid' : 'not_required'
     booking.paymentDeadline = null
     await booking.save({ session })
 

@@ -54,7 +54,9 @@ const bookingSchema = new mongoose.Schema(
 
     paymentStatus: {
       type: String,
-      enum: ['unpaid', 'pending', 'paid', 'failed', 'expired', 'refunded'],
+      // not_required: đặt lịch PT không thu phí riêng; vẫn là booking hợp lệ
+      // để check-in và nghiệp vụ no-show có thể xử lý.
+      enum: ['unpaid', 'pending', 'paid', 'not_required', 'failed', 'expired', 'refunded'],
       default: 'unpaid',
       index: true,
     },

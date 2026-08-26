@@ -13,6 +13,7 @@ import TrainingClass from '../models/TrainingClass.js'
 import ShiftChangeRequest from '../models/ShiftChangeRequest.js'
 import RefundRequest from '../models/RefundRequest.js'
 import MembershipPeriod from '../models/MembershipPeriod.js'
+import MembershipRenewal from '../models/MembershipRenewal.js'
 import MembershipCycle from '../models/MembershipCycle.js'
 import MembershipCancellationRequest from '../models/MembershipCancellationRequest.js'
 import PlanChangeHistory from '../models/PlanChangeHistory.js'
@@ -270,7 +271,7 @@ const sumInRange = async (Model, match, field, { from, to }) => {
 // ---------------------------------------------------------------------------
 
 const collectRevenueStreams = async ({ from, to }) => {
-  const [membership, shop, deposit, refund] = await Promise.all([
+  const [membership, shop, deposit, refund, payout] = await Promise.all([
     Payment.aggregate([
       { $match: { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: from, $lt: to } } },
       { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
@@ -287,12 +288,18 @@ const collectRevenueStreams = async ({ from, to }) => {
       { $match: { status: COMPLETED_TXN, type: { $in: ['refund', 'REFUND_TO_WALLET'] }, createdAt: { $gte: from, $lt: to } } },
       { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
     ]),
+    Transaction.aggregate([
+      { $match: { status: COMPLETED_TXN, type: 'payout', createdAt: { $gte: from, $lt: to } } },
+      { $group: { _id: null, count: { $sum: 1 } } },
+    ]),
   ])
   return {
     membership: membership[0]?.total || 0,
     shop: shop[0]?.total || 0,
     deposit: deposit[0]?.total || 0,
     refund: refund[0]?.total || 0,
+    refundCount: refund[0]?.count || 0,
+    payoutCount: payout[0]?.count || 0,
     membershipCount: membership[0]?.count || 0,
     shopCount: shop[0]?.count || 0,
     depositCount: deposit[0]?.count || 0,
@@ -318,8 +325,9 @@ export const getSummary = async ({ range = '30d', from, to } = {}) => {
     User.countDocuments(),
   ])
 
-  const curRevenue = revenue.membership + revenue.shop + revenue.deposit
-  const prevTotal = prevRevenue.membership + prevRevenue.shop + prevRevenue.deposit
+  // Wallet top-ups are customer funds held by the platform, not revenue.
+  const curRevenue = revenue.membership + revenue.shop
+  const prevTotal = prevRevenue.membership + prevRevenue.shop
 
   const modules = [
     {
@@ -415,24 +423,25 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
     ]),
   ])
 
-  const revenue = cur.membership + cur.shop + cur.deposit
-  const prevRevenue = prev.membership + prev.shop + prev.deposit
-  const txCount = cur.membershipCount + cur.shopCount + cur.depositCount
+  // A wallet-funded purchase already has a Payment/Order record. Counting a
+  // top-up as revenue would therefore overstate revenue and double-count it.
+  const revenue = cur.membership + cur.shop
+  const prevRevenue = prev.membership + prev.shop
+  const txCount = cur.membershipCount + cur.shopCount + cur.depositCount + cur.refundCount + cur.payoutCount
   const days = Math.max(1, Math.ceil((r.to - r.from) / DAY_MS))
 
   // Daily revenue series (all streams combined)
-  const [membershipDaily, shopDaily, depositDaily] = await Promise.all([
+  const [membershipDaily, shopDaily] = await Promise.all([
     dailySeries(Payment, { status: PAID_PAYMENT_STATUSES }, 'amount', { from: r.from, to: r.to }),
     dailySeries(Order, { paymentStatus: 'paid' }, 'totalAmount', { from: r.from, to: r.to }),
-    dailySeries(Transaction, { status: COMPLETED_TXN, type: 'deposit' }, 'amount', { from: r.from, to: r.to }),
   ])
   const revenueLabels = membershipDaily.labels
-  const revenueByDay = revenueLabels.map((_, i) => membershipDaily.data[i] + shopDaily.data[i] + depositDaily.data[i])
+  const revenueByDay = revenueLabels.map((_, i) => membershipDaily.data[i] + shopDaily.data[i])
 
   // Monthly revenue (12 calendar months)
   const endParts = calendarParts(new Date(r.to.getTime() - 1))
   const monthFrom = startOfMonth(endParts.year, endParts.month - 11)
-  const [mPay, mShop, mDep] = await Promise.all([
+  const [mPay, mShop] = await Promise.all([
     Payment.aggregate([
       { $match: { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: monthFrom, $lt: r.to } } },
       { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: TZ } }, total: { $sum: '$amount' } } },
@@ -441,13 +450,9 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
       { $match: { paymentStatus: 'paid', createdAt: { $gte: monthFrom, $lt: r.to } } },
       { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: TZ } }, total: { $sum: '$totalAmount' } } },
     ]),
-    Transaction.aggregate([
-      { $match: { status: COMPLETED_TXN, type: 'deposit', createdAt: { $gte: monthFrom, $lt: r.to } } },
-      { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: TZ } }, total: { $sum: '$amount' } } },
-    ]),
   ])
   const monthMap = new Map()
-  for (const x of [...mPay, ...mShop, ...mDep]) {
+  for (const x of [...mPay, ...mShop]) {
     monthMap.set(x._id, (monthMap.get(x._id) || 0) + x.total)
   }
   const monthLabelsArr = monthLabels(monthFrom, r.to)
@@ -511,7 +516,7 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
 
   const kpis = [
     { key: 'totalRevenue', label: 'Tổng doanh thu', value: revenue, delta: pct(revenue, prevRevenue), format: 'money', icon: 'revenue', sparkline: revenueByDay },
-    { key: 'transactions', label: 'Tổng giao dịch', value: txCount, delta: pct(txCount, prev.membershipCount + prev.shopCount + prev.depositCount), format: 'number', icon: 'orders', sparkline: [] },
+    { key: 'transactions', label: 'Tổng giao dịch', value: txCount, delta: pct(txCount, prev.membershipCount + prev.shopCount + prev.depositCount + prev.refundCount + prev.payoutCount), format: 'number', icon: 'orders', sparkline: [] },
     { key: 'refunds', label: 'Tổng hoàn tiền', value: cur.refund, delta: null, format: 'money', icon: 'refund', sparkline: refundRows.map((x) => x.total) },
     { key: 'avgPerDay', label: 'Doanh thu TB/ngày', value: Math.round(revenue / days), delta: pct(revenue / days, prevRevenue / days), format: 'money', icon: 'avg', sparkline: [] },
   ]
@@ -537,8 +542,8 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
       revenueSource: {
         type: 'pie',
         title: 'Cơ cấu nguồn thu',
-        labels: ['Gói tập', 'Shop', 'Nạp ví'],
-        series: [{ name: 'Nguồn thu', data: [cur.membership, cur.shop, cur.deposit] }],
+        labels: ['Gói tập', 'Shop'],
+        series: [{ name: 'Nguồn doanh thu', data: [cur.membership, cur.shop] }],
       },
       revenueByPlan: {
         type: 'bar',
@@ -582,8 +587,8 @@ export const getMembers = async ({ range = '30d', from, to } = {}) => {
     User.countDocuments({ role: 'member' }),
     countInRange(User, { role: 'member' }, { from: r.from, to: r.to }),
     countInRange(User, { role: 'member' }, { from: r.prevFrom, to: r.prevTo }),
-    countInRange(MembershipPeriod, { status: 'ACTIVE' }, { from: r.from, to: r.to }),
-    countInRange(MembershipPeriod, { status: 'ACTIVE' }, { from: r.prevFrom, to: r.prevTo }),
+    MembershipRenewal.countDocuments({ status: 'ACTIVE', renewedAt: { $gte: r.from, $lt: r.to } }),
+    MembershipRenewal.countDocuments({ status: 'ACTIVE', renewedAt: { $gte: r.prevFrom, $lt: r.prevTo } }),
     countInRange(PlanChangeHistory, { changeType: { $in: ['change_plan', 'upgrade', 'downgrade'] } }, { from: r.from, to: r.to }),
     countInRange(MembershipCancellationRequest, { status: { $in: ['pending', 'approved'] } }, { from: r.from, to: r.to }),
     countInRange(CheckIn, { status: 'success' }, { from: r.from, to: r.to }),
@@ -599,7 +604,7 @@ export const getMembers = async ({ range = '30d', from, to } = {}) => {
     countSeries(User, { role: 'member' }, { from: r.from, to: r.to }),
     countSeries(CheckIn, { status: 'success' }, { from: r.from, to: r.to, dateField: 'checkinTime' }),
     countSeries(MembershipCancellationRequest, { status: { $in: ['pending', 'approved'] } }, { from: r.from, to: r.to }),
-    countSeries(MembershipPeriod, { status: 'ACTIVE' }, { from: r.from, to: r.to }),
+    countSeries(MembershipRenewal, { status: 'ACTIVE' }, { from: r.from, to: r.to, dateField: 'renewedAt' }),
   ])
 
   // Top most-active members (check-ins)
@@ -860,7 +865,7 @@ export const getBooking = async ({ range = '30d', from, to } = {}) => {
     charts: {
       bookingByDay: {
         type: 'line',
-        title: 'Booking theo ngày',
+        title: 'Lượt đặt lịch theo ngày tạo',
         labels: byDay.labels,
         pointKeys: byDay.keys,
         series: [{ name: 'Booking', data: byDay.data }],
@@ -1002,7 +1007,9 @@ export const getShop = async ({ range = '30d', from, to } = {}) => {
   const sellerNameMap = new Map(sellerUsers.map((u) => [String(u._id), getDisplayName(u, 'Seller')]))
 
   const avgOrderValue = ordersNow > 0 ? Math.round(revenueNow / ordersNow) : 0
-  const returnRate = ordersNow > 0 ? Math.round(((ordersNow - deliveredCount) / ordersNow) * 1000) / 10 : 0
+  // There is no returned-order status in the model. This is the rate of paid
+  // orders that have not completed delivery, not a refund/return rate.
+  const undeliveredRate = ordersNow > 0 ? Math.round(((ordersNow - deliveredCount) / ordersNow) * 1000) / 10 : 0
   const cancelRate = totalOrders > 0 ? Math.round((failedOrders / totalOrders) * 1000) / 10 : 0
 
   const kpis = [
@@ -1013,8 +1020,8 @@ export const getShop = async ({ range = '30d', from, to } = {}) => {
     { key: 'lockedShops', label: 'Shop bị khóa', value: lockedShops, delta: null, format: 'number', icon: 'cancel', sparkline: [] },
     { key: 'newShops', label: 'Shop mới tham gia', value: newShops, delta: pct(newShops, newShopsPrev), format: 'number', icon: 'new', sparkline: [] },
     { key: 'avgOrderValue', label: 'Giá trị đơn TB', value: avgOrderValue, delta: null, format: 'money', icon: 'avg', sparkline: [] },
-    { key: 'returnRate', label: 'Tỷ lệ hoàn đơn', value: returnRate, delta: null, format: 'percent', icon: 'return', sparkline: [] },
-    { key: 'cancelRate', label: 'Tỷ lệ hủy đơn', value: cancelRate, delta: null, format: 'percent', icon: 'cancel', sparkline: [] },
+    { key: 'returnRate', label: 'Tỷ lệ chưa giao xong', value: undeliveredRate, delta: null, format: 'percent', icon: 'return', sparkline: [] },
+    { key: 'cancelRate', label: 'Tỷ lệ thanh toán thất bại', value: cancelRate, delta: null, format: 'percent', icon: 'cancel', sparkline: [] },
   ]
 
   return {
@@ -1058,8 +1065,8 @@ export const getShop = async ({ range = '30d', from, to } = {}) => {
       },
       returnRate: {
         type: 'pie',
-        title: 'Trạng thái đơn hàng',
-        labels: [`Giao thành công (${deliveredCount})`, `Khác (${ordersNow - deliveredCount})`],
+        title: 'Tiến độ giao các đơn đã thanh toán',
+        labels: [`Giao thành công (${deliveredCount})`, `Chưa giao xong (${ordersNow - deliveredCount})`],
         series: [{ name: 'Đơn', data: [deliveredCount, ordersNow - deliveredCount] }],
       },
     },
@@ -1069,7 +1076,7 @@ export const getShop = async ({ range = '30d', from, to } = {}) => {
       topSellers: { title: 'Seller doanh thu cao nhất', items: bySeller.map((s) => ({ id: s._id, label: sellerNameMap.get(String(s._id)) || 'Seller', value: s.total, sub: `${s.count} sản phẩm`, color: '#8b5cf6' })) },
       topSellingProducts: { title: 'Sản phẩm bán chạy', items: prodQty.map((p) => ({ id: p._id, label: p._id, value: p.total, sub: 'lượt bán', color: '#3b82f6' })) },
       topProducts: { title: 'Sản phẩm doanh thu cao', items: prodRevenue.map((p) => ({ id: p._id, label: p._id, value: p.total, sub: 'doanh thu', color: '#f59e0b' })) },
-      topReturned: { title: 'Sản phẩm bị hoàn nhiều', items: mostReturned.map((p) => ({ id: p._id, label: p._id, value: p.total, sub: 'lượt thất bại', color: '#ef4444' })) },
+      topReturned: { title: 'Sản phẩm có thanh toán thất bại', items: mostReturned.map((p) => ({ id: p._id, label: p._id, value: p.total, sub: 'lượt thất bại', color: '#ef4444' })) },
     },
   }
 }
@@ -1167,6 +1174,7 @@ const txTypeMeta = {
   deposit: { label: 'Nạp ví', color: 'blue' },
   shop: { label: 'Mua hàng', color: 'magenta' },
   refund: { label: 'Hoàn tiền', color: 'red' },
+  payout: { label: 'Rút tiền', color: 'orange' },
 }
 
 export const getTransactions = async ({ range = '30d', from, to, date, timestamp, type, status, search, memberId, ptId, shopId, planId, page = 1, pageSize = 20 } = {}) => {
@@ -1209,24 +1217,25 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
     pt: p.metadata?.ptName || '',
   }))
 
-  // Deposits & refunds
+  // Wallet movements not already represented by a membership payment/order.
   const walletTxns = await Transaction.aggregate([
-    { $match: { ...memberMatch, status: COMPLETED_TXN, type: { $in: ['deposit', 'refund', 'REFUND_TO_WALLET'] }, createdAt: { $gte: r.from, $lt: r.to } } },
+    { $match: { ...memberMatch, status: COMPLETED_TXN, type: { $in: ['deposit', 'refund', 'REFUND_TO_WALLET', 'payout'] }, createdAt: { $gte: r.from, $lt: r.to } } },
     { $sort: { createdAt: -1 } },
     { $limit: 500 },
   ])
   walletTxns.forEach((t) => {
     const isRefund = ['refund', 'REFUND_TO_WALLET'].includes(t.type)
+    const isPayout = t.type === 'payout'
     txns.push({
       id: t._id,
       code: t.referenceId || String(t._id),
       memberId: t.userId,
       plan: '',
-      type: isRefund ? 'refund' : 'deposit',
+      type: isRefund ? 'refund' : (isPayout ? 'payout' : 'deposit'),
       paymentMethod: t.paymentMethod || t.provider || '',
-      amount: t.amount,
+      amount: isRefund ? 0 : t.amount,
       discount: 0,
-      refund: isRefund ? t.amount : 0,
+      refund: isRefund ? Math.abs(t.amount || 0) : 0,
       status: t.status,
       time: t.completedAt || t.createdAt,
       note: t.description || '',
@@ -1236,7 +1245,7 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
   })
 
   // Shop orders
-  const orderMatch = { ...memberMatch, createdAt: { $gte: r.from, $lt: r.to } }
+  const orderMatch = { ...memberMatch, paymentStatus: 'paid', createdAt: { $gte: r.from, $lt: r.to } }
   if (shopId) orderMatch.shopId = shopId
   const orders = await Order.find(orderMatch).sort({ createdAt: -1 }).limit(500).lean()
   const shopIds = [...new Set(orders.map((o) => o.shopId).filter(Boolean))]
@@ -1253,7 +1262,7 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
       plan: shopMap.get(String(o.shopId)) || '',
       type: 'shop',
       paymentMethod: o.paymentStatus,
-      amount: o.paymentStatus === 'paid' ? o.totalAmount || 0 : 0,
+      amount: o.totalAmount || 0,
       discount: o.discountAmount || 0,
       refund: 0,
       status: o.status,
@@ -1263,6 +1272,10 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
       pt: '',
     })
   })
+
+  // Sources are fetched independently; merge them into a genuine time-ordered
+  // ledger before filtering and paginating.
+  txns.sort((a, b) => new Date(b.time || 0).getTime() - new Date(a.time || 0).getTime())
 
   // Member info
   const memberIds = [...new Set(txns.map((t) => t.memberId).filter(Boolean))]
@@ -1340,10 +1353,10 @@ export const getMemberActivity = async ({ range = '30d', from, to, date, timesta
   }
 
   if (!type || type === 'renew') {
-    const periods = await MembershipPeriod.find({ status: 'ACTIVE', createdAt: { $gte: r.from, $lt: r.to } })
+    const periods = await MembershipRenewal.find({ status: 'ACTIVE', renewedAt: { $gte: r.from, $lt: r.to } })
       .populate('memberId', 'fullName name username email memberCode')
       .populate('planId', 'nameVi')
-      .sort({ createdAt: -1 })
+      .sort({ renewedAt: -1 })
       .limit(1000)
       .lean()
     periods.forEach((p) => {
@@ -1355,8 +1368,8 @@ export const getMemberActivity = async ({ range = '30d', from, to, date, timesta
         plan: p.planId?.nameVi || '',
         activityType: 'renew',
         activityLabel: 'Gia hạn',
-        detail: `Gia hạn đến ${p.endDate ? new Date(p.endDate).toLocaleDateString('vi-VN') : '-'}`,
-        time: p.createdAt,
+        detail: `Gia hạn đến ${p.newEndDate ? new Date(p.newEndDate).toLocaleDateString('vi-VN') : '-'}`,
+        time: p.renewedAt || p.createdAt,
       })
     })
   }
@@ -1478,7 +1491,16 @@ export const getBookings = async ({ range = '30d', from, to, date, ptId, status,
   const users = userIds.length ? await User.find({ _id: { $in: userIds } }).select('fullName name username email memberCode').lean() : []
   const userMap = new Map(users.map((u) => [String(u._id), u]))
 
-  const statusMap = { pending: 'Chờ xử lý', awaiting_payment: 'Chờ thanh toán', confirmed: 'Đã xác nhận', cancelled: 'Đã hủy', completed: 'Hoàn tất' }
+  const statusMap = {
+    pending: 'Chờ xử lý',
+    awaiting_payment: 'Chờ thanh toán',
+    confirmed: 'Đã xác nhận',
+    cancelled: 'Đã hủy',
+    completed: 'Hoàn tất',
+    member_no_show: 'Hội viên vắng mặt',
+    pt_no_show: 'PT vắng mặt',
+    needs_review: 'Cần kiểm tra',
+  }
 
   return {
     range: r,
@@ -1496,6 +1518,7 @@ export const getBookings = async ({ range = '30d', from, to, date, ptId, status,
       status: b.status,
       statusLabel: statusMap[b.status] || b.status,
       paymentStatus: b.paymentStatus,
+      createdAt: b.createdAt,
     })),
     total,
     page: Number(page),
@@ -1550,6 +1573,7 @@ export const getOrders = async ({ range = '30d', from, to, date, shopId, sellerI
   const sellerMap = new Map(sellers.map((u) => [String(u._id), getDisplayName(u, '')]))
 
   const statusMap = { 'CHỜ XÁC NHẬN': 'Chờ xác nhận', 'ĐANG GIAO HÀNG': 'Đang giao hàng', 'GIAO THÀNH CÔNG': 'Giao thành công' }
+  const paymentStatusMap = { unpaid: 'Chưa thanh toán', paid: 'Đã thanh toán', failed: 'Thanh toán thất bại' }
 
   return {
     range: r,
@@ -1569,12 +1593,16 @@ export const getOrders = async ({ range = '30d', from, to, date, shopId, sellerI
       status: o.status,
       statusLabel: statusMap[o.status] || o.status,
       paymentStatus: o.paymentStatus,
+      paymentStatusLabel: paymentStatusMap[o.paymentStatus] || o.paymentStatus,
       time: o.createdAt,
     })),
     total,
     page: Number(page),
     pageSize: limit,
-    types: Object.entries(statusMap).map(([key, label]) => ({ key, label })),
+    types: [
+      ...Object.entries(statusMap).map(([key, label]) => ({ key, label })),
+      ...Object.entries(paymentStatusMap).map(([key, label]) => ({ key, label })),
+    ],
   }
 }
 

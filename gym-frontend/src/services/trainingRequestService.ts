@@ -96,7 +96,8 @@ export const ACTIVE_TRAINING_REQUEST_STATUSES = [
 ] as const
 
 export const trainingRequestService = {
-  create: (data: Partial<TrainingRequest>) => api.post('/training-requests', data),
+  create: (data: Partial<TrainingRequest>) =>
+    api.post<{ message: string; request: TrainingRequest; autoApproved?: boolean }>('/training-requests', data),
   getMyRequests: (params?: { type?: string; status?: string; activeOnly?: boolean }) =>
     api.get<{ requests: TrainingRequest[] }>('/training-requests/my', { params }),
   cancelMyRequest: (id: string, reason?: string) => api.patch(`/training-requests/my/${id}/cancel`, { reason }),

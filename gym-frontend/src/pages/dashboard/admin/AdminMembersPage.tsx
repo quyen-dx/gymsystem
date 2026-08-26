@@ -128,7 +128,7 @@ export default function AdminMembersPage() {
   const [pt1on1Tab, setPt1on1Tab] = useState<'pending' | 'waiting_assignment' | 'assigned'>('pending')
 
   // Store realtime PT 1-1 + group (admin/staff)
-  const { requests: allPt1on1Requests, countsByStatus: pt1on1Counts, badgeCount: pt1on1BadgeCount, groupBadgeCount, loading: pt1on1Loading, latestRequestForMember, reload: reloadPtRequests } = usePtRequests()
+  const { requests: allPt1on1Requests, countsByStatus: pt1on1Counts, badgeCount: pt1on1BadgeCount, groupBadgeCount, loading: pt1on1Loading, reload: reloadPtRequests } = usePtRequests()
 
   // Hủy yêu cầu (admin)
   const [cancelModal, setCancelModal] = useState<{ open: boolean; request: TrainingRequest | null; reason: string; submitting: boolean }>({ open: false, request: null, reason: '', submitting: false })
@@ -629,14 +629,6 @@ export default function AdminMembersPage() {
       },
     },
     {
-      title: 'Check-in',
-      width: 80,
-      align: 'center' as const,
-      render: (_: unknown, record: MemberListItem) => (
-        <span>{record.checkinCount || <span style={{ opacity: 0.4 }}>0</span>}</span>
-      ),
-    },
-    {
       title: 'Trạng thái',
       width: 100,
       render: (_: unknown, record: MemberListItem) => (
@@ -644,32 +636,6 @@ export default function AdminMembersPage() {
           {record.isActive ? 'Hoạt động' : 'Đã khóa'}
         </Tag>
       ),
-    },
-    {
-      title: 'Yêu cầu PT',
-      width: 140,
-      render: (_: unknown, record: MemberListItem) => {
-        const req = latestRequestForMember(record._id)
-        if (!req) return <span style={{ opacity: 0.4, fontSize: 12 }}>—</span>
-        const openReqView = () => {
-          if (req.status === 'pending' || req.status === 'waiting_assignment' || req.status === 'message_sent') {
-            setPt1on1Tab(req.status === 'message_sent' ? 'pending' : req.status as 'pending' | 'waiting_assignment')
-            setPt1on1ModalOpen(true)
-          } else {
-            setHistoryFilter(HISTORY_TABS.some((t) => t.key === req.status) ? req.status : '')
-            setHistoryModal({ type: 'pt1on1', open: true })
-          }
-        }
-        return (
-          <Tag
-            color={STATUS_COLORS[req.status] || 'default'}
-            style={{ cursor: 'pointer' }}
-            onClick={openReqView}
-          >
-            {STATUS_LABELS[req.status] || 'Đang xử lý'}
-          </Tag>
-        )
-      },
     },
     {
       title: 'Thao tác',

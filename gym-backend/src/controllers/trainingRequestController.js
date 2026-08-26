@@ -4,11 +4,17 @@ import { hasActiveMembershipForDate } from './bookingController.js'
 import { getIO, emitPtRequestEvent, emitNotificationUpdated, emitPtClientsUpdated } from '../services/socketService.js'
 import Booking from '../models/Booking.js'
 import PT from '../models/PT.js'
+import User from '../models/User.js'
 import Notification, { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import { validatePTAssignment } from '../services/ptScheduleValidationService.js'
+import { createAssignment } from '../services/ptAssignmentService.js'
 
 const ACTIVE_BOOKING_STATUSES = ['pending', 'awaiting_payment', 'confirmed']
+const AUTO_APPROVAL_ROLLBACK_REASONS = [
+  'Không thể tự xác nhận đầy đủ lịch PT 1-1',
+  'Không thể hoàn tất tự xác nhận PT 1-1',
+]
 
 const normalizeDate = (date) => {
   const d = new Date(date)
@@ -31,8 +37,12 @@ const nextRequestDate = (dayOfWeek, slot, weekOffset = 0) => {
   let diff = Number(dayOfWeek) - currentDay
   if (diff < 0) diff += 7
   const target = new Date(today)
-  target.setDate(today.getDate() + diff + weekOffset * 7)
+  // Xác định buổi đầu tiên còn ở tương lai trước, rồi mới cộng các tuần lặp.
+  // Nếu cộng weekOffset trước khi kiểm tra giờ đã qua thì lịch cùng thứ trong
+  // ngày tạo yêu cầu sẽ bị lặp tuần đầu và thiếu buổi cuối.
+  target.setDate(today.getDate() + diff)
   if (getSlotStartDateTime(target, slot) <= now) target.setDate(target.getDate() + 7)
+  target.setDate(target.getDate() + weekOffset * 7)
   return normalizeDate(target)
 }
 
@@ -89,7 +99,7 @@ const syncPt1on1RequestBookings = async ({ request, trainerId, status = 'pending
       status: { $in: ACTIVE_BOOKING_STATUSES },
     })
 
-if (existingFromRequest) {
+    if (existingFromRequest) {
       // Booking đã xác nhận dứt điểm — không bao giờ chạm lại
       if (existingFromRequest.status === 'confirmed') {
         continue
@@ -97,7 +107,7 @@ if (existingFromRequest) {
       if (existingFromRequest.status !== status) {
         // Không còn bước thanh toán: PT xác nhận → booking chuyển thẳng sang confirmed.
         existingFromRequest.status = status
-        existingFromRequest.paymentStatus = status === 'confirmed' ? 'unpaid' : existingFromRequest.paymentStatus
+        existingFromRequest.paymentStatus = status === 'confirmed' ? 'not_required' : existingFromRequest.paymentStatus
         existingFromRequest.paymentDeadline = null
         await existingFromRequest.save()
         updatedCount += 1
@@ -120,6 +130,32 @@ if (existingFromRequest) {
       continue
     }
 
+    // Nếu lượt tự duyệt trước đã rollback sau khi tạo booking (ví dụ do lỗi
+    // phân công phát sinh sau đó), dùng lại chính bản ghi bị hủy. Không tạo một
+    // booking thứ hai cùng ngày/giờ rồi để PT nhìn thấy cả “Đã hủy” lẫn
+    // “Đã xác nhận” cho một buổi duy nhất.
+    const rolledBackBooking = await Booking.findOne({
+      memberId,
+      ptId: trainerId,
+      date: bookingDate,
+      slot,
+      requestId,
+      status: 'cancelled',
+      cancelReason: { $in: AUTO_APPROVAL_ROLLBACK_REASONS },
+    }).sort({ updatedAt: -1 })
+
+    if (rolledBackBooking) {
+      rolledBackBooking.status = status === 'confirmed' ? 'confirmed' : 'pending'
+      rolledBackBooking.paymentStatus = 'not_required'
+      rolledBackBooking.paymentDeadline = null
+      rolledBackBooking.cancelReason = ''
+      rolledBackBooking.rejectReason = ''
+      rolledBackBooking.isViolation = false
+      await rolledBackBooking.save()
+      updatedCount += 1
+      continue
+    }
+
 try {
       await Booking.create({
         memberId,
@@ -131,7 +167,7 @@ try {
         trainingType: 'one_to_one',
         priceAtBooking: sessionPrice,
         totalAmount: 0,
-        paymentStatus: 'unpaid',
+        paymentStatus: 'not_required',
         paymentDeadline: null,
         // Không còn bước thanh toán: booking tạo ra đã confirmed ngay (nếu PT accept)
         status: status === 'confirmed' ? 'confirmed' : 'pending',
@@ -160,6 +196,11 @@ const validateRequestBeforePtAcceptance = async ({ request, trainerId }) => {
   for (const { day, slot } of daySlots) {
     for (let weekOffset = 0; weekOffset < weeks; weekOffset += 1) {
       const date = nextRequestDate(day, slot, weekOffset)
+      if (!(await hasActiveMembershipForDate(getDocId(request.memberId), date))) {
+        const error = new Error(`Gói tập của hội viên không còn hiệu lực tại buổi ${date.toLocaleDateString('vi-VN')} ${slot}`)
+        error.statusCode = 409
+        throw error
+      }
       const availability = await validatePTAssignment({ trainerId, date, slot })
       if (!availability.ok) {
         const error = new Error(`PT không thể nhận lịch ${date.toLocaleDateString('vi-VN')} ${slot}: ${availability.message}`)
@@ -182,26 +223,78 @@ const validateRequestBeforePtAcceptance = async ({ request, trainerId }) => {
   }
 }
 
+/**
+ * Hội viên tự chọn PT: tự xác nhận khi toàn bộ lịch thực tế vẫn hợp lệ.
+ * Nếu bất kỳ điều kiện nào không đạt, request được GIỮ pending để Admin
+ * dùng danh sách gợi ý phân công — không tự động gán một PT khác.
+ */
+const tryAutoApproveSpecificPtRequest = async ({ request, trainerId }) => {
+  const trainer = await User.findOne({ _id: trainerId, role: 'pt', isActive: true })
+    .select('fullName name specialties')
+    .lean()
+  if (!trainer) return { approved: false, reason: 'PT được chọn không còn hoạt động.' }
+
+  const requestedSpecialization = String(request.specialization || '').trim().toUpperCase()
+  const trainerSpecialties = (trainer.specialties || []).map((item) => String(item || '').trim().toUpperCase())
+  if (trainerSpecialties.length && !trainerSpecialties.includes(requestedSpecialization)) {
+    return { approved: false, reason: 'PT được chọn không phù hợp với chuyên môn hội viên yêu cầu.' }
+  }
+
+  let bookingSync = null
+  try {
+    await validateRequestBeforePtAcceptance({ request, trainerId })
+
+    const expectedBookings = (request.daySlots || []).length * Math.min(Math.max(Number(request.weeks) || 1, 1), 12)
+    bookingSync = await syncPt1on1RequestBookings({ request, trainerId, status: 'confirmed' })
+    if (bookingSync.createdCount + bookingSync.updatedCount < expectedBookings) {
+      await trainingRequestService.cancelRequestBookings({
+        requestId: request._id,
+        ptId: trainerId,
+        reason: 'Không thể tự xác nhận đầy đủ lịch PT 1-1',
+      })
+      return { approved: false, reason: 'Một số buổi đã phát sinh xung đột. Admin sẽ hỗ trợ phân công.' }
+    }
+
+    await createAssignment({ memberId: request.memberId, ptId: trainerId })
+    const confirmedRequest = await trainingRequestService.updateRequestStatus({ requestId: request._id, status: 'confirmed' })
+    return { approved: true, request: confirmedRequest, trainer, bookingSync }
+  } catch (error) {
+    if (bookingSync && (bookingSync.createdCount || bookingSync.updatedCount)) {
+      await trainingRequestService.cancelRequestBookings({
+        requestId: request._id,
+        ptId: trainerId,
+        reason: 'Không thể hoàn tất tự xác nhận PT 1-1',
+      }).catch(() => {})
+    }
+    return { approved: false, reason: error.message || 'Không thể tự xác nhận yêu cầu.' }
+  }
+}
+
 export const createRequest = async (req, res) => {
   try {
     const request = await trainingRequestService.createRequest({ memberId: req.user._id, data: req.body })
-    const pop = await trainingRequestService.getRequestById(request._id)
     const isPt1on1 = (req.body.type || 'group') === 'pt1on1'
+    const autoApproval = isPt1on1 && request.preferredTrainerId
+      ? await tryAutoApproveSpecificPtRequest({ request, trainerId: request.preferredTrainerId })
+      : { approved: false, reason: '' }
+    const pop = await trainingRequestService.getRequestById(request._id)
 
-    emitPtRequestEvent('pt_request_created', { request: pop })
+    emitPtRequestEvent(autoApproval.approved ? 'pt_request_auto_approved' : 'pt_request_created', { request: pop })
     const memberName = typeof pop.memberId === 'object' ? (pop.memberId.fullName || pop.memberId.name || '') : ''
-    createNotification({
-      receiverId: null,
-      receiverRole: 'admin',
-      notificationType: NOTIFICATION_TYPES.PT_REQUEST_NEW,
-      title: isPt1on1 ? 'Có yêu cầu PT 1-1 mới' : 'Có yêu cầu tập luyện nhóm mới',
-      content: `Hội viên ${memberName || '—'} vừa gửi yêu cầu ${isPt1on1 ? 'PT 1-1' : 'tập luyện nhóm'}. Vui lòng xử lý.`,
-      relatedId: request._id,
-      relatedType: 'TrainingRequest',
-      redirectUrl: isPt1on1 ? '/admin/members?pt1on1=1&pt1on1Status=pending' : '/admin/members',
-      priority: 'high',
-      createdBy: 'System',
-    })
+    if (!autoApproval.approved) {
+      createNotification({
+        receiverId: null,
+        receiverRole: 'admin',
+        notificationType: NOTIFICATION_TYPES.PT_REQUEST_NEW,
+        title: isPt1on1 ? 'Có yêu cầu PT 1-1 cần xử lý' : 'Có yêu cầu tập luyện nhóm mới',
+        content: `Hội viên ${memberName || '—'} vừa gửi yêu cầu ${isPt1on1 ? 'PT 1-1' : 'tập luyện nhóm'}.${autoApproval.reason ? `\nKhông tự duyệt: ${autoApproval.reason}` : ''}\nVui lòng xử lý.`,
+        relatedId: request._id,
+        relatedType: 'TrainingRequest',
+        redirectUrl: isPt1on1 ? '/admin/members?pt1on1=1&pt1on1Status=pending' : '/admin/members',
+        priority: 'high',
+        createdBy: 'System',
+      })
+    }
 
     // Xác nhận cho hội viên (ngôi thứ hai — "Bạn đã...")
     const memberUserId = typeof pop.memberId === 'object' ? pop.memberId._id : pop.memberId
@@ -210,9 +303,11 @@ export const createRequest = async (req, res) => {
         receiverId: memberUserId,
         receiverRole: 'member',
         notificationType: NOTIFICATION_TYPES.PT_REQUEST_NEW,
-        title: isPt1on1 ? 'Bạn đã gửi yêu cầu PT 1-1' : 'Bạn đã gửi yêu cầu tập luyện nhóm',
-        content: isPt1on1
-          ? 'Bạn đã gửi yêu cầu PT 1-1 thành công.\nAdmin sẽ xử lý yêu cầu của bạn trong thời gian sớm nhất.'
+        title: autoApproval.approved ? 'Yêu cầu PT 1-1 đã được tự xác nhận' : isPt1on1 ? 'Bạn đã gửi yêu cầu PT 1-1' : 'Bạn đã gửi yêu cầu tập luyện nhóm',
+        content: autoApproval.approved
+          ? `PT ${autoApproval.trainer?.fullName || autoApproval.trainer?.name || 'bạn đã chọn'} đã được phân công. Lịch PT 1-1 của bạn đã sẵn sàng trong mục Lịch tập.`
+          : isPt1on1
+          ? 'Bạn đã gửi yêu cầu PT 1-1 thành công. Admin sẽ xử lý yêu cầu của bạn trong thời gian sớm nhất.'
           : 'Bạn đã gửi yêu cầu tập luyện nhóm thành công.\nAdmin sẽ xử lý yêu cầu của bạn trong thời gian sớm nhất.',
         relatedId: request._id,
         relatedType: 'TrainingRequest',
@@ -227,8 +322,10 @@ export const createRequest = async (req, res) => {
         receiverId: req.body.preferredTrainerId,
         receiverRole: 'pt',
         notificationType: NOTIFICATION_TYPES.PT_REQUEST_DESIGNATED,
-        title: 'Hội viên đã yêu cầu bạn làm PT riêng',
-        content: `Hội viên ${memberName || '—'} đã chỉ định bạn làm PT riêng.\nYêu cầu đang chờ admin xử lý. Bạn sẽ được thông báo khi được phân công.`,
+        title: autoApproval.approved ? 'Bạn có hội viên PT 1-1 mới' : 'Hội viên đã yêu cầu bạn làm PT riêng',
+        content: autoApproval.approved
+          ? `Hội viên ${memberName || '—'} đã chọn bạn làm PT riêng. Hệ thống đã tự xác nhận lịch phù hợp; không cần phản hồi thêm.`
+          : `Hội viên ${memberName || '—'} đã chỉ định bạn làm PT riêng. Yêu cầu đang chờ Admin xử lý.`,
         relatedId: request._id,
         relatedType: 'TrainingRequest',
         redirectUrl: '/pt/clients',
@@ -236,7 +333,24 @@ export const createRequest = async (req, res) => {
       })
     }
 
-    res.status(201).json({ message: 'Đã gửi yêu cầu tập luyện', request: pop })
+    recordAuditLog({
+      req,
+      module: 'training_request',
+      action: autoApproval.approved ? 'auto_approve_specific_pt' : 'create_request',
+      entity: pop,
+      entityName: `Request ${request._id}`,
+      details: autoApproval.approved
+        ? `Tự xác nhận PT ${request.preferredTrainerId}; bookings: ${JSON.stringify(autoApproval.bookingSync)}`
+        : `Yêu cầu chờ Admin xử lý${autoApproval.reason ? `: ${autoApproval.reason}` : ''}`,
+    }).catch((error) => console.error('Audit create training request failed:', error.message))
+
+    res.status(201).json({
+      message: autoApproval.approved
+        ? 'Đã tự xác nhận PT và tạo lịch PT 1-1 thành công.'
+        : 'Đã gửi yêu cầu. Admin sẽ xem các PT phù hợp và phân công cho bạn.',
+      request: pop,
+      autoApproved: autoApproval.approved,
+    })
   } catch (error) {
     const status = error.statusCode || 500
     res.status(status).json({ message: error.message })
@@ -324,30 +438,12 @@ export const assignToClass = async (req, res) => {
 
 export const assignTrainer = async (req, res) => {
   try {
-    // Validate the price before changing the request state. Otherwise a failed
-    // price check leaves the request assigned but without a usable payment flow.
-    const candidatePtProfile = await PT.findOne({ userId: req.body.trainerId }).lean()
-    if (!candidatePtProfile?.oneToOnePrice || candidatePtProfile.oneToOnePrice <= 0) {
-      return res.status(400).json({
-        message: 'PT này chưa được cấu hình giá đặt lịch 1-1. Vui lòng cấu hình giá trước khi phân công.',
-      })
-    }
-
     const request = await trainingRequestService.assignTrainer({
       requestId: req.params.id,
       trainerId: req.body.trainerId,
       assignedBy: req.user._id,
     })
     if (!request) return res.status(404).json({ message: 'Không tìm thấy yêu cầu' })
-
-    // BR-04: chỉ được phân công PT đã được cấu hình giá đặt lịch 1-1
-    const assignedPtProfile = await PT.findOne({ userId: req.body.trainerId }).lean()
-    const oneToOnePrice = assignedPtProfile?.oneToOnePrice || 0
-    if (!oneToOnePrice || oneToOnePrice <= 0) {
-      return res.status(400).json({
-        message: 'PT này chưa được cấu hình giá đặt lịch 1-1. Vui lòng cấu hình giá trước khi phân công.',
-      })
-    }
 
     const bookingSync = await syncPt1on1RequestBookings({
       request,

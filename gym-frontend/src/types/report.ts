@@ -151,6 +151,7 @@ export interface BookingRow {
   status: string
   statusLabel: string
   paymentStatus?: string
+  createdAt?: string
 }
 
 export interface OrderRow {
@@ -169,6 +170,7 @@ export interface OrderRow {
   status: string
   statusLabel: string
   paymentStatus?: string
+  paymentStatusLabel?: string
   time?: string
 }
 

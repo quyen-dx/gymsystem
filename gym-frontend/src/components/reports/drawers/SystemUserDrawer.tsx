@@ -1,5 +1,5 @@
 import { Input, Select, Space, Tag } from 'antd'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ColumnsType } from 'antd/es/table'
 import { reportService } from '../../../services/reportService'
 import type { ReportRangeState, SystemUserRow } from '../../../types/report'
@@ -17,6 +17,12 @@ export default function SystemUserDrawer({ open, title, range, filters, onClose 
   const [roleFilter, setRoleFilter] = useState<string | undefined>(filters?.role)
   const [search, setSearch] = useState(filters?.search || '')
   const [roles, setRoles] = useState<Array<{ key: string; label: string }>>([])
+
+  useEffect(() => {
+    if (!open) return
+    setRoleFilter(filters?.role)
+    setSearch(filters?.search || '')
+  }, [open, filters?.role, filters?.search])
 
   const columns: ColumnsType<SystemUserRow> = [
     {
@@ -49,7 +55,7 @@ export default function SystemUserDrawer({ open, title, range, filters, onClose 
         if (!roles.length && res.data.roles) setRoles(res.data.roles)
         return res.data
       }}
-      buildParams={() => ({ ...range, ...filters, role: roleFilter, search: search || undefined })}
+      buildParams={() => ({ ...range, ...filters, role: roleFilter ?? filters?.role, search: search || undefined })}
       filterBar={
         <Space className="mb-3 flex flex-wrap gap-2">
           <Select

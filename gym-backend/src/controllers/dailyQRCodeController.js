@@ -171,7 +171,10 @@ export const verifyDailyQRAndGetSessions = async (req, res) => {
       memberId,
       date: { $gte: today, $lte: eod },
       status: 'confirmed',
-      paymentStatus: 'paid',
+      $or: [
+        { paymentStatus: { $in: ['paid', 'not_required'] } },
+        { totalAmount: { $lte: 0 } },
+      ],
     }).lean()
     for (const b of bookings) {
       const [time, endTime] = String(b.slot || '').split('-')

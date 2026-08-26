@@ -1,5 +1,5 @@
 import { Input, Select, Space, Tag } from 'antd'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ColumnsType } from 'antd/es/table'
 import { reportService } from '../../../services/reportService'
 import type { ReportRangeState, TransactionRow } from '../../../types/report'
@@ -33,6 +33,12 @@ export default function FinancialDetailDrawer({ open, title, range, filters, onC
   const [search, setSearch] = useState(filters?.search || '')
   const [types, setTypes] = useState<Array<{ key: string; label: string; color: string }>>([])
 
+  useEffect(() => {
+    if (!open) return
+    setTypeFilter(filters?.type)
+    setSearch(filters?.search || '')
+  }, [open, filters?.type, filters?.search])
+
   const columns: ColumnsType<TransactionRow> = [
     {
       title: 'Mã giao dịch',
@@ -62,6 +68,7 @@ export default function FinancialDetailDrawer({ open, title, range, filters, onC
       render: (_: any, row: TransactionRow) => (
         <div className="text-right">
           {row.amount > 0 && <div className="text-xs font-bold text-green-600">+{row.amount.toLocaleString('vi-VN')}đ</div>}
+          {row.amount < 0 && <div className="text-xs font-bold text-red-500">{row.amount.toLocaleString('vi-VN')}đ</div>}
           {row.refund > 0 && <div className="text-[11px] font-medium text-red-500">-{row.refund.toLocaleString('vi-VN')}đ</div>}
         </div>
       ),
@@ -91,7 +98,7 @@ export default function FinancialDetailDrawer({ open, title, range, filters, onC
         if (!types.length && res.data.types) setTypes(res.data.types)
         return res.data
       }}
-      buildParams={() => ({ ...range, ...filters, type: typeFilter, search: search || undefined })}
+      buildParams={() => ({ ...range, ...filters, type: typeFilter ?? filters?.type, search: search || undefined })}
       filterBar={
         <Space className="mb-3 flex flex-wrap gap-2">
           <Select

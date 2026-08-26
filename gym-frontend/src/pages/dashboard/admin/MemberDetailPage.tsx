@@ -29,10 +29,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { memberService } from '../../../services/memberService'
-import type { HealthScore, MemberDetail, MemberMembership, TimelineEvent } from '../../../types/admin/member'
+import type { MemberDetail, MemberMembership, TimelineEvent } from '../../../types/admin/member'
 import { getUserDisplayName } from '../../../utils/userDisplay'
-import MemberRegisterPlanModal from './MemberRegisterPlanModal'
-import MemberRenewPlanModal from './MemberRenewPlanModal'
 
 const { Text, Title } = Typography
 
@@ -41,24 +39,18 @@ export default function MemberDetailPage() {
   const navigate = useNavigate()
   const [member, setMember] = useState<MemberDetail | null>(null)
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
-  const [healthScore, setHealthScore] = useState<HealthScore | null>(null)
   const [loading, setLoading] = useState(true)
-
-  const [registerModalOpen, setRegisterModalOpen] = useState(false)
-  const [renewModalOpen, setRenewModalOpen] = useState(false)
 
   const fetchMember = useCallback(async () => {
     if (!id) return
     setLoading(true)
     try {
-      const [detailRes, timelineRes, healthRes] = await Promise.all([
+      const [detailRes, timelineRes] = await Promise.all([
         memberService.getMemberById(id),
         memberService.getMemberTimeline(id),
-        memberService.getMemberHealthScore(id).catch(() => ({ data: { healthScore: null } })),
       ])
       setMember(detailRes.data.member)
       setTimeline(timelineRes.data.timeline)
-      setHealthScore(healthRes.data.healthScore)
     } catch {
       message.error('Không thể tải thông tin thành viên')
     } finally {
@@ -101,6 +93,11 @@ export default function MemberDetailPage() {
     )
   }
 
+  const formatDate = (date?: string) => {
+    if (!date || Number.isNaN(new Date(date).getTime())) return '—'
+    return new Date(date).toLocaleDateString('vi-VN')
+  }
+
   const membershipColumns = [
     {
       title: 'Gói tập',
@@ -114,19 +111,30 @@ export default function MemberDetailPage() {
     {
       title: 'Ngày bắt đầu',
       dataIndex: 'startDate',
-      render: (date: string) => new Date(date).toLocaleDateString('vi-VN'),
+      render: (date?: string) => formatDate(date),
     },
     {
       title: 'Ngày kết thúc',
       dataIndex: 'endDate',
-      render: (date: string) => new Date(date).toLocaleDateString('vi-VN'),
+      render: (date?: string) => formatDate(date),
     },
     {
       title: 'Trạng thái',
       dataIndex: 'status',
       render: (status: string) => {
-        const color = status === 'active' ? 'success' : status === 'expired' ? 'error' : 'default'
-        return <Tag color={color}>{status}</Tag>
+        const color = status === 'active' ? 'success' : status === 'expired' ? 'error' : status === 'refunded' ? 'warning' : 'default'
+        const label = status === 'active'
+          ? 'Đang hoạt động'
+          : status === 'expired'
+            ? 'Đã hết hạn'
+            : status === 'cancelled'
+              ? 'Đã hủy'
+              : status === 'refunded'
+                ? 'Đã hoàn tiền'
+                : status === 'pending'
+                  ? 'Chờ kích hoạt'
+                  : status
+        return <Tag color={color}>{label}</Tag>
       },
     },
     {
@@ -191,12 +199,6 @@ export default function MemberDetailPage() {
           >
             {member.isActive ? 'Khóa' : 'Mở khóa'}
           </Button>
-          <Button type="primary" onClick={() => setRegisterModalOpen(true)} disabled={!!activeMembership}>
-            Đăng ký gói tập
-          </Button>
-          <Button onClick={() => setRenewModalOpen(true)} disabled={!activeMembership}>
-            Gia hạn
-          </Button>
         </Space>
       </div>
 
@@ -207,7 +209,7 @@ export default function MemberDetailPage() {
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={8}>
-          <Card className="rounded-[24px]" style={{ textAlign: 'center', height: '100%' }}>
+          <Card className="rounded-[24px]" style={{ textAlign: 'center' }}>
             <div
               style={{
                 width: 80,
@@ -230,34 +232,6 @@ export default function MemberDetailPage() {
               </Tag>
             </div>
 
-            {healthScore && (
-              <div style={{ marginTop: 16, padding: '12px 0', borderTop: '1px solid var(--gs-border)' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>Điểm sức khỏe</Text>
-                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  <div style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: '50%',
-                    background: healthScore.overall >= 80 ? '#10B981' : healthScore.overall >= 50 ? '#F59E0B' : '#EF4444',
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 18,
-                    fontWeight: 700,
-                  }}>
-                    {healthScore.overall}
-                  </div>
-                  <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{healthScore.levelText}</div>
-                    <div style={{ fontSize: 12, color: 'var(--gs-text-muted)' }}>
-                      {healthScore.checkinCount} check-in
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {activeMembership ? (
               <div style={{ marginTop: 16, padding: '12px 0', borderTop: '1px solid var(--gs-border)' }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>Thông tin gói tập</Text>
@@ -266,7 +240,7 @@ export default function MemberDetailPage() {
                     {activeMembership.planId?.nameVi}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--gs-text-muted)', marginTop: 4 }}>
-                    {new Date(activeMembership.startDate).toLocaleDateString('vi-VN')} → {new Date(activeMembership.endDate).toLocaleDateString('vi-VN')}
+                    {formatDate(activeMembership.startDate)} → {formatDate(activeMembership.endDate)}
                   </div>
                   <div style={{ marginTop: 8 }}>
                     <Badge
@@ -336,25 +310,6 @@ export default function MemberDetailPage() {
         </Col>
       </Row>
 
-      <MemberRegisterPlanModal
-        open={registerModalOpen}
-        memberId={member._id}
-        memberName={getUserDisplayName(member, member.memberCode)}
-        onClose={() => setRegisterModalOpen(false)}
-        onSuccess={() => { setRegisterModalOpen(false); fetchMember() }}
-      />
-
-      <MemberRenewPlanModal
-        open={renewModalOpen}
-        memberId={member._id}
-        memberName={getUserDisplayName(member, member.memberCode)}
-        currentEndDate={activeMembership?.endDate || ''}
-        currentStartDate={activeMembership?.startDate || ''}
-        currentPlanName={activeMembership?.planId?.nameVi || ''}
-        currentPlanId={activeMembership?.planId?._id || ''}
-        onClose={() => setRenewModalOpen(false)}
-        onSuccess={() => { setRenewModalOpen(false); fetchMember() }}
-      />
     </DashboardLayout>
   )
 }

@@ -33,6 +33,15 @@ const TIER_BOOKING = 1
 const TIER_CLASS = 2
 const TIER_PLAN = 3
 
+// Booking PT hiện không bắt buộc thanh toán riêng. Hỗ trợ cả dữ liệu cũ
+// (totalAmount = 0, paymentStatus = unpaid) lẫn dữ liệu mới not_required.
+const eligibleBookingPaymentFilter = {
+  $or: [
+    { paymentStatus: { $in: ['paid', 'not_required'] } },
+    { totalAmount: { $lte: 0 } },
+  ],
+}
+
 /**
  * Backend là nơi quyết định cuối cùng: check-in là SCHEDULED nếu tìm thấy
  * lịch hợp lệ tại thời điểm check-in, ngược lại là FREE_TRAINING.
@@ -105,7 +114,7 @@ export const resolveCheckinSession = async ({
       _id: clientBookingId,
       memberId,
       status: 'confirmed',
-      paymentStatus: 'paid',
+      ...eligibleBookingPaymentFilter,
     }).lean()
     if (booking) {
       const [startT, endT] = String(booking.slot || '').split('-')
@@ -121,7 +130,7 @@ export const resolveCheckinSession = async ({
     memberId,
     date: { $gte: todayStart, $lte: todayEnd },
     status: 'confirmed',
-    paymentStatus: 'paid',
+    ...eligibleBookingPaymentFilter,
   }).lean()
   for (const booking of bookings) {
     const [startT, endT] = String(booking.slot || '').split('-')

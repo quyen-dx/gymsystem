@@ -41,7 +41,10 @@ export const runNoShowSweeperJob = async () => {
 
   const overdueBookings = await Booking.find({
     status: 'confirmed',
-    paymentStatus: 'paid',
+    $or: [
+      { paymentStatus: { $in: ['paid', 'not_required'] } },
+      { totalAmount: { $lte: 0 } },
+    ],
     date: { $lte: cutoff },
   })
     .select('_id memberId ptId date slot totalAmount')

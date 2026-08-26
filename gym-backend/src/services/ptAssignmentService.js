@@ -136,7 +136,7 @@ export const findActiveAssignmentByPt = async ({ ptId, session }) => {
         status: 'active',
       }).select('memberId status startDate expiresAt').sort({ createdAt: -1 }).lean(),
       TrainingRequest.aggregate([
-        { $match: { memberId: { $in: allMemberIds.map(id => new mongoose.Types.ObjectId(id)) }, status: 'assigned' } },
+        { $match: { memberId: { $in: allMemberIds.map(id => new mongoose.Types.ObjectId(id)) }, status: { $in: ['assigned', 'confirmed', 'active'] } } },
         { $sort: { createdAt: -1 } },
         {
           $group: {

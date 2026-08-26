@@ -1,5 +1,5 @@
 import { Input, Select, Space, Tag } from 'antd'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ColumnsType } from 'antd/es/table'
 import { reportService } from '../../../services/reportService'
 import type { OrderRow, ReportRangeState } from '../../../types/report'
@@ -27,6 +27,12 @@ export default function ShopOrderDrawer({ open, title, range, filters, onClose }
   const [search, setSearch] = useState(filters?.search || '')
   const [types, setTypes] = useState<Array<{ key: string; label: string }>>([])
 
+  useEffect(() => {
+    if (!open) return
+    setStatusFilter(filters?.status)
+    setSearch(filters?.search || '')
+  }, [open, filters?.status, filters?.search])
+
   const columns: ColumnsType<OrderRow> = [
     { title: 'Mã đơn', dataIndex: 'code', width: 120, render: (v: string) => <span className="font-mono text-[11px] text-[var(--gs-text-soft)]">{String(v).substring(0, 14).toUpperCase()}</span> },
     { title: 'Hội viên', dataIndex: 'memberName', width: 150, render: (_: any, row: OrderRow) => <span className="text-xs text-[var(--gs-text)]">{row.memberName || '-'}</span> },
@@ -34,6 +40,7 @@ export default function ShopOrderDrawer({ open, title, range, filters, onClose }
     { title: 'Sản phẩm', dataIndex: 'itemsSummary', width: 180, ellipsis: true, render: (v: string) => <span className="text-xs text-[var(--gs-text-soft)]">{v || '-'}</span> },
     { title: 'Seller', dataIndex: 'sellerName', width: 120, render: (v: string) => <span className="text-xs text-[var(--gs-text-soft)]">{v || '-'}</span> },
     { title: 'Tổng tiền', dataIndex: 'total', width: 120, align: 'right' as const, render: (v: number) => <span className="text-xs font-bold text-[var(--gs-text)]">{v.toLocaleString('vi-VN')}đ</span> },
+    { title: 'Thanh toán', dataIndex: 'paymentStatusLabel', width: 125, render: (_: any, row: OrderRow) => <Tag color={STATUS_COLORS[row.paymentStatus || ''] || 'default'}>{row.paymentStatusLabel || '-'}</Tag> },
     { title: 'Trạng thái', dataIndex: 'statusLabel', width: 130, render: (_: any, row: OrderRow) => <Tag color={STATUS_COLORS[row.status] || 'default'}>{row.statusLabel}</Tag> },
     { title: 'Ngày', dataIndex: 'time', width: 120, render: (v?: string) => (v ? <span className="text-xs text-[var(--gs-text-soft)]">{new Date(v).toLocaleDateString('vi-VN')}</span> : '-') },
   ]
@@ -50,7 +57,7 @@ export default function ShopOrderDrawer({ open, title, range, filters, onClose }
         if (!types.length && res.data.types) setTypes(res.data.types)
         return res.data
       }}
-      buildParams={() => ({ ...range, ...filters, status: statusFilter, search: search || undefined })}
+      buildParams={() => ({ ...range, ...filters, status: statusFilter ?? filters?.status, search: search || undefined })}
       filterBar={
         <Space className="mb-3 flex flex-wrap gap-2">
           <Select

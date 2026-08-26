@@ -1,5 +1,5 @@
 import { Input, Select, Space, Tag } from 'antd'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ColumnsType } from 'antd/es/table'
 import { reportService } from '../../../services/reportService'
 import type { ActivityRow, ReportRangeState } from '../../../types/report'
@@ -25,6 +25,12 @@ export default function MemberActivityDrawer({ open, title, range, filters, onCl
   const [typeFilter, setTypeFilter] = useState<string | undefined>(filters?.activityType)
   const [search, setSearch] = useState(filters?.search || '')
   const [types, setTypes] = useState<Array<{ key: string; label: string }>>([])
+
+  useEffect(() => {
+    if (!open) return
+    setTypeFilter(filters?.activityType)
+    setSearch(filters?.search || '')
+  }, [open, filters?.activityType, filters?.search])
 
   const columns: ColumnsType<ActivityRow> = [
     {
@@ -56,7 +62,7 @@ export default function MemberActivityDrawer({ open, title, range, filters, onCl
         if (!types.length && res.data.types) setTypes(res.data.types)
         return res.data
       }}
-      buildParams={() => ({ ...range, ...filters, type: typeFilter, search: search || undefined })}
+      buildParams={() => ({ ...range, ...filters, type: typeFilter ?? filters?.activityType, search: search || undefined })}
       filterBar={
         <Space className="mb-3 flex flex-wrap gap-2">
           <Select

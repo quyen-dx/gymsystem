@@ -469,53 +469,9 @@ export const createRequest = async ({ memberId, data }) => {
     base.adminDeadline = new Date(Math.min(...starts.map((date) => date.getTime())))
   }
 
-  if (base.preferredTrainerId) {
-    const daySlots = requestDaySlots(base)
-
-    const scheduleConflicts = await findScheduleConflict({
-      trainerId: base.preferredTrainerId,
-      daySlots,
-    })
-    if (scheduleConflicts) {
-      const err = new Error(`${scheduleConflicts.join('; ')}. Vui lòng chọn lại từng ngày theo lịch làm việc của PT.`)
-      err.statusCode = 400
-      throw err
-    }
-
-    const classConflicts = await findClassConflict({
-      trainerId: base.preferredTrainerId,
-      daySlots,
-    })
-    if (classConflicts) {
-      const err = new Error(`${classConflicts.join('; ')}. Vui lòng chọn ngày/giờ khác.`)
-      err.statusCode = 409
-      throw err
-    }
-
-    const crossConflicts = await findCrossMemberConflict({
-      trainerId: base.preferredTrainerId,
-      daySlots,
-      weeks,
-      excludeMemberId: memberId,
-    })
-    if (crossConflicts) {
-      const list = crossConflicts.map((c) => `${formatDayName(c.day)} lúc ${c.slot}`).join(', ')
-      const err = new Error(`PT này đã có lịch không trống vào: ${list}. Vui lòng chọn ngày/giờ khác cho các ngày này.`)
-      err.statusCode = 409
-      throw err
-    }
-
-    // BR-04: PT được chọn phải đã được Admin cấu hình giá cho loại dịch vụ tương ứng
-    const ptProfile = await PT.findOne({ userId: base.preferredTrainerId }).lean()
-    const requiredPrice = type === 'pt1on1' ? (ptProfile?.oneToOnePrice || 0) : (ptProfile?.groupPrice || 0)
-    if (!requiredPrice || requiredPrice <= 0) {
-      const err = new Error(type === 'pt1on1'
-        ? 'PT hiện chưa được cấu hình giá đặt lịch 1-1. Vui lòng chọn PT khác.'
-        : 'PT hiện chưa được cấu hình giá đặt lịch nhóm. Vui lòng chọn PT khác.')
-      err.statusCode = 403
-      throw err
-    }
-  }
+  // Khi hội viên chỉ định PT, việc kiểm tra lịch/chuyên môn được thực hiện ở
+  // bước tự duyệt. Nếu không đạt, vẫn lưu request pending để Admin dùng danh
+  // sách PT gợi ý thay vì từ chối yêu cầu ngay từ đầu.
   const request = await TrainingRequest.create(base)
   return request
 }

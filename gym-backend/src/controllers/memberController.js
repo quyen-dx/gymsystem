@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 import User from '../models/User.js'
 import Membership from '../models/Membership.js'
 import MembershipCycle from '../models/MembershipCycle.js'
+import MembershipPeriod from '../models/MembershipPeriod.js'
 import Payment from '../models/Payment.js'
 import Plan from '../models/Plan.js'
 import UserActivity from '../models/UserActivity.js'
@@ -300,16 +301,66 @@ export const getMemberById = async (req, res) => {
       throw new AppError('Không tìm thấy member', 404)
     }
 
-    const [activeCycle, membershipHistory] = await Promise.all([
+    const [activeCycle, periods, cycles] = await Promise.all([
       MembershipCycle.findOne({ memberId: user._id, status: 'active' })
         .populate('currentPlanId')
         .sort({ createdAt: -1 })
         .lean(),
-      Membership.find({ memberId: user._id })
+      MembershipPeriod.find({ memberId: user._id })
         .populate('planId', 'nameVi nameEn durationDays price color')
-        .sort({ createdAt: -1 })
+        .sort({ startDate: -1 })
+        .lean(),
+      MembershipCycle.find({ memberId: user._id })
+        .populate('currentPlanId', 'nameVi nameEn durationDays price color')
+        .sort({ startDate: -1, createdAt: -1 })
         .lean(),
     ])
+
+    const toHistoryStatus = (status, endDate) => {
+      if (status === 'CANCELLED' || status === 'cancelled') return 'cancelled'
+      if (status === 'REFUNDED' || status === 'refunded') return 'refunded'
+      if (status === 'PENDING') return 'pending'
+      if (status === 'ACTIVE' || status === 'active') {
+        return endDate && new Date(endDate) < new Date() ? 'expired' : 'active'
+      }
+      return 'expired'
+    }
+
+    // MembershipPeriod lưu đầy đủ ngày/gói/giá của từng lần mua hoặc gia hạn.
+    // Các bản ghi Membership cũ không có ngày bắt đầu/kết thúc nên không dùng để
+    // render lịch sử, tránh hiển thị dữ liệu khuyết dưới dạng "—".
+    const historyByPeriod = periods
+      .filter((period) => period.planId && period.startDate && period.endDate)
+      .map((period) => ({
+        _id: period._id,
+        memberId: period.memberId,
+        planId: period.planId,
+        startDate: period.startDate,
+        endDate: period.endDate,
+        status: toHistoryStatus(period.status, period.endDate),
+        createdAt: period.createdAt,
+      }))
+    const historyByCycle = cycles
+      .filter((cycle) => cycle.currentPlanId && cycle.startDate && cycle.expiresAt)
+      .map((cycle) => ({
+        _id: cycle._id,
+        memberId: cycle.memberId,
+        planId: cycle.currentPlanId,
+        startDate: cycle.startDate,
+        endDate: cycle.expiresAt,
+        status: toHistoryStatus(cycle.status, cycle.expiresAt),
+        createdAt: cycle.createdAt,
+      }))
+
+    // Một số dữ liệu cũ có Cycle chính và Period gia hạn riêng. Gộp hai nguồn
+    // rồi loại trùng theo gói + khoảng thời gian để không mất gói chính.
+    const historyMap = new Map()
+    for (const item of [...historyByPeriod, ...historyByCycle]) {
+      const key = `${item.planId._id || item.planId}-${new Date(item.startDate).getTime()}-${new Date(item.endDate).getTime()}`
+      if (!historyMap.has(key)) historyMap.set(key, item)
+    }
+    const membershipHistory = [...historyMap.values()]
+      .sort((left, right) => new Date(right.startDate).getTime() - new Date(left.startDate).getTime())
 
     const periodEndDate = activeCycle
       ? await getActivePeriodEndDate({ membershipId: activeCycle.currentMembershipId, cycle: activeCycle })

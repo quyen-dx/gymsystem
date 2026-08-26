@@ -36,7 +36,7 @@ export type Booking = {
   slot: string
   note?: string
   status: BookingStatus
-  paymentStatus: 'unpaid' | 'pending' | 'paid' | 'failed' | 'expired' | 'refunded'
+  paymentStatus: 'unpaid' | 'pending' | 'paid' | 'not_required' | 'failed' | 'expired' | 'refunded'
   trainingType: 'one_to_one' | 'group'
   priceAtBooking: number
   totalAmount: number

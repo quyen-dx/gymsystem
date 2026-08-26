@@ -303,7 +303,7 @@ export default function PTClientsPage() {
   const fetchClientBookings = useCallback(async (memberId: string) => {
     setBookingsLoading(memberId)
     try {
-      const res = await bookingService.getPTBookings({ memberId, from: 'today' })
+      const res = await bookingService.getPTBookings({ memberId, from: 'today', activeOnly: 'true' })
       setClientBookings((prev) => ({ ...prev, [memberId]: res.data || [] }))
     } catch {
       message.error('Không thể tải lịch PT 1-1 đã book')

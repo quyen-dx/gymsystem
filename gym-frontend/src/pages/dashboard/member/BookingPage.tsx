@@ -552,7 +552,7 @@ export default function BookingPage() {
 
     setSubmitting(true)
     try {
-      await trainingRequestService.create({
+      const { data } = await trainingRequestService.create({
         type: 'group',
         specialization,
         goals,
@@ -563,7 +563,7 @@ export default function BookingPage() {
         isNewToGym,
         healthNotes,
       })
-      message.success('Gửi yêu cầu thành công. Admin sẽ kiểm tra và sắp xếp PT/lịch tập phù hợp cho bạn.')
+      message.success(data.message || 'Gửi yêu cầu thành công. Admin sẽ kiểm tra và sắp xếp PT/lịch tập phù hợp cho bạn.')
       setSubmitted(false)
       setSpecialization('GYM'); setGoals([]); setTimeSlots([]); setDaysOfWeek([]); setGroupWeeks(1); setGroupPreferredTrainer(null); setIsNewToGym(false); setHealthNotes('')
       await loadGroupRequests()
@@ -599,7 +599,7 @@ export default function BookingPage() {
   const handlePt1on1Submit = async () => {
     setPtSubmitting(true)
     try {
-      await trainingRequestService.create({
+      const { data } = await trainingRequestService.create({
         type: 'pt1on1',
         // Tự chọn PT cụ thể mà không chọn chuyên môn → backend lấy chuyên môn từ PT đó
         specialization: ptPickMode === 'specific' && !ptSpecTouched ? undefined : ptSpecialization,
@@ -613,7 +613,7 @@ export default function BookingPage() {
         note: ptNote,
       })
       setPtConfirmOpen(false)
-      message.success('Gửi yêu cầu thành công. Admin sẽ kiểm tra và sắp xếp PT/lịch tập phù hợp cho bạn.')
+      message.success(data.message || 'Gửi yêu cầu thành công. Admin sẽ kiểm tra và sắp xếp PT/lịch tập phù hợp cho bạn.')
       setPtSubmitted(false)
       setPtSpecialization('GYM'); setPtSpecTouched(false); setPtPickMode('gym_assign'); setPtGoals([]); setPtDaySlotMap({}); setPtWeeks(1); setPtHealthNotes(''); setPtNote(''); setPreferredTrainer(null); setPtFormStep(1)
       await loadPt1on1Requests()
@@ -1208,7 +1208,7 @@ export default function BookingPage() {
                             }`}
                           >
                             <div className={`font-medium ${ptPickMode === 'specific' ? 'text-[var(--theme-accent)]' : 'text-[var(--gs-text)]'}`}>Tôi muốn chọn PT cụ thể</div>
-                            <div className="mt-0.5 text-xs text-[var(--gs-text-muted)]">Tự chọn PT theo ý thích của bạn</div>
+                            <div className="mt-0.5 text-xs text-[var(--gs-text-muted)]">Tự xác nhận ngay nếu lịch và chuyên môn phù hợp</div>
                           </button>
                         </div>
                         {ptPickMode === 'specific' && (
@@ -1218,7 +1218,7 @@ export default function BookingPage() {
                               value={preferredTrainer}
                               onChange={setPreferredTrainer}
                               showModeToggle={false}
-                              hint="Admin sẽ xác nhận lịch tập với PT. Nếu PT không có lịch trống, bạn sẽ được gợi ý PT khác phù hợp."
+                              hint="Hệ thống sẽ tự xác nhận nếu PT phù hợp và còn lịch trống. Nếu không, yêu cầu được chuyển Admin để gợi ý PT khác phù hợp."
                             />
                           </div>
                         )}
@@ -1502,7 +1502,9 @@ export default function BookingPage() {
           )}
         </div>
         <p className="mt-3 text-xs text-[var(--gs-text-muted)]">
-          Sau khi gửi, yêu cầu sẽ được Admin xử lý. Bạn có thể hủy yêu cầu trong khi đang chờ xử lý.
+          {ptPickMode === 'specific'
+            ? 'Hệ thống sẽ tự xác nhận ngay khi PT đúng chuyên môn và toàn bộ lịch còn trống. Nếu không đủ điều kiện, Admin sẽ nhận yêu cầu cùng danh sách PT gợi ý.'
+            : 'Admin sẽ nhận yêu cầu cùng danh sách PT gợi ý đã kiểm tra chuyên môn, lịch làm việc và lịch trống để phân công.'}
         </p>
       </Modal>
 
