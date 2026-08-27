@@ -5,7 +5,7 @@ import {
   getTransactionsHandler,
   getMemberActivityHandler,
   getBookingsHandler,
-  getOrdersHandler,
+  getCheckinsHandler,
   getSystemUsersHandler,
   exportReport,
   getRevenueReport,
@@ -21,7 +21,7 @@ router.get('/charts', getChartsData)
 router.get('/transactions', getTransactionsHandler)
 router.get('/member-activity', getMemberActivityHandler)
 router.get('/bookings', getBookingsHandler)
-router.get('/orders', getOrdersHandler)
+router.get('/checkins', getCheckinsHandler)
 router.get('/users', getSystemUsersHandler)
 router.get('/export', exportReport)
 router.get('/revenue', getRevenueReport)

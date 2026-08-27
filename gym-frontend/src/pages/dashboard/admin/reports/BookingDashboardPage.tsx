@@ -13,15 +13,16 @@ export default function BookingDashboardPage() {
         topOrder={['topBookedPt', 'topRatedPt', 'cancelRateTop']}
         kpiToFilter={{
           total: {},
-          success: {},
+          success: { status: 'successful' },
           cancelled: { status: 'cancelled' },
         }}
         chartPointToFilter={(chartKey, pointKey) => {
           if (chartKey === 'bookingByDay') return pointKey ? { date: String(pointKey) } : null
           if (chartKey === 'bookingByPt') return pointKey ? { ptId: String(pointKey) } : null
+          if (chartKey === 'cancelRate') return pointKey ? { status: String(pointKey) } : null
           return null
         }}
-        topToFilter={(_topKey, itemId) => (itemId ? { ptId: itemId } : null)}
+        topToFilter={(topKey, itemId) => (topKey === 'topBookedPt' && itemId ? { ptId: itemId } : null)}
       />
     </DashboardLayout>
   )

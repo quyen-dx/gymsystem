@@ -6,7 +6,7 @@ export interface ReportRangeState {
   to?: string
 }
 
-export type ReportModule = 'finance' | 'members' | 'pt' | 'booking' | 'shop' | 'system'
+export type ReportModule = 'finance' | 'members' | 'pt' | 'booking' | 'checkin' | 'system'
 
 export interface ReportRangeInfo {
   from: string
@@ -121,7 +121,7 @@ export interface TransactionFilter {
   planId?: string
 }
 
-export type DrawerType = 'financial' | 'member' | 'booking' | 'pt' | 'shop' | 'system'
+export type DrawerType = 'financial' | 'member' | 'booking' | 'pt' | 'checkin' | 'system'
 
 export type DrillFilter = Record<string, string | number | undefined>
 
@@ -187,11 +187,10 @@ export interface SystemUserRow {
   lastActiveAt?: string
 }
 
-export const MODULE_META: Record<ReportModule, { label: string; subtitle: string }> = {
+export const MODULE_META: Partial<Record<ReportModule, { label: string; subtitle: string }>> = {
   finance: { label: 'Tài chính', subtitle: 'Doanh thu, giao dịch, hoàn tiền & lợi nhuận' },
   members: { label: 'Hội viên', subtitle: 'Đăng ký, gia hạn, check-in & hoạt động' },
   pt: { label: 'Huấn luyện viên', subtitle: 'Booking, lớp học, đánh giá & doanh thu PT' },
   booking: { label: 'Booking & Lớp học', subtitle: 'Đặt lịch, lớp mở, tỷ lệ hủy' },
-  shop: { label: 'Shop', subtitle: 'Doanh thu, đơn hàng & sản phẩm' },
   system: { label: 'Hệ thống', subtitle: 'Người dùng, vai trò & hoạt động hệ thống' },
 }

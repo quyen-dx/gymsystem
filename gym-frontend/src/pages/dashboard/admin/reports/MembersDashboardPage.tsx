@@ -18,8 +18,14 @@ export default function MembersDashboardPage() {
           cancels: { activityType: 'cancel' },
           checkins: { activityType: 'checkin' },
         }}
-        chartPointToFilter={(_chartKey, pointKey) => (pointKey ? { date: String(pointKey) } : null)}
-        topToFilter={(_topKey, itemId) => (itemId ? { memberId: itemId } : null)}
+        chartPointToFilter={(chartKey, pointKey) => {
+          if (!pointKey) return null
+          if (chartKey === 'growth') return { date: String(pointKey), activityType: 'register' }
+          if (chartKey === 'renewRate') return { date: String(pointKey), activityType: 'renew' }
+          if (chartKey === 'cancelRate') return { date: String(pointKey), activityType: 'cancel' }
+          return null
+        }}
+        topToFilter={(topKey, itemId) => (topKey === 'topCheckIn' && itemId ? { memberId: itemId, activityType: 'checkin' } : null)}
       />
     </DashboardLayout>
   )

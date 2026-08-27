@@ -57,7 +57,7 @@ export default function FinancialDetailDrawer({ open, title, range, filters, onC
         </div>
       ),
     },
-    { title: 'Gói / Shop', dataIndex: 'plan', width: 120, render: (v: string) => <span className="text-xs text-[var(--gs-text)]">{v || '-'}</span> },
+    { title: 'Gói tập', dataIndex: 'plan', width: 120, render: (v: string) => <span className="text-xs text-[var(--gs-text)]">{v || '-'}</span> },
     { title: 'Loại', dataIndex: 'typeLabel', width: 110, render: (_: any, row: TransactionRow) => <Tag color={row.typeColor}>{row.typeLabel}</Tag> },
     { title: 'Thanh toán', dataIndex: 'paymentMethod', width: 100, render: (v: string) => <span className="text-xs uppercase text-[var(--gs-text-soft)]">{v || '-'}</span> },
     {
@@ -109,7 +109,7 @@ export default function FinancialDetailDrawer({ open, title, range, filters, onC
             options={types.map((t) => ({ label: t.label, value: t.key }))}
             style={{ minWidth: 160 }}
           />
-          <Input.Search placeholder="Mã, tên, email, SĐT, gói..." value={search} onChange={(e) => setSearch(e.target.value)} allowClear style={{ width: 260 }} />
+          <Input.Search placeholder="Mã, tên, email, SĐT, gói tập..." value={search} onChange={(e) => setSearch(e.target.value)} allowClear style={{ width: 260 }} />
         </Space>
       }
     />

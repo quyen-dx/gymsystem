@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs'
 import PDFDocument from 'pdfkit'
-import { getFinance, getMembers, getPt, getBooking, getShop, getSystem, getTransactions, getSummary, resolveRange } from './reportService.js'
+import { getFinance, getMembers, getPt, getBooking, getSystem, getTransactions, getSummary, resolveRange } from './reportService.js'
 
 const fmtMoney = (n) => `${Number(n || 0).toLocaleString('vi-VN')} đ`
 
@@ -9,7 +9,6 @@ const MODULE_META = {
   members: { label: 'Hội viên' },
   pt: { label: 'Huấn luyện viên' },
   booking: { label: 'Booking & Lớp học' },
-  shop: { label: 'Shop' },
   system: { label: 'Hệ thống' },
 }
 
@@ -18,7 +17,6 @@ const moduleLoaders = {
   members: getMembers,
   pt: getPt,
   booking: getBooking,
-  shop: getShop,
   system: getSystem,
 }
 
@@ -40,7 +38,7 @@ const TRANSACTION_COLUMNS = [
   { header: 'Hội viên', key: 'memberName', width: 20 },
   { header: 'Email', key: 'memberEmail', width: 26 },
   { header: 'SĐT', key: 'memberPhone', width: 15 },
-  { header: 'Gói / Shop', key: 'plan', width: 22 },
+  { header: 'Gói tập', key: 'plan', width: 22 },
   { header: 'Loại giao dịch', key: 'typeLabel', width: 16 },
   { header: 'Thanh toán', key: 'paymentMethod', width: 14 },
   { header: 'Giá', key: 'amount', width: 16 },

@@ -1,7 +1,8 @@
-import { getSummary, getFinance, getMembers, getPt, getBooking, getShop, getSystem, getTransactions, getMemberActivity, getBookings, getOrders, getSystemUsers } from '../services/reportService.js'
+import { getSummary, getFinance, getMembers, getPt, getBooking, getCheckin, getSystem, getTransactions, getMemberActivity, getBookings, getCheckins, getOrders, getSystemUsers } from '../services/reportService.js'
 import { buildXlsx, buildPdf } from '../services/reportExportService.js'
 
-const MODULES = ['finance', 'members', 'pt', 'booking', 'shop', 'system']
+const MODULES = ['finance', 'members', 'pt', 'booking', 'checkin', 'system']
+const EXPORT_MODULES = MODULES.filter((module) => module !== 'checkin')
 
 const parseRange = (req) => ({
   range: req.query.range || '30d',
@@ -24,7 +25,7 @@ export const getChartsData = async (req, res) => {
     if (!MODULES.includes(module)) {
       return res.status(400).json({ success: false, message: 'Module không hợp lệ' })
     }
-    const loaders = { finance: getFinance, members: getMembers, pt: getPt, booking: getBooking, shop: getShop, system: getSystem }
+    const loaders = { finance: getFinance, members: getMembers, pt: getPt, booking: getBooking, checkin: getCheckin, system: getSystem }
     const data = await loaders[module](parseRange(req))
     res.status(200).json(data)
   } catch (error) {
@@ -101,24 +102,6 @@ export const getBookingsHandler = async (req, res) => {
   }
 }
 
-export const getOrdersHandler = async (req, res) => {
-  try {
-    const data = await getOrders({
-      ...parseRange(req),
-      date: req.query.date || undefined,
-      shopId: req.query.shopId || undefined,
-      sellerId: req.query.sellerId || undefined,
-      status: req.query.status || undefined,
-      search: req.query.search || undefined,
-      page: Number(req.query.page) || 1,
-      pageSize: Math.min(Number(req.query.pageSize) || 20, 200),
-    })
-    res.status(200).json(data)
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách đơn hàng', error: error.message })
-  }
-}
-
 export const getSystemUsersHandler = async (req, res) => {
   try {
     const data = await getSystemUsers({
@@ -142,7 +125,7 @@ export const exportReport = async (req, res) => {
     const format = req.query.format === 'pdf' ? 'pdf' : 'xlsx'
     const range = req.query.range || '30d'
     const { from, to } = req.query
-    if (!MODULES.includes(module)) {
+    if (!EXPORT_MODULES.includes(module)) {
       return res.status(400).json({ success: false, message: 'Module không hợp lệ' })
     }
     const actorName = req.user?.name || 'Admin'
@@ -173,5 +156,25 @@ export const getRevenueReport = async (req, res) => {
     res.status(200).json(data)
   } catch (error) {
     res.status(500).json({ success: false, message: 'Lỗi khi lấy báo cáo doanh thu', error: error.message })
+  }
+}
+
+export const getCheckinsHandler = async (req, res) => {
+  try {
+    const data = await getCheckins({
+      ...parseRange(req),
+      date: req.query.date || undefined,
+      status: req.query.status || undefined,
+      method: req.query.method || undefined,
+      sessionType: req.query.sessionType || undefined,
+      memberId: req.query.memberId || undefined,
+      planId: req.query.planId || undefined,
+      search: req.query.search || undefined,
+      page: Number(req.query.page) || 1,
+      pageSize: Math.min(Number(req.query.pageSize) || 20, 200),
+    })
+    res.status(200).json(data)
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Lỗi khi lấy lịch sử check-in', error: error.message })
   }
 }

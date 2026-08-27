@@ -12,8 +12,8 @@ import FinancialDetailDrawer from './drawers/FinancialDetailDrawer'
 import MemberActivityDrawer from './drawers/MemberActivityDrawer'
 import BookingDetailDrawer from './drawers/BookingDetailDrawer'
 import PTDetailDrawer from './drawers/PTDetailDrawer'
-import ShopOrderDrawer from './drawers/ShopOrderDrawer'
 import SystemUserDrawer from './drawers/SystemUserDrawer'
+import CheckinDetailDrawer from './drawers/CheckinDetailDrawer'
 import { ReportEmpty, ReportError, ReportSkeleton } from './ReportStates'
 import { useReportDashboard } from '../../hooks/useReportDashboard'
 import type { DrawerType, DrillFilter, ReportModule } from '../../types/report'
@@ -30,6 +30,7 @@ interface DashboardScaffoldProps {
   /** When a top item is clicked, map it to a drill filter */
   topToFilter?: (topKey: string, itemId?: string) => DrillFilter | null
   chartPointToFilter?: (chartKey: string, pointKey?: string | number) => DrillFilter | null
+  exportEnabled?: boolean
 }
 
 export default function DashboardScaffold({
@@ -42,6 +43,7 @@ export default function DashboardScaffold({
   kpiToFilter,
   topToFilter,
   chartPointToFilter,
+  exportEnabled = true,
 }: DashboardScaffoldProps) {
   const navigate = useNavigate()
   const { range, setRange, data, loading, error, refresh } = useReportDashboard(module)
@@ -76,10 +78,10 @@ export default function DashboardScaffold({
         return <BookingDetailDrawer {...common} />
       case 'pt':
         return <PTDetailDrawer {...common} />
-      case 'shop':
-        return <ShopOrderDrawer {...common} />
       case 'system':
         return <SystemUserDrawer {...common} />
+      case 'checkin':
+        return <CheckinDetailDrawer {...common} />
       case 'financial':
       default:
         return <FinancialDetailDrawer {...common} />
@@ -104,7 +106,7 @@ export default function DashboardScaffold({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <RangeSelector value={range} onChange={setRange} />
-          <ReportExportButton module={module} range={range} />
+          {exportEnabled && <ReportExportButton module={module} range={range} />}
         </div>
       </div>
 
@@ -135,6 +137,7 @@ export default function DashboardScaffold({
               {chartKeys.map((key) => {
                 const chart = data.charts[key]
                 if (!chart) return null
+                const canDrillDown = !!chartPointToFilter?.(key, chart.pointKeys?.[0])
                 return (
                   <ChartCard key={key} title={chart.title}>
                     <ChartFactory
@@ -143,7 +146,7 @@ export default function DashboardScaffold({
                       series={chart.series}
                       pointKeys={chart.pointKeys}
                       onPointClick={
-                        chartPointToFilter
+                        canDrillDown && chartPointToFilter
                           ? (point) => {
                               const filter = chartPointToFilter(key, point.key)
                               if (filter) openDrawer(`${chart.title} — ${point.label}`, filter)
@@ -163,12 +166,13 @@ export default function DashboardScaffold({
               {topKeys.map((key) => {
                 const top = data.tops[key]
                 if (!top) return null
+                const canDrillDown = !!topToFilter?.(key, top.items[0]?.id)
                 return (
                   <ChartCard key={key} title={top.title}>
                     <TopList
                       data={top}
                       onItemClick={
-                        topToFilter
+                        canDrillDown && topToFilter
                           ? (item) => {
                               const filter = topToFilter(key, item.id)
                               if (filter) openDrawer(`${top.title} — ${item.label}`, filter)

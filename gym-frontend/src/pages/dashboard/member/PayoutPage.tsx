@@ -165,7 +165,6 @@ export default function PayoutPage() {
             { key: 'account', label: 'Tài khoản', children: `${selectedRequest.bankSnapshot?.accountNumber || '—'} — ${selectedRequest.bankSnapshot?.accountHolder || '—'}` },
             { key: 'status', label: 'Trạng thái', children: <Tag color={colors[selectedRequest.status]}>{labels[selectedRequest.status] || selectedRequest.status}</Tag> },
             { key: 'created', label: 'Thời gian gửi', children: selectedRequest.createdAt ? new Date(selectedRequest.createdAt).toLocaleString('vi-VN') : '—' },
-            { key: 'reference', label: 'Mã tham chiếu', children: selectedRequest.transferReference || '—' },
             { key: 'transferred', label: 'Thời gian chuyển', children: selectedRequest.transferredAt ? new Date(selectedRequest.transferredAt).toLocaleString('vi-VN') : '—' },
             { key: 'proof', label: 'Bill chuyển khoản', children: selectedRequest.transferProof ? <Button type="link" className="!px-0" onClick={() => setProofPreview(selectedRequest.transferProof)}>Xem bill</Button> : '—' },
             { key: 'cancelReason', label: 'Lý do hủy', children: selectedRequest.cancelReason || '—' },

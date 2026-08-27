@@ -3,7 +3,8 @@ import mongoose from 'mongoose'
 export const PAYOUT_STATUSES = ['PENDING_REVIEW', 'APPROVED', 'TRANSFERRED', 'DISPUTED', 'COMPLETED', 'REJECTED', 'CANCELLED']
 
 const transferSchema = new mongoose.Schema({
-  transferReference: { type: String, trim: true, required: true },
+  // Bill is the sole mandatory proof. Older records may still contain a bank reference.
+  transferReference: { type: String, trim: true, default: '' },
   transferProof: { type: String, trim: true, required: true },
   transferredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   transferredAt: { type: Date, required: true },

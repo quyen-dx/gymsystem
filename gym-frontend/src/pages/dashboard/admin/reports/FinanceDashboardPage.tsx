@@ -9,24 +9,22 @@ export default function FinanceDashboardPage() {
         title="Dashboard Tài chính"
         subtitle="Doanh thu, giao dịch, ví, hoàn tiền & dòng tiền"
         drawerType="financial"
-        chartOrder={['revenueByDay', 'revenueByMonth', 'revenueSource', 'revenueByPlan', 'revenueByShop']}
-        topOrder={['topPlans', 'topShops', 'topMembers']}
+        chartOrder={['revenueByDay', 'revenueByMonth', 'revenueByPlan']}
+        topOrder={['topPlans', 'topMembers']}
         kpiToFilter={{
-          totalRevenue: {},
+          totalRevenue: { type: 'membership' },
           transactions: {},
           refunds: { type: 'refund' },
-          avgPerDay: {},
+          avgPerDay: { type: 'membership' },
         }}
         chartPointToFilter={(chartKey, pointKey) => {
-          if (chartKey === 'revenueByDay' || chartKey === 'revenueByMonth') return pointKey ? { date: String(pointKey) } : null
-          if (chartKey === 'revenueByPlan') return pointKey ? { planId: String(pointKey) } : null
-          if (chartKey === 'revenueByShop') return pointKey ? { shopId: String(pointKey) } : null
+          if (chartKey === 'revenueByDay' || chartKey === 'revenueByMonth') return pointKey ? { date: String(pointKey), type: 'membership' } : null
+          if (chartKey === 'revenueByPlan') return pointKey ? { planId: String(pointKey), type: 'membership' } : null
           return null
         }}
         topToFilter={(topKey, itemId) => {
-          if (topKey === 'topPlans' && itemId) return { planId: itemId }
-          if (topKey === 'topShops' && itemId) return { shopId: itemId }
-          if (topKey === 'topMembers' && itemId) return { memberId: itemId }
+          if (topKey === 'topPlans' && itemId) return { planId: itemId, type: 'membership' }
+          if (topKey === 'topMembers' && itemId) return { memberId: itemId, type: 'membership' }
           return null
         }}
       />

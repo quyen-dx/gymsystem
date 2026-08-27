@@ -13,6 +13,7 @@ export const MODULE_ICONS: Record<string, ComponentType<any>> = {
   members: TeamOutlined,
   pt: ThunderboltOutlined,
   booking: CalendarOutlined,
+  checkin: CalendarOutlined,
   shop: ShopOutlined,
   system: AppstoreOutlined,
 }

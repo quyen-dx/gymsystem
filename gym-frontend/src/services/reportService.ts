@@ -25,6 +25,9 @@ export const reportService = {
   getBookings: (params: LooseParams) =>
     api.get<{ rows: any[]; total: number; page: number; pageSize: number; types: Array<{ key: string; label: string }> }>('/admin/reports/bookings', { params: { ...toParams(params as ReportRangeState), ...params } }),
 
+  getCheckins: (params: LooseParams) =>
+    api.get<{ rows: any[]; total: number; page: number; pageSize: number; statuses: Array<{ key: string; label: string }>; methods: Array<{ key: string; label: string }>; sessionTypes: Array<{ key: string; label: string }> }>('/admin/reports/checkins', { params: { ...toParams(params as ReportRangeState), ...params } }),
+
   getOrders: (params: LooseParams) =>
     api.get<{ rows: any[]; total: number; page: number; pageSize: number; types: Array<{ key: string; label: string }> }>('/admin/reports/orders', { params: { ...toParams(params as ReportRangeState), ...params } }),
 

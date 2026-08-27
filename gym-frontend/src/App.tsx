@@ -27,7 +27,7 @@ const FinanceDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/
 const MembersDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/MembersDashboardPage'))
 const PtDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/PtDashboardPage'))
 const BookingDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/BookingDashboardPage'))
-const ShopDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/ShopDashboardPage'))
+const CheckinDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/CheckinDashboardPage'))
 const SystemDashboardPage = lazy(() => import('./pages/dashboard/admin/reports/SystemDashboardPage'))
 
 function ReportPageLoader() {
@@ -449,7 +449,7 @@ function AppWithTheme() {
         <Route path="/admin/reports/members" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><MembersDashboardPage /></Suspense></PrivateRoute>} />
         <Route path="/admin/reports/pt" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><PtDashboardPage /></Suspense></PrivateRoute>} />
         <Route path="/admin/reports/booking" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><BookingDashboardPage /></Suspense></PrivateRoute>} />
-        <Route path="/admin/reports/shop" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><ShopDashboardPage /></Suspense></PrivateRoute>} />
+        <Route path="/admin/reports/checkin" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><CheckinDashboardPage /></Suspense></PrivateRoute>} />
         <Route path="/admin/reports/system" element={<PrivateRoute feature="reports.revenueChartEnabled"><Suspense fallback={<ReportPageLoader />}><SystemDashboardPage /></Suspense></PrivateRoute>} />
         <Route path="/admin/checkin" element={<PrivateRoute><AdminCheckinPage /></PrivateRoute>} />
         <Route path="/admin/checkin-history" element={<Navigate to="/admin/checkin?tab=history" replace />} />

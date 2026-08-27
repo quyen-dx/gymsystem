@@ -312,7 +312,7 @@ const collectRevenueStreams = async ({ from, to }) => {
 
 export const getSummary = async ({ range = '30d', from, to } = {}) => {
   const r = resolveRange({ range, from, to })
-  const [revenue, prevRevenue, membersTotal, newMembers, newMembersPrev, ptsTotal, bookingsTotal, shopsTotal, shopRevenue, usersTotal] = await Promise.all([
+  const [revenue, prevRevenue, membersTotal, newMembers, newMembersPrev, ptsTotal, bookingsTotal, checkinsNow, checkinsPrev, checkinMembers, usersTotal] = await Promise.all([
     collectRevenueStreams({ from: r.from, to: r.to }),
     collectRevenueStreams({ from: r.prevFrom, to: r.prevTo }),
     User.countDocuments({ role: 'member' }),
@@ -320,14 +320,18 @@ export const getSummary = async ({ range = '30d', from, to } = {}) => {
     countInRange(User, { role: 'member' }, { from: r.prevFrom, to: r.prevTo }),
     PT.countDocuments(),
     countInRange(Booking, {}, { from: r.from, to: r.to }),
-    Shop.countDocuments(),
-    sumInRange(Order, { paymentStatus: 'paid' }, 'totalAmount', { from: r.from, to: r.to }),
+    CheckIn.countDocuments({ status: 'success', checkinTime: { $gte: r.from, $lt: r.to } }),
+    CheckIn.countDocuments({ status: 'success', checkinTime: { $gte: r.prevFrom, $lt: r.prevTo } }),
+    CheckIn.distinct('memberId', { status: 'success', checkinTime: { $gte: r.from, $lt: r.to } }),
     User.countDocuments(),
   ])
 
   // Wallet top-ups are customer funds held by the platform, not revenue.
-  const curRevenue = revenue.membership + revenue.shop
-  const prevTotal = prevRevenue.membership + prevRevenue.shop
+  const curRevenue = revenue.membership
+  const prevTotal = prevRevenue.membership
+  // Kept as local aliases while replacing the old Shop card below.
+  const shopRevenue = checkinsNow
+  const shopsTotal = checkinMembers.length
 
   const modules = [
     {
@@ -379,16 +383,16 @@ export const getSummary = async ({ range = '30d', from, to } = {}) => {
       route: '/admin/reports/booking',
     },
     {
-      key: 'shop',
-      label: 'Shop',
+      key: 'checkin',
+      label: 'Check-in',
       description: 'Doanh thu, đơn hàng & sản phẩm',
-      icon: 'shop',
-      color: '#ec4899',
-      value: shopRevenue,
+      icon: 'checkin',
+      color: '#06b6d4',
+      value: checkinsNow,
       displayValue: `${fmtMoney(shopRevenue)}đ`,
-      delta: null,
+      delta: pct(checkinsNow, checkinsPrev),
       hint: `${shopsTotal} shop đang hoạt động`,
-      route: '/admin/reports/shop',
+      route: '/admin/reports/checkin',
     },
     {
       key: 'system',
@@ -403,6 +407,13 @@ export const getSummary = async ({ range = '30d', from, to } = {}) => {
       route: '/admin/reports/system',
     },
   ]
+
+  const checkinModule = modules.find((module) => module.key === 'checkin')
+  if (checkinModule) {
+    checkinModule.description = 'Lịch sử và tần suất check-in của hội viên'
+    checkinModule.displayValue = checkinsNow.toLocaleString('vi-VN')
+    checkinModule.hint = `${checkinMembers.length} hội viên đã check-in trong kỳ`
+  }
 
   return { range: r, modules }
 }
@@ -425,34 +436,25 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
 
   // A wallet-funded purchase already has a Payment/Order record. Counting a
   // top-up as revenue would therefore overstate revenue and double-count it.
-  const revenue = cur.membership + cur.shop
-  const prevRevenue = prev.membership + prev.shop
-  const txCount = cur.membershipCount + cur.shopCount + cur.depositCount + cur.refundCount + cur.payoutCount
+  const revenue = cur.membership
+  const prevRevenue = prev.membership
+  const txCount = cur.membershipCount + cur.depositCount + cur.refundCount + cur.payoutCount
   const days = Math.max(1, Math.ceil((r.to - r.from) / DAY_MS))
 
   // Daily revenue series (all streams combined)
-  const [membershipDaily, shopDaily] = await Promise.all([
-    dailySeries(Payment, { status: PAID_PAYMENT_STATUSES }, 'amount', { from: r.from, to: r.to }),
-    dailySeries(Order, { paymentStatus: 'paid' }, 'totalAmount', { from: r.from, to: r.to }),
-  ])
+  const membershipDaily = await dailySeries(Payment, { status: PAID_PAYMENT_STATUSES }, 'amount', { from: r.from, to: r.to })
   const revenueLabels = membershipDaily.labels
-  const revenueByDay = revenueLabels.map((_, i) => membershipDaily.data[i] + shopDaily.data[i])
+  const revenueByDay = membershipDaily.data
 
   // Monthly revenue (12 calendar months)
   const endParts = calendarParts(new Date(r.to.getTime() - 1))
   const monthFrom = startOfMonth(endParts.year, endParts.month - 11)
-  const [mPay, mShop] = await Promise.all([
-    Payment.aggregate([
-      { $match: { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: monthFrom, $lt: r.to } } },
-      { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: TZ } }, total: { $sum: '$amount' } } },
-    ]),
-    Order.aggregate([
-      { $match: { paymentStatus: 'paid', createdAt: { $gte: monthFrom, $lt: r.to } } },
-      { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: TZ } }, total: { $sum: '$totalAmount' } } },
-    ]),
+  const mPay = await Payment.aggregate([
+    { $match: { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: monthFrom, $lt: r.to } } },
+    { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: TZ } }, total: { $sum: '$amount' } } },
   ])
   const monthMap = new Map()
-  for (const x of [...mPay, ...mShop]) {
+  for (const x of mPay) {
     monthMap.set(x._id, (monthMap.get(x._id) || 0) + x.total)
   }
   const monthLabelsArr = monthLabels(monthFrom, r.to)
@@ -470,28 +472,15 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
   ])
 
   // Revenue by shop
-  const shopRevenueAgg = await Order.aggregate([
-    { $match: { paymentStatus: 'paid', createdAt: { $gte: r.from, $lt: r.to } } },
-    { $lookup: { from: 'shops', localField: 'shopId', foreignField: '_id', as: 'shop' } },
-    { $unwind: { path: '$shop', preserveNullAndEmptyArrays: true } },
-    { $group: { _id: '$shopId', name: { $first: { $ifNull: ['$shop.name', 'Shop không tên'] } }, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
-    { $sort: { total: -1 } },
-    { $limit: 6 },
-  ])
+  const shopRevenueAgg = []
 
   // Top members by spend (payments + orders)
-  const [topMembersPayment, topMembersOrder] = await Promise.all([
-    Payment.aggregate([
-      { $match: { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: r.from, $lt: r.to } } },
-      { $group: { _id: '$userId', total: { $sum: '$amount' }, count: { $sum: 1 } } },
-    ]),
-    Order.aggregate([
-      { $match: { paymentStatus: 'paid', createdAt: { $gte: r.from, $lt: r.to } } },
-      { $group: { _id: '$userId', total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
-    ]),
+  const topMembersPayment = await Payment.aggregate([
+    { $match: { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: r.from, $lt: r.to } } },
+    { $group: { _id: '$userId', total: { $sum: '$amount' }, count: { $sum: 1 } } },
   ])
   const spendMap = new Map()
-  for (const grp of [topMembersPayment, topMembersOrder]) {
+  for (const grp of [topMembersPayment]) {
     for (const row of grp) {
       const prev = spendMap.get(String(row._id)) || { total: 0, count: 0 }
       spendMap.set(String(row._id), { total: prev.total + row.total, count: prev.count + row.count })
@@ -516,12 +505,12 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
 
   const kpis = [
     { key: 'totalRevenue', label: 'Tổng doanh thu', value: revenue, delta: pct(revenue, prevRevenue), format: 'money', icon: 'revenue', sparkline: revenueByDay },
-    { key: 'transactions', label: 'Tổng giao dịch', value: txCount, delta: pct(txCount, prev.membershipCount + prev.shopCount + prev.depositCount + prev.refundCount + prev.payoutCount), format: 'number', icon: 'orders', sparkline: [] },
+    { key: 'transactions', label: 'Tổng giao dịch', value: txCount, delta: pct(txCount, prev.membershipCount + prev.depositCount + prev.refundCount + prev.payoutCount), format: 'number', icon: 'orders', sparkline: [] },
     { key: 'refunds', label: 'Tổng hoàn tiền', value: cur.refund, delta: null, format: 'money', icon: 'refund', sparkline: refundRows.map((x) => x.total) },
     { key: 'avgPerDay', label: 'Doanh thu TB/ngày', value: Math.round(revenue / days), delta: pct(revenue / days, prevRevenue / days), format: 'money', icon: 'avg', sparkline: [] },
   ]
 
-  return {
+  const dashboard = {
     range: r,
     kpis,
     charts: {
@@ -575,6 +564,10 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
       },
     },
   }
+  delete dashboard.charts.revenueSource
+  delete dashboard.charts.revenueByShop
+  delete dashboard.tops.topShops
+  return dashboard
 }
 
 // ---------------------------------------------------------------------------
@@ -591,8 +584,8 @@ export const getMembers = async ({ range = '30d', from, to } = {}) => {
     MembershipRenewal.countDocuments({ status: 'ACTIVE', renewedAt: { $gte: r.prevFrom, $lt: r.prevTo } }),
     countInRange(PlanChangeHistory, { changeType: { $in: ['change_plan', 'upgrade', 'downgrade'] } }, { from: r.from, to: r.to }),
     countInRange(MembershipCancellationRequest, { status: { $in: ['pending', 'approved'] } }, { from: r.from, to: r.to }),
-    countInRange(CheckIn, { status: 'success' }, { from: r.from, to: r.to }),
-    countInRange(CheckIn, { status: 'success' }, { from: r.prevFrom, to: r.prevTo }),
+    CheckIn.countDocuments({ status: 'success', checkinTime: { $gte: r.from, $lt: r.to } }),
+    CheckIn.countDocuments({ status: 'success', checkinTime: { $gte: r.prevFrom, $lt: r.prevTo } }),
     countInRange(Booking, { status: { $in: ['confirmed', 'completed'] } }, { from: r.from, to: r.to }),
     countInRange(Booking, { status: { $in: ['confirmed', 'completed'] } }, { from: r.prevFrom, to: r.prevTo }),
     countInRange(ClassEnrollment, {}, { from: r.from, to: r.to }),
@@ -609,7 +602,7 @@ export const getMembers = async ({ range = '30d', from, to } = {}) => {
 
   // Top most-active members (check-ins)
   const topCheckIn = await CheckIn.aggregate([
-    { $match: { status: 'success', createdAt: { $gte: r.from, $lt: r.to } } },
+    { $match: { status: 'success', checkinTime: { $gte: r.from, $lt: r.to } } },
     { $group: { _id: '$memberId', total: { $sum: 1 } } },
     { $sort: { total: -1 } },
     { $limit: 8 },
@@ -681,6 +674,179 @@ export const getMembers = async ({ range = '30d', from, to } = {}) => {
 }
 
 // ---------------------------------------------------------------------------
+// Check-in
+// ---------------------------------------------------------------------------
+
+const CHECKIN_STATUS_LABELS = {
+  success: 'Thành công',
+  failed: 'Thất bại',
+  expired: 'Mã QR hết hạn',
+  blocked: 'Bị chặn',
+}
+
+const CHECKIN_METHOD_LABELS = {
+  QR_SELF: 'QR cá nhân',
+  QR_PROJECTOR: 'QR tại phòng tập',
+  STAFF: 'Nhân viên hỗ trợ',
+  RECEPTION: 'Lễ tân',
+  AUTO: 'Tự động',
+}
+
+const SESSION_TYPE_LABELS = {
+  SCHEDULED: 'Theo lịch tập',
+  FREE_TRAINING: 'Tập tự do',
+}
+
+export const getCheckin = async ({ range = '30d', from, to } = {}) => {
+  const r = resolveRange({ range, from, to })
+  const match = { status: 'success', checkinTime: { $gte: r.from, $lt: r.to } }
+  const prevMatch = { status: 'success', checkinTime: { $gte: r.prevFrom, $lt: r.prevTo } }
+  const days = Math.max(1, Math.ceil((r.to - r.from) / DAY_MS))
+
+  const [total, prevTotal, members, scheduled, freeTraining, daily, hourRows, methodRows, sessionRows, memberRows, planRows] = await Promise.all([
+    CheckIn.countDocuments(match),
+    CheckIn.countDocuments(prevMatch),
+    CheckIn.distinct('memberId', match),
+    CheckIn.countDocuments({ ...match, sessionType: 'SCHEDULED' }),
+    CheckIn.countDocuments({ ...match, sessionType: { $ne: 'SCHEDULED' } }),
+    countSeries(CheckIn, { status: 'success' }, { from: r.from, to: r.to, dateField: 'checkinTime' }),
+    CheckIn.aggregate([
+      { $match: match },
+      { $group: { _id: { $hour: { date: '$checkinTime', timezone: 'Asia/Ho_Chi_Minh' } }, total: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]),
+    CheckIn.aggregate([
+      { $match: match },
+      { $group: { _id: '$checkInMethod', total: { $sum: 1 } } },
+      { $sort: { total: -1 } },
+    ]),
+    CheckIn.aggregate([
+      { $match: match },
+      { $set: { normalizedSessionType: { $cond: [{ $eq: ['$sessionType', 'SCHEDULED'] }, 'SCHEDULED', 'FREE_TRAINING'] } } },
+      { $group: { _id: '$normalizedSessionType', total: { $sum: 1 } } },
+      { $sort: { total: -1 } },
+    ]),
+    CheckIn.aggregate([
+      { $match: match },
+      { $group: { _id: '$memberId', total: { $sum: 1 } } },
+      { $sort: { total: -1 } },
+      { $limit: 10 },
+    ]),
+    CheckIn.aggregate([
+      { $match: { ...match, planId: { $ne: null } } },
+      { $group: { _id: '$planId', name: { $first: '$planName' }, total: { $sum: 1 } } },
+      { $sort: { total: -1 } },
+      { $limit: 10 },
+    ]),
+  ])
+
+  const memberIds = memberRows.map((row) => row._id).filter(Boolean)
+  const users = memberIds.length
+    ? await User.find({ _id: { $in: memberIds } }).select('fullName name username memberCode phone').lean()
+    : []
+  const userMap = new Map(users.map((user) => [String(user._id), user]))
+  const hourlyMap = new Map(hourRows.map((row) => [Number(row._id), row.total]))
+  const hours = Array.from({ length: 24 }, (_, index) => index)
+
+  return {
+    range: r,
+    kpis: [
+      { key: 'total', label: 'Lượt check-in thành công', value: total, delta: pct(total, prevTotal), format: 'number', icon: 'checkin', sparkline: daily.data },
+      { key: 'members', label: 'Hội viên đã check-in', value: members.length, delta: null, format: 'number', icon: 'members', sparkline: [] },
+      { key: 'avgPerDay', label: 'Trung bình mỗi ngày', value: Math.round((total / days) * 10) / 10, delta: null, format: 'number', icon: 'avg', sparkline: [] },
+      { key: 'scheduled', label: 'Check-in theo lịch', value: scheduled, delta: null, format: 'number', icon: 'booking', sparkline: [] },
+      { key: 'freeTraining', label: 'Check-in tập tự do', value: freeTraining, delta: null, format: 'number', icon: 'active', sparkline: [] },
+    ],
+    charts: {
+      checkinsByDay: {
+        type: 'area', title: 'Lượt check-in theo ngày', labels: daily.labels, pointKeys: daily.keys,
+        series: [{ name: 'Check-in thành công', data: daily.data }],
+      },
+      checkinsByHour: {
+        type: 'bar', title: 'Khung giờ check-in', labels: hours.map((hour) => `${String(hour).padStart(2, '0')}h`), pointKeys: hours,
+        series: [{ name: 'Lượt check-in', data: hours.map((hour) => hourlyMap.get(hour) || 0) }],
+      },
+      checkinMethod: {
+        type: 'pie', title: 'Phương thức check-in', labels: methodRows.map((row) => CHECKIN_METHOD_LABELS[row._id] || row._id || 'Chưa xác định'), pointKeys: methodRows.map((row) => row._id || ''),
+        series: [{ name: 'Lượt check-in', data: methodRows.map((row) => row.total) }],
+      },
+      sessionType: {
+        type: 'pie', title: 'Loại buổi tập', labels: sessionRows.map((row) => SESSION_TYPE_LABELS[row._id] || row._id || 'Chưa xác định'), pointKeys: sessionRows.map((row) => row._id || ''),
+        series: [{ name: 'Lượt check-in', data: sessionRows.map((row) => row.total) }],
+      },
+    },
+    tops: {
+      topMembers: {
+        title: 'Hội viên check-in nhiều nhất',
+        items: memberRows.map((row) => {
+          const user = userMap.get(String(row._id))
+          return { id: String(row._id), label: getDisplayName(user, 'Hội viên'), sub: user?.memberCode || user?.phone || '', value: row.total, color: '#06b6d4' }
+        }),
+      },
+      topPlans: {
+        title: 'Gói có lượt check-in nhiều nhất',
+        items: planRows.map((row) => ({ id: String(row._id), label: row.name || 'Gói tập', sub: `${row.total} lượt check-in`, value: row.total, color: '#8b5cf6' })),
+      },
+    },
+  }
+}
+
+export const getCheckins = async ({ range = '30d', from, to, date, status, method, sessionType, memberId, planId, search, page = 1, pageSize = 20 } = {}) => {
+  const r = applyDateFilter(date, null, resolveRange({ range, from, to }))
+  const skip = (Number(page) - 1) * Number(pageSize)
+  const limit = Number(pageSize)
+  const match = { checkinTime: { $gte: r.from, $lt: r.to } }
+  if (status) match.status = status
+  if (method) match.checkInMethod = method
+  if (sessionType === 'FREE_TRAINING') match.sessionType = { $ne: 'SCHEDULED' }
+  else if (sessionType) match.sessionType = sessionType
+  if (memberId) match.memberId = memberId
+  if (planId) match.planId = planId
+
+  if (search) {
+    const re = new RegExp(String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+    const matchedMembers = await User.find({ $or: [{ name: re }, { fullName: re }, { email: re }, { phone: re }, { memberCode: re }] }).select('_id').lean()
+    match.$or = [{ planName: re }, { sessionTitle: re }, { performedByName: re }]
+    if (matchedMembers.length) match.$or.push({ memberId: { $in: matchedMembers.map((user) => user._id) } })
+  }
+
+  const [total, checks] = await Promise.all([
+    CheckIn.countDocuments(match),
+    CheckIn.find(match).sort({ checkinTime: -1 }).skip(skip).limit(limit).lean(),
+  ])
+  const userIds = [...new Set(checks.flatMap((check) => [check.memberId, check.performedBy, check.staffId]).filter(Boolean).map(String))]
+  const users = userIds.length ? await User.find({ _id: { $in: userIds } }).select('fullName name username memberCode phone').lean() : []
+  const userMap = new Map(users.map((user) => [String(user._id), user]))
+
+  return {
+    range: r,
+    rows: checks.map((check) => ({
+      id: String(check._id),
+      memberId: String(check.memberId),
+      memberName: getDisplayName(userMap.get(String(check.memberId)), 'Hội viên'),
+      memberCode: userMap.get(String(check.memberId))?.memberCode || '',
+      plan: check.planName || '—',
+      time: check.checkinTime,
+      status: check.status,
+      statusLabel: CHECKIN_STATUS_LABELS[check.status] || check.status,
+      method: check.checkInMethod || '',
+      methodLabel: CHECKIN_METHOD_LABELS[check.checkInMethod] || check.checkInMethod || 'Chưa xác định',
+      sessionType: check.sessionType === 'SCHEDULED' ? 'SCHEDULED' : 'FREE_TRAINING',
+      sessionTypeLabel: check.sessionType === 'SCHEDULED' ? SESSION_TYPE_LABELS.SCHEDULED : SESSION_TYPE_LABELS.FREE_TRAINING,
+      session: check.sessionTitle || check.sessionTime || 'Tập tự do',
+      performedBy: check.performedByName || getDisplayName(userMap.get(String(check.performedBy || check.staffId)), ''),
+      note: check.errorNote || check.manualReason || '',
+    })),
+    total,
+    page: Number(page),
+    pageSize: limit,
+    statuses: Object.entries(CHECKIN_STATUS_LABELS).map(([key, label]) => ({ key, label })),
+    methods: Object.entries(CHECKIN_METHOD_LABELS).map(([key, label]) => ({ key, label })),
+    sessionTypes: Object.entries(SESSION_TYPE_LABELS).map(([key, label]) => ({ key, label })),
+  }
+}
+
+// ---------------------------------------------------------------------------
 // PT
 // ---------------------------------------------------------------------------
 
@@ -701,7 +867,7 @@ export const getPt = async ({ range = '30d', from, to } = {}) => {
 
   const [bookingByPt, cancelledByPt, shiftByPt, ratingByPt, sessionByPt, studentsByPt] = await Promise.all([
     Booking.aggregate([
-      { $match: { createdAt: { $gte: r.from, $lt: r.to }, status: { $in: ['confirmed', 'completed', 'pending'] } } },
+      { $match: { createdAt: { $gte: r.from, $lt: r.to } } },
       { $group: { _id: '$ptId', total: { $sum: 1 } } },
       { $sort: { total: -1 } },
       { $limit: 8 },
@@ -854,7 +1020,7 @@ export const getBooking = async ({ range = '30d', from, to } = {}) => {
     { key: 'classes', label: 'Lớp đang mở', value: classesActive, delta: null, format: 'number', icon: 'class', sparkline: [] },
     { key: 'waiting', label: 'Lớp chờ PT', value: classesWaiting, delta: null, format: 'number', icon: 'waiting', sparkline: [] },
     { key: 'enrollments', label: 'Học viên trong lớp', value: enrollments, delta: null, format: 'number', icon: 'members', sparkline: enrollDaily.data },
-    { key: 'pending', label: 'Chờ thanh toán', value: waitlist, delta: null, format: 'number', icon: 'pending', sparkline: [] },
+    { key: 'pending', label: 'Chờ xử lý', value: waitlist, delta: null, format: 'number', icon: 'pending', sparkline: [] },
   ]
 
   const cancelRate = totalNow > 0 ? Math.round((cancelledNow / totalNow) * 1000) / 10 : 0
@@ -887,6 +1053,7 @@ export const getBooking = async ({ range = '30d', from, to } = {}) => {
         type: 'pie',
         title: 'Tỷ lệ hủy booking',
         labels: [`Thành công (${confirmedNow})`, `Đã hủy (${cancelledNow})`],
+        pointKeys: ['successful', 'cancelled'],
         series: [{ name: 'Booking', data: [confirmedNow, cancelledNow] }],
       },
     },
@@ -1170,14 +1337,13 @@ export const getSystem = async ({ range = '30d', from, to } = {}) => {
 // ---------------------------------------------------------------------------
 
 const txTypeMeta = {
-  membership: { label: 'Đăng ký gói', color: 'green' },
+  membership: { label: 'Thanh toán gói tập', color: 'green' },
   deposit: { label: 'Nạp ví', color: 'blue' },
-  shop: { label: 'Mua hàng', color: 'magenta' },
   refund: { label: 'Hoàn tiền', color: 'red' },
   payout: { label: 'Rút tiền', color: 'orange' },
 }
 
-export const getTransactions = async ({ range = '30d', from, to, date, timestamp, type, status, search, memberId, ptId, shopId, planId, page = 1, pageSize = 20 } = {}) => {
+export const getTransactions = async ({ range = '30d', from, to, date, timestamp, type, status, search, memberId, ptId, planId, page = 1, pageSize = 20 } = {}) => {
   const r = applyDateFilter(date, timestamp, resolveRange({ range, from, to }))
   const skip = (Number(page) - 1) * Number(pageSize)
   const limit = Number(pageSize)
@@ -1206,6 +1372,7 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
     memberId: p.userId,
     plan: planMap.get(String(p.planId)) || '',
     type: 'membership',
+    membershipMode: p.metadata?.mode || 'register',
     paymentMethod: p.paymentMethod || p.method || '',
     amount: p.amount,
     discount: 0,
@@ -1244,10 +1411,8 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
     })
   })
 
-  // Shop orders
-  const orderMatch = { ...memberMatch, paymentStatus: 'paid', createdAt: { $gte: r.from, $lt: r.to } }
-  if (shopId) orderMatch.shopId = shopId
-  const orders = await Order.find(orderMatch).sort({ createdAt: -1 }).limit(500).lean()
+  // Shop orders are intentionally excluded from the financial reporting ledger.
+  const orders = []
   const shopIds = [...new Set(orders.map((o) => o.shopId).filter(Boolean))]
   const shops = shopIds.length ? await Shop.find({ _id: { $in: shopIds } }).select('name').lean() : []
   const shopMap = new Map(shops.map((s) => [String(s._id), s.name]))
@@ -1294,7 +1459,9 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
       memberPhone: member?.phone || '',
       memberCode: member?.memberCode || '',
       ptName,
-      typeLabel: txTypeMeta[t.type]?.label || t.type,
+      typeLabel: t.type === 'membership'
+        ? (t.membershipMode === 'renew' ? 'Gia hạn gói tập' : 'Đăng ký gói tập')
+        : (txTypeMeta[t.type]?.label || t.type),
       typeColor: txTypeMeta[t.type]?.color || 'default',
     }
   })
@@ -1476,7 +1643,8 @@ export const getBookings = async ({ range = '30d', from, to, date, ptId, status,
   const limit = Number(pageSize)
   const match = { createdAt: { $gte: r.from, $lt: r.to } }
   if (ptId) match.ptId = ptId
-  if (status) match.status = status
+  if (status === 'successful') match.status = { $in: ['confirmed', 'completed'] }
+  else if (status) match.status = status
   if (search) match.$or = [
     { 'slot': { $regex: search, $options: 'i' } },
     { 'note': { $regex: search, $options: 'i' } },
@@ -1523,7 +1691,7 @@ export const getBookings = async ({ range = '30d', from, to, date, ptId, status,
     total,
     page: Number(page),
     pageSize: limit,
-    types: Object.entries(statusMap).map(([key, label]) => ({ key, label })),
+    types: [{ key: 'successful', label: 'Thành công' }, ...Object.entries(statusMap).map(([key, label]) => ({ key, label }))],
   }
 }
 

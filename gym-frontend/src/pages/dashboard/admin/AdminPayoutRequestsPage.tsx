@@ -14,9 +14,18 @@ export default function AdminPayoutRequestsPage() {
   const [rows, setRows] = useState<any[]>([]); const [loading, setLoading] = useState(false); const [status, setStatus] = useState(''); const [search, setSearch] = useState(''); const [detail, setDetail] = useState<any>(null); const [proofPreview, setProofPreview] = useState<string | null>(null); const [action, setAction] = useState<{ type: string; row: any } | null>(null); const [form] = Form.useForm()
   const load = async () => { setLoading(true); try { const r = await payoutService.adminList({ status: status || undefined, search: search || undefined, limit: 50 }); setRows(r.data.data?.requests || []) } catch { message.error('Không thể tải yêu cầu rút tiền') } finally { setLoading(false) } }
   useEffect(() => { load() }, [status])
+  const approve = async (row: any) => {
+    try {
+      await payoutService.approve(row._id)
+      message.success('Đã duyệt yêu cầu rút tiền')
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.message || e.message || 'Không thể duyệt yêu cầu')
+    }
+  }
   const submit = async () => { if (!action) return; try { const values = await form.validateFields(); const fd = new FormData(); Object.entries(values).forEach(([k, v]) => { if (k === 'proof' && (v as any)?.file?.originFileObj) fd.append('transferProof', (v as any).file.originFileObj); else if (k !== 'proof' && v !== undefined) fd.append(k, String(v)) }); if (action.type === 'reject') await payoutService.reject(action.row._id, values.reason); else if (action.type === 'transfer') await payoutService.markTransferred(action.row._id, fd); else if (action.type === 'retransfer' || action.type === 'complete') { fd.set('action', action.type === 'retransfer' ? 'retransfer' : 'complete'); await payoutService.resolve(action.row._id, fd) } else if (action.type === 'approve') await payoutService.approve(action.row._id); message.success('Đã cập nhật yêu cầu'); setAction(null); form.resetFields(); load() } catch (e: any) { message.error(e.response?.data?.message || e.message || 'Không thể xử lý yêu cầu') } }
   const open = (type: string, row: any) => { form.resetFields(); setAction({ type, row }) }
-  const actionTitle: Record<string, string> = { approve: 'Duyệt yêu cầu', reject: 'Từ chối yêu cầu', transfer: 'Đánh dấu đã chuyển khoản', retransfer: 'Chuyển khoản lại', complete: 'Xác minh đã nhận tiền' }
+  const actionTitle: Record<string, string> = { approve: 'Duyệt yêu cầu', reject: 'Từ chối yêu cầu', transfer: 'Gửi minh chứng chuyển khoản', retransfer: 'Gửi minh chứng chuyển khoản lại', complete: 'Xác minh đã nhận tiền' }
   return (
     <DashboardLayout>
       <div className="p-5 md:p-9">
@@ -48,8 +57,8 @@ export default function AdminPayoutRequestsPage() {
               title: 'Thao tác',
               render: (_: any, row: any) => <Space wrap>
                 <Button size="small" icon={<EyeOutlined />} onClick={async () => { const r = await payoutService.adminGet(row._id); setDetail(r.data.data) }}>Xem</Button>
-                {row.status === 'PENDING_REVIEW' && <><Button size="small" type="primary" onClick={() => open('approve', row)}>Duyệt</Button><Button size="small" danger onClick={() => open('reject', row)}>Từ chối</Button></>}
-                {row.status === 'APPROVED' && <><Button size="small" type="primary" onClick={() => open('transfer', row)}>Đã chuyển</Button><Button size="small" danger onClick={() => open('reject', row)}>Từ chối</Button></>}
+                {row.status === 'PENDING_REVIEW' && <><Button size="small" type="primary" onClick={() => approve(row)}>Duyệt</Button><Button size="small" danger onClick={() => open('reject', row)}>Từ chối</Button></>}
+                {row.status === 'APPROVED' && <><Button size="small" type="primary" onClick={() => open('transfer', row)}>Gửi minh chứng chuyển khoản</Button><Button size="small" danger onClick={() => open('reject', row)}>Từ chối</Button></>}
                 {row.status === 'DISPUTED' && <><Button size="small" onClick={() => open('retransfer', row)}>Chuyển lại</Button><Button size="small" type="primary" onClick={() => open('complete', row)}>Xác minh</Button></>}
               </Space>,
             },
@@ -62,7 +71,6 @@ export default function AdminPayoutRequestsPage() {
             { key: 'bank', label: 'Ngân hàng', children: `${detail.bankSnapshot?.bankName} (${detail.bankSnapshot?.bankCode})` },
             { key: 'account', label: 'Tài khoản', children: `${detail.bankSnapshot?.accountNumber} — ${detail.bankSnapshot?.accountHolder}` },
             { key: 'status', label: 'Trạng thái', children: <Tag color={colors[detail.status]}>{labels[detail.status]}</Tag> },
-            { key: 'ref', label: 'Mã giao dịch', children: detail.transferReference || '—' },
             { key: 'proof', label: 'Bill', children: detail.transferProof ? <Button type="link" className="!px-0" onClick={() => setProofPreview(detail.transferProof)}>Xem bill</Button> : '—' },
             { key: 'dispute', label: 'Khiếu nại', children: detail.disputeReason || '—' },
             { key: 'cancelReason', label: 'Lý do hủy', children: detail.cancelReason || '—' },
@@ -76,7 +84,6 @@ export default function AdminPayoutRequestsPage() {
           <Form form={form} layout="vertical">
             {action?.type === 'reject' && <Form.Item name="reason" label="Lý do từ chối" rules={[{ required: true }]}><Input.TextArea /></Form.Item>}
             {['transfer', 'retransfer'].includes(action?.type || '') && <>
-              <Form.Item name="transferReference" label="Mã tham chiếu" rules={[{ required: true }]}><Input /></Form.Item>
               <Form.Item
                 name="proof"
                 label="Bill chuyển khoản"

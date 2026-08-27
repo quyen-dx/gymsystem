@@ -59,7 +59,7 @@ const createPayoutTransaction = async ({ request, session }) => {
     balanceBefore: wallet.balance, balanceAfter: wallet.balance, status: 'completed', completedAt: new Date(),
     provider: 'manual_bank_transfer', source: 'wallet_payout', description: 'Rút tiền từ ví về tài khoản ngân hàng',
     referenceId: request._id.toString(), idempotencyKey: `payout_${request._id}`,
-    metadata: { payoutRequestId: request._id, transferReference: request.transferReference },
+    metadata: { payoutRequestId: request._id },
   }], { session })
   return transaction
 }
@@ -201,14 +201,14 @@ export const rejectPayoutRequest = async ({ payoutRequestId, adminId, reason }) 
   } finally { session.endSession() }
 }
 
-export const markPayoutTransferred = async ({ payoutRequestId, adminId, transferReference, transferProof, fromDispute = false }) => {
-  const reference = clean(transferReference, 120); const proof = clean(transferProof, 1000)
-  if (!reference || !proof) throw new AppError('Mã tham chiếu và bill chuyển khoản là bắt buộc', 400)
+export const markPayoutTransferred = async ({ payoutRequestId, adminId, transferProof, fromDispute = false }) => {
+  const proof = clean(transferProof, 1000)
+  if (!proof) throw new AppError('Bill chuyển khoản là bắt buộc', 400)
   const { confirmHours } = await getPayoutSettings(); const now = new Date(); const deadline = new Date(now.getTime() + confirmHours * 60 * 60 * 1000)
   const expectedStatus = fromDispute ? 'DISPUTED' : 'APPROVED'
-  const request = await PayoutRequest.findOneAndUpdate({ _id: asId(payoutRequestId, 'Payout request ID'), status: expectedStatus }, { $set: { status: 'TRANSFERRED', transferredBy: adminId, transferredAt: now, transferReference: reference, transferProof: proof, confirmationDeadline: deadline }, $push: { transferHistory: { transferReference: reference, transferProof: proof, transferredBy: adminId, transferredAt: now } } }, { new: true })
+  const request = await PayoutRequest.findOneAndUpdate({ _id: asId(payoutRequestId, 'Payout request ID'), status: expectedStatus }, { $set: { status: 'TRANSFERRED', transferredBy: adminId, transferredAt: now, transferProof: proof, confirmationDeadline: deadline }, $push: { transferHistory: { transferProof: proof, transferredBy: adminId, transferredAt: now } } }, { new: true })
   if (!request) throw new AppError('Yêu cầu không thể đánh dấu đã chuyển ở trạng thái hiện tại', 409)
-  await recordUserActivity({ userId: request.memberId, type: 'wallet', title: 'Đã chuyển khoản rút tiền', description: `Admin đã chuyển ${formatMoney(request.amount)}đ.`, metadata: { payoutRequestId: request._id, transferReference: reference }, })
+  await recordUserActivity({ userId: request.memberId, type: 'wallet', title: 'Đã chuyển khoản rút tiền', description: `Admin đã chuyển ${formatMoney(request.amount)}đ.`, metadata: { payoutRequestId: request._id }, })
   notifyMember(request, NOTIFICATION_TYPES.PAYOUT_TRANSFERRED, 'Admin đã chuyển khoản', `Admin đã chuyển ${formatMoney(request.amount)}đ. Vui lòng kiểm tra tài khoản và xác nhận.`)
   return request
 }
@@ -231,8 +231,8 @@ export const disputePayoutRequest = async ({ memberId, payoutRequestId, reason }
   return request
 }
 
-export const resolvePayoutDispute = async ({ payoutRequestId, adminId, action, transferReference, transferProof, resolutionNote }) => {
-  if (action === 'retransfer') return markPayoutTransferred({ payoutRequestId, adminId, transferReference, transferProof, fromDispute: true })
+export const resolvePayoutDispute = async ({ payoutRequestId, adminId, action, transferProof, resolutionNote }) => {
+  if (action === 'retransfer') return markPayoutTransferred({ payoutRequestId, adminId, transferProof, fromDispute: true })
   if (action !== 'complete') throw new AppError('Hướng xử lý khiếu nại không hợp lệ', 400)
   const request = await PayoutRequest.findOne({ _id: asId(payoutRequestId, 'Payout request ID'), status: 'DISPUTED' }).select('_id')
   if (!request) throw new AppError('Khiếu nại không thể được xác minh ở trạng thái hiện tại', 409)

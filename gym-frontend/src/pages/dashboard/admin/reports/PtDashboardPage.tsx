@@ -14,8 +14,12 @@ export default function PtDashboardPage() {
         kpiToFilter={{
           bookings: {},
         }}
-        chartPointToFilter={(_chartKey, pointKey) => (pointKey ? { ptId: String(pointKey) } : null)}
-        topToFilter={(_topKey, itemId) => (itemId ? { ptId: itemId } : null)}
+        chartPointToFilter={(chartKey, pointKey) => (chartKey === 'bookingByPt' && pointKey ? { ptId: String(pointKey) } : null)}
+        topToFilter={(topKey, itemId) => {
+          if (topKey === 'topBooking' && itemId) return { ptId: itemId }
+          if (topKey === 'topCancelled' && itemId) return { ptId: itemId, status: 'cancelled' }
+          return null
+        }}
       />
     </DashboardLayout>
   )
