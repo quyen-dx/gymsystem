@@ -67,6 +67,12 @@ export const getPTs = async (req, res) => {
     const { page = 1, limit = 20, search = '', specialty, minRating, status, isActive, sortBy = 'createdAt', sortOrder = 'desc' } = req.query
 
     const userFilter = { role: 'pt' }
+    const isMemberViewer = req.user?.role === 'member'
+    // Hội viên chỉ được chọn PT đang hoạt động; không được nhìn thấy tài khoản đã khóa.
+    if (isMemberViewer) {
+      userFilter.isActive = true
+      userFilter.status = { $ne: 'locked' }
+    }
 
     if (search) {
       const keyword = String(search).trim()
@@ -81,8 +87,10 @@ export const getPTs = async (req, res) => {
       ]
     }
 
-    if (status === 'active' || isActive === 'true' || isActive === true) userFilter.isActive = true
-    else if (status === 'locked' || isActive === 'false' || isActive === false) userFilter.isActive = false
+    if (!isMemberViewer) {
+      if (status === 'active' || isActive === 'true' || isActive === true) userFilter.isActive = true
+      else if (status === 'locked' || isActive === 'false' || isActive === false) userFilter.isActive = false
+    }
 
     const allUsers = await User.find(userFilter)
       .sort({ [sortBy]: sortOrder === 'asc' ? 1 : -1 })
@@ -164,32 +172,33 @@ export const getPTs = async (req, res) => {
       .map((u) => {
         const pt = ptMap[u._id.toString()]
         const ptId = pt?._id?.toString()
-        return {
+        const base = {
           _id: u._id,
           name: u.fullName || u.name,
           fullName: u.fullName,
+          avatar: u.avatar,
+          specialties: pt?.specialties || [],
+          bio: pt?.bio || '',
+          experienceYears: pt?.experienceYears || 0,
+          rating: pt?.rating || 0,
+          schedules: scheduleMap[u._id.toString()] || [],
+          busyBookings: busyMap[u._id.toString()] || [],
+        }
+        if (isMemberViewer) return base
+        return {
+          ...base,
           email: u.email,
           phone: u.phone,
-          avatar: u.avatar,
           dateOfBirth: u.dateOfBirth,
           gender: u.gender,
           isActive: u.isActive,
           status: u.status,
           createdAt: u.createdAt,
-          // PT-specific fields from PT model
-          specialties: pt?.specialties || [],
-          bio: pt?.bio || '',
-          experienceYears: pt?.experienceYears || 0,
           certificates: pt?.certificates || [],
-          rating: pt?.rating || 0,
           introVideoUrl: pt?.introVideoUrl || '',
           totalSessions: pt?.totalSessions || 0,
           totalStudents: pt?.totalStudents || 0,
-          ptId: ptId,
-          oneToOnePrice: pt?.oneToOnePrice || null,
-          groupPrice: pt?.groupPrice || null,
-          schedules: scheduleMap[u._id.toString()] || [],
-          busyBookings: busyMap[u._id.toString()] || [],
+          ptId,
           bookingCount: bookingCountMap[u._id.toString()] || 0,
         }
       })
@@ -210,7 +219,13 @@ export const getPTs = async (req, res) => {
 
 export const getPTById = async (req, res) => {
   try {
-    const user = await User.findOne({ _id: req.params.id, role: 'pt' }).lean()
+    const isMemberViewer = req.user?.role === 'member'
+    const userFilter = { _id: req.params.id, role: 'pt' }
+    if (isMemberViewer) {
+      userFilter.isActive = true
+      userFilter.status = { $ne: 'locked' }
+    }
+    const user = await User.findOne(userFilter).lean()
     if (!user) throw new AppError('Không tìm thấy PT', 404)
 
     const pt = await PT.findOne({ userId: user._id }).lean()
@@ -239,8 +254,9 @@ export const getPTById = async (req, res) => {
     const classBusy = await buildClassBusyEntries({ trainerIds: [user._id], from: busyStart, to: busyEnd })
     busyBookings.push(...classBusy.map((e) => ({ date: e.date, slot: e.slot })))
 
-    // Booking.ptId tham chiếu User
-    const bookings = await Booking.find({
+    // Chi tiết booking có PII của hội viên chỉ dành cho quản trị. Hội viên chỉ
+    // nhận busyBookings để chọn giờ, không nhận danh tính khách khác.
+    const bookings = isMemberViewer ? [] : await Booking.find({
       ptId: user._id,
       date: { $gte: weekStart, $lt: weekEnd },
       status: { $ne: 'cancelled' },
@@ -254,28 +270,28 @@ export const getPTById = async (req, res) => {
         _id: user._id,
         name: user.fullName || user.name,
         fullName: user.fullName,
-        email: user.email,
-        phone: user.phone,
         avatar: user.avatar,
-        dateOfBirth: user.dateOfBirth,
-        gender: user.gender,
-        isActive: user.isActive,
-        status: user.status,
-        createdAt: user.createdAt,
         specialties: pt?.specialties || [],
         bio: pt?.bio || '',
         experienceYears: pt?.experienceYears || 0,
-        certificates: pt?.certificates || [],
         rating: pt?.rating || 0,
-        introVideoUrl: pt?.introVideoUrl || '',
-        totalSessions: pt?.totalSessions || 0,
-        totalStudents: pt?.totalStudents || 0,
-        oneToOnePrice: pt?.oneToOnePrice || null,
-        groupPrice: pt?.groupPrice || null,
         schedules,
         busyBookings,
+        ...(!isMemberViewer ? {
+          email: user.email,
+          phone: user.phone,
+          dateOfBirth: user.dateOfBirth,
+          gender: user.gender,
+          isActive: user.isActive,
+          status: user.status,
+          createdAt: user.createdAt,
+          certificates: pt?.certificates || [],
+          introVideoUrl: pt?.introVideoUrl || '',
+          totalSessions: pt?.totalSessions || 0,
+          totalStudents: pt?.totalStudents || 0,
+        } : {}),
       },
-      bookings,
+      ...(!isMemberViewer ? { bookings } : {}),
     })
   } catch (error) {
     return sendError(res, error)
@@ -620,16 +636,32 @@ export const createPT = async (req, res) => {
       introVideoUrl,
     } = req.body
     if (!name?.trim()) throw new AppError('Họ tên là bắt buộc', 400)
+    if (!email && !phone) throw new AppError('PT cần có email hoặc số điện thoại', 400)
+    if (!password || String(password).length < 8) {
+      throw new AppError('Mật khẩu khởi tạo cho PT phải có ít nhất 8 ký tự', 400)
+    }
+    const normalizedEmail = email ? String(email).toLowerCase().trim() : ''
+    const normalizedPhone = phone ? normalizePhone(phone) : ''
+    if (normalizedEmail && !isValidEmail(normalizedEmail)) throw new AppError('Email không hợp lệ', 400)
+    if (phone && !normalizedPhone) throw new AppError('Số điện thoại không hợp lệ', 400)
+    const duplicate = await User.findOne({
+      $or: [
+        ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+        ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+      ],
+    }).lean()
+    if (duplicate) throw new AppError('Email hoặc số điện thoại đã được sử dụng', 409)
 
     const userData = {
       name: name.trim(),
       role: 'pt',
       provider: email ? 'email' : 'phone',
       isVerified: true,
-      password: password || 'pt123',
+      password: String(password),
+      specialties: parseSpecialties(specialties),
     }
-    if (email) userData.email = email.toLowerCase().trim()
-    if (phone) userData.phone = normalizePhone(phone)
+    if (normalizedEmail) userData.email = normalizedEmail
+    if (normalizedPhone) userData.phone = normalizedPhone
     if (dateOfBirth) userData.dateOfBirth = new Date(dateOfBirth)
     if (gender) userData.gender = gender
 
@@ -641,7 +673,7 @@ export const createPT = async (req, res) => {
 
     const ptData = {
       userId: user._id,
-      specialties: parseSpecialties(specialties),
+      specialties: userData.specialties,
       bio: bio?.trim() || '',
       experienceYears: Number(experienceYears) || 0,
       certificates: typeof certificates === 'string' ? JSON.parse(certificates) : (certificates || []),
@@ -679,11 +711,23 @@ export const updatePT = async (req, res) => {
     const user = await User.findById(req.params.id)
     if (!user || user.role !== 'pt') throw new AppError('Không tìm thấy PT', 404)
 
-    if (name) user.name = name.trim()
-    if (email) user.email = email.toLowerCase().trim()
-    if (phone) {
-      const np = normalizePhone(phone)
+    const hasField = (field) => Object.prototype.hasOwnProperty.call(req.body, field)
+    if (hasField('name') && !String(name || '').trim()) throw new AppError('Họ tên là bắt buộc', 400)
+    if (hasField('name')) user.name = String(name).trim()
+    if (hasField('email')) {
+      const normalizedEmail = String(email || '').toLowerCase().trim()
+      if (normalizedEmail && !isValidEmail(normalizedEmail)) throw new AppError('Email không hợp lệ', 400)
+      const duplicate = normalizedEmail
+        ? await User.findOne({ email: normalizedEmail, _id: { $ne: user._id } }).lean()
+        : null
+      if (duplicate) throw new AppError('Email đã được sử dụng', 409)
+      user.email = normalizedEmail || undefined
+    }
+    if (hasField('phone')) {
+      const np = phone ? normalizePhone(phone) : ''
       if (!np) throw new AppError('Số điện thoại không hợp lệ', 400)
+      const duplicate = await User.findOne({ phone: np, _id: { $ne: user._id } }).lean()
+      if (duplicate) throw new AppError('Số điện thoại đã được sử dụng', 409)
       user.phone = np
     }
     if (dateOfBirth) user.dateOfBirth = new Date(dateOfBirth)
@@ -700,7 +744,10 @@ export const updatePT = async (req, res) => {
       pt = await PT.create({ userId: user._id })
     }
 
-    if (specialties !== undefined) pt.specialties = parseSpecialties(specialties)
+    if (specialties !== undefined) {
+      pt.specialties = parseSpecialties(specialties)
+      user.specialties = pt.specialties
+    }
     if (bio !== undefined) pt.bio = bio.trim()
     if (experienceYears !== undefined) pt.experienceYears = Number(experienceYears)
     if (certificates !== undefined) pt.certificates = typeof certificates === 'string' ? JSON.parse(certificates) : certificates

@@ -21,6 +21,15 @@ const walletSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+        // Phần ví đã được giữ cho một checkout VNPay đang chờ thanh toán.
+        // Khoản này đã bị loại khỏi `balance` khả dụng để không thể bị chi
+        // tiêu/rút lần hai, nhưng sẽ được hoàn lại nếu cổng thanh toán thất bại
+        // hoặc hết hạn.
+        checkoutReservedBalance: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
         // Only money that is permitted to leave the platform. Legacy wallets
         // intentionally default to zero until they are reconciled from source
         // transactions, so promotional credit can never be withdrawn by

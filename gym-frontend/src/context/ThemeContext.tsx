@@ -93,17 +93,20 @@ export const resolveEffectiveTheme = (
 }
 
 const LIGHT_BASE: Partial<ThemeTokens> = {
-  bg: '#FFFFFF',
-  page: '#F7F7F8',
-  card: '#FFFFFF',
-  elevated: '#F3F4F6',
-  inputBg: '#FFFFFF',
-  text: '#111111',
-  muted: 'rgba(0,0,0,0.65)',
-  soft: 'rgba(0,0,0,0.45)',
-  border: 'rgba(0,0,0,0.12)',
-  borderStrong: 'rgba(0,0,0,0.22)',
-  placeholder: 'rgba(0,0,0,0.38)',
+  // Use layered neutral surfaces instead of pure white everywhere. This keeps
+  // the light theme calm while retaining clear boundaries between page, cards
+  // and form controls.
+  bg: '#E7ECF2',
+  page: '#DDE5EE',
+  card: '#F8FAFC',
+  elevated: '#EEF2F6',
+  inputBg: '#F6F8FB',
+  text: '#172033',
+  muted: '#5B667A',
+  soft: '#7B879A',
+  border: '#C8D2DF',
+  borderStrong: '#A8B6C8',
+  placeholder: '#8A94A6',
 }
 
 const DARK_BASE: Partial<ThemeTokens> = {
@@ -132,6 +135,7 @@ export const resolveAccentTokens = (accentColor: string, mode: 'dark' | 'light')
     const outlineBorder = accent.clone().setAlpha(0.35).toRgbString()
     const outlineHoverBg = accent.clone().setAlpha(0.08).toRgbString()
     const contrastText = getContrastText(accentColor)
+    const isLightMode = mode === 'light'
 
     return {
       accent: accentColor,
@@ -139,8 +143,8 @@ export const resolveAccentTokens = (accentColor: string, mode: 'dark' | 'light')
       buttonText: contrastText,
       buttonBorder: accentColor,
       buttonShadow: 'none',
-      activeBg: accentColor,
-      activeText: contrastText,
+      activeBg: isLightMode ? accent.clone().setAlpha(0.14).toRgbString() : accentColor,
+      activeText: isLightMode ? accent.clone().darken(8).toHexString() : contrastText,
       outlineText: accentColor,
       outlineBorder,
       outlineHoverBg,
@@ -221,6 +225,9 @@ const setThemeVariables = (tokens: ThemeTokens, mode: 'dark' | 'light') => {
   r.setProperty('--gs-elevated', tokens.elevated)
   r.setProperty('--gs-bg-elevated', tokens.elevated)
   r.setProperty('--gs-bg-soft', tokens.card)
+  r.setProperty('--gs-bg-subtle', isDarkMode ? 'rgba(255,255,255,0.055)' : '#EEF1F6')
+  r.setProperty('--gs-active-bg', isDarkMode ? 'rgba(255,255,255,0.08)' : tokens.accentMuted)
+  r.setProperty('--gs-shadow', isDarkMode ? '0 12px 30px rgba(0,0,0,0.22)' : '0 8px 24px rgba(15,23,42,0.07)')
   r.setProperty('--gs-input-bg', tokens.inputBg)
   r.setProperty('--gs-text', tokens.text)
   r.setProperty('--gs-muted', tokens.muted)

@@ -660,6 +660,7 @@ export const assignWorkoutToMember = async (req, res) => {
         templateId: workoutTemplateId,
         memberId,
         ptId: req.user._id,
+        assignmentId: assignment._id,
       })
     }
 

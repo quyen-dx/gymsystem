@@ -24,7 +24,7 @@ const nearestFutureDay = (startDate, targetDayOfWeek) => {
  * Helper: khoi tao WorkoutSchedule tu template days.
  * Tao 1 WorkoutSchedule voi sessions duoc xay dung tu template.days.
  */
-export const buildSchedulesFromTemplate = async ({ templateId, memberId, ptId }) => {
+export const buildSchedulesFromTemplate = async ({ templateId, memberId, ptId, assignmentId = null }) => {
   const template = await Workout.findById(templateId).lean()
   if (!template || !template.isTemplate) return null
 
@@ -54,6 +54,7 @@ export const buildSchedulesFromTemplate = async ({ templateId, memberId, ptId })
     memberId,
     templateId,
     assignedBy: ptId,
+    assignmentId,
     startDate,
     status: 'active',
     sessions,

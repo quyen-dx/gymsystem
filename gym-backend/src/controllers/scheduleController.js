@@ -16,14 +16,16 @@ import { assignTemplateIndexes, buildPlanSummary, findNextPlanIndex, buildSessio
 
 const isAdmin = (user) => ['admin', 'super_admin'].includes(user?.role)
 
-// Chỉ PT phụ trách member (PT 1-1 hoặc PT dạy lớp nhóm của member) — hoặc admin — mới được tạo lịch cho member đó
+// Tạo lịch PT 1-1 chỉ dành cho PT đang có phân công 1-1 với hội viên.
+// Giáo án lớp nhóm đi qua groupAssignWorkout để không vô tình tạo một phân công 1-1 mới.
 const assertCanManageMember = async ({ memberId, req }) => {
   if (isAdmin(req.user)) return true
-  const [pt1on1, group] = await Promise.all([
-    PTAssignment.exists({ memberId, ptId: req.user._id, status: 'active' }),
-    TrainingAssignment.exists({ memberId, trainerId: req.user._id, status: 'active' }),
-  ])
-  if (!pt1on1 && !group) {
+  const pt1on1 = await PTAssignment.exists({
+    memberId,
+    ptId: req.user._id,
+    status: { $in: ['active', 'pending_end_approval'] },
+  })
+  if (!pt1on1) {
     const err = new Error('Bạn không phụ trách hội viên này')
     err.statusCode = 403
     throw err
@@ -223,10 +225,12 @@ export const createSchedule = async (req, res) => {
     })
     const assignedSessions = assignTemplateIndexes({ template, sessions: mappedSessions })
 
+    const pa = await createAssignment({ memberId, ptId })
     const schedule = await WorkoutSchedule.create({
       memberId,
       templateId,
       assignedBy: ptId,
+      assignmentId: pa._id,
       startDate: new Date(),
       weekIndex: weekIndex || 1,
       totalWeeks: totalWeeks || 1,
@@ -234,7 +238,6 @@ export const createSchedule = async (req, res) => {
       sessions: assignedSessions,
     })
 
-    const pa = await createAssignment({ memberId, ptId })
     pa.workoutId = templateId
     await pa.save()
 
@@ -379,6 +382,12 @@ export const bulkCreateSchedules = async (req, res) => {
       weekSessionsMap.push({ week, sessions: mappedSessions })
     }
 
+    let pa = existingAssignment
+    if (!pa) {
+      const { createAssignment } = await import('../services/ptAssignmentService.js')
+      pa = await createAssignment({ memberId, ptId, session: mongoSession })
+    }
+
     // Gán buổi giáo án CHO TOÀN BỘ các tuần: sort theo ngày thực tế (tuần 1 trước tuần 2),
     // slot thứ j ↔ buổi thứ j. VD: T2(T1)→Buổi 1, T3(T1)→Buổi 2, T2(T2)→Buổi 3, T3(T2)→Buổi 4.
     // Giáo án nhiều buổi hơn số slot → buổi thừa để WAITING (tạm bỏ, mở khi có thêm buổi PT).
@@ -395,6 +404,7 @@ export const bulkCreateSchedules = async (req, res) => {
         memberId,
         templateId,
         assignedBy: ptId,
+        assignmentId: pa._id,
         startDate: new Date(),
         weekIndex: item.week.weekIndex || 1,
         totalWeeks,
@@ -407,11 +417,6 @@ export const bulkCreateSchedules = async (req, res) => {
     const saved = await WorkoutSchedule.insertMany(createdSchedules, { session: mongoSession })
 
     // Gán giáo án vào assignment
-    let pa = existingAssignment
-    if (!pa) {
-      const { createAssignment } = await import('../services/ptAssignmentService.js')
-      pa = await createAssignment({ memberId, ptId, session: mongoSession })
-    }
     pa.workoutId = templateId
     await pa.save({ session: mongoSession })
 
@@ -658,18 +663,42 @@ export const getMemberSchedules = async (req, res) => {
       return res.status(400).json({ message: 'ID hội viên không hợp lệ' })
     }
 
-    // PT chỉ xem được lịch của member mình phụ trách (1-1 hoặc lớp nhóm); admin xem tất cả
+    const scheduleFilter = { memberId, status: { $in: ['active', 'completed'] }, deletedAt: null }
+
+    // PT chỉ nhận các lịch thuộc đúng phân công 1-1 của mình hoặc đúng lớp mình dạy.
+    // Không trả toàn bộ lịch của hội viên chỉ vì PT đang phụ trách một dịch vụ khác.
     if (!isAdmin(req.user)) {
-      const [pt1on1, group] = await Promise.all([
-        PTAssignment.exists({ memberId, ptId: req.user._id, status: 'active' }),
-        TrainingAssignment.exists({ memberId, trainerId: req.user._id, status: 'active' }),
+      const [privateAssignments, groupAssignments] = await Promise.all([
+        PTAssignment.find({
+          memberId,
+          ptId: req.user._id,
+          status: { $in: ['active', 'pending_end_approval'] },
+        }).select('_id').lean(),
+        TrainingAssignment.find({ memberId, trainerId: req.user._id, status: 'active' }).select('classId').lean(),
       ])
-      if (!pt1on1 && !group) {
+      const privateAssignmentIds = privateAssignments.map((assignment) => assignment._id)
+      const classIds = groupAssignments.map((assignment) => assignment.classId).filter(Boolean)
+      const scopeFilters = []
+
+      if (privateAssignmentIds.length) {
+        scopeFilters.push({
+          $or: [
+            { assignmentId: { $in: privateAssignmentIds } },
+            // Tương thích lịch cũ chưa có assignmentId: chỉ PT đã tạo lịch mới xem được.
+            { assignmentId: null, assignedBy: req.user._id },
+          ],
+        })
+      }
+      if (classIds.length) {
+        scopeFilters.push({ classId: { $in: classIds } })
+      }
+      if (!scopeFilters.length) {
         return res.status(403).json({ message: 'Bạn không phụ trách hội viên này' })
       }
+      scheduleFilter.$or = scopeFilters
     }
 
-    let schedules = await WorkoutSchedule.find({ memberId, status: { $in: ['active', 'completed'] }, deletedAt: null })
+    let schedules = await WorkoutSchedule.find(scheduleFilter)
       .populate('templateId', 'name goal description')
       .populate('assignedBy', 'name fullName email')
       .sort({ createdAt: -1 })

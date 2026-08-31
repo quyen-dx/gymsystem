@@ -237,7 +237,7 @@ input[type="date"] {
 }
 
 html[data-theme="light"] .member-shell-header {
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
 }
 
 .member-shell-logo {
@@ -958,7 +958,7 @@ body.member-interaction-lock .ai-chat-message-content :where(strong, b) {
 
 html[data-theme="light"] .member-shell-drawer-wallet {
   border: 1px solid var(--gs-border);
-  background: #ffffff;
+  background: var(--gs-card);
 }
 
 .member-shell-drawer-actions {
@@ -1269,14 +1269,14 @@ html[data-theme="light"] .member-shell-content .ant-list,
 html[data-theme="light"] .member-shell-content .ant-descriptions,
 html[data-theme="light"] .member-shell-content [class*="bg-[rgba(23,23,23"] {
   border-color: var(--gs-border) !important;
-  background: #ffffff !important;
+  background: var(--gs-card) !important;
   box-shadow: var(--gs-shadow);
 }
 
 html[data-theme="light"] .member-shell-content [class*="bg-[linear-gradient"] {
   background:
-    linear-gradient(135deg, rgba(224, 90, 48, 0.12), rgba(0, 0, 0, 0.02)),
-    #ffffff !important;
+    linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 10%, transparent), rgba(15, 23, 42, 0.02)),
+    var(--gs-card) !important;
   box-shadow: var(--gs-shadow);
 }
 
@@ -1288,9 +1288,9 @@ html[data-theme="light"] .member-shell-content .ant-table-tbody>tr>td {
 }
 
 html[data-theme="light"] .member-shell-content .ant-table-thead>tr>th {
-  color: #111111;
+  color: var(--gs-text);
   border-bottom-color: var(--gs-border);
-  background: #f7f7f8 !important;
+  background: var(--gs-elevated) !important;
 }
 
 html[data-theme="light"] .member-shell-content .ant-table-tbody>tr>td {
@@ -1298,22 +1298,22 @@ html[data-theme="light"] .member-shell-content .ant-table-tbody>tr>td {
 }
 
 html[data-theme="light"] .member-shell-content .ant-table-tbody>tr:hover>td {
-  background: #f7f7f8 !important;
+  background: var(--gs-elevated) !important;
 }
 
 html[data-theme="light"] .member-shell-content .ant-input,
 html[data-theme="light"] .member-shell-content .ant-input-number,
 html[data-theme="light"] .member-shell-content .ant-select-selector,
 html[data-theme="light"] .member-shell-content .ant-picker {
-  border-color: #5a5a5a !important;
-  background: #ffffff !important;
-  color: #111111 !important;
+  border-color: var(--gs-border-strong) !important;
+  background: var(--gs-input-bg) !important;
+  color: var(--gs-text) !important;
 }
 
 html[data-theme="light"] .member-shell-content .ant-btn-default {
   border-color: var(--gs-border);
-  background: #ffffff;
-  color: #111111;
+  background: var(--gs-card);
+  color: var(--gs-text);
 }
 
 .btn-view-cart.ant-btn-default,
@@ -2326,6 +2326,26 @@ html[data-theme="light"] .member-shell-content .ant-btn-default {
   overscroll-behavior: contain;
 }
 
+/* Light mode needs a clear page/card/sidebar hierarchy. Without it, large
+   dashboard areas merge into one bright surface and are tiring to scan. */
+html[data-theme="light"] .dashboard-desktop-sider {
+  border-right: 1px solid var(--gs-border);
+  box-shadow: 8px 0 24px rgba(15, 23, 42, 0.045);
+}
+
+html[data-theme="light"] .dashboard-content {
+  background: var(--gs-page);
+}
+
+html[data-theme="light"] .dashboard-hero {
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--theme-accent) 11%, transparent),
+      rgba(248, 250, 252, 0.74) 52%,
+      var(--gs-card)) !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+}
+
 .dashboard-inner {
   flex: 1;
   min-width: 0;
@@ -2390,12 +2410,12 @@ html[data-theme="light"] .member-shell-content .ant-btn-default {
 }
 
 html[data-theme="light"] .dashboard-sidebar-item:not(.is-active) {
-  color: #111111;
+  color: var(--gs-text);
 }
 
 html[data-theme="light"] .dashboard-sidebar-item:not(.is-active):hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: #111111;
+  background: var(--gs-elevated);
+  color: var(--gs-text);
 }
 
 html[data-theme="dark"] .dashboard-sidebar-item:not(.is-active) {
@@ -2531,6 +2551,10 @@ html[data-theme="dark"] .dashboard-sidebar-item:not(.is-active):hover {
   flex-wrap: wrap;
   margin-bottom: 16px;
   justify-content: space-between;
+  padding: 12px;
+  border: 1px solid var(--gs-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--gs-elevated) 72%, var(--gs-card));
 }
 
 .dashboard-filter-bar .ant-input-search {
@@ -2545,6 +2569,7 @@ html[data-theme="dark"] .dashboard-sidebar-item:not(.is-active):hover {
   .dashboard-filter-bar {
     flex-direction: column;
     align-items: stretch;
+    padding: 10px;
   }
 
   .dashboard-filter-bar .ant-input-search {
@@ -2558,12 +2583,158 @@ html[data-theme="dark"] .dashboard-sidebar-item:not(.is-active):hover {
 
 /* Dashboard hero responsive */
 .dashboard-hero {
+  position: relative;
+  overflow: hidden;
   padding: 32px;
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--theme-accent) 13%, transparent),
+      color-mix(in srgb, var(--gs-card) 94%, transparent) 58%,
+      var(--gs-card)) !important;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.045);
+}
+
+.dashboard-content .ant-table-wrapper .ant-table {
+  background: transparent;
+}
+
+.dashboard-content .ant-table-thead > tr > th {
+  padding-top: 13px;
+  padding-bottom: 13px;
+  color: var(--gs-text-soft);
+  font-size: 12px;
+  font-weight: 650;
+  background: var(--gs-elevated) !important;
+}
+
+.dashboard-content .ant-table-tbody > tr > td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.dashboard-content .ant-table-tbody > tr:hover > td {
+  background: color-mix(in srgb, var(--theme-accent) 5%, transparent) !important;
+}
+
+.dashboard-content .ant-pagination {
+  padding-top: 4px;
+}
+
+/* Admin members: compact hierarchy for a data-first workspace. */
+.member-admin-hero {
+  padding: 24px 28px;
+}
+
+.member-admin-hero-actions > button {
+  min-height: 34px;
+  padding-inline: 13px;
+  box-shadow: none;
+}
+
+.member-admin-workspace {
+  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.045);
+}
+
+.member-admin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--gs-border);
+  background: color-mix(in srgb, var(--gs-elevated) 72%, var(--gs-card));
+}
+
+.member-admin-toolbar-title {
+  display: flex;
+  min-width: max-content;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.member-admin-toolbar-title h2 {
+  margin: 0;
+  color: var(--gs-text);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.member-admin-toolbar-title span {
+  color: var(--gs-text-muted);
+  font-size: 12px;
+}
+
+.member-admin-toolbar-controls {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.member-admin-toolbar-controls .ant-input-search {
+  margin-right: auto;
+}
+
+.member-admin-table-wrap {
+  padding: 0 20px 18px;
+}
+
+.member-admin-table .ant-table {
+  background: transparent;
+}
+
+.member-admin-table .ant-table-thead > tr > th {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  color: var(--gs-text-soft);
+  font-size: 12px;
+  font-weight: 650;
+  background: transparent;
+}
+
+.member-admin-table .ant-table-tbody > tr > td {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.member-admin-table .ant-table-tbody > tr:hover > td {
+  background: color-mix(in srgb, var(--theme-accent) 5%, transparent) !important;
+}
+
+@media (max-width: 900px) {
+  .member-admin-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .member-admin-toolbar-controls {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .member-admin-toolbar-controls .ant-input-search {
+    flex: 1 1 260px;
+    margin-right: 0;
+  }
 }
 
 @media (max-width: 767px) {
   .dashboard-hero {
     padding: 20px !important;
+  }
+
+  .member-admin-hero {
+    padding: 20px !important;
+  }
+
+  .member-admin-toolbar {
+    padding: 16px;
+  }
+
+  .member-admin-table-wrap {
+    padding: 0 12px 14px;
   }
 
   .dashboard-hero h1 {

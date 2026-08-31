@@ -85,5 +85,11 @@ const membershipCycleSchema = new mongoose.Schema({
 }, { timestamps: true })
 
 membershipCycleSchema.index({ memberId: 1, status: 1 })
+// Một hội viên chỉ có thể có đúng một chu kỳ gói đang hoạt động. Ràng buộc ở
+// DB giúp chặn cả các request đồng thời (không chỉ kiểm tra ở controller).
+membershipCycleSchema.index(
+  { memberId: 1 },
+  { unique: true, partialFilterExpression: { status: 'active' }, name: 'one_active_cycle_per_member' },
+)
 
 export default mongoose.model('MembershipCycle', membershipCycleSchema)

@@ -37,7 +37,11 @@ import {
   calcMembershipEndDate,
 } from '../utils/dateUtils.js'
 import { getActivePeriodEndDate } from '../utils/membershipDays.js'
-import { buildSpendDebitUpdate } from './walletService.js'
+import {
+  buildSpendDebitUpdate,
+  consumeWalletPaymentReservation,
+  reserveWalletForPayment,
+} from './walletService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification, notifyPtMemberChanged } from '../services/notificationService.js'
 import { emitPtClientsUpdated } from '../services/socketService.js'
@@ -240,6 +244,8 @@ const subscribeWithWallet = async ({
   mode = 'register',
   durationMultiplier = 1,
   walletDeductAmount = null,
+  walletAlreadyReserved = false,
+  reservedWalletBalanceBefore = null,
   externalPayment = null,
   vnpayQuery = null,
   session: externalSession = null,
@@ -295,7 +301,14 @@ const subscribeWithWallet = async ({
   try {
     wallet = await Wallet.findOne({ userId: memberId }).session(session)
 
-    if (walletPart > 0) {
+    if (walletPart > 0 && walletAlreadyReserved) {
+      wallet = await consumeWalletPaymentReservation({
+        userId: memberId,
+        walletId: wallet?._id || externalPayment?.walletId,
+        amount: walletPart,
+        session,
+      })
+    } else if (walletPart > 0) {
       wallet = await Wallet.findOneAndUpdate(
         { userId: memberId, balance: { $gte: walletPart } },
         buildSpendDebitUpdate(walletPart),
@@ -309,8 +322,12 @@ const subscribeWithWallet = async ({
       }
     }
 
-    balanceBefore = Number(wallet?.balance || 0)
-    walletBalance = walletPart > 0
+    balanceBefore = walletAlreadyReserved
+      ? Number(reservedWalletBalanceBefore ?? wallet?.balance ?? 0)
+      : Number(wallet?.balance || 0)
+    walletBalance = walletAlreadyReserved
+      ? Number(wallet?.balance || 0)
+      : walletPart > 0
       ? Math.max(0, balanceBefore - walletPart)
       : balanceBefore
     const today = startOfTodayVN()
@@ -409,6 +426,8 @@ const subscribeWithWallet = async ({
         mode,
         durationMultiplier: multiplier,
         walletUsed: walletPart,
+        walletReservationStatus: walletAlreadyReserved ? 'CONSUMED' : payment.metadata?.walletReservationStatus || 'NONE',
+        ...(walletAlreadyReserved ? { walletReservationConsumedAt: new Date() } : {}),
         totalAmount: amount,
         walletBalanceBefore: balanceBefore,
         walletBalanceAfter: walletBalance,
@@ -783,30 +802,54 @@ export const createMembershipCheckout = async ({ userId, planId, mode = 'registe
   const remaining = amount - balance
   const txnRef = `PLAN${Date.now()}${memberId.toString().slice(-6).toUpperCase()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`
 
-  const payment = await Payment.create({
-    userId: memberId,
-    walletId: wallet._id,
-    planId: planObjectId,
-    amount,
-    currency: 'vnd',
-    status: 'PENDING',
-    paymentMethod: 'VNPAY',
-    method: 'VNPAY',
-    source: 'ONLINE',
-    txnRef,
-    metadata: {
-      purpose: 'PLAN_PURCHASE',
-      provider: 'VNPAY',
-      planId: planObjectId,
-      mode,
-      durationMultiplier: multiplier,
-      totalAmount: amount,
-      walletUsed,
-      remainingAmount: remaining,
-      walletBalanceAtCheckout: balance,
-      planName: plan.nameVi || plan.nameEn,
-    },
-  })
+  // Giữ ngay phần ví trước khi chuyển sang VNPay. Nhờ đó tiền này không thể
+  // bị rút/chi cho giao dịch khác trong lúc cổng thanh toán đang chờ.
+  const session = await mongoose.startSession()
+  let payment
+  let reservation = null
+  try {
+    await session.withTransaction(async () => {
+      const currentWallet = await Wallet.findOne({ _id: wallet._id, userId: memberId }).session(session)
+      if (!currentWallet) throw new Error('Không tìm thấy ví thanh toán')
+      reservation = await reserveWalletForPayment({
+        userId: memberId,
+        walletId: currentWallet._id,
+        amount: walletUsed,
+        session,
+      })
+      ;[payment] = await Payment.create([{
+        userId: memberId,
+        walletId: currentWallet._id,
+        planId: planObjectId,
+        amount,
+        currency: 'vnd',
+        status: 'PENDING',
+        paymentMethod: 'VNPAY',
+        method: 'VNPAY',
+        source: 'ONLINE',
+        txnRef,
+        metadata: {
+          purpose: 'PLAN_PURCHASE',
+          provider: 'VNPAY',
+          planId: planObjectId,
+          mode,
+          durationMultiplier: multiplier,
+          totalAmount: amount,
+          walletUsed,
+          remainingAmount: remaining,
+          walletBalanceAtCheckout: reservation.balanceBefore,
+          walletBalanceAfterReservation: reservation.balanceAfter,
+          walletReservedAmount: walletUsed,
+          walletWithdrawableReserved: reservation.withdrawableReserved,
+          walletReservationStatus: walletUsed > 0 ? 'HELD' : 'NONE',
+          walletReservedAt: walletUsed > 0 ? new Date() : null,
+          planName: plan.nameVi || plan.nameEn,
+        },
+      }], { session })
+    })
+  } finally {
+    session.endSession()
+  }
 
   const paymentUrl = createVnpayPaymentUrl({
     amount: remaining,
@@ -819,7 +862,7 @@ export const createMembershipCheckout = async ({ userId, planId, mode = 'registe
   return {
     status: balance > 0 ? 'PARTIAL' : 'NO_BALANCE',
     totalAmount: amount,
-    walletBalance: balance,
+    walletBalance: reservation?.balanceAfter ?? balance,
     walletUsed,
     remainingAmount: remaining,
     paymentId: payment._id,
@@ -858,6 +901,8 @@ export const finalizePlanPurchase = async ({ paymentId, vnpayQuery = null }) => 
         mode: meta.mode || 'register',
         durationMultiplier: meta.durationMultiplier || 1,
         walletDeductAmount: meta.walletUsed || 0,
+        walletAlreadyReserved: meta.walletReservationStatus === 'HELD',
+        reservedWalletBalanceBefore: meta.walletBalanceAtCheckout,
         externalPayment: payment,
         vnpayQuery,
         session,

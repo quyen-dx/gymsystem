@@ -1,10 +1,15 @@
 import mongoose from 'mongoose'
 import Booking from '../models/Booking.js'
+import ClassEnrollment from '../models/ClassEnrollment.js'
 import Membership from '../models/Membership.js'
 import MembershipCycle from '../models/MembershipCycle.js'
 import MembershipPeriod from '../models/MembershipPeriod.js'
 import MembershipTransferRequest from '../models/MembershipTransferRequest.js'
+import PTAssignment from '../models/PTAssignment.js'
+import TrainingAssignment from '../models/TrainingAssignment.js'
+import TrainingRequest from '../models/TrainingRequest.js'
 import User from '../models/User.js'
+import WorkoutSchedule from '../models/WorkoutSchedule.js'
 import AppError from '../utils/appError.js'
 import { createNotification } from './notificationService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
@@ -189,7 +194,42 @@ export const approveMembershipTransferRequest = async ({ requestId, staffId }) =
         purchasedAt: now, startDate: now, activatedAt: now, endDate: lastEndDate, expiresAt: lastEndDate,
         durationDays: daysRemaining(lastEndDate, now), status: 'active', refundEligible: false,
       }], { session })
-      await Booking.updateMany({ memberId: request.senderId, date: { $gte: dayStart(now) }, status: { $in: ['pending', 'awaiting_payment', 'confirmed'] } }, { $set: { status: 'cancelled', cancelReason: 'Chuyển nhượng gói tập' } }, { session })
+      const cleanupReason = 'Chuyển nhượng gói tập đã được phê duyệt'
+      await Promise.all([
+        // Chỉ hủy booking tương lai; lịch sử buổi đã qua vẫn được giữ nguyên.
+        Booking.updateMany(
+          { memberId: request.senderId, date: { $gte: dayStart(now) }, status: { $in: ['pending', 'awaiting_payment', 'confirmed'] } },
+          { $set: { status: 'cancelled', cancelReason: cleanupReason } },
+          { session },
+        ),
+        // Không để PT/lớp/giáo án active của người chuyển tiếp tục tồn tại sau
+        // khi gói nguồn đã bị khóa. Dữ liệu lịch sử vẫn được giữ với trạng thái kết thúc.
+        PTAssignment.updateMany(
+          { memberId: request.senderId, status: { $in: ['active', 'pending_end_approval'] } },
+          { $set: { status: 'cancelled', cancelledAt: now, cancelReason: cleanupReason, endDate: now } },
+          { session },
+        ),
+        TrainingAssignment.updateMany(
+          { memberId: request.senderId, status: { $in: ['active', 'waiting_pt'] } },
+          { $set: { status: 'cancelled', cancelledAt: now, cancelReason: cleanupReason, endDate: now } },
+          { session },
+        ),
+        ClassEnrollment.updateMany(
+          { memberId: request.senderId, status: 'active' },
+          { $set: { status: 'ended', leftAt: now, sourceReason: 'membership_transfer', note: cleanupReason } },
+          { session },
+        ),
+        WorkoutSchedule.updateMany(
+          { memberId: request.senderId, status: 'active' },
+          { $set: { status: 'archived', deleteReason: cleanupReason } },
+          { session },
+        ),
+        TrainingRequest.updateMany(
+          { memberId: request.senderId, status: { $in: ['pending', 'processing', 'message_sent', 'waiting_member', 'waiting_assignment', 'waiting_reassign', 'awaiting_payment'] } },
+          { $set: { status: 'cancelled', cancelledAt: now, cancelReason: cleanupReason, cancelledBy: asId(staffId, 'Staff ID') } },
+          { session },
+        ),
+      ])
       await MembershipPeriod.updateMany({ membershipId: sourceMembership._id, status: { $in: ['ACTIVE', 'PENDING'] } }, { $set: { status: 'CANCELLED' } }, { session })
       await Membership.updateOne({ _id: sourceMembership._id }, { $set: { status: 'cancelled' } }, { session })
       await MembershipCycle.updateOne({ _id: sourceCycle._id }, { $set: { status: 'cancelled', transferPending: false, transferRequestId: null } }, { session })

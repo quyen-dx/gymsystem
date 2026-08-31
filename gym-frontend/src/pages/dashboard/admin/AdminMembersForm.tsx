@@ -28,8 +28,18 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
         name: getUserDisplayName(member, ''),
         email: member.email || '',
         phone: member.phone || '',
+        contactEmail: member.contactEmail || '',
         dateOfBirth: member.dateOfBirth ? dayjs(member.dateOfBirth) : null,
         gender: member.gender || undefined,
+        detailedAddress: member.detailedAddress || '',
+        emergencyContactName: member.emergencyContact?.name || '',
+        emergencyContactPhone: member.emergencyContact?.phone || '',
+        emergencyContactRelationship: member.emergencyContact?.relationship || '',
+        healthHeight: member.healthInfo?.height ?? undefined,
+        healthWeight: member.healthInfo?.weight ?? undefined,
+        healthGoals: member.healthInfo?.goals?.join(', ') || '',
+        activityLevel: member.healthInfo?.activityLevel || '',
+        healthNotes: member.healthInfo?.notes || '',
       })
     } else {
       form.resetFields()
@@ -49,6 +59,16 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
         fd.append('name', values.name as string)
         fd.append('email', (values.email as string) || '')
         fd.append('phone', (values.phone as string) || '')
+        fd.append('contactEmail', (values.contactEmail as string) || '')
+        fd.append('detailedAddress', (values.detailedAddress as string) || '')
+        fd.append('emergencyContactName', (values.emergencyContactName as string) || '')
+        fd.append('emergencyContactPhone', (values.emergencyContactPhone as string) || '')
+        fd.append('emergencyContactRelationship', (values.emergencyContactRelationship as string) || '')
+        fd.append('healthHeight', String(values.healthHeight ?? ''))
+        fd.append('healthWeight', String(values.healthWeight ?? ''))
+        fd.append('healthGoals', (values.healthGoals as string) || '')
+        fd.append('activityLevel', (values.activityLevel as string) || '')
+        fd.append('healthNotes', (values.healthNotes as string) || '')
         if (values.gender) fd.append('gender', values.gender as string)
         if (values.dateOfBirth) fd.append('dateOfBirth', new Date(values.dateOfBirth as Date).toISOString())
         payload = fd
@@ -59,6 +79,16 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
           phone: (values.phone as string) || '',
           gender: (values.gender as string) || undefined,
           dateOfBirth: values.dateOfBirth ? new Date(values.dateOfBirth as Date).toISOString() : undefined,
+          contactEmail: (values.contactEmail as string) || '',
+          detailedAddress: (values.detailedAddress as string) || '',
+          emergencyContactName: (values.emergencyContactName as string) || '',
+          emergencyContactPhone: (values.emergencyContactPhone as string) || '',
+          emergencyContactRelationship: (values.emergencyContactRelationship as string) || '',
+          healthHeight: values.healthHeight ?? '',
+          healthWeight: values.healthWeight ?? '',
+          healthGoals: (values.healthGoals as string) || '',
+          activityLevel: (values.activityLevel as string) || '',
+          healthNotes: (values.healthNotes as string) || '',
         }
       }
 
@@ -143,6 +173,10 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
               <Input placeholder="Nhập số điện thoại" size="large" />
             </Form.Item>
 
+            <Form.Item label="Email liên hệ" name="contactEmail" rules={[{ type: 'email', message: 'Email liên hệ không hợp lệ' }]}>
+              <Input placeholder="Email dùng để liên hệ (nếu khác email đăng nhập)" size="large" />
+            </Form.Item>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <Form.Item label="Giới tính" name="gender">
                 <Select
@@ -161,6 +195,36 @@ export default function AdminMembersForm({ member, onSuccess, pageTitle, pageDes
                 <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" placeholder="DD/MM/YYYY" size="large" />
               </Form.Item>
             </div>
+
+            <Form.Item label="Địa chỉ" name="detailedAddress">
+              <Input.TextArea rows={2} placeholder="Địa chỉ liên hệ" />
+            </Form.Item>
+          </div>
+
+          <div style={cardStyle} className="p-6 max-[640px]:p-4">
+            <h2 style={sectionTitleStyle}>Liên hệ khẩn cấp</h2>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Form.Item label="Họ tên" name="emergencyContactName"><Input placeholder="Người liên hệ" /></Form.Item>
+              <Form.Item label="Số điện thoại" name="emergencyContactPhone"><Input placeholder="Số điện thoại" /></Form.Item>
+              <Form.Item label="Mối quan hệ" name="emergencyContactRelationship"><Input placeholder="Ví dụ: Người thân" /></Form.Item>
+            </div>
+          </div>
+
+          <div style={cardStyle} className="p-6 max-[640px]:p-4">
+            <h2 style={sectionTitleStyle}>Thông tin sức khỏe</h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Form.Item label="Chiều cao (cm)" name="healthHeight"><Input type="number" min={1} /></Form.Item>
+              <Form.Item label="Cân nặng (kg)" name="healthWeight"><Input type="number" min={1} /></Form.Item>
+            </div>
+            <Form.Item label="Mục tiêu tập luyện" name="healthGoals" extra="Ngăn cách các mục tiêu bằng dấu phẩy">
+              <Input placeholder="Ví dụ: Giảm mỡ, Tăng sức bền" />
+            </Form.Item>
+            <Form.Item label="Mức độ hoạt động" name="activityLevel">
+              <Select allowClear options={[{ value: 'low', label: 'Thấp' }, { value: 'medium', label: 'Trung bình' }, { value: 'high', label: 'Cao' }]} />
+            </Form.Item>
+            <Form.Item label="Lưu ý sức khỏe" name="healthNotes">
+              <Input.TextArea rows={3} placeholder="Dị ứng, chấn thương hoặc lưu ý khi tập" />
+            </Form.Item>
           </div>
 
           <div style={cardStyle} className="p-6 max-[640px]:p-4">

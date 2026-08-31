@@ -318,8 +318,7 @@ export default function AdminMembersPage() {
   }
 
   const openEdit = (member: MemberListItem) => {
-    setFormModalMember(member)
-    setFormModalOpen(true)
+    navigate(`/admin/members/${member._id}/edit`)
   }
 
   const onFormSuccess = () => {
@@ -329,13 +328,28 @@ export default function AdminMembersPage() {
   }
 
   const toggleStatus = async (member: MemberListItem) => {
-    try {
-      await memberService.toggleMemberStatus(member._id)
-      message.success('Cập nhật trạng thái thành công')
-      fetchMembers()
-    } catch {
-      message.error('Thao tác thất bại')
-    }
+    let reason = ''
+    Modal.confirm({
+      title: member.isActive ? 'Khóa tài khoản hội viên' : 'Mở khóa tài khoản hội viên',
+      content: (
+        <div className="mt-3">
+          <p className="mb-2 text-sm text-[var(--gs-text-muted)]">Vui lòng ghi rõ lý do để lưu vào nhật ký quản trị.</p>
+          <Input.TextArea autoFocus rows={3} placeholder="Nhập lý do" onChange={(event) => { reason = event.target.value }} />
+        </div>
+      ),
+      okText: member.isActive ? 'Xác nhận khóa' : 'Xác nhận mở khóa',
+      okButtonProps: { danger: member.isActive },
+      cancelText: 'Hủy',
+      onOk: async () => {
+        if (!reason.trim()) {
+          message.warning('Vui lòng nhập lý do')
+          return Promise.reject()
+        }
+        await memberService.toggleMemberStatus(member._id, reason.trim())
+        message.success('Cập nhật trạng thái thành công')
+        fetchMembers()
+      },
+    })
   }
 
   const openRegisterPlan = (member: MemberListItem) => {
@@ -605,6 +619,7 @@ export default function AdminMembersPage() {
     },
     {
       title: 'Gói tập',
+      width: 220,
       render: (_: unknown, record: MemberListItem) => {
         if (!record.activeMembership) {
           return <Tag style={{ opacity: 0.5 }}>Chưa có gói</Tag>
@@ -852,10 +867,14 @@ export default function AdminMembersPage() {
 
   return (
     <DashboardLayout>
-      <div className="dashboard-hero mb-6 rounded-[28px] border border-[var(--gs-border)] bg-[linear-gradient(135deg,rgba(182,70,47,0.14),rgba(255,255,255,0.02))]">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--gs-text-soft)]">Quản lý</p>
-        <h1 className="mt-3 text-4xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý thành viên</h1>
-        <div className="mt-4 flex flex-wrap gap-3">
+      <div className="member-admin-hero dashboard-hero mb-5 rounded-[24px] border border-[var(--gs-border)]">
+        <div className="flex flex-wrap items-end justify-between gap-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--gs-text-soft)]">Quản lý hội viên</p>
+            <h1 className="mt-2 text-3xl font-semibold text-[var(--gs-text)] max-[640px]:text-2xl">Quản lý thành viên</h1>
+            <p className="mt-1 text-sm text-[var(--gs-text-muted)]">Theo dõi hồ sơ, gói tập và yêu cầu tập luyện của hội viên.</p>
+          </div>
+          <div className="member-admin-hero-actions flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setModalOpen(true)}
@@ -894,11 +913,17 @@ export default function AdminMembersPage() {
           >
             <span>Lịch sử PT 1-1</span>
           </button>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
-        <div className="dashboard-filter-bar">
+      <div className="member-admin-workspace rounded-[20px] border border-[var(--gs-border)] bg-[var(--gs-card)] max-[640px]:rounded-2xl">
+        <div className="member-admin-toolbar">
+          <div className="member-admin-toolbar-title">
+            <h2>Danh sách hội viên</h2>
+            <span>{total.toLocaleString('vi-VN')} hội viên</span>
+          </div>
+          <div className="member-admin-toolbar-controls">
           <Input.Search
             placeholder="Tìm kiếm thành viên..."
             allowClear
@@ -927,14 +952,17 @@ export default function AdminMembersPage() {
           <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
             Thêm thành viên
           </Button>
+          </div>
         </div>
 
-        <div className="member-scroll-x">
+        <div className="member-scroll-x member-admin-table-wrap">
           <Table
             dataSource={members}
             columns={columns}
             rowKey="_id"
             loading={loading}
+            className="member-admin-table"
+            size="middle"
             pagination={{
               total,
               current: page,

@@ -472,7 +472,6 @@ function AppWithTheme() {
         <Route path="/admin/workout-reports" element={<PrivateRoute feature="pt.moduleEnabled"><AdminWorkoutReportsPage /></PrivateRoute>} />
         <Route path="/admin/pt-assignment-end-requests" element={<PrivateRoute><AdminPTAssignmentEndRequestsPage /></PrivateRoute>} />
         <Route path="/admin/trainer-end-requests" element={<PrivateRoute><AdminPTAssignmentEndRequestsPage /></PrivateRoute>} />
-        <Route path="/admin/pt-prices" element={<PrivateRoute feature="pt.moduleEnabled"><Navigate to="/admin/trainers?tab=prices" replace /></PrivateRoute>} />
         {/* SELLER */}
         <Route path="/seller" element={<Navigate to="/seller/products" />} />
         <Route path="/seller/products" element={<PrivateRoute feature="shop.productStoreEnabled"><SellerProductsPage /></PrivateRoute>} />

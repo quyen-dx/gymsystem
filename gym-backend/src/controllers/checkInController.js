@@ -9,6 +9,7 @@ import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createNotification } from '../services/notificationService.js'
 import AppError from '../utils/appError.js'
 import sendError from '../utils/sendError.js'
+import { checkMemberFeature } from '../utils/featureCheck.js'
 import { resolveCheckinSession } from '../services/checkinSessionResolver.js'
 
 const getUserDisplayName = (user, fallback = '') =>
@@ -223,14 +224,15 @@ export const generateQRToken = async (req, res) => {
   try {
     const memberId = req.user._id
 
-    const activeMembership = await MembershipCycle.findOne({
-      memberId,
-      status: 'active',
-      expiresAt: { $gte: new Date() },
-    }).lean()
-
-    if (!activeMembership) {
-      throw new AppError('Gói tập của bạn đã hết hạn hoặc không còn hiệu lực', 403)
+    const [gymAccess, qrCheckin] = await Promise.all([
+      checkMemberFeature(memberId, 'GYM_ACCESS'),
+      checkMemberFeature(memberId, 'QR_CHECKIN'),
+    ])
+    if (!gymAccess.allowed) {
+      throw new AppError(gymAccess.reason, 403)
+    }
+    if (!qrCheckin.allowed) {
+      throw new AppError(qrCheckin.reason, 403)
     }
 
     if (isAfterCheckinCutoff()) {
@@ -376,6 +378,32 @@ export const staffVerifyCheckin = async (req, res) => {
         checkInMethod,
       })
       throw new AppError('Gói tập đã hết hạn. Vui lòng gia hạn để tiếp tục.', 403)
+    }
+
+    // Check-in tại quầy và qua QR đều cần quyền vào phòng tập. QR cần thêm
+    // quyền quét mã; check-in thủ công không bị yêu cầu quyền đó.
+    const gymAccess = await checkMemberFeature(member._id, 'GYM_ACCESS')
+    if (!gymAccess.allowed) {
+      await recordFailedCheckin({
+        memberId: member._id,
+        staffId,
+        errorNote: gymAccess.reason,
+        checkInMethod,
+      })
+      throw new AppError(gymAccess.reason, 403)
+    }
+    if (token) {
+      const qrCheckin = await checkMemberFeature(member._id, 'QR_CHECKIN')
+      if (!qrCheckin.allowed) {
+        await recordFailedCheckin({
+          memberId: member._id,
+          staffId,
+          errorNote: qrCheckin.reason,
+          checkInMethod,
+          qrToken: token,
+        })
+        throw new AppError(qrCheckin.reason, 403)
+      }
     }
 
     if (isAfterCheckinCutoff()) {

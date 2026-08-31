@@ -389,8 +389,7 @@ export default function PTClientsPage() {
       const { data } = await ptAssignmentEndService.create({
         memberId: client._id,
         reasonType: 'MEMBER_COMPLETED',
-        assignmentId: client.assignmentId,
-        classId,
+        ...(classId ? { classId } : { assignmentId: client.assignmentId }),
       })
       message.success(data.message || 'Đã gửi yêu cầu kết thúc phụ trách')
       setEndRequestModal({ open: false, client: null })

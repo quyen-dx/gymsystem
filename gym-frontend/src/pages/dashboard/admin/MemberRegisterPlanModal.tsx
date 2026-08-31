@@ -1,4 +1,4 @@
-import { Modal, Select, message } from 'antd'
+import { Input, Modal, Select, message } from 'antd'
 import { useEffect, useState } from 'react'
 import api from '../../../services/api'
 import { memberService } from '../../../services/memberService'
@@ -16,10 +16,16 @@ export default function MemberRegisterPlanModal({ open, memberId, memberName, on
   const [plans, setPlans] = useState<MemberPlan[]>([])
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'POS' | 'BANK_TRANSFER'>('CASH')
+  const [note, setNote] = useState('')
+  const [receiptNumber, setReceiptNumber] = useState('')
 
   useEffect(() => {
     if (open) {
       setSelectedPlanId(null)
+      setPaymentMethod('CASH')
+      setNote('')
+      setReceiptNumber('')
       api.get<{ plans: MemberPlan[] }>('/plans', { params: { limit: 100 } })
         .then(({ data }) => setPlans(data.plans || []))
         .catch(() => message.error('Không thể tải danh sách gói tập'))
@@ -34,9 +40,11 @@ export default function MemberRegisterPlanModal({ open, memberId, memberName, on
     try {
       const paymentRes = await memberService.createOfflinePlanPayment(memberId, {
         planId: selectedPlanId,
-        method: 'CASH',
+        method: paymentMethod,
         confirmed: true,
         flow: 'register',
+        note: note.trim(),
+        receiptNumber: receiptNumber.trim(),
       })
       await memberService.registerPlan(memberId, selectedPlanId, paymentRes.data?.data?.paymentId)
       message.success('Đăng ký gói tập thành công')
@@ -96,11 +104,22 @@ export default function MemberRegisterPlanModal({ open, memberId, memberName, on
               <span>{new Date().toLocaleDateString('vi-VN')}</span>
               <span style={{ color: 'var(--gs-text-muted)' }}>Ngày kết thúc:</span>
               <span style={{ fontWeight: 600 }}>
-                {new Date(Date.now() + selectedPlan.durationDays * 86400000).toLocaleDateString('vi-VN')}
+                {new Date(new Date().setHours(0, 0, 0, 0) + (selectedPlan.durationDays - 1) * 86400000).toLocaleDateString('vi-VN')}
               </span>
             </div>
           </div>
         )}
+
+        <div>
+          <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>Phương thức thanh toán</label>
+          <Select value={paymentMethod} onChange={setPaymentMethod} size="large" style={{ width: '100%' }} options={[
+            { value: 'CASH', label: 'Tiền mặt' },
+            { value: 'POS', label: 'POS / thẻ' },
+            { value: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
+          ]} />
+        </div>
+        <Input placeholder="Số biên nhận / mã hóa đơn (nếu có)" value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} />
+        <Input.TextArea rows={2} placeholder="Ghi chú thu tiền (nếu có)" value={note} onChange={(event) => setNote(event.target.value)} />
       </div>
     </Modal>
   )

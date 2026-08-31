@@ -345,5 +345,5 @@ assert(stray.length === 0, 'no transactions from error-path PIs')
 
 console.log('\n=== SUMMARY ===')
 console.log('wallet final balance:', await getBalance(wallet._id))
-console.log('expected:', 100000 + amountVnd)
+console.log('expected:', 100000 + amountVnd + cardAmountVnd)
 await mongoose.disconnect()

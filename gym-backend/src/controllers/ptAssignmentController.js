@@ -16,6 +16,23 @@ import { createNotification } from '../services/notificationService.js'
 import { leaveCurrentTraining as cleanupCurrentTraining } from '../services/trainingCleanupService.js'
 import { validateScheduleSessions, buildClassLocation } from './scheduleController.js'
 
+const isAdmin = (user) => ['admin', 'super_admin'].includes(user?.role)
+
+const assertPtCanAccessMember = async ({ req, memberId }) => {
+  if (isAdmin(req.user)) return
+  const [privateAssignment, groupAssignment] = await Promise.all([
+    PTAssignment.exists({
+      memberId,
+      ptId: req.user._id,
+      status: { $in: ['active', 'pending_end_approval'] },
+    }),
+    TrainingAssignment.exists({ memberId, trainerId: req.user._id, status: 'active' }),
+  ])
+  if (!privateAssignment && !groupAssignment) {
+    throw new AppError('Bạn không phụ trách hội viên này', 403)
+  }
+}
+
 export const getMyAssignment = async (req, res) => {
   try {
     const assignment = await ptAssignmentService.findActiveAssignment({
@@ -98,6 +115,7 @@ export const getSuggestedSlots = async (req, res) => {
 export const getMemberTrainingPreferences = async (req, res) => {
   try {
     const { memberId } = req.params
+    await assertPtCanAccessMember({ req, memberId })
     const prefs = await ptAssignmentService.getMemberTrainingPreferences({ memberId })
     res.json(prefs)
   } catch (error) {
@@ -108,6 +126,7 @@ export const getMemberTrainingPreferences = async (req, res) => {
 export const getMatchedClasses = async (req, res) => {
   try {
     const { memberId } = req.params
+    await assertPtCanAccessMember({ req, memberId })
     const result = await ptAssignmentService.getMatchedClassesForBooking({
       memberId,
       ptId: req.user._id,
@@ -140,16 +159,6 @@ export const assignWorkout = async (req, res) => {
     // Không gán giáo án cho assignment đã kết thúc
     if (!['active', 'pending_end_approval'].includes(assignment.status)) {
       return res.status(400).json({ message: 'Không thể gán giáo án cho phân công đã kết thúc' })
-    }
-
-    const pendingPaymentRequest = await TrainingRequest.findOne({
-      memberId: assignment.memberId,
-      assignedTrainerId: assignment.ptId,
-      type: 'pt1on1',
-      status: { $in: ['assigned', 'awaiting_payment'] },
-    }).lean()
-    if (pendingPaymentRequest) {
-      return res.status(409).json({ message: 'Chỉ có thể gán giáo án sau khi yêu cầu PT đã được thanh toán và xác nhận.' })
     }
 
     assignment.workoutId = workoutId || null
@@ -219,18 +228,6 @@ export const createScheduleAndAssignWorkout = async (req, res) => {
     if (!isAdminUser && String(existingAssignment.ptId) !== String(ptId)) {
       await mongoSession.abortTransaction()
       return res.status(403).json({ message: 'Bạn không phụ trách phân công này' })
-    }
-
-    // Chính sách 1 member = 1 PT active cho PT 1-1
-    const pendingPaymentRequest = await TrainingRequest.findOne({
-      memberId,
-      assignedTrainerId: existingAssignment.ptId,
-      type: 'pt1on1',
-      status: { $in: ['assigned', 'awaiting_payment'] },
-    }).session(mongoSession)
-    if (pendingPaymentRequest) {
-      await mongoSession.abortTransaction()
-      return res.status(409).json({ message: 'Chỉ có thể gán giáo án sau khi yêu cầu PT đã được thanh toán và xác nhận.' })
     }
 
     const otherActive = await PTAssignment.findOne({
@@ -309,10 +306,17 @@ export const createScheduleAndAssignWorkout = async (req, res) => {
       }
     }
 
+    const pa = existingAssignment
+    if (pa.status !== 'active') {
+      await mongoSession.abortTransaction()
+      return res.status(409).json({ message: 'Phân công này không còn hoạt động' })
+    }
+
     const schedule = await WorkoutSchedule.create([{
       memberId,
       templateId,
       assignedBy: ptId,
+      assignmentId: pa._id,
       startDate: new Date(),
       weekIndex: weekIndex || 1,
       totalWeeks: totalWeeks || 1,
@@ -340,8 +344,6 @@ export const createScheduleAndAssignWorkout = async (req, res) => {
         }
       }),
     }], { session: mongoSession })
-
-    const pa = await ptAssignmentService.createAssignment({ memberId, ptId, session: mongoSession })
 
     pa.workoutId = templateId
     await pa.save({ session: mongoSession })
@@ -408,26 +410,39 @@ export const getWorkoutProgress = async (req, res) => {
   try {
     const { scheduleId } = req.query
     const ptId = req.user._id
+    const assignmentId = req.params.id
 
     // Load schedule by scheduleId (the only reliable identifier from the frontend)
     if (!scheduleId) {
       return res.status(400).json({ message: 'Thiếu scheduleId' })
     }
+    if (!mongoose.Types.ObjectId.isValid(assignmentId) || !mongoose.Types.ObjectId.isValid(scheduleId)) {
+      return res.status(400).json({ message: 'ID phân công hoặc lịch tập không hợp lệ' })
+    }
+
+    const assignmentFilter = { _id: assignmentId }
+    if (!isAdmin(req.user)) {
+      assignmentFilter.ptId = ptId
+      assignmentFilter.status = { $in: ['active', 'pending_end_approval'] }
+    }
+    const assignment = await PTAssignment.findOne(assignmentFilter)
+      .populate('memberId', 'name fullName email phone avatar memberCode memberNumber')
+      .populate('workoutId', 'name goal days totalSessions')
+    if (!assignment) {
+      return res.status(403).json({ message: 'Bạn không có quyền xem tiến độ của phân công này' })
+    }
+
     const schedule = await WorkoutSchedule.findById(scheduleId)
       .populate('templateId', 'name goal days')
-
-    // Find assignment by memberId + current PT (chỉ assignment còn hiệu lực,
-    // tránh lấy nhầm assignment cũ khi PT thay đổi)
-    let assignment = null
-    if (schedule) {
-      assignment = await PTAssignment.findOne({
-        memberId: schedule.memberId,
-        ptId,
-        status: { $in: ['active', 'pending_end_approval'] },
-      })
-        .populate('memberId', 'name fullName email phone avatar memberCode memberNumber')
-        .populate('workoutId', 'name goal days totalSessions')
-        .sort({ createdAt: -1 })
+    if (!schedule || String(schedule.memberId) !== String(assignment.memberId?._id || assignment.memberId)) {
+      return res.status(404).json({ message: 'Không tìm thấy lịch tập thuộc phân công này' })
+    }
+    // Lịch mới phải gắn assignmentId; lịch cũ chỉ được chấp nhận nếu do đúng PT này tạo.
+    if (
+      (schedule.assignmentId && String(schedule.assignmentId) !== String(assignment._id)) ||
+      (!schedule.assignmentId && String(schedule.assignedBy) !== String(assignment.ptId))
+    ) {
+      return res.status(403).json({ message: 'Lịch tập không thuộc phân công PT này' })
     }
 
     res.json({ assignment, schedule })
@@ -459,10 +474,14 @@ export const endWorkout = async (req, res) => {
       await schedule.save()
 
       // If no active schedules remain for this member, clear workoutId on PTAssignment
-      const remainingActive = await WorkoutSchedule.findOne({ memberId: schedule.memberId, status: 'active' })
+      const remainingActive = await WorkoutSchedule.findOne({
+        memberId: schedule.memberId,
+        assignmentId: schedule.assignmentId,
+        status: 'active',
+      })
       if (!remainingActive) {
-        await PTAssignment.updateMany(
-          { memberId: schedule.memberId, status: 'active' },
+        await PTAssignment.updateOne(
+          { _id: schedule.assignmentId, memberId: schedule.memberId, status: 'active' },
           { $set: { workoutId: null } },
         )
       }
@@ -533,6 +552,7 @@ export const endWorkout = async (req, res) => {
       // Always load active schedules so we can both preview and execute on the same data
       const activeSchedules = await WorkoutSchedule.find({
         memberId: req.body.memberId,
+        assignmentId: ptAssignment._id,
         status: 'active',
       }).lean()
 
@@ -584,14 +604,14 @@ export const endWorkout = async (req, res) => {
         endAllSession.startTransaction()
 
         endAllResult = await WorkoutSchedule.updateMany(
-          { memberId: req.body.memberId, status: 'active' },
+          { memberId: req.body.memberId, assignmentId: ptAssignment._id, status: 'active' },
           { $set: { status: 'completed' } },
           { session: endAllSession },
         )
 
         // All schedules ended → clear workoutId on PTAssignment
-        await PTAssignment.updateMany(
-          { memberId: req.body.memberId, status: 'active' },
+        await PTAssignment.updateOne(
+          { _id: ptAssignment._id, memberId: req.body.memberId, status: 'active' },
           { $set: { workoutId: null } },
           { session: endAllSession },
         )
@@ -713,7 +733,7 @@ export const endWorkout = async (req, res) => {
     }).catch(err => console.error('Notify PT endWorkout failed:', err.message))
 
     await WorkoutSchedule.updateMany(
-      { memberId: assignment.memberId, status: 'active' },
+      { memberId: assignment.memberId, assignmentId: assignment._id, status: 'active' },
       { $set: { status: 'completed' } },
     )
 

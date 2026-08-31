@@ -2,6 +2,7 @@ import TrainerSchedule from '../models/TrainerSchedule.js'
 import TrainingAssignment from '../models/TrainingAssignment.js'
 import Booking from '../models/Booking.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
+import mongoose from 'mongoose'
 
 const SHIFT_RANGES = {
   morning: { start: '06:00', end: '12:00' },
@@ -216,20 +217,31 @@ export const setSchedule = async ({ trainerId, schedules }) => {
   const normalizedSchedules = normalizeSchedules(schedules)
   await validateNoAffectedAssignedSessions(trainerId, normalizedSchedules)
 
-  await TrainerSchedule.deleteMany({ trainerId })
-  if (normalizedSchedules.length > 0) {
-    return TrainerSchedule.insertMany(
-      normalizedSchedules.map((s) => ({
-        trainerId,
-        dayOfWeek: s.dayOfWeek,
-        shift: s.shift,
-        startTime: s.startTime,
-        endTime: s.endTime,
-        status: 'active',
-      })),
-    )
+  // Thay lịch là thao tác thay thế toàn bộ. Thực hiện trong transaction để không
+  // có trạng thái PT bị mất sạch lịch nếu insert mới thất bại giữa chừng.
+  const session = await mongoose.startSession()
+  try {
+    let saved = []
+    await session.withTransaction(async () => {
+      await TrainerSchedule.deleteMany({ trainerId }, { session })
+      if (normalizedSchedules.length > 0) {
+        saved = await TrainerSchedule.insertMany(
+          normalizedSchedules.map((s) => ({
+            trainerId,
+            dayOfWeek: s.dayOfWeek,
+            shift: s.shift,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            status: 'active',
+          })),
+          { session },
+        )
+      }
+    })
+    return saved
+  } finally {
+    await session.endSession()
   }
-  return []
 }
 
 export const getTrainerSchedule = async (trainerId) => {

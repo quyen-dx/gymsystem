@@ -11,7 +11,8 @@ export async function checkMemberFeature(memberId, featureCode) {
     memberId,
     status: 'active',
     expiresAt: { $gte: new Date() },
-  }).populate('currentPlanId').lean()
+    transferPending: { $ne: true },
+  }).sort({ createdAt: -1 }).populate('currentPlanId').lean()
 
   if (!cycle) {
     return { allowed: false, feature: null, plan: null, reason: 'Không tìm thấy gói tập đang hoạt động' }
@@ -44,10 +45,11 @@ export async function getMemberFeatures(memberId) {
     memberId,
     status: 'active',
     expiresAt: { $gte: new Date() },
+    transferPending: { $ne: true },
   }).populate({
     path: 'currentPlanId',
     populate: { path: 'featureIds', model: 'PlanFeature' }
-  }).lean()
+  }).sort({ createdAt: -1 }).lean()
 
   if (!cycle || !cycle.currentPlanId) return []
 

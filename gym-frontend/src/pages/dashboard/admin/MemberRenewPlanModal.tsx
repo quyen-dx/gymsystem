@@ -1,4 +1,4 @@
-import { Modal, Radio, message } from 'antd'
+import { Input, Modal, Radio, Select, message } from 'antd'
 import { useEffect, useState } from 'react'
 import api from '../../../services/api'
 import { memberService } from '../../../services/memberService'
@@ -21,10 +21,16 @@ export default function MemberRenewPlanModal({ open, memberId, memberName, curre
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
   const [renewFrom, setRenewFrom] = useState<'today' | 'endDate'>('endDate')
   const [loading, setLoading] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'POS' | 'BANK_TRANSFER'>('CASH')
+  const [note, setNote] = useState('')
+  const [receiptNumber, setReceiptNumber] = useState('')
 
   useEffect(() => {
     if (open) {
       setRenewFrom('endDate')
+      setPaymentMethod('CASH')
+      setNote('')
+      setReceiptNumber('')
       if (currentPlanId) {
         setSelectedPlanId(currentPlanId)
       }
@@ -50,9 +56,11 @@ export default function MemberRenewPlanModal({ open, memberId, memberName, curre
     try {
       const paymentRes = await memberService.createOfflinePlanPayment(memberId, {
         planId: selectedPlanId,
-        method: 'CASH',
+        method: paymentMethod,
         confirmed: true,
         flow: 'renew',
+        note: note.trim(),
+        receiptNumber: receiptNumber.trim(),
       })
       await memberService.renewPlan(memberId, selectedPlanId, paymentRes.data?.data?.paymentId, renewFrom)
       message.success('Gia hạn gói tập thành công')
@@ -75,8 +83,11 @@ export default function MemberRenewPlanModal({ open, memberId, memberName, curre
 
   const calculateNewEndDate = () => {
     if (!selectedPlan) return null
-    const baseDate = renewFrom === 'today' ? new Date() : (currentEndDate ? new Date(currentEndDate) : new Date())
-    return new Date(baseDate.getTime() + selectedPlan.durationDays * 86400000)
+    const baseDate = renewFrom === 'today'
+      ? new Date(new Date().setHours(0, 0, 0, 0))
+      : (currentEndDate ? new Date(currentEndDate) : new Date())
+    const offset = renewFrom === 'today' ? selectedPlan.durationDays - 1 : selectedPlan.durationDays
+    return new Date(baseDate.getTime() + offset * 86400000)
   }
 
   const remainingDays = calculateRemainingDays()
@@ -161,6 +172,17 @@ export default function MemberRenewPlanModal({ open, memberId, memberName, curre
               </span>
             </div>
           </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <label style={{ fontWeight: 500, fontSize: 13 }}>Phương thức thanh toán</label>
+          <Select value={paymentMethod} onChange={setPaymentMethod} options={[
+            { value: 'CASH', label: 'Tiền mặt' },
+            { value: 'POS', label: 'POS / thẻ' },
+            { value: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
+          ]} />
+          <Input placeholder="Số biên nhận / mã hóa đơn (nếu có)" value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} />
+          <Input.TextArea rows={2} placeholder="Ghi chú thu tiền (nếu có)" value={note} onChange={(event) => setNote(event.target.value)} />
         </div>
       </div>
     </Modal>

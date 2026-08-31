@@ -55,6 +55,8 @@ const workoutScheduleSchema = new mongoose.Schema({
   memberId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   templateId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workout', required: true },
   assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  // Liên kết với đúng phân công PT 1-1 để thao tác kết thúc không quét lịch khác.
+  assignmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'PTAssignment', default: null, index: true },
   classId: { type: mongoose.Schema.Types.ObjectId, ref: 'TrainingClass', default: null, index: true },
   trainerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   startDate: { type: Date, required: true },

@@ -119,6 +119,11 @@ export default function AdminPTAssignmentEndRequestsPage() {
     const ass = typeof r.assignmentId === 'object' ? r.assignmentId : null
     const workout = ass?.workoutId && typeof ass.workoutId === 'object' ? ass.workoutId : null
     const proc = typeof r.processedBy === 'object' ? r.processedBy : null
+    const scopeLabel = cls
+      ? `Lớp nhóm: ${cls.name || 'Lớp đã chọn'}`
+      : ass
+        ? 'Phân công PT 1-1 đã chọn'
+        : 'Yêu cầu cũ chưa xác định phạm vi — không nên phê duyệt tự động'
 
     return (
       <div className="grid grid-cols-2 gap-4 p-4 text-sm">
@@ -130,6 +135,11 @@ export default function AdminPTAssignmentEndRequestsPage() {
           <div className="mb-1 font-medium text-[var(--gs-text-muted)]">Hội viên</div>
           <div className="text-[var(--gs-text)]">{member ? getUserDisplayName(member, 'Thành viên') : '—'}</div>
           {member?.memberCode && <div className="text-xs text-[var(--gs-text-muted)]">Mã: {member.memberCode}</div>}
+        </div>
+        <div className="col-span-2 rounded-lg border border-[var(--gs-border)] bg-[var(--gs-surface-muted)] px-3 py-2">
+          <div className="mb-1 font-medium text-[var(--gs-text-muted)]">Phạm vi sẽ kết thúc</div>
+          <div className="font-medium text-[var(--gs-text)]">{scopeLabel}</div>
+          <div className="mt-1 text-xs text-[var(--gs-text-muted)]">Chỉ phân công/lớp này bị tác động; dữ liệu PT khác của hội viên được giữ nguyên.</div>
         </div>
         {cls && (
           <div>

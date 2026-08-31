@@ -12,6 +12,8 @@ import {
   createPayoutRequest,
   markPayoutTransferred,
   rejectPayoutRequest,
+  sendStalePayoutAdminReminders,
+  autoCancelStalePayoutRequests,
 } from '../services/payoutRequestService.js'
 
 const uri = process.env.PAYOUT_TEST_MONGO_URI
@@ -65,6 +67,20 @@ try {
   check(await autoConfirmDuePayouts() === 0, 'cron rerun is idempotent')
   const autoCompleted = await PayoutRequest.findById(auto._id).lean()
   check(autoCompleted.status === 'COMPLETED' && autoCompleted.confirmationSource === 'AUTO', 'cron marks request auto-completed')
+
+  console.log('CASE 5: stale pending reminder + auto-cancel')
+  const stale = await createPayoutRequest({ memberId, payload: { amount: 100_000, bankCode: 'MB', bankName: 'MB Bank', accountNumber: '123456789', accountHolder: 'NGUYEN VAN A' } })
+  // createdAt là immutable trong Mongoose, nên dùng native collection để mô phỏng
+  // một yêu cầu được tạo từ lâu mà không làm thay đổi schema/logic production.
+  await PayoutRequest.collection.updateOne({ _id: stale._id }, { $set: { createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } })
+  check(await sendStalePayoutAdminReminders() === 1, 'cron sends exactly one reminder for a stale pending request')
+  check(await sendStalePayoutAdminReminders() === 0, 'reminder cron is idempotent')
+  check(await autoCancelStalePayoutRequests() === 1, 'cron auto-cancels exactly one stale pending request')
+  check(await autoCancelStalePayoutRequests() === 0, 'auto-cancel cron is idempotent')
+  const staleCancelled = await PayoutRequest.findById(stale._id).lean()
+  wallet = await Wallet.findOne({ userId: memberId }).lean()
+  check(staleCancelled.status === 'CANCELLED' && staleCancelled.cancelReason, 'stale request is cancelled with a reason')
+  check(wallet.balance === 300_000 && wallet.lockedBalance === 0 && wallet.withdrawableBalance === 300_000, 'auto-cancel returns locked funds to the wallet')
   console.log('PAYOUT INTEGRATION TEST PASSED')
 } catch (error) {
   exitCode = 1

@@ -33,6 +33,16 @@ export interface MemberUser {
   gender?: string
   memberCode?: string
   memberNumber?: number
+  contactEmail?: string
+  detailedAddress?: string
+  emergencyContact?: { name?: string; phone?: string; relationship?: string }
+  healthInfo?: {
+    height?: number | null
+    weight?: number | null
+    goals?: string[]
+    activityLevel?: string
+    notes?: string
+  }
 }
 
 export interface MemberListItem extends MemberUser {
@@ -55,6 +65,7 @@ export interface TimelineEvent {
   description: string
   metadata?: Record<string, unknown>
   createdAt: string
+  price?: number
 }
 
 export interface MemberStats {

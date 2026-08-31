@@ -288,7 +288,9 @@ export const findPTMemberConflicts = async ({ ptId, date, slot, excludeScheduleI
       const sDate = new Date(sess.date)
       sDate.setHours(0, 0, 0, 0)
       if (sDate.getTime() !== dayStart.getTime()) continue
-      const sRange = normalizeSlot(sess.time.split('-')[0].trim())
+      const rawStartTime = String(sess.time).split('-')[0].trim()
+      const rawEndTime = String(sess.endTime || '').trim()
+      const sRange = normalizeSlot(rawEndTime ? `${rawStartTime}-${rawEndTime}` : sess.time)
       if (timesOverlap(slotRange.start, slotRange.end, sRange.start, sRange.end)) {
         const m = s.memberId && typeof s.memberId === 'object' ? s.memberId : null
         conflicts.push({

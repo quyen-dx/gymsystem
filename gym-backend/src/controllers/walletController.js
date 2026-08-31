@@ -7,7 +7,7 @@ import Transaction from '../models/Transaction.js'
 import User from '../models/User.js'
 import Wallet from '../models/Wallet.js'
 import Booking from '../models/Booking.js'
-import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, transferWalletBalance, IdempotencyConflictError } from '../services/walletService.js'
+import { applyWalletTransaction, getOrCreateWallet, getWalletTransactions, transferWalletBalance, IdempotencyConflictError, releaseWalletPaymentReservation } from '../services/walletService.js'
 import { finalizeWalletDeposit, notifyDepositSuccess } from '../services/walletDepositService.js'
 import { finalizePlanPurchase } from '../services/membershipService.js'
 import { finalizePlanChangePurchase } from './planChangeController.js'
@@ -46,6 +46,17 @@ const getVnpayChargedAmount = (payment) => {
     const remainingAmount = Number(payment?.metadata?.remainingAmount)
     if (Number.isFinite(remainingAmount) && remainingAmount > 0) return remainingAmount
     return Number(payment?.amount || 0)
+}
+
+const failPendingPlanPayment = async ({ payment, txnRef, metadata, reason }) => {
+    const result = await Payment.updateOne(
+        { _id: payment._id, txnRef, status: 'PENDING' },
+        { $set: { status: 'FAILED', completedAt: new Date(), metadata } },
+    )
+    if (result.modifiedCount) {
+        await releaseWalletPaymentReservation({ paymentId: payment._id, reason })
+    }
+    return result.modifiedCount > 0
 }
 
 const getUsdToVndRate = async () => {
@@ -500,15 +511,7 @@ export const handleVnpayReturn = async (req, res, next) => {
     if (paymentPurpose === 'PLAN_PURCHASE') {
       const redirectTarget = '/my-membership'
       if (payment.status === 'PAID') return redirectWithStatus('success', txnRef, redirectTarget)
-      if (payment.status !== 'PENDING') {
-        // Recover a payment that the previous amount check incorrectly marked
-        // FAILED, but only when VNPay now returns a valid success result.
-        if (isPaid && payment.status === 'FAILED') {
-          await Payment.updateOne({ _id: payment._id, status: 'FAILED' }, { $set: { status: 'PENDING' } })
-        } else {
-          return redirectWithStatus('failed', txnRef, redirectTarget)
-        }
-      }
+      if (payment.status !== 'PENDING') return redirectWithStatus('failed', txnRef, redirectTarget)
 
       const metaPatch = {
         ...(payment.metadata || {}),
@@ -517,7 +520,12 @@ export const handleVnpayReturn = async (req, res, next) => {
       }
 
       if (!isPaid) {
-        await Payment.updateOne({ txnRef, status: 'PENDING' }, { $set: { status: 'FAILED', metadata: metaPatch } })
+        await failPendingPlanPayment({
+          payment,
+          txnRef,
+          metadata: metaPatch,
+          reason: 'vnpay_return_failed',
+        })
         return redirectWithStatus('failed', txnRef, redirectTarget)
       }
 
@@ -697,17 +705,23 @@ export const handleVnpayIpn = async (req, res, next) => {
     const ipnMeta = { ...(payment.metadata || {}), vnpayIpn: req.query, verified: true, ipnProcessedAt: new Date() }
 
     if (!isPaid) {
-      await Payment.updateOne(
-        { _id: payment._id, status: 'PENDING' },
-        { $set: { status: 'FAILED', metadata: ipnMeta } },
-      )
+      if (payment.metadata?.purpose === 'PLAN_PURCHASE') {
+        await failPendingPlanPayment({
+          payment,
+          txnRef,
+          metadata: ipnMeta,
+          reason: 'vnpay_ipn_failed',
+        })
+      } else {
+        await Payment.updateOne(
+          { _id: payment._id, status: 'PENDING' },
+          { $set: { status: 'FAILED', metadata: ipnMeta } },
+        )
+      }
       return respond('00', 'Confirm Success')
     }
 
-    // Race hiếm: return trước đó đánh FAILED nhưng VNPay thực tế đã trừ tiền → khôi phục về PENDING để finalize
-    if (String(payment.status).toUpperCase() !== 'PENDING') {
-      await Payment.updateOne({ _id: payment._id }, { $set: { status: 'PENDING' } })
-    }
+    if (String(payment.status).toUpperCase() !== 'PENDING') return respond('02', 'Order Already Confirmed')
 
     try {
       const purpose = payment.metadata?.purpose

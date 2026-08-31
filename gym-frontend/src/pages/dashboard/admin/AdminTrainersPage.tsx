@@ -14,15 +14,13 @@ import {
   Space,
   Table,
   Tag,
-  Tabs,
   TimePicker,
   Tooltip,
   message,
 } from 'antd'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import AdminPTPricesPage from './AdminPTPricesPage'
+import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../../../components/layout/header/DashboardLayout'
 import { trainerService } from '../../../services/trainerService'
 import { trainerScheduleService, type AffectedTrainerSchedule, type TrainerSchedule } from '../../../services/trainerScheduleService'
@@ -94,8 +92,6 @@ function TagBadge({ children, color }: { children: React.ReactNode; color?: stri
 
 export default function AdminTrainersPage() {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = searchParams.get('tab') === 'prices' ? 'prices' : 'trainers'
   const [pts, setPts] = useState<PT[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
@@ -272,17 +268,6 @@ export default function AdminTrainersPage() {
         </div>
       </div>
 
-      <Tabs
-        className="mb-5"
-        activeKey={activeTab}
-        onChange={(tab) => setSearchParams(tab === 'prices' ? { tab: 'prices' } : {})}
-        items={[
-          { key: 'trainers', label: 'Danh sách PT' },
-          { key: 'prices', label: 'Giá dịch vụ PT' },
-        ]}
-      />
-
-      {activeTab === 'trainers' ? <>
       <div className="rounded-[24px] border border-[var(--gs-border)] bg-[var(--gs-card)] p-6 max-[640px]:p-4">
         <div className="dashboard-filter-bar">
           <Input.Search placeholder="Tìm kiếm huấn luyện viên..." allowClear onSearch={handleSearch} style={{ maxWidth: 300 }} />
@@ -303,7 +288,6 @@ export default function AdminTrainersPage() {
         onClose={() => { setSchedulesOpen(false); setScheduleModalTrainerId(null) }}
         initialTrainerId={scheduleModalTrainerId || undefined}
       />
-      </> : <AdminPTPricesPage embedded />}
 
     </DashboardLayout>
   )

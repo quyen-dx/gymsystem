@@ -1,3 +1,4 @@
+import mongoose from 'mongoose'
 import TrainingRequest, { ACTIVE_TRAINING_REQUEST_STATUSES } from '../models/TrainingRequest.js'
 import TrainerSchedule from '../models/TrainerSchedule.js'
 import TrainingClass from '../models/TrainingClass.js'
@@ -13,6 +14,7 @@ import { ensureEnrollment as ensureClassEnrollment } from './classEnrollmentServ
 import { notifyPtMemberChanged } from './notificationService.js'
 import { applyWalletTransaction } from './walletService.js'
 import { calculateRemainingDays } from '../utils/dateUtils.js'
+import { checkMemberFeature } from '../utils/featureCheck.js'
 import { getActivePeriodEndDate } from '../utils/membershipDays.js'
 
 const ALLOWED_SPECIALIZATIONS = new Set([
@@ -380,6 +382,15 @@ export const createRequest = async ({ memberId, data }) => {
     err.statusCode = 400
     throw err
   }
+
+  const requiredFeature = type === 'pt1on1' ? 'BOOK_PT_PRIVATE' : 'BOOK_PT_GROUP'
+  const entitlement = await checkMemberFeature(memberId, requiredFeature)
+  if (!entitlement.allowed) {
+    const err = new Error(entitlement.reason)
+    err.statusCode = 403
+    throw err
+  }
+
   await reconcileStaleRequests({ memberId })
 
   // Chặn trùng: 1 hội viên chỉ có 1 yêu cầu đang xử lý cho mỗi loại dịch vụ
@@ -628,16 +639,6 @@ export const assignToClass = async ({ requestId, classId, assignedBy }) => {
     throw err
   }
 
-  const zone = trainingClass.zoneId
-  if (zone?.maxCapacity) {
-    const activeCount = await TrainingAssignment.countDocuments({ classId, status: { $in: ['active', 'waiting_pt'] } })
-    if (activeCount >= zone.maxCapacity) {
-      const err = new Error('Lớp học đã đầy')
-      err.statusCode = 400
-      throw err
-    }
-  }
-
   const requestSpec = normalizeSpecialization(existing.specialization)
   const classSpec = normalizeSpecialization(trainingClass.specialization)
   if (requestSpec !== classSpec) {
@@ -646,50 +647,61 @@ export const assignToClass = async ({ requestId, classId, assignedBy }) => {
     throw err
   }
 
-  const existingEnrollment = await Promise.all([
-    TrainingAssignment.exists({ memberId: existing.memberId, status: { $in: ['active', 'waiting_pt'] } }),
-    ClassEnrollment.exists({ memberId: existing.memberId, status: 'active' }),
-    PTAssignment.exists({ memberId: existing.memberId, status: 'active' }),
-  ])
-  if (existingEnrollment.some(Boolean)) {
-    const err = new Error('Hoi vien dang co PT/lop active, khong the xep them')
-    err.statusCode = 409
-    throw err
-  }
+  // Request, assignment và ClassEnrollment phải được tạo chung một transaction.
+  // ensureEnrollment dùng capacityRevision để các yêu cầu đồng thời không vượt chỗ.
+  const session = await mongoose.startSession()
+  try {
+    let request
+    await session.withTransaction(async () => {
+      const freshRequest = await TrainingRequest.findOne({
+        _id: requestId,
+        type: 'group',
+        status: { $in: ['pending', 'waiting_assignment', 'waiting_reassign'] },
+      }).session(session)
+      if (!freshRequest) {
+        const err = new Error('Yêu cầu không còn ở trạng thái có thể xếp lớp')
+        err.statusCode = 409
+        throw err
+      }
 
-  const request = await TrainingRequest.findByIdAndUpdate(
-    requestId,
-    {
-      status: 'assigned',
-      assignedClassId: classId,
-      assignedAt: new Date(),
-      assignedBy: assignedBy || undefined,
-    },
-    { new: true },
-  )
+      const existingEnrollment = await Promise.all([
+        TrainingAssignment.exists({ memberId: freshRequest.memberId, status: { $in: ['active', 'waiting_pt'] } }).session(session),
+        ClassEnrollment.exists({ memberId: freshRequest.memberId, status: 'active' }).session(session),
+        PTAssignment.exists({ memberId: freshRequest.memberId, status: 'active' }).session(session),
+      ])
+      if (existingEnrollment.some(Boolean)) {
+        const err = new Error('Hội viên đang có PT/lớp active, không thể xếp thêm')
+        err.statusCode = 409
+        throw err
+      }
 
-  if (request) {
-    const hasActivePt = trainingClass.status === 'active' && trainingClass.ptId
-    // Tạo TrainingAssignment — nếu lớp đã có PT active thì gán luôn
-    await TrainingAssignment.create({
-      memberId: request.memberId,
-      classId,
-      requestId: request._id,
-      trainerId: hasActivePt ? trainingClass.ptId : null,
-      assignedBy: assignedBy || undefined,
-      status: hasActivePt ? 'active' : 'waiting_pt',
-      acceptedAt: hasActivePt ? new Date() : null,
-      startDate: new Date(),
+      await ensureClassEnrollment({
+        classId,
+        memberId: freshRequest.memberId,
+        sourceReason: 'assigned_by_pt',
+        session,
+      })
+
+      const hasActivePt = trainingClass.status === 'active' && trainingClass.ptId
+      await TrainingAssignment.create([{
+        memberId: freshRequest.memberId,
+        classId,
+        requestId: freshRequest._id,
+        trainerId: hasActivePt ? trainingClass.ptId : null,
+        assignedBy: assignedBy || undefined,
+        status: hasActivePt ? 'active' : 'waiting_pt',
+        acceptedAt: hasActivePt ? new Date() : null,
+        startDate: new Date(),
+      }], { session })
+
+      freshRequest.status = 'assigned'
+      freshRequest.assignedClassId = classId
+      freshRequest.assignedAt = new Date()
+      freshRequest.assignedBy = assignedBy || undefined
+      await freshRequest.save({ session })
+      request = freshRequest
     })
 
-    // Authoritative ClassEnrollment (idempotent)
-    await ensureClassEnrollment({
-      classId,
-      memberId: request.memberId,
-      sourceReason: 'assigned_by_pt',
-    })
-
-    // Notify PT nếu lớp đã có PT active
     const member = await (await import('../models/User.js')).default.findById(request.memberId).select('fullName name').lean()
     const memberName = member?.fullName || member?.name || ''
     notifyPtMemberChanged({
@@ -699,9 +711,10 @@ export const assignToClass = async ({ requestId, classId, assignedBy }) => {
       classId,
       ptId: trainingClass.ptId || null,
     })
+    return request
+  } finally {
+    await session.endSession()
   }
-
-  return request
 }
 
 export const assignTrainer = async ({ requestId, trainerId, assignedBy }) => {

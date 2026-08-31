@@ -1,5 +1,6 @@
 import ClassEnrollment from '../models/ClassEnrollment.js'
 import TrainingClass from '../models/TrainingClass.js'
+import User from '../models/User.js'
 import mongoose from 'mongoose'
 
 /**
@@ -18,6 +19,34 @@ import mongoose from 'mongoose'
 export const ensureEnrollment = async ({ classId, memberId, session, sourceReason = 'assigned_by_pt', enforceCapacity = true }) => {
   if (!classId || !memberId) return { created: false, transferredFrom: null, enrollment: null }
 
+  // Các luồng cũ có thể gọi service ngoài transaction. Bao transaction ở đây để
+  // không kết thúc lớp cũ khi lớp mới đã đầy, và để chặn hai yêu cầu cùng vượt chỗ.
+  if (!session) {
+    const ownSession = await mongoose.startSession()
+    try {
+      let result
+      await ownSession.withTransaction(async () => {
+        result = await ensureEnrollment({ classId, memberId, session: ownSession, sourceReason, enforceCapacity })
+      })
+      return result
+    } finally {
+      await ownSession.endSession()
+    }
+  }
+
+  // Ghi lên User trước khi đọc enrollment để serialize các yêu cầu đồng thời của
+  // cùng một hội viên; transaction bị retry sẽ nhìn thấy enrollment mới nhất.
+  const memberLock = await User.updateOne(
+    { _id: memberId },
+    { $inc: { classEnrollmentRevision: 1 } },
+    { session },
+  )
+  if (memberLock.matchedCount !== 1) {
+    const err = new Error('Không tìm thấy hội viên để xếp lớp')
+    err.statusCode = 404
+    throw err
+  }
+
   const existingActive = await ClassEnrollment.findOne({
     memberId,
     status: 'active',
@@ -28,7 +57,32 @@ export const ensureEnrollment = async ({ classId, memberId, session, sourceReaso
     return { created: false, transferredFrom: null, enrollment: existingActive }
   }
 
-  // Case 2: member is in a DIFFERENT class -> end old enrollment first (transfer)
+  // Capacity check. Việc tăng capacityRevision tạo write-conflict giữa hai
+  // transaction xếp cùng một lớp; MongoDB sẽ retry transaction sau và đếm lại.
+  if (enforceCapacity) {
+    const cls = await TrainingClass.findById(classId).populate('zoneId', 'maxCapacity').session(session).lean()
+    if (!cls) {
+      const err = new Error('Không tìm thấy lớp tập')
+      err.statusCode = 404
+      throw err
+    }
+    const maxCapacity = cls?.zoneId?.maxCapacity || 0
+    if (maxCapacity > 0) {
+      const currentCount = await ClassEnrollment.countDocuments({
+        classId,
+        status: 'active',
+      }).session(session)
+      if (currentCount >= maxCapacity) {
+        const err = new Error(`Lớp ${cls?.name || cls?.code || ''} đã đầy (${currentCount}/${maxCapacity})`)
+        err.statusCode = 409
+        throw err
+      }
+      await TrainingClass.updateOne({ _id: classId }, { $inc: { capacityRevision: 1 } }, { session })
+    }
+  }
+
+  // Chỉ rời lớp cũ sau khi lớp mới đã được kiểm tra còn chỗ; toàn bộ thao tác
+  // nằm trong cùng transaction nên không để hội viên rơi vào trạng thái treo.
   let transferredFrom = null
   if (existingActive) {
     transferredFrom = existingActive.classId
@@ -41,25 +95,8 @@ export const ensureEnrollment = async ({ classId, memberId, session, sourceReaso
           sourceReason: 'transfer_class',
         },
       },
-      { session: session || undefined },
+      { session },
     )
-  }
-
-  // Capacity check (only matters if creating new — transfer doesn't add to count, but new class does)
-  if (enforceCapacity) {
-    const cls = await TrainingClass.findById(classId).populate('zoneId', 'maxCapacity').session(session || null).lean()
-    const maxCapacity = cls?.zoneId?.maxCapacity || 0
-    if (maxCapacity > 0) {
-      const currentCount = await ClassEnrollment.countDocuments({
-        classId,
-        status: 'active',
-      }).session(session || null)
-      if (currentCount >= maxCapacity) {
-        const err = new Error(`Lớp ${cls?.name || cls?.code || ''} đã đầy (${currentCount}/${maxCapacity})`)
-        err.statusCode = 409
-        throw err
-      }
-    }
   }
 
   const [enrollment] = await ClassEnrollment.create([{
@@ -68,7 +105,7 @@ export const ensureEnrollment = async ({ classId, memberId, session, sourceReaso
     status: 'active',
     joinedAt: new Date(),
     sourceReason,
-  }], { session: session || undefined })
+  }], { session })
 
   return { created: true, transferredFrom, enrollment }
 }
@@ -113,6 +150,18 @@ export const endEnrollments = async ({ memberId, classId, sourceReason = 'ended_
  * @returns {Object} { endedOld, createdNew }
  */
 export const transferEnrollment = async ({ memberId, fromClassId, toClassId, sourceReason = 'transfer_class', note = '', session }) => {
+  if (!session) {
+    const ownSession = await mongoose.startSession()
+    try {
+      let result
+      await ownSession.withTransaction(async () => {
+        result = await transferEnrollment({ memberId, fromClassId, toClassId, sourceReason, note, session: ownSession })
+      })
+      return result
+    } finally {
+      await ownSession.endSession()
+    }
+  }
   let endedOld = 0
   if (fromClassId) {
     const r = await endEnrollments({ memberId, classId: fromClassId, sourceReason, note, session })

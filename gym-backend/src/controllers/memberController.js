@@ -104,38 +104,61 @@ export const getMembers = async (req, res) => {
     if (status === 'active') filter.isActive = true
     else if (status === 'locked') filter.isActive = false
 
-    const users = await User.find(filter)
-      .sort({ [sortBy]: sortOrder === 'asc' ? 1 : -1 })
-      .lean()
+    const pageNumber = Math.max(1, Number(page) || 1)
+    const limitNumber = Math.max(1, Math.min(100, Number(limit) || 20))
+    const allowedSortFields = new Set(['memberNumber', 'memberCode', 'name', 'fullName', 'createdAt'])
+    const safeSortBy = allowedSortFields.has(String(sortBy)) ? String(sortBy) : 'memberNumber'
+    const hasComputedFilters = Boolean(
+      planId || membershipStatus || remainingDaysFilter || remainingDaysMin || remainingDaysMax || checkinMin || checkinMax,
+    )
+    const usersQuery = User.find(filter).sort({ [safeSortBy]: sortOrder === 'asc' ? 1 : -1 })
+    // Màn danh sách mặc định chỉ cần dữ liệu của một trang. Chỉ khi lọc theo
+    // gói/check-in/hạn dùng mới phải lấy toàn bộ để tính điều kiện dẫn xuất.
+    let users
+    let baseTotal = null
+    if (hasComputedFilters) {
+      users = await usersQuery.lean()
+    } else {
+      ;[users, baseTotal] = await Promise.all([
+        usersQuery.skip((pageNumber - 1) * limitNumber).limit(limitNumber).lean(),
+        User.countDocuments(filter),
+      ])
+    }
 
-    const membersWithMembership = await Promise.all(
-      users.map(async (user) => {
-        const activeCycle = await MembershipCycle.findOne({
-          memberId: user._id,
-          status: 'active',
-        })
-          .populate('currentPlanId', 'nameVi nameEn price durationDays color')
-          .sort({ createdAt: -1 })
-          .lean()
+    const memberIds = users.map((user) => user._id)
+    const [activeCycles, checkinCounts] = await Promise.all([
+      MembershipCycle.find({ memberId: { $in: memberIds }, status: 'active' })
+        .populate('currentPlanId', 'nameVi nameEn price durationDays color')
+        .sort({ createdAt: -1 })
+        .lean(),
+      UserActivity.aggregate([
+        { $match: { user: { $in: memberIds }, type: 'checkin' } },
+        { $group: { _id: '$user', count: { $sum: 1 } } },
+      ]),
+    ])
+    const activeCycleByMemberId = new Map()
+    for (const cycle of activeCycles) {
+      const key = String(cycle.memberId)
+      if (!activeCycleByMemberId.has(key)) activeCycleByMemberId.set(key, cycle)
+    }
+    const activeMembershipIds = [...new Set(activeCycles.map((cycle) => String(cycle.currentMembershipId)).filter(Boolean))]
+    const activePeriods = activeMembershipIds.length
+      ? await MembershipPeriod.find({ membershipId: { $in: activeMembershipIds }, status: 'ACTIVE' }).sort({ startDate: 1 }).lean()
+      : []
+    const activePeriodByMembershipId = new Map()
+    for (const period of activePeriods) {
+      const key = String(period.membershipId)
+      if (!activePeriodByMembershipId.has(key)) activePeriodByMembershipId.set(key, period)
+    }
+    const checkinCountByMemberId = new Map(checkinCounts.map((item) => [String(item._id), Number(item.count || 0)]))
 
-        const membershipHistory = await Membership.find({ memberId: user._id })
-          .populate('planId', 'nameVi nameEn')
-          .sort({ createdAt: -1 })
-          .lean()
-
+    const membersWithMembership = users.map((user) => {
+        const activeCycle = activeCycleByMemberId.get(String(user._id)) || null
         const periodEndDate = activeCycle
-          ? await getActivePeriodEndDate({ membershipId: activeCycle.currentMembershipId, cycle: activeCycle })
+          ? activePeriodByMembershipId.get(String(activeCycle.currentMembershipId))?.endDate || activeCycle.expiresAt || null
           : null
-
-        let remainingDays = 0
-        if (periodEndDate) {
-          remainingDays = calculateRemainingDays(periodEndDate)
-        }
-
-        const checkinCount = await UserActivity.countDocuments({
-          user: user._id,
-          type: 'checkin',
-        })
+        const remainingDays = periodEndDate ? calculateRemainingDays(periodEndDate) : 0
+        const checkinCount = checkinCountByMemberId.get(String(user._id)) || 0
 
         const membershipExpired = Boolean(activeCycle && (!periodEndDate || new Date(periodEndDate) < new Date()))
         const hasActivePlan = Boolean(activeCycle && !membershipExpired && remainingDays > 0)
@@ -174,7 +197,7 @@ export const getMembers = async (req, res) => {
           })()
           if (!matchesRemainingRange) matchFilter = false
         }
-        if (membershipStatus === 'no_plan' && activeCycle) matchFilter = false
+        if (membershipStatus === 'no_plan' && hasActivePlan) matchFilter = false
         if (membershipStatus === 'active' && !hasActivePlan) matchFilter = false
         if (membershipStatus === 'expiring' && (!hasActivePlan || remainingDays > 7)) matchFilter = false
         if (membershipStatus === 'expired' && !membershipExpired) matchFilter = false
@@ -193,27 +216,26 @@ export const getMembers = async (req, res) => {
             endDate: periodEndDate,
             remainingDays,
           } : null,
-          membershipHistory,
           checkinCount,
           membershipExpired,
           matchFilter,
         }
       })
-    )
 
     const filteredMembers = membersWithMembership.filter((m) => m.matchFilter)
-    const pageNumber = Math.max(1, Number(page) || 1)
-    const limitNumber = Math.max(1, Number(limit) || 20)
-    const pagedMembers = filteredMembers.slice((pageNumber - 1) * limitNumber, pageNumber * limitNumber)
+    const total = hasComputedFilters ? filteredMembers.length : Number(baseTotal || 0)
+    const pagedMembers = hasComputedFilters
+      ? filteredMembers.slice((pageNumber - 1) * limitNumber, pageNumber * limitNumber)
+      : filteredMembers
 
     res.json({
       members: pagedMembers,
       pagination: {
-        total: filteredMembers.length,
-        filtered: filteredMembers.length,
+        total,
+        filtered: total,
         page: pageNumber,
         limit: limitNumber,
-        totalPages: Math.ceil(filteredMembers.length / limitNumber),
+        totalPages: Math.ceil(total / limitNumber),
       },
     })
   } catch (error) {
@@ -301,6 +323,17 @@ export const getMemberById = async (req, res) => {
       throw new AppError('Không tìm thấy member', 404)
     }
 
+    const isPtViewer = req.user?.role === 'pt'
+    if (isPtViewer) {
+      const [privateAssignment, groupAssignment] = await Promise.all([
+        PTAssignment.exists({ memberId: user._id, ptId: req.user._id, status: { $in: ['active', 'pending_end_approval'] } }),
+        TrainingAssignment.exists({ memberId: user._id, trainerId: req.user._id, status: 'active' }),
+      ])
+      if (!privateAssignment && !groupAssignment) {
+        throw new AppError('Bạn chỉ có thể xem hội viên đang được phân công', 403)
+      }
+    }
+
     const [activeCycle, periods, cycles] = await Promise.all([
       MembershipCycle.findOne({ memberId: user._id, status: 'active' })
         .populate('currentPlanId')
@@ -337,6 +370,7 @@ export const getMemberById = async (req, res) => {
         planId: period.planId,
         startDate: period.startDate,
         endDate: period.endDate,
+        price: period.price,
         status: toHistoryStatus(period.status, period.endDate),
         createdAt: period.createdAt,
       }))
@@ -348,6 +382,7 @@ export const getMemberById = async (req, res) => {
         planId: cycle.currentPlanId,
         startDate: cycle.startDate,
         endDate: cycle.expiresAt,
+        price: cycle.currentPlanId?.price,
         status: toHistoryStatus(cycle.status, cycle.expiresAt),
         createdAt: cycle.createdAt,
       }))
@@ -378,9 +413,24 @@ export const getMemberById = async (req, res) => {
       remainingDays,
     } : null
 
+    const serializedMember = sanitizeMember(user)
+    if (isPtViewer) {
+      delete serializedMember.identityNumber
+      delete serializedMember.identityCountry
+      delete serializedMember.identityType
+      delete serializedMember.identityFrontImage
+      delete serializedMember.identityBackImage
+      delete serializedMember.identityStatus
+      delete serializedMember.identityRejectReason
+      delete serializedMember.identityReviewedBy
+      delete serializedMember.identityReviewedAt
+      delete serializedMember.detailedAddress
+      delete serializedMember.emergencyContact
+    }
+
     res.json({
       member: {
-        ...sanitizeMember(user),
+        ...serializedMember,
         activeMembership,
         membershipHistory,
         remainingDays,
@@ -447,22 +497,74 @@ export const createMember = async (req, res) => {
 
 export const updateMember = async (req, res) => {
   try {
-    const { name, email, contactEmail, phone, dateOfBirth, gender } = req.body
+    const { name, email, contactEmail, phone, dateOfBirth, gender, detailedAddress, emergencyContactName, emergencyContactPhone, emergencyContactRelationship, healthHeight, healthWeight, healthNotes, healthGoals, activityLevel } = req.body
     const user = await User.findById(req.params.id)
 
     if (!user || user.role !== 'member') {
       throw new AppError('Không tìm thấy member', 404)
     }
 
-    if (name) user.name = name.trim()
-    if (email) user.email = email.toLowerCase().trim()
-    if (phone) {
-      const normalizedPhone = normalizePhone(phone)
-      if (!normalizedPhone) throw new AppError('Số điện thoại không hợp lệ', 400)
-      user.phone = normalizedPhone
+    const hasField = (field) => Object.prototype.hasOwnProperty.call(req.body, field)
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
+    const normalizedContactEmail = typeof contactEmail === 'string' ? contactEmail.trim().toLowerCase() : ''
+
+    if (hasField('name')) {
+      if (!String(name || '').trim()) throw new AppError('Họ tên là bắt buộc', 400)
+      user.name = String(name).trim()
     }
-    if (dateOfBirth) user.dateOfBirth = new Date(dateOfBirth)
-    if (gender) user.gender = gender
+    if (hasField('email')) {
+      if (normalizedEmail && !isValidEmail(normalizedEmail)) throw new AppError('Email không hợp lệ', 400)
+      if (normalizedEmail && await User.exists({ _id: { $ne: user._id }, email: normalizedEmail })) {
+        throw new AppError('Email đã được sử dụng', 409)
+      }
+      user.email = normalizedEmail || undefined
+    }
+    if (hasField('contactEmail')) {
+      if (normalizedContactEmail && !isValidEmail(normalizedContactEmail)) throw new AppError('Email liên hệ không hợp lệ', 400)
+      user.contactEmail = normalizedContactEmail || ''
+    }
+    if (hasField('phone')) {
+      const normalizedPhone = phone ? normalizePhone(phone) : ''
+      if (phone && !normalizedPhone) throw new AppError('Số điện thoại không hợp lệ', 400)
+      if (normalizedPhone && await User.exists({ _id: { $ne: user._id }, phone: normalizedPhone })) {
+        throw new AppError('Số điện thoại đã được sử dụng', 409)
+      }
+      user.phone = normalizedPhone || undefined
+    }
+    if (hasField('dateOfBirth')) {
+      if (!dateOfBirth) user.dateOfBirth = null
+      else {
+        const parsedDate = new Date(dateOfBirth)
+        if (Number.isNaN(parsedDate.getTime())) throw new AppError('Ngày sinh không hợp lệ', 400)
+        user.dateOfBirth = parsedDate
+      }
+    }
+    if (hasField('gender')) user.gender = gender || ''
+    if (hasField('detailedAddress')) user.detailedAddress = String(detailedAddress || '').trim()
+    if (hasField('emergencyContactName') || hasField('emergencyContactPhone') || hasField('emergencyContactRelationship')) {
+      user.emergencyContact = {
+        name: hasField('emergencyContactName') ? String(emergencyContactName || '').trim() : user.emergencyContact?.name || '',
+        phone: hasField('emergencyContactPhone') ? String(emergencyContactPhone || '').trim() : user.emergencyContact?.phone || '',
+        relationship: hasField('emergencyContactRelationship') ? String(emergencyContactRelationship || '').trim() : user.emergencyContact?.relationship || '',
+      }
+    }
+    if (hasField('healthHeight') || hasField('healthWeight') || hasField('healthNotes') || hasField('healthGoals') || hasField('activityLevel')) {
+      const toOptionalNumber = (value, label) => {
+        if (value === '' || value == null) return null
+        const number = Number(value)
+        if (!Number.isFinite(number) || number <= 0) throw new AppError(`${label} không hợp lệ`, 400)
+        return number
+      }
+      user.healthInfo = {
+        height: hasField('healthHeight') ? toOptionalNumber(healthHeight, 'Chiều cao') : user.healthInfo?.height ?? null,
+        weight: hasField('healthWeight') ? toOptionalNumber(healthWeight, 'Cân nặng') : user.healthInfo?.weight ?? null,
+        notes: hasField('healthNotes') ? String(healthNotes || '').trim() : user.healthInfo?.notes || '',
+        activityLevel: hasField('activityLevel') ? String(activityLevel || '').trim() : user.healthInfo?.activityLevel || '',
+        goals: hasField('healthGoals')
+          ? String(healthGoals || '').split(',').map((goal) => goal.trim()).filter(Boolean)
+          : user.healthInfo?.goals || [],
+      }
+    }
 
     if (req.files?.avatar?.[0]) {
       user.avatar = req.files.avatar[0].path
@@ -486,7 +588,7 @@ export const updateMember = async (req, res) => {
 
 export const createOfflinePlanPayment = async (req, res) => {
   try {
-    const { planId, method, confirmed = false, flow = 'register' } = req.body
+    const { planId, method, confirmed = false, flow = 'register', note = '', receiptNumber = '' } = req.body
     const paymentMethod = String(method || '').toUpperCase().trim()
 
     if (!planId) throw new AppError('planId là bắt buộc', 400)
@@ -505,7 +607,7 @@ export const createOfflinePlanPayment = async (req, res) => {
     }
 
     const transferContent = buildTransferContent(member, plan)
-    const status = paymentMethod === 'BANK_TRANSFER' ? 'PENDING' : 'PAID'
+    const status = paymentMethod === 'BANK_TRANSFER' && !confirmed ? 'PENDING' : 'PAID'
     const confirmToken = crypto.randomBytes(24).toString('hex')
     const payment = await Payment.create({
       userId: member._id,
@@ -523,6 +625,8 @@ export const createOfflinePlanPayment = async (req, res) => {
         staffId: req.user._id,
         staffName: req.user.name || req.user.fullName || '',
         flow,
+        note: String(note || '').trim().slice(0, 1000),
+        receiptNumber: String(receiptNumber || '').trim().slice(0, 120),
         transferContent,
         bankInfo: BANK_INFO,
         confirmToken: status === 'PENDING' ? confirmToken : null,
@@ -629,6 +733,8 @@ export const confirmOfflinePlanPayment = async (req, res) => {
 
 export const toggleMemberStatus = async (req, res) => {
   try {
+    const reason = String(req.body?.reason || '').trim()
+    if (!reason) throw new AppError('Lý do khóa hoặc mở khóa là bắt buộc', 400)
     const user = await User.findById(req.params.id)
     if (!user || user.role !== 'member') {
       throw new AppError('Không tìm thấy member', 404)
@@ -644,7 +750,7 @@ export const toggleMemberStatus = async (req, res) => {
       module: 'users',
       action: 'update',
       entity: user,
-      details: user.isActive ? 'Mở khóa member' : 'Khóa member',
+      details: `${user.isActive ? 'Mở khóa' : 'Khóa'} member. Lý do: ${reason}`,
     })
 
     res.json({
@@ -670,57 +776,83 @@ export const registerPlanForMember = async (req, res) => {
     const plan = await Plan.findOne({ _id: planId, isActive: true })
     if (!plan) throw new AppError('Không tìm thấy gói tập hợp lệ', 404)
 
-    const existingActive = await MembershipCycle.findOne({
-      memberId: member._id,
-      status: 'active',
-    })
+    // Tạo gói, chu kỳ, kỳ hạn và đánh dấu Payment đã dùng trong cùng một
+    // transaction để không bao giờ lưu dữ liệu dở dang.
+    let membership
+    let cycle
+    let payment
+    let startDate
+    let endDate
+    const session = await mongoose.startSession()
+    try {
+      await session.withTransaction(async () => {
+        const existingActive = await MembershipCycle.findOne({
+          memberId: member._id,
+          status: 'active',
+        }).session(session)
+        if (existingActive) {
+          throw new AppError('Hội viên đang có gói tập hoạt động. Hãy gia hạn hoặc đợi hết hạn.', 409)
+        }
 
-    if (existingActive) {
-      throw new AppError('Member đang có gói tập active. Hãy gia hạn hoặc đợi hết hạn.', 400)
+        payment = await getPlanPurchasePayment({ paymentId, memberId: member._id, planId: plan._id, session })
+        if (!payment) throw new AppError('Không tìm thấy thanh toán mua gói phù hợp', 404)
+        if (payment.status !== 'PAID') throw new AppError('Thanh toán chưa hoàn tất, không thể đăng ký gói', 400)
+        if (payment.membershipId) throw new AppError('Thanh toán này đã được dùng để kích hoạt một gói tập', 409)
+        if (Number(payment.amount) < Number(plan.price || 0)) {
+          throw new AppError('Số tiền thanh toán không đủ giá gói', 400)
+        }
+
+        const now = new Date()
+        now.setHours(0, 0, 0, 0)
+        startDate = new Date(now)
+        endDate = new Date(startDate)
+        endDate.setDate(endDate.getDate() + Number(plan.durationDays) - 1)
+        endDate.setHours(23, 59, 59, 999)
+
+        ;[membership] = await Membership.create([{
+          memberId: member._id,
+          planId: plan._id,
+          status: 'active',
+          source: 'staff',
+          paymentId: payment._id,
+        }], { session })
+
+        ;[cycle] = await MembershipCycle.create([{
+          memberId: member._id,
+          currentMembershipId: membership._id,
+          currentPlanId: plan._id,
+          startDate,
+          expiresAt: endDate,
+          durationDays: plan.durationDays,
+          status: 'active',
+          purchasedAt: new Date(),
+          activatedAt: new Date(),
+        }], { session })
+
+        await MembershipPeriod.create([{
+          membershipId: membership._id,
+          planId: plan._id,
+          memberId: member._id,
+          startDate,
+          endDate,
+          totalDays: plan.durationDays,
+          price: Number(payment.amount),
+          paymentId: payment._id,
+          status: 'ACTIVE',
+          activatedAt: new Date(),
+        }], { session })
+
+        payment.membershipId = membership._id
+        payment.metadata = {
+          ...(payment.metadata || {}),
+          activatedAt: new Date(),
+          activatedBy: req.user._id,
+        }
+        await payment.save({ session })
+      })
+    } finally {
+      session.endSession()
     }
-
-    const payment = await getPlanPurchasePayment({ paymentId, memberId: member._id, planId: plan._id })
-    if (!payment) throw new AppError('Không tìm thấy payment mua gói phù hợp', 404)
-    if (payment.status !== 'PAID') throw new AppError('Payment chưa PAID, không thể đăng ký gói', 400)
-    if (Number(payment.amount) < Number(plan.price || 0)) {
-      throw new AppError('Số tiền payment không đủ giá gói', 400)
-    }
-
-    const now = new Date()
-    now.setHours(0, 0, 0, 0)
-
-    const startDate = new Date(now)
-    const endDate = new Date(startDate)
-    endDate.setDate(endDate.getDate() + Number(plan.durationDays) - 1)
-    endDate.setHours(23, 59, 59, 999)
-
-    const membership = await Membership.create({
-      memberId: member._id,
-      planId: plan._id,
-      status: 'active',
-      source: 'staff',
-      paymentId: payment._id,
-    })
-
-    const cycle = await MembershipCycle.create({
-      memberId: member._id,
-      currentMembershipId: membership._id,
-      currentPlanId: plan._id,
-      startDate,
-      expiresAt: endDate,
-      durationDays: plan.durationDays,
-      status: 'active',
-      purchasedAt: new Date(),
-      activatedAt: new Date(),
-    })
-
-    payment.membershipId = membership._id
-    payment.metadata = {
-      ...(payment.metadata || {}),
-      activatedAt: new Date(),
-      activatedBy: req.user._id,
-    }
-    await payment.save()
 
     await recordUserActivity({
       userId: member._id,
@@ -750,6 +882,9 @@ export const registerPlanForMember = async (req, res) => {
       },
     })
   } catch (error) {
+    if (error?.code === 11000 && error?.keyPattern?.memberId) {
+      return sendError(res, new AppError('Hội viên đã có gói tập hoạt động. Vui lòng tải lại dữ liệu.', 409))
+    }
     return sendError(res, error)
   }
 }
@@ -768,72 +903,83 @@ export const renewPlanForMember = async (req, res) => {
     const plan = await Plan.findOne({ _id: planId, isActive: true })
     if (!plan) throw new AppError('Không tìm thấy gói tập hợp lệ', 404)
 
-    const activeCycle = await MembershipCycle.findOne({
-      memberId: member._id,
-      status: 'active',
-    }).populate('currentPlanId')
+    let membership
+    let cycle
+    let payment
+    let endDate
+    const session = await mongoose.startSession()
+    try {
+      await session.withTransaction(async () => {
+        cycle = await MembershipCycle.findOne({
+          memberId: member._id,
+          status: 'active',
+        }).populate('currentPlanId').session(session)
+        if (!cycle) throw new AppError('Hội viên chưa có gói tập để gia hạn.', 400)
 
-    if (!activeCycle) {
-      throw new AppError('Hội viên chưa có gói tập để gia hạn.', 400)
+        const currentPlanId = String(cycle.currentPlanId?._id || cycle.currentPlanId)
+        if (currentPlanId !== String(plan._id)) {
+          throw new AppError('Chỉ có thể gia hạn gói tập hiện tại của hội viên.', 400)
+        }
+
+        payment = await getPlanPurchasePayment({ paymentId, memberId: member._id, planId: plan._id, session })
+        if (!payment) throw new AppError('Không tìm thấy thanh toán mua gói phù hợp', 404)
+        if (payment.status !== 'PAID') throw new AppError('Thanh toán chưa hoàn tất, không thể gia hạn gói', 400)
+        if (payment.membershipId) throw new AppError('Thanh toán này đã được dùng để kích hoạt một gói tập', 409)
+        if (Number(payment.amount) < Number(plan.price || 0)) {
+          throw new AppError('Số tiền thanh toán không đủ giá gói', 400)
+        }
+
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const startDate = renewFrom === 'endDate'
+          ? new Date(new Date(cycle.expiresAt).setHours(0, 0, 0, 0))
+          : new Date(today)
+        if (renewFrom === 'endDate') startDate.setDate(startDate.getDate() + 1)
+
+        endDate = new Date(startDate)
+        endDate.setDate(endDate.getDate() + Number(plan.durationDays) - 1)
+        endDate.setHours(23, 59, 59, 999)
+
+        membership = await Membership.findById(cycle.currentMembershipId).session(session)
+        if (!membership) throw new AppError('Không tìm thấy gói tập hiện tại của hội viên', 404)
+
+        membership.planId = plan._id
+        membership.source = 'staff'
+        membership.paymentId = payment._id
+        await membership.save({ session })
+
+        cycle.currentMembershipId = membership._id
+        cycle.currentPlanId = plan._id
+        cycle.endDate = endDate
+        cycle.expiresAt = endDate
+        cycle.durationDays = Number(cycle.durationDays || 0) + Number(plan.durationDays || 0)
+        await cycle.save({ session })
+
+        const periodIsActive = startDate <= new Date()
+        await MembershipPeriod.create([{
+          membershipId: membership._id,
+          planId: plan._id,
+          memberId: member._id,
+          startDate,
+          endDate,
+          totalDays: plan.durationDays,
+          price: Number(payment.amount),
+          paymentId: payment._id,
+          status: periodIsActive ? 'ACTIVE' : 'PENDING',
+          activatedAt: periodIsActive ? new Date() : null,
+        }], { session })
+
+        payment.membershipId = membership._id
+        payment.metadata = {
+          ...(payment.metadata || {}),
+          activatedAt: new Date(),
+          activatedBy: req.user._id,
+        }
+        await payment.save({ session })
+      })
+    } finally {
+      session.endSession()
     }
-
-    const currentPlanId = String(activeCycle.currentPlanId?._id || activeCycle.currentPlanId)
-    if (currentPlanId !== String(plan._id)) {
-      throw new AppError('Chỉ có thể gia hạn gói tập hiện tại của hội viên.', 400)
-    }
-
-    const payment = await getPlanPurchasePayment({ paymentId, memberId: member._id, planId: plan._id })
-    if (!payment) throw new AppError('Không tìm thấy payment mua gói phù hợp', 404)
-    if (payment.status !== 'PAID') throw new AppError('Payment chưa PAID, không thể gia hạn gói', 400)
-    if (Number(payment.amount) < Number(plan.price || 0)) {
-      throw new AppError('Số tiền payment không đủ giá gói', 400)
-    }
-
-    const now = new Date()
-    now.setHours(0, 0, 0, 0)
-
-    let startDate
-    if (renewFrom === 'endDate') {
-      const prevEnd = new Date(activeCycle.expiresAt)
-      prevEnd.setHours(0, 0, 0, 0)
-      prevEnd.setDate(prevEnd.getDate() + 1)
-      startDate = prevEnd
-    } else {
-      startDate = new Date(now)
-    }
-
-    const endDate = new Date(startDate)
-    endDate.setDate(endDate.getDate() + Number(plan.durationDays) - 1)
-    endDate.setHours(23, 59, 59, 999)
-
-    const membership = await Membership.create({
-      memberId: member._id,
-      planId: plan._id,
-      status: 'active',
-      source: 'staff',
-      paymentId: payment._id,
-    })
-
-    const cycle = await MembershipCycle.create({
-      memberId: member._id,
-      currentMembershipId: membership._id,
-      currentPlanId: plan._id,
-      startDate,
-      expiresAt: endDate,
-      durationDays: plan.durationDays,
-      status: 'active',
-      purchasedAt: new Date(),
-      activatedAt: new Date(),
-      previousCycleId: activeCycle._id,
-    })
-
-    payment.membershipId = membership._id
-    payment.metadata = {
-      ...(payment.metadata || {}),
-      activatedAt: new Date(),
-      activatedBy: req.user._id,
-    }
-    await payment.save()
 
     await recordUserActivity({
       userId: member._id,
@@ -872,12 +1018,21 @@ export const renewPlanForMember = async (req, res) => {
       },
     })
   } catch (error) {
+    if (error?.code === 11000 && error?.keyPattern?.memberId) {
+      return sendError(res, new AppError('Dữ liệu gói tập vừa thay đổi. Vui lòng tải lại và thử lại.', 409))
+    }
     return sendError(res, error)
   }
 }
 
 export const batchRenewMembers = async (req, res) => {
   try {
+    throw new AppError('Gia hạn hàng loạt đã tạm khóa vì cần đối soát thanh toán riêng cho từng hội viên', 409)
+    /*
+     * Luồng cũ tạo gói active mà không tạo payment/period, dẫn tới thất thoát
+     * doanh thu và nhiều MembershipCycle active. Chỉ mở lại khi có màn hình
+     * đối soát payment theo từng hội viên trong cùng một transaction.
+     */
     const { memberIds, planId, renewFrom = 'today' } = req.body
 
     if (!memberIds?.length) throw new AppError('Danh sách memberIds là bắt buộc', 400)
@@ -998,26 +1153,26 @@ export const getMemberTimeline = async (req, res) => {
       .limit(100)
       .lean()
 
-    const memberships = await Membership.find({ memberId: member._id })
+    const periods = await MembershipPeriod.find({ memberId: member._id })
       .populate('planId', 'nameVi nameEn price durationDays color')
-      .sort({ createdAt: -1 })
+      .sort({ startDate: -1 })
       .lean()
 
-    const membershipEvents = memberships.map((m) => ({
-      _id: m._id,
+    const membershipEvents = periods.map((period) => ({
+      _id: period._id,
       type: 'membership',
-      title: m.status === 'active' ? 'Đăng ký gói tập' : 'Gói tập kết thúc',
-      description: `${m.planId?.nameVi || 'N/A'} - ${new Date(m.startDate).toLocaleDateString('vi-VN')} đến ${new Date(m.endDate).toLocaleDateString('vi-VN')}`,
+      title: period.status === 'ACTIVE' ? 'Đăng ký/gia hạn gói tập' : 'Lịch sử gói tập',
+      description: `${period.planId?.nameVi || 'N/A'} - ${new Date(period.startDate).toLocaleDateString('vi-VN')} đến ${new Date(period.endDate).toLocaleDateString('vi-VN')}`,
       metadata: {
-        membershipId: m._id,
-        planId: m.planId?._id,
-        planName: m.planId?.nameVi,
-        startDate: m.startDate,
-        endDate: m.endDate,
-        status: m.status,
-        price: m.planId?.price,
+        membershipId: period.membershipId,
+        planId: period.planId?._id,
+        planName: period.planId?.nameVi,
+        startDate: period.startDate,
+        endDate: period.endDate,
+        status: period.status,
+        price: period.price,
       },
-      createdAt: m.createdAt,
+      createdAt: period.createdAt,
     }))
 
     const timeline = [
@@ -1175,6 +1330,19 @@ export const createMemberAndRegister = async (req, res) => {
         memo: String(memo || '').trim(),
         registrationType: 'create_and_register',
       },
+    })
+
+    await MembershipPeriod.create({
+      membershipId: membership._id,
+      planId: plan._id,
+      memberId: member._id,
+      startDate,
+      endDate,
+      totalDays: plan.durationDays,
+      price: Number(amountPaid),
+      paymentId: payment._id,
+      status: 'ACTIVE',
+      activatedAt: new Date(),
     })
 
     membership.paymentId = payment._id
@@ -1371,6 +1539,19 @@ export const offlineRegisterMembership = async (req, res) => {
         note: String(note || '').trim(),
         registrationType: 'offline',
       },
+    })
+
+    await MembershipPeriod.create({
+      membershipId: membership._id,
+      planId: plan._id,
+      memberId: member._id,
+      startDate,
+      endDate,
+      totalDays: plan.durationDays,
+      price: Number(amountPaid),
+      paymentId: payment._id,
+      status: 'ACTIVE',
+      activatedAt: new Date(),
     })
 
     membership.paymentId = payment._id

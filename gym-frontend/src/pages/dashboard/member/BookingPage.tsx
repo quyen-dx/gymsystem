@@ -1331,57 +1331,67 @@ export default function BookingPage() {
                     <div className="space-y-6">
                       <div>
                         <label className="block text-sm font-medium text-[var(--gs-text)] mb-2">Ngày và khung giờ mong muốn * <span className="font-normal text-[var(--gs-text-muted)]">(chọn 1 khung giờ cho mỗi ngày bạn muốn tập)</span></label>
-                        <div className="overflow-x-auto rounded-2xl border border-[var(--theme-border)] bg-[var(--gs-bg-subtle)] p-1.5 shadow-sm">
-                          <table className="w-full min-w-[860px] border-separate border-spacing-0 text-sm">
-                            <thead>
-                              <tr className="bg-[var(--gs-bg-subtle)]">
-                                <th className="px-3 py-3 text-left text-xs font-semibold text-[var(--gs-text-muted)] whitespace-nowrap">Ngày</th>
-                                {TIME_SLOTS.map((s) => (
-                                  <th key={s} className="px-1 py-3 text-center text-[11px] font-semibold text-[var(--gs-text-muted)] whitespace-nowrap">
-                                    {s.replace('-', ' - ')}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {DAYS.map((d) => {
-                                const dayLocked = pt1on1Lock.isDayLocked(d.value)
-                                return (
-                                  <tr key={d.value} className={dayLocked ? 'opacity-50' : ''}>
-                                    <td className="px-3 py-2 text-xs font-medium text-[var(--gs-text)] whitespace-nowrap border-t border-[var(--gs-border)]">
-                                      {d.label}
-                                    </td>
-                                    {TIME_SLOTS.map((s) => {
-                                      const disabled = dayLocked || !pt1on1Lock.slotEnabledForDay(d.value, s)
-                                      const selected = ptDaySlotMap[d.value] === s
-                                      const title = dayLocked
-                                        ? 'PT này không làm việc vào ngày này'
-                                        : pt1on1Lock.slotDisabledReasonForDay(d.value, s) || undefined
-                                      return (
-                                        <td key={s} className="p-0.5 text-center border-t border-[var(--gs-border)]">
-                                          <button
-                                            type="button"
-                                            disabled={disabled}
-                                            title={title}
-                                            onClick={() => togglePtDaySlot(d.value, s)}
-                                            className={`w-full rounded-lg border px-1 py-2 text-[11px] leading-tight transition-all ${
-                                              selected
-                                                ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-accent)] font-semibold'
-                                                : disabled
-                                                  ? 'border-transparent bg-[var(--gs-card)] text-[var(--gs-text-muted)] opacity-40 cursor-not-allowed'
-                                                  : 'border-[var(--theme-border)] text-[var(--gs-text)] hover:border-[var(--theme-accent)]'
-                                            }`}
-                                          >
-                                            {s}
-                                          </button>
-                                        </td>
-                                      )
-                                    })}
-                                  </tr>
-                                )
-                              })}
-                            </tbody>
-                          </table>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {DAYS.map((d) => {
+                            const dayLocked = pt1on1Lock.isDayLocked(d.value)
+                            const selectedSlot = ptDaySlotMap[d.value]
+                            return (
+                              <section
+                                key={d.value}
+                                className={`rounded-2xl border p-3 transition-colors ${
+                                  selectedSlot
+                                    ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
+                                    : dayLocked
+                                      ? 'border-[var(--theme-border)] bg-[var(--gs-bg-subtle)] opacity-55'
+                                      : 'border-[var(--theme-border)] bg-[var(--gs-card)]'
+                                }`}
+                              >
+                                <div className="mb-3 flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`flex h-7 min-w-7 items-center justify-center rounded-lg text-xs font-bold ${selectedSlot ? 'bg-[var(--theme-accent)] text-white' : 'bg-[var(--gs-bg-subtle)] text-[var(--gs-text-soft)]'}`}>
+                                      {d.short}
+                                    </span>
+                                    <span className="text-sm font-semibold text-[var(--gs-text)]">{d.label}</span>
+                                  </div>
+                                  {dayLocked ? (
+                                    <span className="text-[11px] text-[var(--gs-text-muted)]">PT không làm việc</span>
+                                  ) : selectedSlot ? (
+                                    <span className="rounded-full bg-[var(--theme-accent)] px-2 py-0.5 text-[11px] font-medium text-white">Đã chọn {selectedSlot.replace('-', ' - ')}</span>
+                                  ) : (
+                                    <span className="text-[11px] text-[var(--gs-text-muted)]">Chọn 1 khung giờ</span>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                  {TIME_SLOTS.map((s) => {
+                                    const disabled = dayLocked || !pt1on1Lock.slotEnabledForDay(d.value, s)
+                                    const selected = selectedSlot === s
+                                    const title = dayLocked
+                                      ? 'PT này không làm việc vào ngày này'
+                                      : pt1on1Lock.slotDisabledReasonForDay(d.value, s) || undefined
+                                    return (
+                                      <button
+                                        key={s}
+                                        type="button"
+                                        disabled={disabled}
+                                        title={title}
+                                        aria-label={`${d.label}, ${s}${selected ? ', đã chọn' : disabled ? ', không khả dụng' : ', còn trống'}`}
+                                        onClick={() => togglePtDaySlot(d.value, s)}
+                                        className={`rounded-xl border px-2 py-2 text-xs font-medium transition-all ${
+                                          selected
+                                            ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white shadow-sm'
+                                            : disabled
+                                              ? 'cursor-not-allowed border-transparent bg-[var(--gs-bg-subtle)] text-[var(--gs-text-muted)] opacity-45'
+                                              : 'border-[var(--theme-border)] text-[var(--gs-text)] hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)]'
+                                        }`}
+                                      >
+                                        {s.replace('-', ' - ')}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </section>
+                            )
+                          })}
                         </div>
                         <div className="mt-3 space-y-2">
                           <p className="text-xs text-[var(--gs-text-muted)]">

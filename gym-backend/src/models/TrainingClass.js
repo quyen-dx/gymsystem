@@ -12,6 +12,9 @@ const trainingClassSchema = new mongoose.Schema({
   daysOfWeek: { type: [{ type: Number, min: 0, max: 6 }], default: [] },
   startTime: { type: String, default: null }, // HH:mm
   endTime: { type: String, default: null },   // HH:mm
+  // Tăng trong transaction khi xếp/chuyển lớp để các giao dịch đồng thời
+  // cùng chạm vào một document lớp và MongoDB phát hiện xung đột.
+  capacityRevision: { type: Number, default: 0 },
   status: {
     type: String,
     enum: ['waiting_pt', 'waiting_accept', 'active', 'inactive', 'closed'],

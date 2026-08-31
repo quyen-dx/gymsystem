@@ -15,6 +15,7 @@ import {
   Card,
   Col,
   Descriptions,
+  Input,
   Row,
   Space,
   Spin,
@@ -64,13 +65,28 @@ export default function MemberDetailPage() {
 
   const toggleStatus = async () => {
     if (!member) return
-    try {
-      await memberService.toggleMemberStatus(member._id)
-      message.success('Cập nhật trạng thái thành công')
-      fetchMember()
-    } catch {
-      message.error('Thao tác thất bại')
-    }
+    let reason = ''
+    Modal.confirm({
+      title: member.isActive ? 'Khóa tài khoản hội viên' : 'Mở khóa tài khoản hội viên',
+      content: (
+        <div className="mt-3">
+          <p className="mb-2 text-sm text-[var(--gs-text-muted)]">Lý do sẽ được lưu vào nhật ký quản trị.</p>
+          <Input.TextArea autoFocus rows={3} placeholder="Nhập lý do" onChange={(event) => { reason = event.target.value }} />
+        </div>
+      ),
+      okText: member.isActive ? 'Xác nhận khóa' : 'Xác nhận mở khóa',
+      okButtonProps: { danger: member.isActive },
+      cancelText: 'Hủy',
+      onOk: async () => {
+        if (!reason.trim()) {
+          message.warning('Vui lòng nhập lý do')
+          return Promise.reject()
+        }
+        await memberService.toggleMemberStatus(member._id, reason.trim())
+        message.success('Cập nhật trạng thái thành công')
+        fetchMember()
+      },
+    })
   }
 
   if (loading) {
@@ -139,9 +155,10 @@ export default function MemberDetailPage() {
     },
     {
       title: 'Giá',
-      dataIndex: 'planId',
-      render: (plan: { price?: number }) =>
-        plan?.price ? `${plan.price.toLocaleString('vi-VN')}đ` : '—',
+      render: (_: unknown, record: MemberMembership) => {
+        const price = record.price ?? record.planId?.price
+        return price != null ? `${price.toLocaleString('vi-VN')}đ` : '—'
+      },
     },
   ]
 
@@ -174,6 +191,8 @@ export default function MemberDetailPage() {
       </div>
     ),
   }))
+  const checkinTimelineItems = timelineItems.filter((_, index) => timeline[index]?.type === 'checkin')
+  const trainingTimelineItems = timelineItems.filter((_, index) => ['booking', 'pt_assignment', 'workout_complete', 'training'].includes(timeline[index]?.type || ''))
 
   const activeMembership = member.activeMembership
 
@@ -283,8 +302,28 @@ export default function MemberDetailPage() {
             <Tabs
               items={[
                 {
+                  key: 'profile',
+                  label: <><UserOutlined /> Thông tin liên hệ</>,
+                  children: (
+                    <Descriptions column={{ xs: 1, sm: 2 }} size="small">
+                      <Descriptions.Item label="Email liên hệ">{member.contactEmail || '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Địa chỉ">{member.detailedAddress || '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Liên hệ khẩn cấp">{member.emergencyContact?.name || '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Số điện thoại khẩn cấp">{member.emergencyContact?.phone || '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Mối quan hệ">{member.emergencyContact?.relationship || '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Sức khỏe">
+                        {member.healthInfo?.height || member.healthInfo?.weight
+                          ? `${member.healthInfo?.height || '—'} cm · ${member.healthInfo?.weight || '—'} kg`
+                          : '—'}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="Mục tiêu" span={2}>{member.healthInfo?.goals?.join(', ') || '—'}</Descriptions.Item>
+                      <Descriptions.Item label="Lưu ý sức khỏe" span={2}>{member.healthInfo?.notes || '—'}</Descriptions.Item>
+                    </Descriptions>
+                  ),
+                },
+                {
                   key: 'membership',
-                  label: <><OrderedListOutlined /> Lịch sử gói tập</>,
+                  label: <><OrderedListOutlined /> Gói tập & thanh toán</>,
                   children: (
                     <Table
                       dataSource={member.membershipHistory}
@@ -296,8 +335,18 @@ export default function MemberDetailPage() {
                   ),
                 },
                 {
+                  key: 'checkin',
+                  label: <><CheckCircleOutlined /> Check-in</>,
+                  children: checkinTimelineItems.length > 0 ? <Timeline items={checkinTimelineItems} /> : <Text type="secondary">Chưa có lịch sử check-in</Text>,
+                },
+                {
+                  key: 'training',
+                  label: <><CalendarOutlined /> PT / lịch tập</>,
+                  children: trainingTimelineItems.length > 0 ? <Timeline items={trainingTimelineItems} /> : <Text type="secondary">Chưa có hoạt động PT hoặc lịch tập</Text>,
+                },
+                {
                   key: 'timeline',
-                  label: <><CalendarOutlined /> Dòng thời gian</>,
+                  label: <><CalendarOutlined /> Nhật ký hoạt động</>,
                   children: timelineItems.length > 0 ? (
                     <Timeline items={timelineItems} />
                   ) : (

@@ -11,7 +11,11 @@ import { createNotification } from '../services/notificationService.js'
 import { NOTIFICATION_TYPES } from '../models/Notification.js'
 import { createVnpayPaymentUrl } from '../services/vnpayService.js'
 import { cleanupMemberBenefitsOnPlanChange, resolvePlanFeatureCodes } from '../services/membershipService.js'
-import { buildSpendDebitUpdate } from '../services/walletService.js'
+import {
+  buildSpendDebitUpdate,
+  consumeWalletPaymentReservation,
+  reserveWalletForPayment,
+} from '../services/walletService.js'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
@@ -126,8 +130,9 @@ const executePlanChangeCore = async ({ memberId, newPlanId, expectedDirection, c
       cycle, membershipId, newPlan, oldPlan,
       allPeriods, activePeriod, remainingDays,
       currentDailyValue, remainingValue, changeType,
-      amountToPayPreview, creditToWalletPreview, wallet,
+      amountToPayPreview, creditToWalletPreview, wallet: initialWallet,
     } = await computePlanChangeSnapshot({ memberId, newPlanId, expectedDirection, session })
+    let wallet = initialWallet
 
     // Kỳ gia hạn PENDING: hủy + hoàn tiền nếu cancelRenewals, ngược lại trỏ sang gói mới
     const nowMs = Date.now()
@@ -178,14 +183,26 @@ const executePlanChangeCore = async ({ memberId, newPlanId, expectedDirection, c
       }
 
       if (amountToPay > 0) {
-        const balanceBefore = Number(wallet.balance || 0)
+        const reservationHeld = externalPayment?.metadata?.walletReservationStatus === 'HELD'
+        const balanceBefore = reservationHeld
+          ? Number(externalPayment.metadata?.walletBalanceAtCheckout ?? wallet.balance ?? 0)
+          : Number(wallet.balance || 0)
         if (walletPart > 0) {
-          wallet = await Wallet.findOneAndUpdate(
-            { _id: wallet._id, balance: { $gte: walletPart } },
-            buildSpendDebitUpdate(walletPart),
-            { new: true, session, updatePipeline: true },
-          )
-          if (!wallet) fail(400, 'Số dư ví không đủ')
+          if (reservationHeld) {
+            wallet = await consumeWalletPaymentReservation({
+              userId: memberId,
+              walletId: wallet._id,
+              amount: walletPart,
+              session,
+            })
+          } else {
+            wallet = await Wallet.findOneAndUpdate(
+              { _id: wallet._id, balance: { $gte: walletPart } },
+              buildSpendDebitUpdate(walletPart),
+              { new: true, session, updatePipeline: true },
+            )
+            if (!wallet) fail(400, 'Số dư ví không đủ')
+          }
         }
 
         if (externalPayment) {
@@ -202,6 +219,8 @@ const executePlanChangeCore = async ({ memberId, newPlanId, expectedDirection, c
             planChange: true,
             changeType,
             walletUsed: walletPart,
+            walletReservationStatus: reservationHeld ? 'CONSUMED' : externalPayment.metadata?.walletReservationStatus || 'NONE',
+            ...(reservationHeld ? { walletReservationConsumedAt: new Date() } : {}),
             walletBalanceBefore: balanceBefore,
             walletBalanceAfter: wallet.balance,
             finalizedAt: new Date(),
@@ -551,36 +570,56 @@ export const changePlanCheckout = async (req, res) => {
     const remaining = amountToPayPreview - balance
     const txnRef = `PLANCHANGE${Date.now()}${memberId.toString().slice(-6).toUpperCase()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`
 
-    const payment = await Payment.create({
-      userId: memberId,
-      walletId: wallet._id,
-      planId: newPlan._id,
-      amount: amountToPayPreview,
-      currency: 'vnd',
-      status: 'PENDING',
-      paymentMethod: 'VNPAY',
-      method: 'VNPAY',
-      source: 'ONLINE',
-      txnRef,
-      metadata: {
-        purpose: 'PLAN_PURCHASE',
-        planChange: true,
-        provider: 'VNPAY',
-        changeType,
-        newPlanId: newPlan._id,
-        oldPlanId: oldPlan._id,
-        cancelRenewals,
-        totalAmount: amountToPayPreview,
-        walletUsed,
-        remainingAmount: remaining,
-        walletBalanceAtCheckout: balance,
-        remainingDays,
-        remainingValue,
-        currentDailyValue,
-        oldPlanName: oldPlan.nameVi,
-        newPlanName: newPlan.nameVi,
-      },
-    })
+    const session = await mongoose.startSession()
+    let payment
+    let reservation
+    try {
+      await session.withTransaction(async () => {
+        reservation = await reserveWalletForPayment({
+          userId: memberId,
+          walletId: wallet._id,
+          amount: walletUsed,
+          session,
+        })
+        ;[payment] = await Payment.create([{
+          userId: memberId,
+          walletId: wallet._id,
+          planId: newPlan._id,
+          amount: amountToPayPreview,
+          currency: 'vnd',
+          status: 'PENDING',
+          paymentMethod: 'VNPAY',
+          method: 'VNPAY',
+          source: 'ONLINE',
+          txnRef,
+          metadata: {
+            purpose: 'PLAN_PURCHASE',
+            planChange: true,
+            provider: 'VNPAY',
+            changeType,
+            newPlanId: newPlan._id,
+            oldPlanId: oldPlan._id,
+            cancelRenewals,
+            totalAmount: amountToPayPreview,
+            walletUsed,
+            remainingAmount: remaining,
+            walletBalanceAtCheckout: reservation.balanceBefore,
+            walletBalanceAfterReservation: reservation.balanceAfter,
+            walletReservedAmount: walletUsed,
+            walletWithdrawableReserved: reservation.withdrawableReserved,
+            walletReservationStatus: walletUsed > 0 ? 'HELD' : 'NONE',
+            walletReservedAt: walletUsed > 0 ? new Date() : null,
+            remainingDays,
+            remainingValue,
+            currentDailyValue,
+            oldPlanName: oldPlan.nameVi,
+            newPlanName: newPlan.nameVi,
+          },
+        }], { session })
+      })
+    } finally {
+      session.endSession()
+    }
 
     const paymentUrl = createVnpayPaymentUrl({
       amount: remaining,
@@ -593,7 +632,7 @@ export const changePlanCheckout = async (req, res) => {
     return res.json({
       status: balance > 0 ? 'PARTIAL' : 'NO_BALANCE',
       totalAmount: amountToPayPreview,
-      walletBalance: balance,
+      walletBalance: reservation?.balanceAfter ?? balance,
       walletUsed,
       remainingAmount: remaining,
       paymentId: payment._id,

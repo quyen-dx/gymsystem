@@ -46,10 +46,10 @@ export const memberService = {
       : undefined,
     ),
 
-  toggleMemberStatus: (id: string) =>
-    api.patch(`/members/${id}/toggle-status`),
+  toggleMemberStatus: (id: string, reason: string) =>
+    api.patch(`/members/${id}/toggle-status`, { reason }),
 
-  createOfflinePlanPayment: (id: string, data: { planId: string; method: 'CASH' | 'POS' | 'BANK_TRANSFER'; confirmed?: boolean; flow?: 'register' | 'renew' }) =>
+  createOfflinePlanPayment: (id: string, data: { planId: string; method: 'CASH' | 'POS' | 'BANK_TRANSFER'; confirmed?: boolean; flow?: 'register' | 'renew'; note?: string; receiptNumber?: string }) =>
     api.post(`/members/${id}/offline-plan-payment`, data),
 
   getOfflinePlanPayment: (paymentId: string) =>

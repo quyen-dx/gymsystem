@@ -1,4 +1,5 @@
 import Payment from '../models/Payment.js'
+import { releaseWalletPaymentReservation } from '../services/walletService.js'
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000
 // VNPay intent có hạn 15 phút (vnp_ExpireDate) → đóng Payment PENDING sau 20 phút
@@ -31,6 +32,7 @@ export const runPaymentExpiryJob = async () => {
         },
       )
       if (result.modifiedCount) {
+        await releaseWalletPaymentReservation({ paymentId: payment._id, reason: 'vnpay_payment_expired' })
         closedCount += 1
         console.log(`[paymentExpiry] Đóng Payment PENDING hết hạn ${payment.txnRef} (${payment._id})`)
       }

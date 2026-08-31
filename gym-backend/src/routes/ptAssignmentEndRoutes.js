@@ -13,7 +13,7 @@ const router = express.Router()
 router.use(protect)
 
 // PT
-router.post('/', authorize('pt', 'admin', 'super_admin'), createEndRequest)
+router.post('/', authorize('pt'), createEndRequest)
 router.get('/my', authorize('pt'), getMyEndRequests)
 
 // Admin

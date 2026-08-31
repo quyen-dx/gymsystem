@@ -1,4 +1,5 @@
 import User from '../models/User.js'
+import mongoose from 'mongoose'
 import PTAssignmentEndRequest from '../models/PTAssignmentEndRequest.js'
 import PTAssignment from '../models/PTAssignment.js'
 import WorkoutSchedule from '../models/WorkoutSchedule.js'
@@ -44,12 +45,37 @@ export const createEndRequest = async (req, res) => {
       return res.status(400).json({ message: 'Vui long nhap ly do chi tiet' })
     }
 
-    // Chi cho phep 1 yeu cau pending cho cap PT-member
-    const existing = await PTAssignmentEndRequest.findOne({
-      ptId, memberId, status: 'pending',
-    })
+    // Mỗi yêu cầu chỉ được kết thúc đúng một phạm vi: PT 1-1 hoặc lớp nhóm.
+    if (Boolean(assignmentId) === Boolean(classId)) {
+      return res.status(400).json({
+        message: 'Yêu cầu phải chọn đúng một phạm vi: phân công PT 1-1 hoặc lớp nhóm',
+      })
+    }
+
+    const isPrivate = Boolean(assignmentId)
+    if (isPrivate) {
+      const assignment = await PTAssignment.findOne({
+        _id: assignmentId, memberId, ptId, status: 'active',
+      }).lean()
+      if (!assignment) {
+        return res.status(403).json({ message: 'Bạn không có phân công PT 1-1 đang hoạt động với hội viên này' })
+      }
+    } else {
+      const groupAssignment = await TrainingAssignment.findOne({
+        memberId, trainerId: ptId, classId, status: 'active',
+      }).lean()
+      if (!groupAssignment) {
+        return res.status(403).json({ message: 'Bạn không phụ trách lớp nhóm đang hoạt động này của hội viên' })
+      }
+    }
+
+    // Chỉ chặn yêu cầu đang chờ trên chính phạm vi đã chọn.
+    const pendingFilter = { ptId, memberId, status: 'pending' }
+    if (isPrivate) pendingFilter.assignmentId = assignmentId
+    else pendingFilter.classId = classId
+    const existing = await PTAssignmentEndRequest.findOne(pendingFilter)
     if (existing) {
-      return res.status(409).json({ message: 'Đã có yêu cầu đang chờ xử lý cho hội viên này' })
+      return res.status(409).json({ message: 'Đã có yêu cầu kết thúc đang chờ xử lý cho đúng phạm vi này' })
     }
 
     const doc = await PTAssignmentEndRequest.create({
@@ -59,7 +85,7 @@ export const createEndRequest = async (req, res) => {
     // Chuyen trang thai PTAssignment sang pending_end_approval
     if (assignmentId) {
       await PTAssignment.updateOne(
-        { _id: assignmentId, ptId },
+        { _id: assignmentId, memberId, ptId, status: 'active' },
         { $set: { status: 'pending_end_approval' } },
       )
     }
@@ -183,49 +209,91 @@ export const approveEndRequest = async (req, res) => {
     const memberId = doc.memberId
     const ptId = doc.ptId
 
-    // Ket thuc PTAssignment (status 'ended' — phân biệt với 'completed' = hết giáo án)
-    await PTAssignment.updateMany(
-      { memberId, ptId, status: { $in: ['active', 'pending_end_approval'] } },
-      {
-        $set: {
-          status: 'ended',
-          cancelledAt: new Date(),
-          cancelReason: `pt_end_request${doc.reasonType ? `_${doc.reasonType}` : ''}`,
-          endDate: new Date(),
-        },
-      },
-    )
-
-    // Ket thuc moi giao an dang hoat dong:
-    // - Giao an da hoan thanh toan bo buoi -> giu trang thai 'completed' (lich su, khong mat)
-    // - Giao an con buoi chua dien ra -> archived (khong con hien thi o lich dang hoat dong)
-    const activeSchedules = await WorkoutSchedule.find({ memberId, status: 'active' }).lean()
-    const terminalStatuses = ['completed', 'skipped', 'no_show', 'cancelled']
-    for (const sched of activeSchedules) {
-      const hasFutureOrPending = (sched.sessions || []).some((s) => !terminalStatuses.includes(s.status))
-      await WorkoutSchedule.updateOne(
-        { _id: sched._id },
-        { $set: { status: hasFutureOrPending ? 'archived' : 'completed' } },
-      )
+    const isPrivate = Boolean(doc.assignmentId) && !doc.classId
+    const isGroup = Boolean(doc.classId) && !doc.assignmentId
+    if (!isPrivate && !isGroup) {
+      return res.status(409).json({
+        message: 'Yêu cầu cũ không xác định được phạm vi PT 1-1/lớp nhóm nên không thể duyệt tự động. Hãy xử lý lại theo đúng phân công.',
+      })
     }
 
-    // Go khoi lop (TrainingAssignment) - legacy, kept for safety
-    await TrainingAssignment.updateMany(
-      { memberId, status: 'active' },
-      { $set: { status: 'cancelled' } },
-    )
+    const mongoSession = await mongoose.startSession()
+    try {
+      await mongoSession.withTransaction(async () => {
+        const now = new Date()
+        const note = `PT end request approved (${doc.reasonType || ''}${doc.reasonDetail ? `: ${doc.reasonDetail}` : ''})`
 
-    // End ClassEnrollment (member leaves all PT classes)
-    await endClassEnrollments({
-      memberId,
-      sourceReason: 'ended_by_admin',
-      note: `PT end request approved (${doc.reasonType || ''}${doc.reasonDetail ? ': ' + doc.reasonDetail : ''})`,
-    })
+        if (isPrivate) {
+          // Chỉ kết thúc đúng assignment được chọn. Lịch cũ không có assignmentId
+          // được giữ lại để Admin rà soát, không suy đoán theo memberId.
+          const assignment = await PTAssignment.findOneAndUpdate(
+            {
+              _id: doc.assignmentId,
+              memberId,
+              ptId,
+              status: { $in: ['active', 'pending_end_approval'] },
+            },
+            {
+              $set: {
+                status: 'ended',
+                cancelledAt: now,
+                cancelReason: `pt_end_request${doc.reasonType ? `_${doc.reasonType}` : ''}`,
+                endDate: now,
+              },
+            },
+            { new: true, session: mongoSession },
+          )
+          if (!assignment) {
+            const error = new Error('Phân công PT 1-1 không còn hoạt động hoặc không thuộc yêu cầu này')
+            error.statusCode = 409
+            throw error
+          }
+          await WorkoutSchedule.updateMany(
+            { memberId, assignmentId: doc.assignmentId, status: 'active' },
+            { $set: { status: 'archived' } },
+            { session: mongoSession },
+          )
+        } else {
+          // Lớp nhóm: chỉ dừng đúng TrainingAssignment, enrollment và lịch của classId.
+          const result = await TrainingAssignment.updateOne(
+            { memberId, trainerId: ptId, classId: doc.classId, status: 'active' },
+            {
+              $set: {
+                status: 'cancelled',
+                cancelledAt: now,
+                cancelReason: `pt_end_request${doc.reasonType ? `_${doc.reasonType}` : ''}`,
+                endDate: now,
+              },
+            },
+            { session: mongoSession },
+          )
+          if (result.modifiedCount !== 1) {
+            const error = new Error('Phân công lớp nhóm không còn hoạt động hoặc không thuộc yêu cầu này')
+            error.statusCode = 409
+            throw error
+          }
+          await WorkoutSchedule.updateMany(
+            { memberId, classId: doc.classId, status: 'active' },
+            { $set: { status: 'archived' } },
+            { session: mongoSession },
+          )
+          await endClassEnrollments({
+            memberId,
+            classId: doc.classId,
+            sourceReason: 'ended_by_admin',
+            note,
+            session: mongoSession,
+          })
+        }
 
-    doc.status = 'approved'
-    doc.processedBy = adminId
-    doc.processedAt = new Date()
-    await doc.save({ validateModifiedOnly: true })
+        doc.status = 'approved'
+        doc.processedBy = adminId
+        doc.processedAt = now
+        await doc.save({ session: mongoSession, validateModifiedOnly: true })
+      })
+    } finally {
+      await mongoSession.endSession()
+    }
 
     recordAuditLog({
       req,
@@ -243,7 +311,7 @@ export const approveEndRequest = async (req, res) => {
       receiverRole: 'pt',
       notificationType: 'PT_END_REQUEST_APPROVED',
       title: 'Yêu cầu kết thúc phụ trách đã được phê duyệt',
-      content: `Yêu cầu kết thúc phụ trách hội viên ${memberName} đã được Admin phê duyệt.\n\nHội viên đã được kết thúc phụ trách thành công.\n\nNếu hội viên vẫn còn gói tập, hội viên có thể truy cập trang Booking để gửi yêu cầu xếp lớp mới.`,
+      content: `Yêu cầu kết thúc ${isPrivate ? 'phân công PT 1-1' : 'lớp nhóm'} của hội viên ${memberName} đã được Admin phê duyệt.\n\nChỉ phạm vi đã yêu cầu được kết thúc; các phân công khác vẫn được giữ nguyên.`,
       relatedId: doc._id,
       relatedType: 'PTAssignmentEndRequest',
       redirectUrl: '/pt/clients',
@@ -257,7 +325,7 @@ export const approveEndRequest = async (req, res) => {
       receiverRole: 'member',
       notificationType: 'PT_END_APPROVED',
       title: 'Thay đổi PT phụ trách',
-      content: `Yêu cầu kết thúc PT phụ trách của bạn đã được chấp nhận.\n\nNếu gói tập vẫn còn hiệu lực, bạn có thể truy cập trang Booking để gửi yêu cầu xếp lớp/PT mới.`,
+      content: `Yêu cầu kết thúc ${isPrivate ? 'PT 1-1' : 'lớp nhóm'} của bạn đã được chấp nhận.\n\nCác phân công/lớp khác (nếu có) không bị ảnh hưởng.`,
       relatedType: 'PTAssignmentEndRequest',
       redirectUrl: '/booking',
       createdBy: 'Admin',
@@ -313,7 +381,12 @@ export const rejectEndRequest = async (req, res) => {
     // Tra lai trang thai active cho PTAssignment
     if (doc.assignmentId) {
       await PTAssignment.updateOne(
-        { _id: doc.assignmentId, ptId: doc.ptId },
+        {
+          _id: doc.assignmentId,
+          memberId: doc.memberId,
+          ptId: doc.ptId,
+          status: 'pending_end_approval',
+        },
         { $set: { status: 'active' } },
       )
     }

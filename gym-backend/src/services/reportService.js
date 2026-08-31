@@ -30,6 +30,20 @@ const TIME_ZONE_OFFSET_MS = 7 * 60 * 60 * 1000
 
 const PAID_PAYMENT_STATUSES = { $in: ['PAID', 'paid'] }
 const COMPLETED_TXN = { $in: ['completed', 'COMPLETED'] }
+// Payment của nạp ví cũng có trạng thái PAID, nhưng là khoản tiền khách gửi
+// giữ hộ chứ không phải doanh thu. Chỉ Payment gắn một gói tập mới là doanh
+// thu membership (đăng ký, gia hạn, đổi/nâng cấp gói).
+const MEMBERSHIP_PAYMENT_MATCH = {
+  status: PAID_PAYMENT_STATUSES,
+  planId: { $ne: null },
+  'metadata.purpose': { $ne: 'WALLET_DEPOSIT' },
+}
+const paymentOccurredAtExpr = { $ifNull: ['$paidAt', { $ifNull: ['$completedAt', '$createdAt'] }] }
+const membershipPaymentPipeline = ({ from, to }) => [
+  { $match: MEMBERSHIP_PAYMENT_MATCH },
+  { $addFields: { reportOccurredAt: paymentOccurredAtExpr } },
+  { $match: { reportOccurredAt: { $gte: from, $lt: to } } },
+]
 
 const startOfDay = (ts) => {
   const shifted = new Date(new Date(ts).getTime() + TIME_ZONE_OFFSET_MS)
@@ -273,7 +287,7 @@ const sumInRange = async (Model, match, field, { from, to }) => {
 const collectRevenueStreams = async ({ from, to }) => {
   const [membership, shop, deposit, refund, payout] = await Promise.all([
     Payment.aggregate([
-      { $match: { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: from, $lt: to } } },
+      ...membershipPaymentPipeline({ from, to }),
       { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
     ]),
     Order.aggregate([
@@ -442,7 +456,12 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
   const days = Math.max(1, Math.ceil((r.to - r.from) / DAY_MS))
 
   // Daily revenue series (all streams combined)
-  const membershipDaily = await dailySeries(Payment, { status: PAID_PAYMENT_STATUSES }, 'amount', { from: r.from, to: r.to })
+  const membershipDailyRows = await Payment.aggregate([
+    ...membershipPaymentPipeline({ from: r.from, to: r.to }),
+    { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$reportOccurredAt', timezone: TZ } }, total: { $sum: '$amount' } } },
+    { $sort: { _id: 1 } },
+  ])
+  const membershipDaily = fillDaily(membershipDailyRows, r.from, r.to)
   const revenueLabels = membershipDaily.labels
   const revenueByDay = membershipDaily.data
 
@@ -450,8 +469,8 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
   const endParts = calendarParts(new Date(r.to.getTime() - 1))
   const monthFrom = startOfMonth(endParts.year, endParts.month - 11)
   const mPay = await Payment.aggregate([
-    { $match: { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: monthFrom, $lt: r.to } } },
-    { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: TZ } }, total: { $sum: '$amount' } } },
+    ...membershipPaymentPipeline({ from: monthFrom, to: r.to }),
+    { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$reportOccurredAt', timezone: TZ } }, total: { $sum: '$amount' } } },
   ])
   const monthMap = new Map()
   for (const x of mPay) {
@@ -462,7 +481,7 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
 
   // Revenue by plan (membership)
   const planRevenue = await Payment.aggregate([
-    { $match: { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: r.from, $lt: r.to }, planId: { $ne: null } } },
+    ...membershipPaymentPipeline({ from: r.from, to: r.to }),
     { $lookup: { from: 'plans', localField: 'planId', foreignField: '_id', as: 'plan' } },
     { $match: { 'plan.0': { $exists: true } } },
     { $unwind: '$plan' },
@@ -476,7 +495,7 @@ export const getFinance = async ({ range = '30d', from, to } = {}) => {
 
   // Top members by spend (payments + orders)
   const topMembersPayment = await Payment.aggregate([
-    { $match: { status: PAID_PAYMENT_STATUSES, createdAt: { $gte: r.from, $lt: r.to } } },
+    ...membershipPaymentPipeline({ from: r.from, to: r.to }),
     { $group: { _id: '$userId', total: { $sum: '$amount' }, count: { $sum: 1 } } },
   ])
   const spendMap = new Map()
@@ -1355,11 +1374,13 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
   const memberMatch = memberId ? { userId: memberObjectId } : {}
 
   // Membership payments
-  const payMatch = { ...memberMatch, status: PAID_PAYMENT_STATUSES, createdAt: { $gte: r.from, $lt: r.to } }
+  const payMatch = { ...memberMatch, ...MEMBERSHIP_PAYMENT_MATCH }
   if (planId) payMatch.planId = planId
   const payments = await Payment.aggregate([
     { $match: payMatch },
-    { $sort: { createdAt: -1 } },
+    { $addFields: { reportOccurredAt: paymentOccurredAtExpr } },
+    { $match: { reportOccurredAt: { $gte: r.from, $lt: r.to } } },
+    { $sort: { reportOccurredAt: -1 } },
     { $limit: 500 },
   ])
   const planIds = [...new Set(payments.map((p) => p.planId).filter(Boolean))]
@@ -1378,7 +1399,7 @@ export const getTransactions = async ({ range = '30d', from, to, date, timestamp
     discount: 0,
     refund: 0,
     status: 'completed',
-    time: p.paidAt || p.completedAt || p.createdAt,
+    time: p.reportOccurredAt || p.paidAt || p.completedAt || p.createdAt,
     note: p.metadata?.note || '',
     staff: p.metadata?.staffName || '',
     pt: p.metadata?.ptName || '',

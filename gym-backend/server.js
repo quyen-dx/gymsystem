@@ -56,7 +56,6 @@ import reportRoutes from "./src/routes/reportRoutes.js"
 import notificationRoutes from "./src/routes/notificationRoutes.js"
 import aiRoutes from './src/routes/aiRoutes.js'
 import visionRoutes from './src/routes/visionRoutes.js'
-import ptPriceRoutes from './src/routes/ptPriceRoutes.js'
 import { initSocketIO } from './src/services/socketService.js'
 import { runStartupTasks } from './src/config/startupTasks.js'
 import { startPtConfirmationTimeoutJob } from './src/jobs/ptConfirmationTimeout.js'
@@ -155,7 +154,6 @@ app.use("/api/admin/reports", reportRoutes)
 app.use("/api/notifications", notificationRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/ai', visionRoutes)
-app.use('/api/pt-prices', ptPriceRoutes)
 
 app.get('/api/system/status', (_req, res) => {
   res.json({

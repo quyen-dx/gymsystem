@@ -22,7 +22,6 @@ import {
   markPtAttendance,
   joinWaitlist,
   reviewPT,
-  payBooking,
 } from '../controllers/bookingController.js'
 
 import { protect, authorize } from '../middlewares/authMiddleware.js'
@@ -64,8 +63,6 @@ router.patch('/:id/no-show', protect, authorize('pt', 'staff', 'admin', 'super_a
 router.patch('/:id/pt-no-show', protect, authorize('pt', 'staff', 'admin', 'super_admin'), markBookingPtNoShow)
 
 router.patch('/:id/pt-attendance', protect, authorize('pt', 'staff', 'admin', 'super_admin'), markPtAttendance)
-
-router.post('/:id/pay', protect, authorize('member'), payBooking)
 
 router.post('/:slotId/waitlist', protect, authorize('member'), joinWaitlist)
 

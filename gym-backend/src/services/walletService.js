@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import Transaction from '../models/Transaction.js'
 import Wallet from '../models/Wallet.js'
+import Payment from '../models/Payment.js'
 import AppError from '../utils/appError.js'
 
 /**
@@ -63,6 +64,94 @@ export const buildSpendDebitUpdate = (amount) => [
         },
     },
 ]
+
+const calculateWithdrawableDebit = ({ balance, withdrawableBalance, amount }) => {
+    const available = Math.max(0, Number(balance) || 0)
+    const withdrawable = Math.max(0, Number(withdrawableBalance) || 0)
+    const nonWithdrawable = Math.max(0, available - withdrawable)
+    return Math.min(withdrawable, Math.max(0, Number(amount) - nonWithdrawable))
+}
+
+// Giữ phần tiền ví của checkout kết hợp ví + VNPay. Việc giữ tiền và tạo
+// Payment phải chạy trong cùng transaction ở caller.
+export const reserveWalletForPayment = async ({ userId, walletId, amount, session }) => {
+    const reservedAmount = Math.max(0, Number(amount) || 0)
+    const wallet = await Wallet.findOne({ _id: walletId, userId }).session(session)
+    if (!wallet) throw new AppError('Không tìm thấy ví thanh toán', 404)
+    if (reservedAmount === 0) {
+        return { wallet, balanceBefore: Number(wallet.balance || 0), balanceAfter: Number(wallet.balance || 0), withdrawableReserved: 0 }
+    }
+
+    const balanceBefore = Number(wallet.balance || 0)
+    const withdrawableReserved = calculateWithdrawableDebit({
+        balance: wallet.balance,
+        withdrawableBalance: wallet.withdrawableBalance,
+        amount: reservedAmount,
+    })
+    const reserved = await Wallet.findOneAndUpdate(
+        { _id: wallet._id, userId, balance: { $gte: reservedAmount } },
+        [
+            ...buildSpendDebitUpdate(reservedAmount),
+            { $set: { checkoutReservedBalance: { $add: [{ $ifNull: ['$checkoutReservedBalance', 0] }, reservedAmount] } } },
+        ],
+        { new: true, session, updatePipeline: true },
+    )
+    if (!reserved) throw new AppError('Số dư ví không đủ để giữ cho giao dịch thanh toán', 400)
+    return { wallet: reserved, balanceBefore, balanceAfter: Number(reserved.balance || 0), withdrawableReserved }
+}
+
+// Chuyển khoản giữ chỗ thành khoản đã chi khi thanh toán ngoài ví thành công.
+export const consumeWalletPaymentReservation = async ({ userId, walletId, amount, session }) => {
+    const reservedAmount = Math.max(0, Number(amount) || 0)
+    if (reservedAmount === 0) return Wallet.findOne({ _id: walletId, userId }).session(session)
+    const wallet = await Wallet.findOneAndUpdate(
+        { _id: walletId, userId, checkoutReservedBalance: { $gte: reservedAmount } },
+        { $inc: { checkoutReservedBalance: -reservedAmount } },
+        { new: true, session },
+    )
+    if (!wallet) throw new AppError('Khoản tiền giữ cho giao dịch không còn hợp lệ', 409)
+    return wallet
+}
+
+// Hoàn khoản giữ chỗ khi VNPay thất bại/hết hạn. Hàm idempotent để return,
+// IPN và job hết hạn có thể gọi độc lập mà không hoàn tiền hai lần.
+export const releaseWalletPaymentReservation = async ({ paymentId, reason = 'payment_failed', session: externalSession = null }) => {
+    const ownsSession = !externalSession
+    const session = externalSession || await mongoose.startSession()
+    try {
+        if (ownsSession) session.startTransaction()
+        const payment = await Payment.findById(paymentId).session(session)
+        const meta = payment?.metadata || {}
+        const amount = Math.max(0, Number(meta.walletReservedAmount || 0))
+        if (!payment || amount === 0 || meta.walletReservationStatus !== 'HELD') {
+            if (ownsSession) await session.commitTransaction()
+            return { released: false }
+        }
+
+        const withdrawableAmount = Math.max(0, Number(meta.walletWithdrawableReserved || 0))
+        const wallet = await Wallet.findOneAndUpdate(
+            { _id: payment.walletId, userId: payment.userId, checkoutReservedBalance: { $gte: amount } },
+            { $inc: { balance: amount, checkoutReservedBalance: -amount, withdrawableBalance: withdrawableAmount } },
+            { new: true, session },
+        )
+        if (!wallet) throw new AppError('Không thể hoàn khoản tiền giữ của giao dịch', 409)
+
+        payment.metadata = {
+            ...meta,
+            walletReservationStatus: 'RELEASED',
+            walletReservationReleasedAt: new Date(),
+            walletReservationReleaseReason: reason,
+        }
+        await payment.save({ session })
+        if (ownsSession) await session.commitTransaction()
+        return { released: true, wallet }
+    } catch (error) {
+        if (ownsSession) await session.abortTransaction()
+        throw error
+    } finally {
+        if (ownsSession) session.endSession()
+    }
+}
 
 export const applyWalletTransaction = async ({
     userId,

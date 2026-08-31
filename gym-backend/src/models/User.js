@@ -75,6 +75,12 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Technical revision used to serialize concurrent class-enrollment changes.
+    classEnrollmentRevision: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
     role: {
       type: String,
       enum: ['super_admin', 'admin', 'pt', 'staff', 'member', 'seller'],

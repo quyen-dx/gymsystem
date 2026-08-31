@@ -25,7 +25,7 @@ const classEnrollmentSchema = new mongoose.Schema({
     type: String,
     enum: [
       'assigned_by_pt', 'ended_by_pt', 'ended_by_admin', 'member_request', 'auto_migrated', 'transfer_class',
-      'member_cancelled_plan', 'package_downgraded', 'package_switched_to_1on1', 'membership_cancelled',
+      'member_cancelled_plan', 'package_downgraded', 'package_switched_to_1on1', 'membership_cancelled', 'membership_transfer',
     ],
     default: 'assigned_by_pt',
   },
